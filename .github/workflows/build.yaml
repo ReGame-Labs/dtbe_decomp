@@ -62,6 +62,9 @@ jobs:
         make -j$(nproc)
         make compare
 
+    # NON_MATCHING code, #if 0 and assembly in place of C never go in
+    - run: python3 tools/hacks.py
+
     - run: make report
 
     - uses: actions/upload-artifact@v6
