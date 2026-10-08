@@ -1,0 +1,70 @@
+name: build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    # The original executable lives in a private repository that only this
+    # repository's own runs can read, so builds from forks are skipped.
+    if: >-
+      github.repository == 'ReGame-Labs/dtbe_decomp' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: jp
+            exe: SLPS_033.57
+    name: build (${{ matrix.version }})
+    env:
+      VERSION: ${{ matrix.version }}
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        submodules: recursive
+        persist-credentials: false
+
+    - uses: actions/checkout@v5
+      with:
+        repository: ReGame-Labs/dtbe_decomp_dependencies
+        ssh-key: ${{ secrets.DTBE_DEPENDENCIES_SSH_KEY }}
+        path: dependencies
+        persist-credentials: false
+
+    - run: |
+        mkdir -p "disks/$VERSION"
+        cp "dependencies/$VERSION/$EXE" "disks/$VERSION/"
+        rm -rf dependencies
+      env:
+        EXE: ${{ matrix.exe }}
+
+    - run: |
+        sudo apt-get update
+        sudo apt-get install -y binutils-mipsel-linux-gnu gcc-mipsel-linux-gnu
+
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+        cache: pip
+
+    - run: pip install -r requirements.txt
+
+    - run: tools/dl_deps.sh
+
+    # make and the tools take VERSION from the environment
+    - run: |
+        make generate
+        make -j$(nproc)
+        make compare
+
+    - run: make report
+
+    - uses: actions/upload-artifact@v6
+      with:
+        name: ${{ matrix.exe }}_report
+        path: build/${{ matrix.version }}/report.json

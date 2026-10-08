@@ -1,0 +1,15 @@
+colorama
+crunch64
+intervaltree
+Levenshtein
+n64img
+pyelftools
+pygfxd
+pylibyaml
+PyNaCl
+PyYAML
+rabbitizer
+spimdisasm==1.42.4
+splat64==0.50.0
+toml
+tqdm

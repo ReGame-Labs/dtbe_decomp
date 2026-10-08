@@ -1,0 +1,68 @@
+name: main
+sha1: 6db2c1b5a9fbe9f1a9ac1145fb115cdc775463fb
+options:
+  basename: main
+  target_path: disks/jp/SLPS_033.57
+  base_path: ../..
+  platform: psx
+  compiler: GCC
+
+  asm_path: asm/jp/main
+  src_path: src/main
+  build_path: build/jp
+
+  ld_script_path: build/jp/generated/main.ld
+
+  global_vram_start: 0x80000000
+  global_vram_end: 0x80200000
+
+  find_file_boundaries: True
+  # crt0 sets $gp (0x8003DDF0)
+  gp_value: 0x8006414C
+
+  generate_asm_macros_files: False
+
+  section_order: [".rodata", ".text", ".data", ".bss"]
+
+  symbol_addrs_path:
+    - config/jp/symbols.txt
+
+  undefined_funcs_auto_path: build/jp/generated/undefined_funcs_auto_main.txt
+  undefined_syms_auto_path: build/jp/generated/undefined_syms_auto_main.txt
+
+  string_encoding: SHIFT-JIS
+  data_string_encoding: SHIFT-JIS
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+  ld_bss_is_noload: False
+
+  migrate_rodata_to_functions: True
+  create_data_pads: False
+
+segments:
+  - name: header
+    type: header
+    start: 0x0
+
+  - name: main
+    type: code
+    start: 0x800
+    vram: 0x80010000
+    bss_size: 0xB7E68
+    align: 4
+    subalign: 4
+    subsegments:
+      # psylink places .rdata ahead of .text
+      - [0x800, .rodata, game]
+      # main is the first function after the rodata (0x8001AF68)
+      - [0xB618, c, game]
+      # crt0's start (the entry point), __main and its constructor loop
+      - [0x2E574, asm, crt0]
+      # a first guess: the PsyQ libraries after crt0
+      - [0x2E6E8, c, psyq]
+      - [0x4F640, data, game]
+      # the file keeps .bss as zeros: crt0 clears 0x800DA320-0x8011C248 of it
+      - { start: 0x54BE0, type: bss, vram: 0x800643E0, name: game }
+
+  - [0x10D000]

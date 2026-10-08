@@ -1,0 +1,5 @@
+// crt0 (asm/jp/main/crt0.s)
+__SN_ENTRY_POINT = 0x8003DD74; // type:func
+__main = 0x8003DE34; // type:func
+_do_ctors = 0x8003DE8C; // type:func
+main = 0x8001AF68; // type:func

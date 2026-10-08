@@ -1,0 +1,11 @@
+asm/
+assets/
+bin/
+build/
+disks/
+expected/
+local.mk
+objdiff.json
+permuter/
+__pycache__/
+.venv/
