@@ -2,7 +2,28 @@
 __SN_ENTRY_POINT = 0x8003DD74; // type:func
 __main = 0x8003DE34; // type:func
 _do_ctors = 0x8003DE8C; // type:func
+
+// the game
 main = 0x8001AF68; // type:func
+hexDigitValue = 0x8002AF18; // type:func
+die = 0x8002B420; // type:func
+
+// the heap library (include/heap.h)
+heapLargestFree = 0x8003A1F8; // type:func
+heapCheck = 0x8003A234; // type:func
+heapFree = 0x8003A2C8; // type:func
+heapInit = 0x8003A38C; // type:func
+heapAllocBest = 0x8003A3CC; // type:func
+heapAllocLargest = 0x8003A4B4; // type:func
+heapAllocNext = 0x8003A5A8; // type:func
+heapAllocPrev = 0x8003A67C; // type:func
+heapTotalFree = 0x8003A750; // type:func
+heapShrink = 0x8003A788; // type:func
+
+// the game's heaps
+D_80114468 = 0x80114468; // size:0x10
+mainHeap = 0x80114478; // size:0x10
+D_80114490 = 0x80114490; // size:0x10
 
 // The PsyQ libraries, named by matching the SDK's functions with their
 // relocated fields masked. Functions that several SDK functions match stay

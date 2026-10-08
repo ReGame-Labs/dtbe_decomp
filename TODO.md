@@ -18,6 +18,14 @@ with every function still in assembly.
   (`/bin/<name>.bin`) and the game's data, some of it compressed (the
   executable has zlib's inflate).
 
+## Code
+
+- [ ] The heap library (`include/heap.h`): `heapAllocNext`, `heapAllocPrev`
+  and `heapShrink` are still asm. The first two test their first block
+  before the loop, as a `while` loop that GCC rotates would.
+- [ ] Name the game's heaps (`D_80114468`, `D_80114490`) and the wrappers
+  around them from their callers.
+
 ## Toolchain
 
 - [ ] Confirm the compiler on more functions: GCC 2.95.2 at `-O2` matches the
@@ -25,5 +33,6 @@ with every function still in assembly.
 
 ## Names
 
-- [ ] Name the PsyQ functions from the SDK's signatures, so the game's calls
-  read, and the game's from the strings, calls and data they use.
+- [x] Name the PsyQ functions from the SDK's signatures (the ones that only
+  one SDK function matches).
+- [ ] Name the game's functions from the strings, calls and data they use.

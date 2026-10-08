@@ -1,4 +1,6 @@
 #include "common.h"
+#include "heap.h"
+#include "stdio.h"
 
 INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8001AE18);
 
@@ -1275,43 +1277,105 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002AE80);
 
 INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002AE98);
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002AF18);
+s32 hexDigitValue(u8 c) {
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    return -1;
+}
 
 INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002AF68);
 
 INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002AFFC);
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B044);
+void func_8002B044(void *base, s32 size) {
+    heapInit(&D_80114468, base, size);
+}
 
 INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B074);
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B0CC);
+void func_8002B0CC(void *ptr) {
+    heapCheck(&D_80114468);
+    heapFree(&D_80114468, ptr);
+    heapCheck(&D_80114468);
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B118);
+void func_8002B118(void *base, u32 size) {
+    heapInit(&mainHeap, base, size);
+    printf("Heap: %d KBytes (%08X-%08X)\n", size >> 10, (u32)base, (u32)base + size);
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B170);
+void *func_8002B170(s32 size) {
+    void *ptr = heapAllocBest(&mainHeap, size);
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B1DC);
+    if (ptr == NULL) {
+        die(D_8005FE10, heapLargestFree(&mainHeap) - size);
+    }
+    return ptr;
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B248);
+void *func_8002B1DC(s32 size) {
+    void *ptr = heapAllocLargest(&mainHeap, size);
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B2B4);
+    if (ptr == NULL) {
+        die(D_8005FE10, heapLargestFree(&mainHeap) - size);
+    }
+    return ptr;
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B2DC);
+void *func_8002B248(s32 size) {
+    void *ptr = heapAllocPrev(&mainHeap, size);
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B300);
+    if (ptr == NULL) {
+        die(D_8005FE10, heapLargestFree(&mainHeap) - size);
+    }
+    return ptr;
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B310);
+void func_8002B2B4(void *ptr) {
+    heapFree(&mainHeap, ptr);
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B334);
+s32 func_8002B2DC(void) {
+    return heapLargestFree(&mainHeap);
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B364);
+s32 func_8002B300(void) {
+    return mainHeap.count;
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B3D0);
+s32 func_8002B310(void) {
+    return heapTotalFree(&mainHeap);
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B3F8);
+void func_8002B334(void *ptr, s32 size) {
+    heapShrink(&mainHeap, ptr, size);
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B420);
+void *func_8002B364(s32 size) {
+    void *ptr = heapAllocBest(&mainHeap, size);
+
+    if (ptr == NULL) {
+        die(D_8005FE10, heapLargestFree(&mainHeap) - size);
+    }
+    return ptr;
+}
+
+void func_8002B3D0(void *ptr) {
+    heapFree(&mainHeap, ptr);
+}
+
+void func_8002B3F8(void *ptr) {
+    heapFree(&mainHeap, ptr);
+}
+
+INCLUDE_ASM("asm/jp/main/nonmatchings/game", die);
 
 INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002B4C4);
 
@@ -1388,9 +1452,13 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002BDC8);
 
 INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002BDF4);
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002BE14);
+void *func_8002BE14(s32 size) {
+    return heapAllocNext(&D_80114490, size);
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002BE3C);
+void func_8002BE3C(void *ptr) {
+    heapFree(&D_80114490, ptr);
+}
 
 INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8002BE64);
 
@@ -2341,25 +2409,206 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A104);
 
 INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A1C8);
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A1F8);
+s32 heapLargestFree(Heap *heap) {
+    HeapBlock *block = heap->rover;
+    s32 largest = 0;
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A234);
+    do {
+        if (largest < block->size) {
+            largest = block->size;
+        }
+        block = block->next;
+    } while (block != heap->rover);
+    return largest - sizeof(HeapBlock);
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A2C8);
+s32 heapCheck(Heap *heap) {
+    HeapBlock *block = heap->rover;
+    s32 count = heap->count;
+    HeapBlock *first = heap->first;
+    HeapBlock *end = heap->end;
+    HeapBlock *next;
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A38C);
+    do {
+        if (block < first || block >= end || ((u32)block & 3)) {
+            return -1;
+        }
+        next = block->next;
+        if (next < first || next >= end || ((u32)next & 3)) {
+            return -1;
+        }
+        if (next->prev != block) {
+            return -1;
+        }
+        block = next;
+        count--;
+    } while (block != heap->rover);
+    if (count != 0) {
+        return -1;
+    }
+    return 0;
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A3CC);
+void heapFree(Heap *heap, void *ptr) {
+    HeapBlock *block = ptr;
+    HeapBlock *neighbor;
+    HeapBlock *next;
+    HeapBlock *rover;
+    s32 size;
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A4B4);
+    if (block != NULL) {
+        block--;
+        neighbor = block->next;
+        size = -block->size;
+        block->size = size;
+        rover = heap->rover;
+        if (neighbor->size > 0 && (HeapBlock *)((u8 *)block + size) == neighbor) {
+            block->size = size + neighbor->size;
+            block->next = neighbor->next;
+            neighbor->next->prev = block;
+            if (rover == neighbor) {
+                rover = block;
+            }
+            heap->count--;
+        }
+        neighbor = block->prev;
+        if (neighbor->size > 0 && (HeapBlock *)((u8 *)block - neighbor->size) == neighbor) {
+            neighbor->size += block->size;
+            next = block->next;
+            neighbor->next = next;
+            next->prev = neighbor;
+            if (rover == block) {
+                rover = neighbor;
+            }
+            heap->count--;
+        }
+        heap->rover = rover;
+    }
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A5A8);
+void heapInit(Heap *heap, void *base, s32 size) {
+    HeapBlock *first = (HeapBlock *)(((u32)base + 3) & ~3);
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A67C);
+    size -= (u32)first - (u32)base;
+    size &= ~3;
+    heap->count = 1;
+    heap->rover = first;
+    heap->first = first;
+    heap->end = (HeapBlock *)((u8 *)first + size);
+    first->size = size;
+    first->next = first;
+    first->prev = first;
+}
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A750);
+/* best fit: the free block that leaves the least over */
+void *heapAllocBest(Heap *heap, s32 size) {
+    HeapBlock *block = heap->first;
+    HeapBlock *best = NULL;
+    s32 bestLeft = 0x7FFFFFFF;
+    s32 left;
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A788);
+    size = HEAP_BLOCK_SIZE(size);
+    do {
+        left = block->size - size;
+        if (left == 0) {
+            goto exact;
+        }
+        if (left > 0 && left < bestLeft) {
+            bestLeft = left;
+            best = block;
+        }
+        block = block->next;
+    } while (block != heap->first);
+    if (best == NULL) {
+        return NULL;
+    }
+    if (bestLeft <= HEAP_MIN_SPLIT) {
+        goto whole;
+    }
+    /* the rest of the block becomes a free block after it */
+    block = (HeapBlock *)((u8 *)best + size);
+    heap->rover = block;
+    heap->count++;
+    block->size = bestLeft;
+    best->size = -size;
+    best->next->prev = block;
+    block->next = best->next;
+    block->prev = best;
+    best->next = block;
+    return best + 1;
+exact:
+    heap->rover = block->next;
+    block->size = -block->size;
+    return block + 1;
+whole:
+    best->size = -best->size;
+    return best + 1;
+}
+
+/* the largest free block, from its end */
+void *heapAllocLargest(Heap *heap, s32 size) {
+    HeapBlock *block;
+    HeapBlock *best = NULL;
+    s32 bestLeft = 0;
+    s32 left;
+
+    size = HEAP_BLOCK_SIZE(size);
+    block = heap->first->prev;
+    do {
+        left = block->size - size;
+        if (left == 0) {
+            goto exact;
+        }
+        if (left > 0 && bestLeft < left) {
+            bestLeft = left;
+            best = block;
+        }
+        block = block->prev;
+    } while (block != heap->first->prev);
+    if (best == NULL) {
+        return NULL;
+    }
+    if (bestLeft <= HEAP_MIN_SPLIT) {
+        goto whole;
+    }
+    /* the block keeps its start, free, and hands out its end */
+    block = (HeapBlock *)((u8 *)best + bestLeft);
+    heap->rover = best;
+    heap->count++;
+    best->size = bestLeft;
+    block->size = -size;
+    best->next->prev = block;
+    block->next = best->next;
+    best->next = block;
+    block->prev = best;
+    return block + 1;
+exact:
+    heap->rover = block->prev;
+    block->size = -block->size;
+    return block + 1;
+whole:
+    best->size = -best->size;
+    return best + 1;
+}
+
+INCLUDE_ASM("asm/jp/main/nonmatchings/game", heapAllocNext);
+
+INCLUDE_ASM("asm/jp/main/nonmatchings/game", heapAllocPrev);
+
+s32 heapTotalFree(Heap *heap) {
+    HeapBlock *block = heap->rover;
+    s32 total = 0;
+
+    do {
+        if (block->size > 0) {
+            total += block->size;
+        }
+        block = block->next;
+    } while (block != heap->rover);
+    return total;
+}
+
+INCLUDE_ASM("asm/jp/main/nonmatchings/game", heapShrink);
 
 INCLUDE_ASM("asm/jp/main/nonmatchings/game", func_8003A858);
 

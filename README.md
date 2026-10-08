@@ -94,5 +94,6 @@ make compare
 ## Contributing
 
 Pick a function behind `INCLUDE_ASM` in `src/main/`, write it as C, and check
-that `make compare` still passes. Only byte-identical matches go in. The
+that `make compare` still passes. Only byte-identical matches go in.
+[CONTRIBUTING](CONTRIBUTING.md) describes the tools and the rules, and the
 [TODO](TODO.md) lists what comes next.
