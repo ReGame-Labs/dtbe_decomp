@@ -32,7 +32,7 @@ them one by one, keeping the match, is the work. Progress is measured by
 | Address | What |
 |---|---|
 | `0x80010000` | `.rodata` (psylink places it ahead of `.text`) |
-| `0x8001AE18` | the game's code, `main` at `0x8001AF68` (`src/main/game.c`) |
+| `0x8001AE18` | the game's code, `main` at `0x8001AF68` (`src/main/*.c`) |
 | `0x8003DD74` | crt0: the entry point, `__main` and its constructor loop |
 | `0x8003DEE8` | SN's runtime wrappers and the PsyQ libraries |
 | `0x8005EE40` | `.data`, with `$gp` at `0x8006414C` |

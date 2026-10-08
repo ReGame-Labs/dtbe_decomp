@@ -9,10 +9,19 @@ with every function still in assembly.
   signatures match the code after crt0, and the libraries' rodata starts
   at `0x80019F58`, their `.data` at `0x80060F98` and their `.bss` at
   `0x801168E8`. They stay assembly and out of the progress.
-- [ ] Split `game.c` into one file per original object, where the
-  alignment padding and the rodata (splat suggests splits at `0x9FB4` and
-  `0xA788` from the jump tables) show the boundaries.
-- [ ] Split the game's `.data` and `.bss` by module, and find where `.sbss`
+- [ ] Check the split of the game's code into objects. The 60 files of
+  `src/main/` are cut where no local rodata (strings, jump tables), no
+  shared data and no call to a nearby function used only there crosses,
+  in pieces of at least 0x200 bytes; most are named after their first
+  function. Merge, move or rename them as the code shows what each object
+  is. A few references go to rodata far from the rest of their file's (the
+  `const` tables at `0x80010BAC`-`0x80018940`, `die`'s `0x80010028`), most
+  likely another object's data.
+- [ ] Some functions address small data through `$gp` (17 of the files
+  have some): find which objects were built with `-G8` and give their C
+  files that flag.
+- [ ] Split the game's `.data` and `.bss` into the files of `src/main/`, so
+  that they count as data in the progress, and find where `.sbss`
   and `.bss` start (crt0 only clears `0x800DA320`-`0x8011C248`).
 - [ ] Unpack `A.VFS` (header `VFS2`): it holds the code overlays
   (`/bin/<name>.bin`) and the game's data, some of it compressed (the

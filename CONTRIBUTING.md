@@ -10,12 +10,12 @@ build the project; this file is about the work itself.
 Every function that isn't C yet is an `INCLUDE_ASM` line in `src/main/`,
 which includes splat's disassembly of it:
 ```c
-INCLUDE_ASM("asm/jp/main/nonmatchings/game", heapShrink);
+INCLUDE_ASM("asm/jp/main/nonmatchings/heap", heapShrink);
 ```
 
 1. **Get a first draft.** m2c turns the `.s` into C to start from:
    ```
-   python3 external/m2c/m2c.py asm/jp/main/nonmatchings/game/heapShrink.s
+   python3 external/m2c/m2c.py asm/jp/main/nonmatchings/heap/heapShrink.s
    ```
    The draft is a starting point: give it the real types, the struct fields
    and the calls of the code around it (`include/heap.h` has the heap's).
