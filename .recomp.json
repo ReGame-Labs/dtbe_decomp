@@ -1,6 +1,6 @@
 {
   "$schema": "https://recomp.fyi/schema/v1.json",
-  "game": "Digimon Tamers: Battle Evolution",
+  "game": "Digimon Rumble Arena",
   "wikidata": "Q2568519",
   "system": "PS1",
   "type": "decomp",
@@ -11,22 +11,35 @@
       "sha1": "6db2c1b5a9fbe9f1a9ac1145fb115cdc775463fb"
     }
   ],
-  "project": "Digimon Tamers: Battle Evolution decompilation",
+  "project": "Digimon Rumble Arena decompilation",
   "status": "in-progress",
-  "targets": ["PS1"],
+  "targets": [
+    "PS1"
+  ],
   "toolchain": "Splat",
   "approach": "Matching decompilation with GCC 2.95.2, splat and maspsx, byte-identical to the Japanese executable",
   "maintainers": [
-    { "name": "ReGame-Labs", "link": "https://github.com/ReGame-Labs" }
+    {
+      "name": "ReGame-Labs",
+      "link": "https://github.com/ReGame-Labs"
+    }
   ],
   "links": [
-    { "label": "decomp.dev", "url": "https://decomp.dev/ReGame-Labs/dtbe_decomp" }
+    {
+      "label": "decomp.dev",
+      "url": "https://decomp.dev/ReGame-Labs/dtbe_decomp"
+    }
   ],
   "help": [
     "Decompiling functions",
     "Splitting the executable into its original objects",
     "Unpacking the A.VFS archive and its overlays"
   ],
-  "tags": ["matching", "gcc", "maspsx", "psyq"],
-  "notes": "The Japanese release of the game known in the West as Digimon Rumble Arena. The executable already rebuilds byte for byte from splat's split, checked against its SHA-1; its functions are being decompiled to C one by one."
+  "tags": [
+    "matching",
+    "gcc",
+    "maspsx",
+    "psyq"
+  ],
+  "notes": "Built from the Japanese release, Digimon Tamers: Battle Evolution (SLPS-03357). The executable already rebuilds byte for byte from splat's split, checked against its SHA-1; its functions are being decompiled to C one by one."
 }

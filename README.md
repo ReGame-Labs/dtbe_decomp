@@ -1,4 +1,4 @@
-# Digimon Tamers: Battle Evolution decomp
+# Digimon Rumble Arena decomp
 
 | Version | Code | Data | Functions |
 |---|---|---|---|
@@ -9,11 +9,10 @@
 [![Compiler](https://img.shields.io/badge/compiler-GCC%202.95.2-orange)](#toolchain)
 [![License](https://img.shields.io/github/license/ReGame-Labs/dtbe_decomp)](LICENSE)
 
-A work-in-progress matching decompilation of **Digimon Tamers: Battle
-Evolution** (デジモンテイマーズ バトルエボリューション) for the PlayStation, the
-Japanese release of the game known in the West as Digimon Rumble Arena: C
-source that compiles back into a byte-identical copy of the game's
-executable.
+A work-in-progress matching decompilation of **Digimon Rumble Arena** for
+the PlayStation, from its Japanese release, *Digimon Tamers: Battle
+Evolution* (デジモンテイマーズ バトルエボリューション): C source that compiles
+back into a byte-identical copy of the game's executable.
 
 This repository does not contain any game data. You need your own copy of the
 game to build it.
