@@ -34,9 +34,14 @@ them one by one, keeping the match, is the work. Progress is measured by
 | `0x80010000` | `.rodata` (psylink places it ahead of `.text`) |
 | `0x8001AE18` | the game's code, `main` at `0x8001AF68` (`src/main/game.c`) |
 | `0x8003DD74` | crt0: the entry point, `__main` and its constructor loop |
-| `0x8003DEE8` | the code after crt0, a first guess at the PsyQ libraries (`src/main/psyq.c`) |
+| `0x8003DEE8` | SN's runtime wrappers and the PsyQ libraries |
 | `0x8005EE40` | `.data`, with `$gp` at `0x8006414C` |
 | `0x800643E0` | `.bss`, stored in the file as zeros up to `0x8011C248` |
+
+Only the game is decompiled. The PsyQ libraries stay splat's disassembly and
+out of the progress: their code from `0x8003DF10`, their rodata from
+`0x80019F58`, their `.data` from `0x80060F98` and their `.bss` from
+`0x801168E8`.
 
 The rest of the game, its code overlays (`/bin/<name>.bin`) included, is in
 the disc's `A.VFS` archive; the movies are in `A.STR` and the sound in

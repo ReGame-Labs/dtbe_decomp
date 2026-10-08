@@ -55,14 +55,25 @@ segments:
     subsegments:
       # psylink places .rdata ahead of .text
       - [0x800, .rodata, game]
+      # the PsyQ libraries' strings and tables
+      - [0xA758, rodata, psyq]
       # main is the first function after the rodata (0x8001AF68)
       - [0xB618, c, game]
       # crt0's start (the entry point), __main and its constructor loop
       - [0x2E574, asm, crt0]
-      # a first guess: the PsyQ libraries after crt0
-      - [0x2E6E8, c, psyq]
-      - [0x4F640, data, game]
+      # SN's runtime wrappers and the PsyQ libraries, which stay splat's
+      # disassembly and out of the progress
+      - [0x2E6E8, asm, psyq]
+      # only PsyQ reads these 0x10 bytes
+      - [0x4F640, data, psyq_head]
+      - [0x4F650, data, game]
+      # crt0's variables, then the PsyQ libraries'
+      - [0x51798, data, psyq]
+      # the game's data around gp
+      - [0x5494C, data, game_gp]
       # the file keeps .bss as zeros: crt0 clears 0x800DA320-0x8011C248 of it
       - { start: 0x54BE0, type: bss, vram: 0x800643E0, name: game }
+      # libgs's globals onwards (the game writes some of them directly)
+      - { start: 0x1070E8, type: bss, vram: 0x801168E8, name: psyq }
 
   - [0x10D000]

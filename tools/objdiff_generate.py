@@ -5,7 +5,8 @@ Target objects are splat's full disassembly of each C segment
 (expected/<version>/asm/<segment>/<file>.s.o); base objects are the files
 built from src/ (build/<version>/src/...), where every function still behind
 INCLUDE_ASM carries a .NON_MATCHING label that objdiff drops from the
-progress count.
+progress count. The PsyQ libraries stay splat's disassembly, outside src/,
+so the progress counts only the game.
 
 usage: objdiff_generate.py [version]   (default: $VERSION, or jp)
 """
@@ -17,23 +18,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Units whose name starts with one of these prefixes go to that category;
-# everything else is game code.
-CATEGORY_PREFIXES = {
-    "main/psyq": "sdk",
-}
-
 CATEGORIES = [
     {"id": "game", "name": "Game"},
-    {"id": "sdk", "name": "PsyQ SDK"},
 ]
-
-
-def category_for(name: str) -> str:
-    for prefix, category in CATEGORY_PREFIXES.items():
-        if name == prefix or name.startswith(prefix + "/"):
-            return category
-    return "game"
 
 
 def main() -> None:
@@ -46,7 +33,7 @@ def main() -> None:
                 "name": name,
                 "target_path": f"expected/{version}/asm/{name}.s.o",
                 "base_path": f"build/{version}/src/{name}.c.o",
-                "metadata": {"progress_categories": [category_for(name)]},
+                "metadata": {"progress_categories": ["game"]},
             }
         )
 
