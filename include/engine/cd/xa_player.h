@@ -33,11 +33,13 @@ typedef struct {
 /* the tracks follow the head in the next sector */
 #define XAP_TRACKS_OFFSET CD_SECTOR_SIZE
 
+/* the CD-ROM mode of the XA reads: real-time XA-ADPCM of the selected
+ * channel, in 2340-byte sectors */
 #define XA_MODE (CdlModeRT | CdlModeSize1 | CdlModeSF)
 
 /* the start of a sector as CdGetSector reads it with XA_MODE */
 typedef struct {
-    /* 0x0 */ CdlLOC pos;
+    /* 0x0 */ CdlLOC position;
     /* 0x4 */ u8 file;
     /* 0x5 */ u8 channel;
     /* 0x6 */ u8 submode; /* XA_SUBMODE_* */
@@ -49,8 +51,8 @@ typedef struct {
 
 /* The track playing: where it started and when, to tell where it is. */
 typedef struct XaStream {
-    /* 0x00 */ CdlLOC pos;   /* where the read starts or resumes */
-    /* 0x04 */ CdlLOC start; /* the track's first sector */
+    /* 0x00 */ CdlLOC position; /* where the read starts or resumes */
+    /* 0x04 */ CdlLOC start;    /* the track's first sector */
     /* 0x08 */ XaTrack *track;
     /* 0x0C */ s32 startTime;   /* the VSync count when the read started */
     /* 0x10 */ s32 startSector; /* where the read started */
@@ -82,11 +84,15 @@ typedef struct XaStream {
 #define XA_STEREO 0
 #define XA_MONO 1
 
+/* the SPU's full CD input volume, and the CD mixer volume a playing track
+ * gets (0x80: as recorded) */
 #define XA_VOLUME_MAX 0x7F
 #define XA_VOLUME_ON 0x80
 
+/* what the player calls with an XA_EVENT_* */
 typedef void (*XaCallback)(s32 event);
 
+/* The XA music player: its state, its loops, its volume and its tracks. */
 typedef struct XaPlayer {
     /* 0x00 */ volatile u32 flags; /* XA_*, also set by the CD-ROM callbacks */
     /* 0x04 */ void (*cdfsHook)(void); /* the hook CDFS had before */

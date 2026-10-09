@@ -3,19 +3,19 @@
 
 /* Copies src to dst in lower case; returns dst. */
 u8 *copyLowerCase(u8 *dst, u8 *src) {
-    func_80035F10(dst, src, CTYPE_UPPER, 'a' - 'A');
+    copyChangingCase(dst, src, CTYPE_UPPER, 'a' - 'A');
     return dst;
 }
 
 /* Copies src to dst in upper case; returns dst. */
 u8 *copyUpperCase(u8 *dst, u8 *src) {
-    func_80035F10(dst, src, CTYPE_LOWER, 'A' - 'a');
+    copyChangingCase(dst, src, CTYPE_LOWER, 'A' - 'a');
     return dst;
 }
 
-/* Copies src to dst, adding delta to the single-byte characters of class
- * flag; two-byte characters are copied as they are. */
-void func_80035F10(u8 *dst, u8 *src, s32 flag, s32 delta) {
+/* Copies src to dst, adding delta to the single-byte characters of a class
+ * of ctype (CTYPE_*); two-byte characters are copied as they are. */
+void copyChangingCase(u8 *dst, u8 *src, s32 ctype, s32 delta) {
     u8 c;
 
     while (*src != '\0') {
@@ -24,7 +24,7 @@ void func_80035F10(u8 *dst, u8 *src, s32 flag, s32 delta) {
             *dst++ = c;
             *dst = *src++;
         } else {
-            if (CTYPE_TABLE[c] & flag) {
+            if (CTYPE_TABLE[c] & ctype) {
                 c += delta;
             }
             *dst = c;

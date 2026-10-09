@@ -10,8 +10,8 @@ EXTERN_C_BEGIN
 
 /* A quaternion as two words, to copy or set two of its elements at once. */
 typedef union {
-    Quaternion q;
-    u32 words[2];
+    /* 0x0 */ Quaternion q;
+    /* 0x0 */ u32 words[2];
 } QuaternionWords;
 
 QuaternionWords *quaternionCopy(QuaternionWords *dst, QuaternionWords *src);

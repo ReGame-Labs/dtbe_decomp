@@ -5,21 +5,16 @@
 
 #include "common.h"
 #include <libgte.h>
+#include "engine/math/matrix.h"
 
 EXTERN_C_BEGIN
 
 /* The three lights of a scene, as the GTE takes them. */
 typedef struct {
-    /* 0x00 */ MATRIX light; /* the direction of light i in row i */
-    /* 0x20 */ MATRIX color; /* the color of light i in column i, the back
-                              * color (0 to 255) in t */
+    /* 0x00 */ MatrixWords light; /* the direction of light i in row i */
+    /* 0x20 */ MatrixWords color; /* the color of light i in column i, the
+                                   * back color (0 to 255) in t */
 } Lights;
-
-/* A matrix as eight words, to clear or set two of its elements at once. */
-typedef union {
-    MATRIX m;
-    u32 words[8];
-} MatrixWords;
 
 /* the defaults lightsReset gives the lights: the directions of lights 0,
  * 1 and 2, their colors, then the back color */

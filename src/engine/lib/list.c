@@ -1,7 +1,5 @@
 #include "common.h"
 #include "engine/lib/list.h"
-#include "libsnd.h"
-#include "memory.h"
 
 /* Sorts a chain of nodes by their next links; the prev links are left as
  * they were. Returns the new first node. */
@@ -10,19 +8,19 @@ LinkNode *linkNodeSort(LinkNode *nodes, LinkCompare compare) {
 }
 
 /* Sorts a list, then rebuilds its prev links and its tail. */
-void linkListSort(LinkList *list, LinkCompare compare) {
+void linkListSort(LinkList *this, LinkCompare compare) {
     LinkNode *node;
     LinkNode *prev;
 
-    node = mergeSortLinkNodes(compare, list->head);
+    node = mergeSortLinkNodes(compare, this->head);
     prev = NULL;
-    list->head = node;
+    this->head = node;
     while (node != NULL) {
         node->prev = prev;
         prev = node;
         node = node->next;
     }
-    list->tail = prev;
+    this->tail = prev;
 }
 
 /* Merge sort of a chain of nodes by their next links: returns the new
@@ -77,50 +75,50 @@ LinkNode *mergeLinkNodes(LinkCompare compare, LinkNode *a, LinkNode *b) {
     return head.next;
 }
 
-/* Inserts node into list before the node before; into an empty list, as its
- * only node. */
-void linkListInsertBefore(LinkList *list, LinkNode *before, LinkNode *node) {
+/* Inserts node into the list before the node before; into an empty list, as
+ * its only node. */
+void linkListInsertBefore(LinkList *this, LinkNode *before, LinkNode *node) {
     LinkNode *prev;
 
-    list->count++;
-    if (list->head == NULL) {
+    this->count++;
+    if (this->head == NULL) {
         node->next = NULL;
         node->prev = NULL;
-        list->head = node;
-        list->tail = node;
+        this->head = node;
+        this->tail = node;
         return;
     }
     node->next = before;
     node->prev = before->prev;
     prev = before->prev;
     if (prev == NULL) {
-        list->head = node;
+        this->head = node;
     } else {
         prev->next = node;
     }
     before->prev = node;
 }
 
-/* Takes node out of list. */
-void linkListRemove(LinkList *list, LinkNode *node) {
+/* Takes node out of the list. */
+void linkListRemove(LinkList *this, LinkNode *node) {
     LinkNode *prev = node->prev;
     LinkNode *next = node->next;
 
-    if (--list->count < 0) {
+    if (--this->count < 0) {
         /* crash on purpose: the list lost count */
         *(s32 *)1 = 1;
     }
     if (prev == NULL) {
-        list->head = next;
+        this->head = next;
         if (next == NULL) {
-            list->tail = NULL;
+            this->tail = NULL;
             return;
         }
         next->prev = NULL;
         return;
     }
     if (next == NULL) {
-        list->tail = prev;
+        this->tail = prev;
         prev->next = NULL;
         return;
     }

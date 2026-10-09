@@ -1,7 +1,6 @@
 #include "common.h"
 #include "engine/gfx/prim_buffer.h"
-#include "libpad.h"
-#include "memory.h"
+#include "libpad.h" /* TRUE and FALSE */
 
 /* whether drawing may touch the displayed area (DRAWENV.dfe) and dithers
  * (DRAWENV.dtd) */
@@ -65,7 +64,8 @@ u8 *getPrimBufferBase(void) {
     return PRIM_BUFFER_STARTS[0];
 }
 
-/* Takes size bytes from the frame's primitive buffer; returns where they start. */
+/* Takes size bytes from the frame's primitive buffer; returns where they
+ * start. */
 u8 *allocPrimBytes(s32 size) {
     u8 *start = PRIM_BUFFER_FREE;
 

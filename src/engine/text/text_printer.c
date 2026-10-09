@@ -1,7 +1,6 @@
 #include "common.h"
 #include "engine/text/text_printer.h"
 #include "engine/lib/format.h"
-#include "vtable.h"
 
 /* Prints formatted text at the cursor, the two bytes of a Shift JIS
  * character as one code; returns the length of the text. */
@@ -28,8 +27,9 @@ s32 printerPrint(Printer *this, u8 *format, ...) {
 void printerIgnoreColor(Printer *this, u32 color) {
 }
 
-/* Does nothing. */
-void func_80032878(Printer *this, s32 arg1) {
+/* Does nothing: the function at unk18 of both PRINTER_VTABLE and
+ * TEXT_PRINTER_VTABLE. */
+void func_80032878(Printer *this, s32 value) {
 }
 
 /* Moves the cursor. */
@@ -48,6 +48,8 @@ void printerSetColor(Printer *this, u32 color) {
     this->vtable->setColor.func((u8 *)this + this->vtable->setColor.delta, color);
 }
 
-void func_80032900(Printer *this, s32 arg1) {
-    this->vtable->unk18.func((u8 *)this + this->vtable->unk18.delta, arg1);
+/* Calls the printer's function at unk18 of its vtable with value, whose
+ * meaning is unknown. */
+void func_80032900(Printer *this, s32 value) {
+    this->vtable->unk18.func((u8 *)this + this->vtable->unk18.delta, value);
 }

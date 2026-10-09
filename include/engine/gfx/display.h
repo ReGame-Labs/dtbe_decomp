@@ -9,6 +9,7 @@
 
 EXTERN_C_BEGIN
 
+/* the size of the screen the game draws */
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 240
 
@@ -26,8 +27,8 @@ typedef struct Display {
     /* 0x100 */ s32 vsyncTime;
     /* 0x104 */ s32 field; /* the interlaced field being shown */
     /* 0x108 */ s32 interlaced;
-    /* 0x10C */ s32 unk10C;
-    /* 0x110 */ s32 unk110;
+    /* 0x10C */ s32 noDrawSync;     /* DISPLAY_NO_DRAW_SYNC */
+    /* 0x110 */ s32 forceInterlace; /* DISPLAY_INTERLACE */
     /* 0x114 */ s32 redraw;
     /* 0x118 */ u_long *ot; /* the ordering table to draw at the next vertical blank */
 } Display;
@@ -37,8 +38,11 @@ typedef struct Display {
 #define DISPLAY_CLEAR 0     /* clear the buffer before drawing (isbg) */
 #define DISPLAY_INTERLACE 1 /* interlace even below 256 lines */
 #define DISPLAY_RGB24 2     /* 24 bit color */
-#define DISPLAY_DITHER 3
-#define DISPLAY_UNK4 4      /* sets unk10C */
+#define DISPLAY_DITHER 3    /* dither (dtd) */
+/* end a frame without waiting for its drawing: the vertical blank cuts the
+ * drawing short (ResetGraph(1)) to draw the next ordering table, as when
+ * interlaced */
+#define DISPLAY_NO_DRAW_SYNC 4
 
 /* the display, built by initOrDestroyMainGlobals */
 extern struct Display DISPLAY;
@@ -69,7 +73,7 @@ void displayClear(Display *display);
 void getDrawBufferSubRect(RECT *rect, s32 x, s32 y, s32 width, s32 height);
 void getDrawBufferRect(RECT *rect);
 RECT *getShownBufferRect(void);
-void displayCopyShownBuffer(Display *display, RECT *rect, u_long *dest);
+void displayCopyShownBuffer(Display *display, RECT *rect, u_long *dst);
 Display *getDisplay(void);
 
 EXTERN_C_END

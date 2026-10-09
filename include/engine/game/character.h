@@ -18,10 +18,10 @@ typedef struct {
     /* 0x4 */ void *file;
 } FileRef;
 
-/* What a .loop file holds for each clip. */
+/* What a .loop file holds for each clip: how it plays (modelStartClip). */
 typedef struct {
-    /* 0x0 */ u16 unk0;
-    /* 0x2 */ u16 unk2;
+    /* 0x0 */ u16 loopFrame; /* where its loops start again (modelSetLoopFrame) */
+    /* 0x2 */ u16 plays;
 } CharaLoop;
 
 /* The files of a character packed in one. Its offsets are relocated to
@@ -49,7 +49,8 @@ typedef struct {
     /* 0x2C */ HsvColor tint;  /* applied to the textures */
 } Chara;
 
-/* the sat or val of an HsvColor tint that leaves them as they are (n / 128) */
+/* the saturation or value of an HsvColor tint that leaves them as they are
+ * (n / 128) */
 #define TINT_SCALE_ONE 0x80
 
 extern char CHARA_PATH_FORMAT[]; /* "/chara/%02d%s" */
@@ -76,8 +77,8 @@ void charaLoadTims(Chara *chara, u32 *tims);
 void charaLoadPack(Chara *chara, char *path, s32 unused, RECT *bounds);
 TmdHeader *charaGetTmd(Chara *chara);
 AnimData *charaGetAnimData(Chara *chara);
-u16 func_80031258(Chara *chara, s32 clip);
-u16 func_80031298(Chara *chara, s32 clip);
+u16 charaGetLoopFrame(Chara *chara, s32 clip);
+u16 charaGetClipPlays(Chara *chara, s32 clip);
 s32 func_800312D8(Chara *chara);
 s32 func_80031300(void);
 s32 func_80031308(void);

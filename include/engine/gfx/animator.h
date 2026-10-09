@@ -6,21 +6,16 @@
 #include "common.h"
 #include "vtable.h"
 #include "engine/math/quaternion.h"
+#include "engine/math/vector.h"
 
 EXTERN_C_BEGIN
 
-/* An SVECTOR without its padding. */
+/* Where an animation puts a node: a rotation, a scale and a translation, in
+ * the order meshPartUpdate builds its matrix from them. */
 typedef struct {
-    s16 vx;
-    s16 vy;
-    s16 vz;
-} Vec3s;
-
-/* Where an animation puts a node: a rotation and two vectors. */
-typedef struct {
-    /* 0x00 */ Quaternion rot;
-    /* 0x08 */ Vec3s unk8;
-    /* 0x0E */ Vec3s unkE;
+    /* 0x00 */ Quaternion rotation;
+    /* 0x08 */ Vec3s scale;
+    /* 0x0E */ Vec3s translation;
 } AnimPose; /* size 0x14 */
 
 /* One animation: a key for every node in every frame. */
@@ -41,23 +36,24 @@ typedef struct {
     /* 0x0C */ s16 *objects; /* the TMD object each node moves */
     /* 0x10 */ s32 clipCount;
     /* 0x14 */ AnimClip *clips;
-    /* 0x18 */ Quaternion *rots;
-    /* 0x1C */ Vec3s *unk8s;
-    /* 0x20 */ Vec3s *unkEs;
+    /* 0x18 */ Quaternion *rotations;
+    /* 0x1C */ Vec3s *scales;
+    /* 0x20 */ Vec3s *translations;
     /* 0x24 */ u16 unk24;
-    /* 0x26 */ u16 rotMask;
-    /* 0x28 */ u16 unk8Shift;
-    /* 0x2A */ u16 unk8Mask;
-    /* 0x2C */ u16 unkEShift;
-    /* 0x2E */ u16 unkEMask;
+    /* 0x26 */ u16 rotationMask;
+    /* 0x28 */ u16 scaleShift;
+    /* 0x2A */ u16 scaleMask;
+    /* 0x2C */ u16 translationShift;
+    /* 0x2E */ u16 translationMask;
 } AnimData;
 
 /* AnimData.flags: the offsets are pointers already */
 #define ANIM_DATA_RELOCATED 0x80000000
 
+/* the virtual table of AnimNode */
 typedef struct AnimNodeVtable {
     /* 0x00 */ VtableEntry unused;
-    /* 0x08 */ VtableEntry update; /* (AnimNode *): takes on the new pose */
+    /* 0x08 */ VtableEntry update; /* (object, AnimPose *pose): takes on pose */
 } AnimNodeVtable;
 
 /* A node an Animator moves: its pose, and the two poses it blends between. */
@@ -109,7 +105,7 @@ void animatorUpdate(Animator *animator);
 void animatorUpdateNodes(Animator *animator);
 void animatorSetFramePoses(Animator *animator, s32 frame);
 void animatorSetBlendPoses(Animator *animator, s32 frame);
-void animNodeBlend(AnimNode *node, s32 t);
+void animNodeBlend(AnimNode *animNode, s32 t);
 void blendVec3s(Vec3s *out, Vec3s *from, Vec3s *to, s32 t);
 void blendQuaternion(Quaternion *out, Quaternion *from, Quaternion *to, s32 t);
 

@@ -114,3 +114,8 @@ xaSetMixMode setXaMixModeInline
 xaStartRead startXaReadInline
 xaStop stopXaInline
 xaOff turnXaOffInline
+
+# PsyQ: GetVideoMode matches only that function of Digimon World 3's (named by
+# matching the SDK); FlushCache is the BIOS's A(44h)
+func_80040294 GetVideoMode
+func_800402B0 FlushCache

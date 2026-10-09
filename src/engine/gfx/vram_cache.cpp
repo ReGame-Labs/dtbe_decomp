@@ -1,22 +1,19 @@
 #include "common.h"
 #include "engine/gfx/vram_cache.h"
+#include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/lib/list.h"
 #include "engine/system/memory.h"
 #include "vtable.h"
 
 INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/vram_cache", CACHE_VTABLE);
 
-/* a texture page of VRAM is 1 << 6 by 1 << 8 pixels */
-#define TPAGE_WSHIFT 6
-#define TPAGE_HSHIFT 8
-
 /*
  * Cache constructor: cuts the areas of VRAM at the texture pages, then the
- * pages into cellW x cellH cells, a slot each (the last cells first), and
- * empties the cache. The pages are kept in a variable-length array, which
- * is why this file is C++.
+ * pages into cellWidth x cellHeight cells, a slot each (the last cells
+ * first), and empties the cache. The pages are kept in a variable-length
+ * array, which is why this file is C++.
  */
-Cache *cacheInit(Cache *cache, RECT *areas, s32 count, s32 cellW, s32 cellH) {
+Cache *cacheInit(Cache *cache, RECT *areas, s32 count, s32 cellWidth, s32 cellHeight) {
     u32 pageCount = 0;
     s32 i;
 
@@ -32,15 +29,15 @@ Cache *cacheInit(Cache *cache, RECT *areas, s32 count, s32 cellW, s32 cellH) {
     page = pages;
     u32 slotCount = 0;
     for (i = pageCount; i != 0; i--, page++) {
-        slotCount += (page->w / cellW) * (page->h / cellH);
+        slotCount += (page->w / cellWidth) * (page->h / cellHeight);
     }
     cache->count = slotCount;
     cache->slots = new CacheSlot[slotCount];
     CacheSlot *slot = cache->slots + slotCount;
     page = pages;
     for (i = pageCount; i != 0; i--, page++) {
-        s32 cols = page->w / cellW;
-        s32 rows = page->h / cellH;
+        s32 cols = page->w / cellWidth;
+        s32 rows = page->h / cellHeight;
         s32 row;
         s32 col;
 
@@ -48,8 +45,8 @@ Cache *cacheInit(Cache *cache, RECT *areas, s32 count, s32 cellW, s32 cellH) {
             for (row = 0; row < rows; row++) {
                 for (col = 0; col < cols; col++) {
                     slot--;
-                    slot->x = page->x + col * cellW;
-                    slot->y = page->y + cellH * row;
+                    slot->x = page->x + col * cellWidth;
+                    slot->y = page->y + cellHeight * row;
                 }
             }
         }
@@ -63,11 +60,11 @@ Cache *cacheInit(Cache *cache, RECT *areas, s32 count, s32 cellW, s32 cellH) {
 void cacheReset(Cache *cache) {
     CacheSlot *slot = cache->slots;
     ListNode *prev = &cache->used;
-    u32 n = cache->count;
+    u32 left = cache->count;
     CacheSlot *next = slot + 1;
 
     cache->used.next = &slot->link;
-    while (n--) {
+    while (left--) {
         slot->link.prev = prev;
         slot->link.next = &next->link;
         prev = &slot->link;
@@ -79,6 +76,7 @@ void cacheReset(Cache *cache) {
     cache->root = NULL;
 }
 
+/* Destroys the cache, freeing its slots. */
 void cacheDestroy(Cache *cache, s32 flags) {
     cache->vtable = &CACHE_VTABLE;
     if (cache->slots != NULL) {
@@ -169,8 +167,44 @@ void cacheAddSlot(Cache *cache, CacheSlot *slot, u32 key) {
     *link = slot;
 }
 
-/* Near miss: the node->lower load goes to another register and delay slot. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/vram_cache", cacheRemoveSlot);
+/*
+ * Takes slot, found by its key, out of the tree: a leaf goes, a node with one
+ * subtree is replaced by it, and a node with two by the highest node of its
+ * lower subtree. The address of node->lower is taken before its test, as the
+ * call needs it: that keeps node's a0 preference off the load.
+ */
+void cacheRemoveSlot(Cache *cache, CacheSlot *slot) {
+    CacheSlot **link = &cache->root;
+    u32 key = slot->key;
+    CacheSlot *node;
+
+    while (*link != NULL && (*link)->key != key) {
+        if ((*link)->key < key) {
+            link = &(*link)->higher;
+        } else {
+            link = &(*link)->lower;
+        }
+    }
+    node = *link;
+    if (node != slot) {
+        return;
+    }
+    if (node->higher == NULL && node->lower == NULL) {
+        *link = NULL;
+    } else if (node->higher == NULL) {
+        *link = node->lower;
+    } else {
+        CacheSlot **lower = &node->lower;
+
+        if (*lower == NULL) {
+            *link = node->higher;
+        } else {
+            *link = removeHighestSlot(lower);
+            (*link)->lower = *lower;
+            (*link)->higher = node->higher;
+        }
+    }
+}
 
 /* Takes the node with the greatest key out of the subtree at link. */
 CacheSlot *removeHighestSlot(CacheSlot **link) {
@@ -184,61 +218,63 @@ CacheSlot *removeHighestSlot(CacheSlot **link) {
     return node;
 }
 
-/* rectCountCells again: the number of (1 << wshift) x (1 << hshift) aligned
- * cells that rect touches. */
-s32 func_8002EB94(RECT *rect, s32 wshift, s32 hshift) {
-    s32 cellW = 1 << wshift;
-    s32 cellH = 1 << hshift;
-    s32 cols = ((-cellW & (rect->x + rect->w + cellW - 1)) - (-cellW & rect->x)) >> wshift;
-    s32 rows = ((-cellH & (rect->y + rect->h + cellH - 1)) - (-cellH & rect->y)) >> hshift;
+/* rectCountCells again: the number of (1 << widthShift) x (1 << heightShift)
+ * aligned cells that rect touches. */
+s32 func_8002EB94(RECT *rect, s32 widthShift, s32 heightShift) {
+    s32 cellWidth = 1 << widthShift;
+    s32 cellHeight = 1 << heightShift;
+    s32 cols = ((-cellWidth & (rect->x + rect->w + cellWidth - 1)) - (-cellWidth & rect->x)) >> widthShift;
+    s32 rows = ((-cellHeight & (rect->y + rect->h + cellHeight - 1)) - (-cellHeight & rect->y)) >> heightShift;
 
     return cols * rows;
 }
 
-/* rectSplitCells again: splits rect at the (1 << wshift) x (1 << hshift)
- * aligned cells it touches, column by column, into out; returns the end of
- * what it wrote. */
-RECT *func_8002EC00(RECT *out, RECT *rect, s32 wshift, s32 hshift) {
-    s32 cellW = 1 << wshift;
-    s32 cellH = 1 << hshift;
-    s32 cols = ((-cellW & (rect->x + rect->w + cellW - 1)) - (-cellW & rect->x)) >> wshift;
-    s32 rows = ((-cellH & (rect->y + rect->h + cellH - 1)) - (-cellH & rect->y)) >> hshift;
+/* rectSplitCells again: splits rect at the
+ * (1 << widthShift) x (1 << heightShift) aligned cells it touches, column by
+ * column, into out; returns the end of what it wrote. */
+RECT *func_8002EC00(RECT *out, RECT *rect, s32 widthShift, s32 heightShift) {
+    s32 cellWidth = 1 << widthShift;
+    s32 cellHeight = 1 << heightShift;
+    s32 cols = ((-cellWidth & (rect->x + rect->w + cellWidth - 1)) - (-cellWidth & rect->x)) >> widthShift;
+    s32 rows = ((-cellHeight & (rect->y + rect->h + cellHeight - 1)) - (-cellHeight & rect->y)) >> heightShift;
     s32 x = rect->x;
     s32 nextX;
     s32 col;
 
     for (col = cols - 1; col >= 0; col--, x = nextX) {
-        s32 w;
+        s32 width;
         s32 y;
         s32 row;
 
         if (col == 0) {
-            w = rect->x + rect->w - x;
+            width = rect->x + rect->w - x;
         } else {
-            w = (-cellW & (x + cellW)) - x;
+            width = (-cellWidth & (x + cellWidth)) - x;
         }
         y = rect->y;
-        nextX = x + w;
+        nextX = x + width;
         for (row = rows - 1; row >= 0; row--) {
-            s32 h;
+            s32 height;
 
             if (row == 0) {
-                h = rect->y + rect->h - y;
+                height = rect->y + rect->h - y;
             } else {
-                h = (-cellH & (y + cellH)) - y;
+                height = (-cellHeight & (y + cellHeight)) - y;
             }
-            setRECT(out, x, y, w, h);
-            y += h;
+            setRECT(out, x, y, width, height);
+            y += height;
             out++;
         }
     }
     return out;
 }
 
-s16 cacheSlotGetX(CacheSlot *slot) {
-    return slot->x;
+/* Where the slot is in VRAM, across. */
+s16 cacheSlotGetX(CacheSlot *cacheSlot) {
+    return cacheSlot->x;
 }
 
-s16 cacheSlotGetY(CacheSlot *slot) {
-    return slot->y;
+/* Where the slot is in VRAM, down. */
+s16 cacheSlotGetY(CacheSlot *cacheSlot) {
+    return cacheSlot->y;
 }

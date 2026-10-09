@@ -6,9 +6,7 @@
 #include "engine/gfx/ordering_table.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/system/memory.h"
-#include "vtable.h"
 #include "libgpu.h"
-#include "kernel.h"
 #include "psyq.h"
 
 /* Builds the loading screen. */

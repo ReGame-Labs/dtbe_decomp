@@ -9,6 +9,12 @@
 
 EXTERN_C_BEGIN
 
+/* A matrix as eight words, to clear or set two of its elements at once. */
+typedef union {
+    /* 0x00 */ MATRIX m;
+    /* 0x00 */ u32 words[8];
+} MatrixWords;
+
 void swapFourWords(u32 *a, u32 *b);
 void swapTwoWords(u32 *a, u32 *b);
 void matrixTransformVec(MATRIX *m, VECTOR *out, VECTOR *in);

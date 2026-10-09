@@ -12,9 +12,9 @@ EXTERN_C_BEGIN
 
 /* A glyph of a Font: 15 rows of 16 one-bit pixels, each row a big-endian
  * halfword. */
-#define FONT_GLYPH_W 16
-#define FONT_GLYPH_H 15
-#define FONT_GLYPH_SIZE (FONT_GLYPH_H * 2)
+#define FONT_GLYPH_WIDTH 16
+#define FONT_GLYPH_HEIGHT 15
+#define FONT_GLYPH_SIZE (FONT_GLYPH_HEIGHT * 2)
 
 /* A font of glyphs for the two-byte (Shift JIS) characters. data points to
  * the glyph count n, then to the n character codes in increasing order, then
@@ -60,10 +60,14 @@ typedef struct SprtColorWords {
     /* 0x10 */ u32 wh;      /* h in the high half */
 } SprtColorWords;
 
+/* a TextPrinter's colors until they are set: grey, and a darker grey */
+#define TEXT_PRINTER_COLOR 0x808080
+#define TEXT_PRINTER_SHADOW_COLOR 0x404040
+
 /* the sizes of the characters */
-#define TEXT_ASCII_W 8
-#define TEXT_KANJI_W 16
-#define TEXT_LINE_H 16
+#define TEXT_ASCII_WIDTH 8
+#define TEXT_KANJI_WIDTH 16
+#define TEXT_LINE_HEIGHT 16
 
 /* the Shift JIS full-width space, and the first two-byte code */
 #define SJIS_SPACE 0x8140

@@ -35,15 +35,12 @@ public:
 
 #else
 
+/* the virtual table of Task, as the C files see it */
 typedef struct TaskVtable {
     /* 0x00 */ VtableEntry unused;
     /* 0x08 */ VtableEntry destroy; /* (Task *, s32 flags) */
     /* 0x10 */ VtableEntry update;  /* (Task *, s32 arg) */
-    /* 0x18 */ struct {
-        s16 delta;
-        s16 index;
-        s32 (*func)(); /* (Task *): whether killing it leaves it running */
-    } survives;
+    /* 0x18 */ VtableEntryS32 survives; /* (Task *): whether killing it leaves it running */
 } TaskVtable;
 
 /* Something run every frame by a Scheduler; the base class of the game's tasks. */
@@ -95,7 +92,6 @@ void schedulerDestroyTasks(Scheduler *scheduler);
 void destroyTaskList(ListNode *list);
 void schedulerRunTasks(Scheduler *scheduler, s32 arg);
 void schedulerRemoveTask(Scheduler *scheduler, Task *task);
-
 Scheduler *schedulerInsertTask(Scheduler *scheduler, Task *task);
 void taskUpdate(void);
 char *taskGetName(Task *task);

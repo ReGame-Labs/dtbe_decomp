@@ -21,13 +21,13 @@ EXTERN_C_BEGIN
  * (0x81-0x9F or 0xE0-0xFC) */
 #define IS_SJIS_LEAD(c) ((u8)(((c) ^ 0x20) - 0xA1) < 0x3C)
 
-extern const u8 FULL_WIDTH_CHARS[]; /* the full-width Shift-JIS character of each
-                           half-width one, two bytes each */
+/* the full-width Shift-JIS character of each half-width one, two bytes each */
+extern const u8 FULL_WIDTH_CHARS[];
 extern const u8 CTYPE_TABLE[256];
 
 u8 *copyLowerCase(u8 *dst, u8 *src);
 u8 *copyUpperCase(u8 *dst, u8 *src);
-void func_80035F10(u8 *dst, u8 *src, s32 flag, s32 delta);
+void copyChangingCase(u8 *dst, u8 *src, s32 ctype, s32 delta);
 u8 *copyFullWidth(u8 *dst, u8 *src);
 s32 getPathElementLength(u8 *path);
 u8 *copyBackslashPath(u8 *dst, u8 *src);

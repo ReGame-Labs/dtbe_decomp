@@ -1,7 +1,7 @@
 #ifndef VTABLE_H
 #define VTABLE_H
 
-/* The virtual tables of g++ 2.95, as the C files see them: an entry, destructor flags. */
+/* The virtual tables of g++ 2.95, as the C files see them: their entries, destructor flags. */
 
 #include "common.h"
 
@@ -18,6 +18,17 @@ typedef struct {
     /* 0x4 */ void (*func)();
 #endif
 } VtableEntry;
+
+/* An entry of a g++ 2.95 virtual table whose function returns a value. */
+typedef struct {
+    /* 0x0 */ s16 delta;
+    /* 0x2 */ s16 index;
+#ifdef __cplusplus
+    /* 0x4 */ s32 (*func)(...);
+#else
+    /* 0x4 */ s32 (*func)();
+#endif
+} VtableEntryS32;
 
 /* the flags a deleting destructor is called with */
 #define DESTROY_FREE 1   /* free the object's memory afterwards */

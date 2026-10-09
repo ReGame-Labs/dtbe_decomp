@@ -8,7 +8,7 @@
 
 EXTERN_C_BEGIN
 
-s32 func_80023468(s32 arg0);
+s32 func_80023468(s32 value);
 void matrixPrint(MATRIX *m);
 void svecPrint(SVECTOR *v);
 void vecPrint(VECTOR *v);

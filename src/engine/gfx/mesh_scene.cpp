@@ -2,7 +2,6 @@
 #pragma implementation
 #include "common.h"
 #include "engine/gfx/mesh_scene.h"
-#include "engine/gfx/camera.h"
 #include "engine/gfx/scene_graph.h"
 #include "engine/gfx/tmd.h"
 #include "engine/lib/list.h"
@@ -49,20 +48,23 @@ void meshSceneDestroy(MeshScene *meshScene, s32 flags) {
         operatorVecDelete((s32 *)meshScene->links - 2);
     }
     mainHeapFree(meshScene->file);
-    groupDestroy(&meshScene->group, 2);
+    groupDestroy(&meshScene->group, DESTROY_BASES);
     if (flags & DESTROY_FREE) {
         operatorDelete(meshScene);
     }
 }
 
-/* func_80076A00, in an overlay, is not declared yet, and the inlined
- * transformGetWorld copies a MATRIX as a block move (see "Block moves" in
- * TODO.md). */
+/* Loads the scene file at path: uploads its TIMs, relocates its TMD, builds
+ * a Mesh per object in the scene's group, then sets up the nodes
+ * (meshSceneInitNodes). It calls func_80076A00, in an overlay. Left in asm:
+ * the inlined transformGetWorld copies a MATRIX as a block move (see "Block
+ * moves" in TODO.md). */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/mesh_scene", meshSceneLoad);
 
-/* Sets each node's local matrix from its MeshScenePose (the rotation, then the
- * position). It copies a MATRIX as a block move (four loads then four stores),
- * which GCC 2.95.2 does not emit for 32 bytes (see "Block moves" in TODO.md). */
+/* Sets each node's local matrix from its MeshScenePose (the rotation, then
+ * the translation). It copies a MATRIX as a block move (four loads then four
+ * stores), which GCC 2.95.2 does not emit for 32 bytes (see "Block moves" in
+ * TODO.md). */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/mesh_scene", meshSceneInitNodes);
 
 /* Makes `parent` the parent transform of the nodes that have none. */
@@ -74,18 +76,18 @@ void meshSceneSetParent(MeshScene *meshScene, Transform *parent) {
 
     for (i = 0; i < count; i++) {
         if (parents[i] < 0) {
-            Mesh *mesh = meshScene->meshes[i];
-
-            mesh->object.transform.valid = 0;
-            mesh->object.transform.parent = parent;
+            transformSetParentKeepLocalInline(&meshScene->meshes[i]->object.transform, parent);
         }
     }
 }
 
-/* Copies a MATRIX as a block move, as meshSceneInitNodes does. */
+/* Sets the local matrix of a node's mesh, if it has one: its world matrix
+ * goes out of date. It copies the MATRIX as a block move, as
+ * meshSceneInitNodes does. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/mesh_scene", meshSceneSetLocalMatrix);
 
-/* Prepares the TMD of a node again (tmdHeaderRelocate), and its first object. */
+/* Prepares the TMD of a node again (tmdHeaderRelocate), and its first
+ * object. */
 void meshSceneRelocateNodeTmd(MeshScene *meshScene, s32 node) {
     MeshSceneFile *file = meshScene->file;
     s16 *tmdIndex = file->nodes + 1;
@@ -138,8 +140,9 @@ MATRIX *meshSceneGetLocalMatrix(MeshScene *meshScene, s32 node) {
     return &meshScene->meshes[node]->object.transform.local.m;
 }
 
-/* transformGetWorld inlined, whose matrix copy is a block move (see "Block moves"
- * in TODO.md). */
+/* The world matrix of a node's mesh, worked out again if it is out of date:
+ * transformGetWorld inlined, whose matrix copy is a block move (see "Block
+ * moves" in TODO.md). */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/mesh_scene", meshSceneGetWorldMatrix);
 
 /* Hides a node, taking its link out of the list it is in. */

@@ -10,29 +10,29 @@ EXTERN_C_BEGIN
 
 /* An ordering table: a run of linked GPU primitive slots and the pointers into it. */
 typedef struct {
-    s32 depth;       /* number of slots; negative when the table runs in reverse */
-    u_long *head;       /* where drawing starts */
-    u_long *slots;      /* the lowest slot of the depth range */
-    u_long *tail;       /* where drawing ends */
-    u_long *firstDrawn; /* the slot drawn first */
-    u_long *lastDrawn;  /* the slot drawn last */
-} OrderingTable;
+    /* 0x00 */ s32 depth;          /* number of slots; negative when the table runs in reverse */
+    /* 0x04 */ u_long *head;       /* where drawing starts */
+    /* 0x08 */ u_long *slots;      /* the lowest slot of the depth range */
+    /* 0x0C */ u_long *tail;       /* where drawing ends */
+    /* 0x10 */ u_long *firstDrawn; /* the slot drawn first */
+    /* 0x14 */ u_long *lastDrawn;  /* the slot drawn last */
+} OrderingTable; /* size 0x18 */
 
 /* the ordering table the frame is drawn with */
 extern OrderingTable FRAME_OT;
 
-OrderingTable *orderingTableInit(OrderingTable *ot, s32 depth);
-void orderingTableClear(OrderingTable *ot);
-void orderingTableLinkInto(OrderingTable *ot, OrderingTable *other);
-void orderingTableLinkAfter(OrderingTable *ot, u_long *prim);
-u_long *orderingTableGetHead(OrderingTable *ot);
-u_long *orderingTableGetLastDrawn(OrderingTable *ot);
-u_long *orderingTableGetFirstDrawn(OrderingTable *ot);
-u_long *orderingTableGetSlots(OrderingTable *ot);
-u_long *func_80026BC0(OrderingTable *ot);
-u_long *orderingTableGetTail(OrderingTable *ot);
-u32 orderingTableIsReversed(OrderingTable *ot);
-s32 orderingTableGetSlotCount(OrderingTable *ot);
+OrderingTable *orderingTableInit(OrderingTable *orderingTable, s32 depth);
+void orderingTableClear(OrderingTable *orderingTable);
+void orderingTableLinkInto(OrderingTable *orderingTable, OrderingTable *other);
+void orderingTableLinkAfter(OrderingTable *orderingTable, u_long *prim);
+u_long *orderingTableGetHead(OrderingTable *orderingTable);
+u_long *orderingTableGetLastDrawn(OrderingTable *orderingTable);
+u_long *orderingTableGetFirstDrawn(OrderingTable *orderingTable);
+u_long *orderingTableGetSlots(OrderingTable *orderingTable);
+u_long *func_80026BC0(OrderingTable *orderingTable);
+u_long *orderingTableGetTail(OrderingTable *orderingTable);
+u32 orderingTableIsReversed(OrderingTable *orderingTable);
+s32 orderingTableGetSlotCount(OrderingTable *orderingTable);
 
 EXTERN_C_END
 

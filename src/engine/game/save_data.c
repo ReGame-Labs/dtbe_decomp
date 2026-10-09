@@ -4,9 +4,7 @@
 #include "engine/gfx/display.h"
 #include "engine/lib/md5.h"
 #include "engine/pad/button_map.h"
-#include "engine/pad/pad.h"
 #include "psyq.h"
-#include "strings.h"
 
 /* Whether the save data is intact: its MD5 is the one stored in it. */
 s32 saveDataIsValid(SaveData *this) {
@@ -25,7 +23,7 @@ void saveDataStoreMd5(SaveData *this) {
 void saveDataGetMd5(SaveData *this, u8 *digest) {
     Md5 md5;
 
-    func_800383B4(&md5);
+    md5Init(&md5);
     MD5Update(&md5, (u8 *)this, offsetof(SaveData, md5));
     MD5Final(&md5, digest);
 }
@@ -35,7 +33,7 @@ void saveDataGetMd5(SaveData *this, u8 *digest) {
  * the display code (gfx/display.c), which defines it, reaches it through $gp. */
 void saveDataApplyOptions(SaveData *this) {
     displaySetTvPosition(CURRENT_DISPLAY, this->screenX, this->screenY);
-    if (this->unk0) {
+    if (this->mono) {
         setXaMono();
         func_80052A90();
     } else {
@@ -57,8 +55,8 @@ void saveDataResetButtons(SaveData *this) {
     this->unkC = 0;
 }
 
-/* Sets the maps of both players from the slots they gave the buttons: each
- * button of a slot stands for what the slot it was given stands for. */
+/* Sets the maps of both players from the slot indexes they gave the slots:
+ * the pad button of the index given to a slot stands for the slot's button. */
 void saveDataApplyButtons(SaveData *this, ButtonMap *map0, ButtonMap *map1) {
     s32 i;
     s32 slot;
@@ -74,8 +72,8 @@ void saveDataApplyButtons(SaveData *this, ButtonMap *map0, ButtonMap *map1) {
         u16 given1 = this->buttons[1][slot];
         u16 button = BUTTON_SLOTS[slot].button;
 
-        buttonMapSet(map0, BUTTON_SLOTS[given0].unk2, button);
-        buttonMapSet(map1, BUTTON_SLOTS[given1].unk2, button);
+        buttonMapSet(map0, BUTTON_SLOTS[given0].padButton, button);
+        buttonMapSet(map1, BUTTON_SLOTS[given1].padButton, button);
     }
 }
 

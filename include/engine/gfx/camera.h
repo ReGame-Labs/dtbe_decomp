@@ -21,7 +21,12 @@ typedef struct {
 
 /* The planes of the view frustum: first the four sides, which cameraClipLine
  * clips lines against, then the near and the far plane. Their normals point
- * into the frustum. */
+ * into the frustum (cameraSetFov), x to the right and y down as on the
+ * screen. */
+#define PLANE_LEFT 0   /* its normal leans to +x */
+#define PLANE_RIGHT 1  /* to -x */
+#define PLANE_TOP 2    /* to +y */
+#define PLANE_BOTTOM 3 /* to -y */
 #define SIDE_PLANE_COUNT 4
 #define PLANE_NEAR 4
 #define PLANE_FAR 5
@@ -72,11 +77,11 @@ typedef struct {
 
 /* the outcodes of the ends of a line in the last call to cameraClipLine */
 typedef struct {
-    u_long start;
-    u_long end;
+    /* 0x0 */ u_long start;
+    /* 0x4 */ u_long end;
 } Outcodes;
 
-extern Outcodes CLIP_OUTCODES[SIDE_PLANE_COUNT];
+extern Outcodes CLIP_OUTCODES[SIDE_PLANE_COUNT]; /* by side plane */
 
 Camera *cameraInit(Camera *camera, s32 length);
 Camera *cameraInitShared(Camera *camera, s32 length, Camera *other);

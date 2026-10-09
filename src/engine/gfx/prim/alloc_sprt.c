@@ -21,13 +21,15 @@ TILE *allocTile(void) {
     return tile;
 }
 
-/* Takes a texture page primitive from the frame's primitive buffer, with the drawing flags. */
+/* Takes a texture page primitive from the frame's primitive buffer, with the
+ * frame's dither and display area settings. */
 DR_TPAGE *allocDrTpage(s32 tpage) {
     DR_TPAGE *prim = (DR_TPAGE *)PRIM_BUFFER_FREE;
     u_long *code;
 
     PRIM_BUFFER_FREE += sizeof(DR_TPAGE);
     setlen(prim, 1);
+    /* the address is taken before the value, as in allocDrMode */
     code = prim->code;
     *code = _get_mode(DRAW_ON_DISPLAY, DRAW_DITHER, tpage);
     return prim;

@@ -8,6 +8,7 @@
 
 EXTERN_C_BEGIN
 
+/* the virtual table of Printer */
 typedef struct PrinterVtable {
     /* 0x00 */ VtableEntry unused;
     /* 0x08 */ VtableEntry putChar;  /* (Printer *, s32 x, s32 y, u32 code) */
@@ -27,11 +28,11 @@ extern u8 PRINTER_FORMAT_BUFFER[0x400]; /* where a Printer formats its text */
 
 s32 printerPrint(Printer *printer, u8 *format, ...);
 void printerIgnoreColor(Printer *printer, u32 color);
-void func_80032878(Printer *printer, s32 arg1);
+void func_80032878(Printer *printer, s32 value);
 void printerSetCursor(Printer *printer, s32 x, s32 y);
 void printerPrintChar(Printer *printer, u32 code);
 void printerSetColor(Printer *printer, u32 color);
-void func_80032900(Printer *printer, s32 arg1);
+void func_80032900(Printer *printer, s32 value);
 
 EXTERN_C_END
 

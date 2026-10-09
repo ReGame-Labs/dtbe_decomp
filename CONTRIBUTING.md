@@ -10,19 +10,20 @@ build the project; this file is about the work itself.
 Every function that isn't C yet is an `INCLUDE_ASM` line in `src/engine/`,
 which includes splat's disassembly of it:
 ```c
-INCLUDE_ASM("asm/jp/main/nonmatchings/lib/heap", heapShrink);
+INCLUDE_ASM("asm/jp/main/nonmatchings/lib/format", formatterPadNumber);
 ```
 
 1. **Get a first draft.** m2c turns the `.s` into C to start from:
    ```
-   python3 external/m2c/m2c.py asm/jp/main/nonmatchings/lib/heap/heapShrink.s
+   python3 external/m2c/m2c.py asm/jp/main/nonmatchings/lib/format/formatterPadNumber.s
    ```
    The draft is a starting point: give it the real types, the struct fields
-   and the calls of the code around it (`include/engine/lib/heap.h` has the heap's).
+   and the calls of the code around it (`include/engine/lib/format.h` has the
+   formatter's).
 2. **Make it match on its own.** Put the draft in a file of its own that
    includes the headers it needs, and compare it with the original:
    ```
-   tools/try_match.py draft.c heapShrink
+   tools/try_match.py draft.c formatterPadNumber
    ```
    It compiles the draft with the project's compiler and prints `MATCH`, or
    both versions side by side with the differing instructions marked `**`.
@@ -33,8 +34,8 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/lib/heap", heapShrink);
    statements, a temporary, a loop written another way. Then the permuter
    can search for you:
    ```
-   tools/permuter_import.py draft.c heapShrink
-   python3 external/decomp-permuter/permuter.py permuter/heapShrink -j8
+   tools/permuter_import.py draft.c formatterPadNumber
+   python3 external/decomp-permuter/permuter.py permuter/formatterPadNumber -j8
    ```
    The permuter's finds are hints, not answers: keep only what reads as C
    someone would write.
@@ -104,6 +105,7 @@ Look at the C around you and write the same way:
 
 - Four spaces, no tabs; the opening brace on the same line; braces around
   every `if`, `for` and `while` body, even a one-line one.
+- Lines of code up to 120 columns; comments wrapped at 80.
 - A header says what it is about in a line after its include guard
   (`/* The pads: both ports' buttons and analog sticks, held buttons
   repeating, rumble. */`), which `make docs` shows as the file's.
@@ -121,8 +123,9 @@ Look at the C around you and write the same way:
 - Struct fields keep their offset in a comment, and the fields that aren't
   understood yet are named by it (`/* 0x1C */ s32 unk1C;`).
 - A C++ class (`src/engine/menu/stepper.cpp`, `src/engine/debug/system_menu.cpp`)
-  is declared for C++, and as the same struct with its vtable for the C
-  files, in one header; the game's functions have C linkage
+  is declared in its header for C++ only (under `__cplusplus`); what C
+  files use of a C++ file gets a C declaration there too (a global `List`
+  as a `ListNode`). The game's functions have C linkage
   (`EXTERN_C_BEGIN`/`EXTERN_C_END`).
 
 ## Names

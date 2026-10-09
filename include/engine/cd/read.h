@@ -18,6 +18,7 @@ EXTERN_C_BEGIN
  * callbacks into the caller's buffer.
  */
 
+/* the bytes of data in a CD-ROM sector, and their log2 */
 #define CD_SECTOR_SIZE 0x800
 #define CD_SECTOR_SHIFT 11
 /* CdGetSector counts in words */
@@ -42,6 +43,7 @@ EXTERN_C_BEGIN
 #define CDFS_REQ_FOUND 0x4   /* the file was looked up */
 #define CDFS_REQ_NO_SEEK 0x8 /* the file is at position 0: no data read */
 
+/* the size of a request's file name */
 #define CDFS_NAME_MAX 0x59
 
 /* called when a file read ends */
@@ -65,19 +67,23 @@ typedef struct CdfsRequest {
 /* What a file lookup finds: the position, size and name of a file. */
 typedef struct {
     /* 0x00 */ union {
-        CdlLOC loc;
-        u32 word; /* 0 for no position: nothing to read */
-    } pos;
+        /* 0x00 */ CdlLOC loc;
+        /* 0x00 */ u32 word; /* 0 for no position: nothing to read */
+    } position;
     /* 0x04 */ u32 size;
     /* 0x08 */ char name[22];
     /* 0x1E */ u16 offset; /* where the file starts in its first sector */
 } CdfsFile;
 
+/* how many VFS archives can be mounted, and the size of the current
+ * directory */
 #define CDFS_VFS_MAX 4
 #define CDFS_PATH_MAX 0x40
 /* the size of the path buffers the lookups build */
 #define CDFS_ISO_PATH_MAX 0x60
 
+/* The file reader: its queue of requests, the mounted VFS archives and the
+ * current directory. */
 typedef struct Cdfs {
     /* 0x000 */ volatile u32 flags; /* CDFS_*, also set by the CD-ROM callbacks */
     /* 0x004 */ CdfsRequest *current;
@@ -104,8 +110,8 @@ typedef struct Cdfs {
  * sector (head) through CDFS_HEAD_BUFFER, reads the whole sectors straight into
  * the buffer, and copies a last partial sector (tail) through CDFS_TAIL_BUFFER. */
 typedef struct CdfsRead {
-    /* 0x00 */ u8 *dest;
-    /* 0x04 */ u8 *savedDest; /* dest and sectors at the start, for retries */
+    /* 0x00 */ u8 *dst;
+    /* 0x04 */ u8 *savedDst; /* dst and sectors at the start, for retries */
     /* 0x08 */ u16 sectors;   /* sectors left to read */
     /* 0x0A */ u16 savedSectors;
     /* 0x0C */ u16 sectorIndex;
@@ -138,19 +144,21 @@ extern u8 CDFS_HEAD_BUFFER[0x800];
 extern u8 CDFS_TAIL_BUFFER[0x800];
 extern struct CdfsRead CDFS_READ; /* the data read in progress */
 
-/* CdSearchFile */
+/* DsSearchFile (see psyq.h's CD-ROM functions): looks a file up in the disc's
+ * ISO directory; 0 when it is not there, -1 on a drive error. Declared here as
+ * it fills a CdfsFile, which starts as the SDK's CdlFILE. */
 s32 func_80045920(CdfsFile *file, char *name);
 
 s32 findIsoFile(CdfsFile *file, char *name);
 s32 findFile(CdfsFile *file, char *name);
 s32 findMountedFile(CdfsFile *file, char *name);
 s32 findVfsFile(CdfsFile *file, Vfs *vfs, char *path);
-VfsEntry *vfsEntryFind(VfsEntry *dir, char *names, char *name, s32 length);
+VfsEntry *vfsEntryFind(VfsEntry *directory, char *names, char *name, s32 length);
 s32 compareVfsName(u8 *name, u8 *key, s32 length);
-s32 cdfsRequestStart(CdfsRequest *request);
-s32 cdfsRequestLocate(CdfsRequest *request);
-void cdfsRequestPlanRead(CdfsRequest *request, u32 offset);
-void cdfsRequestPlanHeadRead(CdfsRequest *request, u32 offset);
+s32 cdfsRequestStart(CdfsRequest *cdfsRequest);
+s32 cdfsRequestLocate(CdfsRequest *cdfsRequest);
+void cdfsRequestPlanRead(CdfsRequest *cdfsRequest, u32 offset);
+void cdfsRequestPlanHeadRead(CdfsRequest *cdfsRequest, u32 offset);
 void receiveShiftedReadSector(u8 intr);
 void finishShiftedRead(void);
 void finishCdfsRequest(void);
@@ -161,14 +169,14 @@ void resumeCdfs(void);
 void pauseCdfs(void);
 void updateCdfs(void);
 void setCdfsIdle(void (*idle)(s32 arg), s32 arg);
-void getFullPath(char *dest, char *path);
-s32 cdfsRequestFind(CdfsRequest *request);
+void getFullPath(char *dst, char *path);
+s32 cdfsRequestFind(CdfsRequest *cdfsRequest);
 void loadSectors(void *buffer, CdlLOC *loc, u32 offset, u32 size);
 void enableCdfs(void);
 void disableCdfs(void);
 void startNextCdfsRequest(void);
-void cdfsRequestStartRead(CdfsRequest *request);
-void cdfsRequestSkipRead(CdfsRequest *request);
+void cdfsRequestStartRead(CdfsRequest *cdfsRequest);
+void cdfsRequestSkipRead(CdfsRequest *cdfsRequest);
 void receiveCdfsReadComplete(u8 intr);
 void receiveWholeReadSector(u8 intr);
 void receiveTailReadSector(u8 intr);
@@ -184,7 +192,7 @@ void skipCdfsIdle(s32 arg);
 s32 vfsUnmount(Vfs *vfs);
 void initVfsPool(void);
 CdfsDoneFunc setCdfsDone(CdfsDoneFunc done);
-u32 getFileSize();
+u32 getFileSize(char *name);
 
 EXTERN_C_END
 

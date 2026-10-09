@@ -9,6 +9,7 @@
 #include "libsnd.h"
 #include "memory.h"
 #include "psyq.h"
+#include "vtable.h"
 
 /* Sets the reverb type; any type but 0 turns reverb on and sets its depth
  * REVERB_DEPTH_DELAY frames later. 0 on success, else negative. */
@@ -18,7 +19,7 @@ s32 setReverb(s32 type, s16 depthLeft, s16 depthRight) {
     }
     if (type == SS_REV_TYPE_OFF) {
         SOUND_SYSTEM.reverbDelay = 0;
-        func_8004F120();
+        SsUtReverbOff();
         if (func_80047CF0(-1) == 1) {
             func_800479E0(SPU_OFF);
         }
@@ -26,7 +27,7 @@ s32 setReverb(s32 type, s16 depthLeft, s16 depthRight) {
     }
     if (func_80047CF0(-2) == 1) {
         func_800479E0(SPU_ON);
-        func_8004F140();
+        SsUtReverbOn();
         SOUND_SYSTEM.reverbDelay = REVERB_DEPTH_DELAY;
         SOUND_SYSTEM.reverbDepthLeft = depthLeft;
         SOUND_SYSTEM.reverbDepthRight = depthRight;
@@ -83,9 +84,9 @@ void startSoundSystem(void *memory, s16 sepMax, s16 seqMax) {
     SOUND_SYSTEM.songMemory = memory;
     nodePoolInit(&SOUND_SYSTEM.songPool, memory, sizeof(SndPlayingSong), songMax);
     SsSetTableSize((char *)SOUND_SYSTEM.songMemory + songMax * sizeof(SndPlayingSong), sepMax, seqMax);
-    nodePoolInit(&SOUND_SYSTEM.effectPool, SOUND_SYSTEM.effectNodes, sizeof(SndPlayingEffect), SND_MAX_VOICES);
+    nodePoolInit(&SOUND_SYSTEM.effectPool, SOUND_SYSTEM.effectNodes, sizeof(SndPlayingEffect), SND_VOICE_MAX);
     func_80038D44();
-    func_80052AB0(SND_MAX_VOICES);
+    func_80052AB0(SND_VOICE_MAX);
     SsUtSetReverbType(SS_REV_TYPE_OFF);
     SsSetSerialAttr(SS_SERIAL_A, SS_MIX, SS_SON);
     attr.mask = SPU_COMMON_MVOLL | SPU_COMMON_MVOLR;
@@ -102,18 +103,19 @@ s32 getSongMemorySize(s16 sepMax, s16 seqMax) {
     return sepMax * songSize * seqMax;
 }
 
-/* Sets up the pool at 0x358. */
+/* Sets up the pool at 0x358: SND_VOICE_MAX nodes, numbered from 0. Nothing
+ * in the executable takes a node from it. */
 void func_80038D44(void) {
     u32 i;
 
-    nodePoolInit(&SOUND_SYSTEM.unk358, SOUND_SYSTEM.unk370, sizeof(SndUnk370), SND_MAX_VOICES);
-    for (i = 0; i < SND_MAX_VOICES; i++) {
+    nodePoolInit(&SOUND_SYSTEM.unk358, SOUND_SYSTEM.unk370, sizeof(SndUnk370), SND_VOICE_MAX);
+    for (i = 0; i < SND_VOICE_MAX; i++) {
         SOUND_SYSTEM.unk370[i].index = i;
     }
 }
 
 /* Takes the tables of a sound definition file: 0, or -1 when it is not one.
- * A voice count of 0 or above SND_MAX_VOICES means all the voices. */
+ * A voice count of 0 or above SND_VOICE_MAX means all the voices. */
 s32 setSndDef(SndDef *def) {
     u16 voiceCount;
 
@@ -132,8 +134,8 @@ s32 setSndDef(SndDef *def) {
         SOUND_SYSTEM.songCount = def->songCount;
         voiceCount = def->voiceCount;
         SOUND_SYSTEM.voiceCount = voiceCount;
-        if (voiceCount == 0 || voiceCount > SND_MAX_VOICES) {
-            SOUND_SYSTEM.voiceCount = SND_MAX_VOICES;
+        if (voiceCount == 0 || voiceCount > SND_VOICE_MAX) {
+            SOUND_SYSTEM.voiceCount = SND_VOICE_MAX;
         }
         return 0;
     }
@@ -144,7 +146,7 @@ s32 setSndDef(SndDef *def) {
  * or its voice went quiet, any other once its voice is keyed off. Then keys
  * on the new ones, and frees those that got no voice and do not loop. */
 void updateSoundEffects(void) {
-    u8 keys[SND_MAX_VOICES];
+    u8 keys[SND_VOICE_MAX];
     /* libspu takes it as a short, but compares it unsigned */
     u16 envelope;
     SndPlayingEffect *effect;
@@ -189,8 +191,8 @@ void updateSongFades(void) {
     SndSong *def;
     SndSep *sep;
     NodePool *pool = &SOUND_SYSTEM.songPool;
-    s32 volLeft;
-    s32 volRight;
+    s32 volumeLeft;
+    s32 volumeRight;
 
     for (song = (SndPlayingSong *)pool->used.head; song != NULL; song = next) {
         next = (SndPlayingSong *)song->link.next;
@@ -203,15 +205,15 @@ void updateSongFades(void) {
                 song->fade = SND_FADE_FULL;
                 song->fadeStep = 0;
             }
-            volLeft = (song->volLeft * song->fade) >> SND_FADE_SHIFT;
-            volRight = (song->volRight * song->fade) >> SND_FADE_SHIFT;
+            volumeLeft = (song->volumeLeft * song->fade) >> SND_FADE_SHIFT;
+            volumeRight = (song->volumeRight * song->fade) >> SND_FADE_SHIFT;
             def = &SOUND_SYSTEM.songs[song->song];
             sep = &SOUND_SYSTEM.seps[def->sep];
-            if ((volLeft | volRight) == 0) {
-                func_8004D038(sep->id, def->seq);
+            if ((volumeLeft | volumeRight) == 0) {
+                SsSepStop(sep->id, def->seq);
                 nodePoolReleaseInline(&SOUND_SYSTEM.songPool, &song->link);
             } else {
-                func_8004D638(sep->id, def->seq, volLeft, volRight);
+                SsSepSetVol(sep->id, def->seq, volumeLeft, volumeRight);
             }
         }
     }
@@ -228,24 +230,24 @@ void updateSoundSystem(void) {
 }
 
 /* Keys on the voice of a sound effect. */
-void sndPlayingEffectKeyOn(SndPlayingEffect *effect) {
+void sndPlayingEffectKeyOn(SndPlayingEffect *this) {
     s32 keyed;
     u8 voice;
     u32 voiceBits;
-    s8 tone = effect->tone;
+    s8 tone = this->tone;
 
     voice = SND_VOICE_NONE;
     if (tone >= 0) {
-        keyed = SsUtKeyOn(effect->vabId, effect->prog, tone, effect->note, effect->fine, effect->volLeft,
-                          effect->volRight);
+        keyed = SsUtKeyOn(this->vabId, this->prog, tone, this->note, this->fine, this->volumeLeft,
+                          this->volumeRight);
         voice = keyed;
         voiceBits = 1 << keyed;
     } else {
-        voiceBits = func_8004D4F0((effect->vabId << 8) | effect->prog, (effect->note << 8) | effect->fine,
-                                  effect->volLeft, effect->volRight);
+        voiceBits = func_8004D4F0((this->vabId << 8) | this->prog, (this->note << 8) | this->fine,
+                                  this->volumeLeft, this->volumeRight);
     }
-    effect->voice = voice | SND_VOICE_KEYED;
-    effect->voiceBits = voiceBits;
+    this->voice = voice | SND_VOICE_KEYED;
+    this->voiceBits = voiceBits;
 }
 
 /* Stops the songs of a SEP and closes it. */
@@ -260,11 +262,11 @@ void closeSep(u16 sepIndex) {
             def = &SOUND_SYSTEM.songs[song->song];
             next = (SndPlayingSong *)song->link.next;
             if (def->sep == sepIndex) {
-                func_8004D038(sep->id, def->seq);
+                SsSepStop(sep->id, def->seq);
                 nodePoolReleaseInline(&SOUND_SYSTEM.songPool, &song->link);
             }
         }
-        func_80049180(sep->id);
+        SsSepClose(sep->id);
         sep->id = -1;
     }
 }
@@ -307,13 +309,13 @@ void playSong(u16 song) {
 
     if (song < SOUND_SYSTEM.songCount && SOUND_SYSTEM.songs != NULL) {
         def = &SOUND_SYSTEM.songs[song];
-        playSongAtVolume(song, def->volLeft, def->volRight);
+        playSongAtVolume(song, def->volumeLeft, def->volumeRight);
     }
 }
 
 /* Plays a song from its start at the volume given, starting it over when it
  * plays already. */
-void playSongAtVolume(u16 song, u8 volLeft, u8 volRight) {
+void playSongAtVolume(u16 song, u8 volumeLeft, u8 volumeRight) {
     SndSong *def;
     SndSep *sep;
     SndPlayingSong *playing;
@@ -328,7 +330,7 @@ void playSongAtVolume(u16 song, u8 volLeft, u8 volRight) {
                  playing = (SndPlayingSong *)playing->link.next) {
                 if (playing->song == song) {
                     /* it plays already: start it over */
-                    func_8004D038(sep->id, def->seq);
+                    SsSepStop(sep->id, def->seq);
                     break;
                 }
             }
@@ -341,11 +343,11 @@ void playSongAtVolume(u16 song, u8 volLeft, u8 volRight) {
                 playing->song = song;
             }
             playing->flags = 0;
-            playing->volLeft = volLeft;
-            playing->volRight = volRight;
+            playing->volumeLeft = volumeLeft;
+            playing->volumeRight = volumeRight;
             playing->fade = SND_FADE_FULL;
             playing->fadeStep = 0;
-            func_8004D638(sep->id, def->seq, volLeft, volRight);
+            SsSepSetVol(sep->id, def->seq, volumeLeft, volumeRight);
             if (def->loops == 0) {
                 loops = SSPLAY_INFINITY;
             } else {
@@ -388,12 +390,12 @@ void stopAllSongs(void) {
 }
 
 /* Stops a song and frees it. */
-void sndPlayingSongStop(SndPlayingSong *song) {
-    SndSong *def = &SOUND_SYSTEM.songs[song->song];
+void sndPlayingSongStop(SndPlayingSong *this) {
+    SndSong *def = &SOUND_SYSTEM.songs[this->song];
     SndSep *sep = &SOUND_SYSTEM.seps[def->sep];
 
-    func_8004D038(sep->id, def->seq);
-    nodePoolReleaseInline(&SOUND_SYSTEM.songPool, &song->link);
+    SsSepStop(sep->id, def->seq);
+    nodePoolReleaseInline(&SOUND_SYSTEM.songPool, &this->link);
 }
 
 /* Closes the SEPs that use a VAB, stops its sound effects and closes it. */
@@ -459,13 +461,13 @@ s32 playSoundEffect(u16 effect) {
         return -1;
     }
     def = &SOUND_SYSTEM.effects[effect];
-    return playSoundEffectAtVolume(effect, def->volLeft, def->volRight);
+    return playSoundEffectAtVolume(effect, def->volumeLeft, def->volumeRight);
 }
 
 /* A node for a new sound effect: a free one, or else the playing effect of
  * the lowest priority when that is not above its own. NULL when there is
  * none or its VAB is not open. */
-SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volLeft, u8 volRight) {
+SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volumeLeft, u8 volumeRight) {
     SndEffect *def = &SOUND_SYSTEM.effects[effect];
     s16 vabId = SOUND_SYSTEM.vabs[def->vab].id;
     SndPlayingEffect *node;
@@ -500,8 +502,8 @@ SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volLeft, u8 volRight) {
     node->tone = def->tone;
     node->note = def->note;
     node->fine = def->fine;
-    node->volLeft = volLeft;
-    node->volRight = volRight;
+    node->volumeLeft = volumeLeft;
+    node->volumeRight = volumeRight;
     if (SOUND_SYSTEM.nextGroup != 0) {
         node->group = SOUND_SYSTEM.nextGroup;
         SOUND_SYSTEM.nextGroup = 0;
@@ -513,14 +515,14 @@ SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volLeft, u8 volRight) {
 
 /* Plays a sound effect at the volume given: its handle, or 0 when it does
  * not play. The playing effects are kept from the highest priority down. */
-u32 playSoundEffectAtVolume(u16 effect, u8 volLeft, u8 volRight) {
+u32 playSoundEffectAtVolume(u16 effect, u8 volumeLeft, u8 volumeRight) {
     SndPlayingEffect *node;
     SndPlayingEffect *at;
 
     if (effect >= SOUND_SYSTEM.effectCount || SOUND_SYSTEM.effects == NULL || canPlaySoundEffect(effect) == 0) {
         return 0;
     }
-    node = allocPlayingEffect(effect, volLeft, volRight);
+    node = allocPlayingEffect(effect, volumeLeft, volumeRight);
     if (node == NULL) {
         return 0;
     }
@@ -538,41 +540,41 @@ u32 playSoundEffectAtVolume(u16 effect, u8 volLeft, u8 volRight) {
 
 /* Frees a sound effect and its handle. sndPlayingEffectFree is its out-of-line
  * copy; the code after it inlines it, as the game did. */
-static inline void sndPlayingEffectFreeInline(SndPlayingEffect *effect) {
-    freeSoundEffectHandle(effect->handle);
-    nodePoolReleaseInline(&SOUND_SYSTEM.effectPool, &effect->link);
+static inline void sndPlayingEffectFreeInline(SndPlayingEffect *this) {
+    freeSoundEffectHandle(this->handle);
+    nodePoolReleaseInline(&SOUND_SYSTEM.effectPool, &this->link);
 }
 
 /* Frees a sound effect and its handle. */
-void sndPlayingEffectFree(SndPlayingEffect *effect) {
-    sndPlayingEffectFreeInline(effect);
+void sndPlayingEffectFree(SndPlayingEffect *this) {
+    sndPlayingEffectFreeInline(this);
 }
 
 /* Keys off the voice of a sound effect and silences it. sndPlayingEffectKeyOff is its
  * out-of-line copy; sndPlayingEffectStop inlines it, as the game did. */
-static inline void sndPlayingEffectKeyOffInline(SndPlayingEffect *effect) {
+static inline void sndPlayingEffectKeyOffInline(SndPlayingEffect *this) {
     SpuVoiceAttr attr;
 
-    SpuSetKey(SPU_OFF, effect->voiceBits);
+    SpuSetKey(SPU_OFF, this->voiceBits);
     attr.mask = SPU_VOICE_VOLL | SPU_VOICE_VOLR;
     attr.volume.left = 0;
     attr.volume.right = 0;
-    attr.voice = effect->voiceBits;
+    attr.voice = this->voiceBits;
     SpuSetVoiceAttr(&attr);
 }
 
 /* Keys off the voice of a sound effect and silences it. */
-void sndPlayingEffectKeyOff(SndPlayingEffect *effect) {
-    sndPlayingEffectKeyOffInline(effect);
+void sndPlayingEffectKeyOff(SndPlayingEffect *this) {
+    sndPlayingEffectKeyOffInline(this);
 }
 
 /* Stops a sound effect and frees it. */
-void sndPlayingEffectStop(SndPlayingEffect *effect) {
-    resumeVoices(effect->voiceBits);
-    if (effect->voice & SND_VOICE_KEYED) {
-        sndPlayingEffectKeyOffInline(effect);
+void sndPlayingEffectStop(SndPlayingEffect *this) {
+    resumeVoices(this->voiceBits);
+    if (this->voice & SND_VOICE_KEYED) {
+        sndPlayingEffectKeyOffInline(this);
     }
-    sndPlayingEffectFreeInline(effect);
+    sndPlayingEffectFreeInline(this);
 }
 
 /* Stops the effects of the group of a new sound effect, and tells whether it
@@ -639,15 +641,15 @@ s32 transferVabBody(u16 vab, u8 *data) {
     return result;
 }
 
-/* g++'s constructor and destructor of the handle table of the playing sound
- * effects (__static_initialization_and_destruction_0). */
-void func_80039EEC(s32 initialize, s32 priority) {
+/* Builds (initialize) or destroys the handle table of the playing sound
+ * effects: g++'s __static_initialization_and_destruction_0 of this file. */
+void initOrDestroySoundEffectHandles(s32 initialize, s32 priority) {
     if (priority == 0xFFFF) {
         if (initialize) {
             handleTableInit(&SOUND_EFFECT_HANDLES, SND_HANDLE_CAPACITY);
             return;
         }
-        handleTableDestroy(&SOUND_EFFECT_HANDLES, 2);
+        handleTableDestroy(&SOUND_EFFECT_HANDLES, DESTROY_BASES);
     }
 }
 
@@ -666,12 +668,14 @@ void freeSoundEffectHandle(u32 handle) {
     handleTableRemove(&SOUND_EFFECT_HANDLES, handle);
 }
 
-/* the global constructor of this file */
-void func_80039FAC(void) {
-    func_80039EEC(1, 0xFFFF);
+/* Builds the handle table of the playing sound effects: the file's global
+ * constructor. */
+void initSoundEffectHandles(void) {
+    initOrDestroySoundEffectHandles(1, 0xFFFF);
 }
 
-/* the global destructor of this file */
-void func_80039FD0(void) {
-    func_80039EEC(0, 0xFFFF);
+/* Destroys the handle table of the playing sound effects: the file's global
+ * destructor. */
+void destroySoundEffectHandles(void) {
+    initOrDestroySoundEffectHandles(0, 0xFFFF);
 }

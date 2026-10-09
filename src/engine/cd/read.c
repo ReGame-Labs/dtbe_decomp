@@ -6,9 +6,9 @@
 #include "engine/lib/string.h"
 #include "engine/system/log.h"
 #include "memory.h"
-#include "psyq.h"
 #include "stdio.h"
 #include "strings.h"
+#include "psyq.h"
 
 /* The first node of a list. Read through this, a list of CDFS is
  * addressed as its own symbol, as the game does. */
@@ -35,8 +35,8 @@ static inline s32 cdfsFind(CdfsRequest *request) {
     }
     request->fileSize = file.size;
     request->fileOffset = file.offset;
-    request->loc = file.pos.loc;
-    if (file.pos.word == 0) {
+    request->loc = file.position.loc;
+    if (file.position.word == 0) {
         request->flags |= CDFS_REQ_NO_SEEK;
     }
     request->flags |= CDFS_REQ_FOUND;
@@ -90,44 +90,48 @@ s32 findMountedFile(CdfsFile *file, char *name) {
     char path[CDFS_ISO_PATH_MAX];
     s32 result = -1;
     Vfs *vfs;
-    s32 len;
+    s32 length;
 
     path[0] = '/';
     copyLowerCase(path + 1, name);
     copySlashPath(path, path);
     vfs = (Vfs *)listHead(&CDFS.vfs.used);
     while (vfs != NULL) {
-        len = strlen(vfs->mountPoint);
-        if (strncmp(vfs->mountPoint, path, len) != 0) {
+        length = strlen(vfs->mountPoint);
+        if (strncmp(vfs->mountPoint, path, length) != 0) {
             vfs = (Vfs *)vfs->link.next;
         } else {
             if (listHead(&CDFS.vfs.used) != &vfs->link) {
                 linkListRemove(&CDFS.vfs.used, &vfs->link);
                 linkListInsertBefore(&CDFS.vfs.used, listHead(&CDFS.vfs.used), &vfs->link);
             }
-            result = findVfsFile(file, vfs, path + len);
+            result = findVfsFile(file, vfs, path + length);
             break;
         }
     }
     return result;
 }
 
-/* Finds a path in a VFS archive's directory tree. The C is right, but GCC lays
- * out the -2/-3 returns in a different block order (60 diffs at best). */
+/* Finds a path in a VFS archive's directory tree. A loop written with gotos
+ * gives the game's block layout and registers (52 diffs): a structured loop
+ * has loop.c move the -2 return after it. What is left: the game keeps the
+ * block of the vfsEntryFind call unscheduled (as if a loop note sat before
+ * it), and its first vfs->entries load sets a pseudo of its own; no natural
+ * source was found for either. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/cd/read", findVfsFile);
 
 /* Finds the entry of the directory named by the length characters at name
  * (its entries are sorted); returns NULL if there is none. */
-VfsEntry *vfsEntryFind(VfsEntry *dir, char *names, char *name, s32 length) {
+VfsEntry *vfsEntryFind(VfsEntry *directory, char *names, char *name, s32 length) {
     s32 low = 0;
-    s32 high = dir->size - 1;
+    s32 high = directory->size - 1;
     s32 middle;
     s32 order;
 
     /* from here on the directory's entries */
-    dir = dir->at.entries;
+    directory = directory->at.entries;
     middle = (low + high) / 2;
-    while ((order = compareVfsName(names + dir[middle].nameOffset, name, length)) != 0) {
+    while ((order = compareVfsName(names + directory[middle].nameOffset, name, length)) != 0) {
         if (low == high) {
             return NULL;
         }
@@ -141,7 +145,7 @@ VfsEntry *vfsEntryFind(VfsEntry *dir, char *names, char *name, s32 length) {
         }
         middle = (low + high) / 2;
     }
-    return &dir[middle];
+    return &directory[middle];
 }
 
 /* Compares the name with the length characters at key: 0 if they are the
@@ -162,32 +166,32 @@ s32 compareVfsName(u8 *name, u8 *key, s32 length) {
 
 /* Starts the request, or restarts it after an error; returns 0, or a
  * negative number when its file cannot be read (it is then dropped). */
-s32 cdfsRequestStart(CdfsRequest *request) {
+s32 cdfsRequestStart(CdfsRequest *this) {
     s32 result;
 
     CDFS.flags |= CDFS_STARTING;
-    if (!(request->flags & CDFS_REQ_STARTED)) {
-        result = cdfsRequestLocate(request);
+    if (!(this->flags & CDFS_REQ_STARTED)) {
+        result = cdfsRequestLocate(this);
         if (result < 0) {
-            linkListRemove(&CDFS.requests.used, &request->link);
-            nodePoolFree(&CDFS.requests, &request->link);
+            linkListRemove(&CDFS.requests.used, &this->link);
+            nodePoolFree(&CDFS.requests, &this->link);
             CDFS.result = 0;
             CDFS.flags &= ~CDFS_STARTING;
             return result;
         }
         CDFS_READ.savedSectors = CDFS_READ.sectors;
-        CDFS_READ.savedDest = CDFS_READ.dest;
-        request->flags |= CDFS_REQ_STARTED;
+        CDFS_READ.savedDst = CDFS_READ.dst;
+        this->flags |= CDFS_REQ_STARTED;
     } else {
         CDFS_READ.sectors = CDFS_READ.savedSectors;
-        CDFS_READ.dest = CDFS_READ.savedDest;
+        CDFS_READ.dst = CDFS_READ.savedDst;
     }
     CDFS.hook();
-    CDFS.current = request;
-    if (request->flags & CDFS_REQ_NO_SEEK) {
-        cdfsRequestSkipRead(request);
+    CDFS.current = this;
+    if (this->flags & CDFS_REQ_NO_SEEK) {
+        cdfsRequestSkipRead(this);
     } else {
-        cdfsRequestStartRead(request);
+        cdfsRequestStartRead(this);
     }
     CDFS.idle(CDFS.idleArg);
     return 0;
@@ -195,48 +199,48 @@ s32 cdfsRequestStart(CdfsRequest *request) {
 
 /* Looks the request's file up, clips the size to it and finds where the
  * read starts; returns -1 if the file cannot be read. */
-s32 cdfsRequestLocate(CdfsRequest *request) {
-    u32 offset = request->offset;
+s32 cdfsRequestLocate(CdfsRequest *this) {
+    u32 offset = this->offset;
 
-    if (!(request->flags & CDFS_REQ_SECTOR)) {
-        if (cdfsFind(request) != 0) {
+    if (!(this->flags & CDFS_REQ_SECTOR)) {
+        if (cdfsFind(this) != 0) {
             return -1;
         }
-        if (request->fileSize - offset < request->size || request->size == 0) {
-            request->size = request->fileSize - offset;
+        if (this->fileSize - offset < this->size || this->size == 0) {
+            this->size = this->fileSize - offset;
         }
-        if (request->flags & CDFS_REQ_NO_SEEK) {
+        if (this->flags & CDFS_REQ_NO_SEEK) {
             return 0;
         }
-        offset += request->fileOffset;
+        offset += this->fileOffset;
     }
     if (offset != 0) {
-        func_80046B60(func_80046C70(&request->loc) + (offset >> CD_SECTOR_SHIFT), &request->loc);
+        func_80046B60(func_80046C70(&this->loc) + (offset >> CD_SECTOR_SHIFT), &this->loc);
         offset &= CD_SECTOR_SIZE - 1;
     }
-    cdfsRequestPlanRead(request, offset);
+    cdfsRequestPlanRead(this, offset);
     return 0;
 }
 
 /* Picks how to read the request from where it starts in its first sector:
  * whole sectors go straight to an aligned buffer. */
-void cdfsRequestPlanRead(CdfsRequest *request, u32 offset) {
+void cdfsRequestPlanRead(CdfsRequest *this, u32 offset) {
     /* CdGetSector stores words: only a word aligned buffer takes them */
-    if (offset != 0 || ((u32)request->buffer & 3)) {
-        if ((request->size + offset + CD_SECTOR_SIZE - 1) >> CD_SECTOR_SHIFT == 1) {
+    if (offset != 0 || ((u32)this->buffer & 3)) {
+        if ((this->size + offset + CD_SECTOR_SIZE - 1) >> CD_SECTOR_SHIFT == 1) {
             CDFS_READ.head = CDFS_HEAD_BUFFER + offset;
-            CDFS_READ.headSize = request->size;
+            CDFS_READ.headSize = this->size;
             CDFS_READ.ready = receiveSmallReadSector;
             CDFS_READ.finish = finishSmallRead;
             CDFS_READ.mode = CDFS_READ_SMALL;
             return;
         }
-        cdfsRequestPlanHeadRead(request, offset);
+        cdfsRequestPlanHeadRead(this, offset);
         return;
     }
-    CDFS_READ.dest = request->buffer;
-    CDFS_READ.sectors = (request->size + CD_SECTOR_SIZE - 1) >> CD_SECTOR_SHIFT;
-    CDFS_READ.tailSize = request->size & (CD_SECTOR_SIZE - 1);
+    CDFS_READ.dst = this->buffer;
+    CDFS_READ.sectors = (this->size + CD_SECTOR_SIZE - 1) >> CD_SECTOR_SHIFT;
+    CDFS_READ.tailSize = this->size & (CD_SECTOR_SIZE - 1);
     if (CDFS_READ.tailSize == 0) {
         CDFS_READ.ready = receiveWholeReadSector;
         CDFS_READ.finish = finishCdfsRequest;
@@ -250,24 +254,24 @@ void cdfsRequestPlanRead(CdfsRequest *request, u32 offset) {
 
 /* Sets up a read that starts inside its first sector: the body is read to
  * the word aligned place at or before it, then moved up. */
-void cdfsRequestPlanHeadRead(CdfsRequest *request, u32 offset) {
+void cdfsRequestPlanHeadRead(CdfsRequest *this, u32 offset) {
     u32 headSize = CD_SECTOR_SIZE - offset;
-    u8 *body = request->buffer + headSize;
+    u8 *body = this->buffer + headSize;
     /* the body's place rounded down to a word, CdGetSector stores words
      * (an integer, to mask it) */
     u32 aligned = (u32)body & ~3;
     u32 shift = (u32)body - aligned;
-    u8 *dest = (u8 *)aligned;
-    u32 sectors = (request->size + offset + CD_SECTOR_SIZE - 1) >> CD_SECTOR_SHIFT;
+    u8 *dst = (u8 *)aligned;
+    u32 sectors = (this->size + offset + CD_SECTOR_SIZE - 1) >> CD_SECTOR_SHIFT;
     u8 *head = CDFS_HEAD_BUFFER + offset;
-    u32 rest = request->size - headSize;
+    u32 rest = this->size - headSize;
     u32 bodySize = rest & ~(CD_SECTOR_SIZE - 1);
     u8 *tail = body + bodySize;
     u32 tailSize = rest - bodySize;
 
     if (bodySize != 0 && headSize < shift) {
         /* the aligned place is before the buffer: read a word later */
-        dest += 4;
+        dst += 4;
         shift -= 4;
         CDFS_READ.ready = receiveShiftedReadSector;
         CDFS_READ.finish = finishShiftedRead;
@@ -282,7 +286,7 @@ void cdfsRequestPlanHeadRead(CdfsRequest *request, u32 offset) {
     CDFS_READ.bodySize = bodySize;
     CDFS_READ.tailSize = tailSize;
     CDFS_READ.shift = shift;
-    CDFS_READ.dest = dest;
+    CDFS_READ.dst = dst;
     CDFS_READ.head = head;
     CDFS_READ.body = body;
     CDFS_READ.tail = tail;
@@ -304,19 +308,19 @@ void receiveShiftedReadSector(u8 intr) {
                 /* the word before the shifted body goes to the unused
                  * start of the head's buffer (finishShiftedRead moves it) */
                 func_80046930(CDFS_HEAD_BUFFER, 1);
-                func_80046930(CDFS_READ.dest, CD_SECTOR_WORDS - 1);
-                CDFS_READ.dest += CD_SECTOR_SIZE - 4;
+                func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS - 1);
+                CDFS_READ.dst += CD_SECTOR_SIZE - 4;
                 break;
             default:
-                func_80046930(CDFS_READ.dest, CD_SECTOR_WORDS);
-                CDFS_READ.dest += CD_SECTOR_SIZE;
+                func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
+                CDFS_READ.dst += CD_SECTOR_SIZE;
                 break;
         }
         return;
     }
     func_80046E00(receiveCdfsLastSector);
     if (CDFS_READ.tailSize == 0) {
-        func_80046930(CDFS_READ.dest, CD_SECTOR_WORDS);
+        func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
     } else {
         func_80046930(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
     }
@@ -433,42 +437,42 @@ void setCdfsIdle(void (*idle)(s32 arg), s32 arg) {
 }
 
 /* Makes the full path of path: '/' separated, relative ones from cwd. */
-void getFullPath(char *dest, char *path) {
+void getFullPath(char *dst, char *path) {
     u8 clean[CDFS_ISO_PATH_MAX];
 
     copySlashPath(clean, path);
     if (clean[0] == '/') {
-        strcpy(dest, clean);
+        strcpy(dst, clean);
         return;
     }
-    strcpy(dest, CDFS.cwd);
-    strcat(dest, clean);
+    strcpy(dst, CDFS.cwd);
+    strcat(dst, clean);
 }
 
 /* Looks the request's file up once: sets its position, size and offset in
  * its sector. Returns -1 when there is no such file or the read would start
  * past its end. */
-s32 cdfsRequestFind(CdfsRequest *request) {
+s32 cdfsRequestFind(CdfsRequest *this) {
     CdfsFile file;
 
-    if (request->flags & CDFS_REQ_FOUND) {
+    if (this->flags & CDFS_REQ_FOUND) {
         return 0;
     }
-    if (CDFS.find(&file, request->name) != 0) {
-        LOG_PRINT(STR_CDFS_FILE_NOT_FOUND, request->name);
+    if (CDFS.find(&file, this->name) != 0) {
+        LOG_PRINT(STR_CDFS_FILE_NOT_FOUND, this->name);
         return -1;
     }
-    if (request->offset >= file.size) {
-        LOG_PRINT(STR_CDFS_OFFSET_SIZE_OVER, request->name);
+    if (this->offset >= file.size) {
+        LOG_PRINT(STR_CDFS_OFFSET_SIZE_OVER, this->name);
         return -1;
     }
-    request->fileSize = file.size;
-    request->fileOffset = file.offset;
-    request->loc = file.pos.loc;
-    if (file.pos.word == 0) {
-        request->flags |= CDFS_REQ_NO_SEEK;
+    this->fileSize = file.size;
+    this->fileOffset = file.offset;
+    this->loc = file.position.loc;
+    if (file.position.word == 0) {
+        this->flags |= CDFS_REQ_NO_SEEK;
     }
-    request->flags |= CDFS_REQ_FOUND;
+    this->flags |= CDFS_REQ_FOUND;
     return 0;
 }
 
@@ -511,16 +515,16 @@ void startNextCdfsRequest(void) {
 }
 
 /* Starts the data read of the request. */
-void cdfsRequestStartRead(CdfsRequest *request) {
-    LOG_PRINT("CDFS: Read(%d) %p %08x \"%s\" ..", CDFS_READ.mode, request->buffer, request->size,
-               request->name);
-    func_80043998(CDFS_MODE, &request->loc, CdlReadN, receiveCdfsReadComplete, -1);
+void cdfsRequestStartRead(CdfsRequest *this) {
+    LOG_PRINT("CDFS: Read(%d) %p %08x \"%s\" ..", CDFS_READ.mode, this->buffer, this->size,
+               this->name);
+    func_80043998(CDFS_MODE, &this->loc, CdlReadN, receiveCdfsReadComplete, -1);
     CDFS_READ.sectorIndex = 0;
     CDFS.flags |= CDFS_READING;
 }
 
 /* Ends a request that has nothing to read. */
-void cdfsRequestSkipRead(CdfsRequest *request) {
+void cdfsRequestSkipRead(CdfsRequest *this) {
     CDFS.unk24();
     CDFS.flags |= CDFS_SECTOR_DONE;
     CDFS_READ.finish = finishCdfsRequest;
@@ -545,12 +549,12 @@ void receiveWholeReadSector(u8 intr) {
     if (--CDFS_READ.sectors == 0) {
         func_80046E00(receiveCdfsLastSector);
     }
-    func_80046930(CDFS_READ.dest, CD_SECTOR_WORDS);
+    func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
     if (CDFS_READ.sectors == 0) {
         func_80046304();
         return;
     }
-    CDFS_READ.dest += CD_SECTOR_SIZE;
+    CDFS_READ.dst += CD_SECTOR_SIZE;
 }
 
 /* The data ready callback of a read ending in a partial sector. */
@@ -560,8 +564,8 @@ void receiveTailReadSector(u8 intr) {
         return;
     }
     if (--CDFS_READ.sectors != 0) {
-        func_80046930(CDFS_READ.dest, CD_SECTOR_WORDS);
-        CDFS_READ.dest += CD_SECTOR_SIZE;
+        func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
+        CDFS_READ.dst += CD_SECTOR_SIZE;
         return;
     }
     func_80046E00(receiveCdfsLastSector);
@@ -571,7 +575,7 @@ void receiveTailReadSector(u8 intr) {
 
 /* The end of a read ending in a partial sector: copies that in. */
 void finishTailRead(void) {
-    memcpy(CDFS_READ.dest, CDFS_TAIL_BUFFER, CDFS_READ.tailSize);
+    memcpy(CDFS_READ.dst, CDFS_TAIL_BUFFER, CDFS_READ.tailSize);
     finishCdfsRequest();
 }
 
@@ -586,13 +590,13 @@ void receiveHeadReadSector(u8 intr) {
             func_80046930(CDFS_HEAD_BUFFER, CD_SECTOR_WORDS);
             return;
         }
-        func_80046930(CDFS_READ.dest, CD_SECTOR_WORDS);
-        CDFS_READ.dest += CD_SECTOR_SIZE;
+        func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
+        CDFS_READ.dst += CD_SECTOR_SIZE;
         return;
     }
     func_80046E00(receiveCdfsLastSector);
     if (CDFS_READ.tailSize == 0) {
-        func_80046930(CDFS_READ.dest, CD_SECTOR_WORDS);
+        func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
     } else {
         func_80046930(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
     }
@@ -662,11 +666,11 @@ void skipCdfsIdle(s32 arg) {
 
 /* Unmounts a VFS archive; returns the number of archives left, or -1 if it
  * was not mounted. */
-s32 vfsUnmount(Vfs *vfs) {
+s32 vfsUnmount(Vfs *this) {
     LinkNode *node;
 
     for (node = listHead(&CDFS.vfs.used); node != NULL; node = node->next) {
-        if (node == &vfs->link) {
+        if (node == &this->link) {
             NodePool *pool = &CDFS.vfs;
 
             nodePoolRelease(pool, node);

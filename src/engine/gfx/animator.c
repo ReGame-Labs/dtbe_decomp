@@ -2,6 +2,7 @@
 #include "engine/gfx/animator.h"
 #include "engine/math/quaternion.h"
 #include "engine/system/memory.h"
+#include "gte.h"
 #include "vtable.h"
 
 /* The address of what offset, counted from the start of data, points at. */
@@ -20,9 +21,9 @@ Animator *animatorInit(Animator *this, AnimData *data) {
         data->parents = (s16 *)RELOCATE(data, data->parents);
         data->objects = (s16 *)RELOCATE(data, data->objects);
         data->clips = (AnimClip *)RELOCATE(data, data->clips);
-        data->rots = (Quaternion *)RELOCATE(data, data->rots);
-        data->unk8s = (Vec3s *)RELOCATE(data, data->unk8s);
-        data->unkEs = (Vec3s *)RELOCATE(data, data->unkEs);
+        data->rotations = (Quaternion *)RELOCATE(data, data->rotations);
+        data->scales = (Vec3s *)RELOCATE(data, data->scales);
+        data->translations = (Vec3s *)RELOCATE(data, data->translations);
         for (clip = data->clips, end = clip + data->clipCount; clip != end; clip++) {
             clip->keys = (u32 *)RELOCATE(data, clip->keys);
         }
@@ -95,7 +96,7 @@ s32 animatorIsStopped(Animator *this) {
 
 /* Whether the clip came to its end in the last step. */
 s32 animatorHasEnded(Animator *this) {
-    return (this->flags >> 1) & 1;
+    return (this->flags & ANIMATOR_ENDED) != 0;
 }
 
 /* Whether clip has no frames. */
@@ -147,16 +148,16 @@ void animatorSetLoopFrame(Animator *this, s32 frame) {
 s32 animatorStartBlend(Animator *this, s32 frame, s32 blendFrames) {
     AnimData *data;
     u32 *keys;
-    Quaternion *rots;
-    Vec3s *unk8s;
-    Vec3s *unkEs;
+    Quaternion *rotations;
+    Vec3s *scales;
+    Vec3s *translations;
     AnimNode *node;
     s32 nodeCount;
     s32 i;
     u32 key;
-    u32 rot;
-    u32 unk8;
-    u32 unkE;
+    u32 rotationIndex;
+    u32 scaleIndex;
+    u32 translationIndex;
 
     if (frame > this->frameCount - 1) {
         frame = this->frameCount - 1;
@@ -174,22 +175,22 @@ s32 animatorStartBlend(Animator *this, s32 frame, s32 blendFrames) {
     data = this->data;
     nodeCount = data->nodeCount;
     keys = this->keys;
-    rots = data->rots;
-    unk8s = data->unk8s;
-    unkEs = data->unkEs;
+    rotations = data->rotations;
+    scales = data->scales;
+    translations = data->translations;
     keys += nodeCount * frame;
     for (i = 0; i < nodeCount; i++) {
         node = this->nodes[i];
         if (node != NULL) {
             key = *keys++;
-            rot = data->rotMask & key;
-            key >>= data->unk8Shift;
-            unk8 = data->unk8Mask & key;
-            key >>= data->unkEShift;
-            unkE = data->unkEMask & key;
-            node->to.rot = rots[rot];
-            node->to.unk8 = unk8s[unk8];
-            node->to.unkE = unkEs[unkE];
+            rotationIndex = data->rotationMask & key;
+            key >>= data->scaleShift;
+            scaleIndex = data->scaleMask & key;
+            key >>= data->translationShift;
+            translationIndex = data->translationMask & key;
+            node->to.rotation = rotations[rotationIndex];
+            node->to.scale = scales[scaleIndex];
+            node->to.translation = translations[translationIndex];
             node->from = node->pose;
         }
     }
@@ -229,7 +230,7 @@ void animatorUpdate(Animator *this) {
     this->frame = frame;
 }
 
-/* Lets every node take on its new pose. */
+/* Hands every node its new pose, through the update entry of its vtable. */
 void animatorUpdateNodes(Animator *this) {
     s32 nodeCount = this->data->nodeCount;
     AnimNode *node;
@@ -238,7 +239,7 @@ void animatorUpdateNodes(Animator *this) {
     for (i = 0; i < nodeCount; i++) {
         node = this->nodes[i];
         if (node != NULL) {
-            node->vtable->update.func((u8 *)node + node->vtable->update.delta);
+            node->vtable->update.func((u8 *)node + node->vtable->update.delta, &node->pose);
         }
     }
 }
@@ -248,29 +249,29 @@ void animatorSetFramePoses(Animator *this, s32 frame) {
     AnimData *data = this->data;
     s32 nodeCount = data->nodeCount;
     u32 *keys = this->keys;
-    Quaternion *rots = data->rots;
-    Vec3s *unk8s = data->unk8s;
-    Vec3s *unkEs = data->unkEs;
+    Quaternion *rotations = data->rotations;
+    Vec3s *scales = data->scales;
+    Vec3s *translations = data->translations;
     AnimNode *node;
     s32 i;
     u32 key;
-    u32 rot;
-    u32 unk8;
-    u32 unkE;
+    u32 rotationIndex;
+    u32 scaleIndex;
+    u32 translationIndex;
 
     keys += nodeCount * frame;
     for (i = 0; i < nodeCount; i++) {
         node = this->nodes[i];
         if (node != NULL) {
             key = *keys++;
-            rot = data->rotMask & key;
-            key >>= data->unk8Shift;
-            unk8 = data->unk8Mask & key;
-            key >>= data->unkEShift;
-            unkE = data->unkEMask & key;
-            node->pose.rot = rots[rot];
-            node->pose.unk8 = unk8s[unk8];
-            node->pose.unkE = unkEs[unkE];
+            rotationIndex = data->rotationMask & key;
+            key >>= data->scaleShift;
+            scaleIndex = data->scaleMask & key;
+            key >>= data->translationShift;
+            translationIndex = data->translationMask & key;
+            node->pose.rotation = rotations[rotationIndex];
+            node->pose.scale = scales[scaleIndex];
+            node->pose.translation = translations[translationIndex];
         }
     }
 }
@@ -295,18 +296,23 @@ void animatorSetBlendPoses(Animator *this, s32 frame) {
 }
 
 /* Blends the pose of node from from to to by t (4.12). */
-void animNodeBlend(AnimNode *node, s32 t) {
-    blendQuaternion(&node->pose.rot, &node->from.rot, &node->to.rot, t);
-    blendVec3s(&node->pose.unk8, &node->from.unk8, &node->to.unk8, t);
-    blendVec3s(&node->pose.unkE, &node->from.unkE, &node->to.unkE, t);
+void animNodeBlend(AnimNode *this, s32 t) {
+    blendQuaternion(&this->pose.rotation, &this->from.rotation, &this->to.rotation, t);
+    blendVec3s(&this->pose.scale, &this->from.scale, &this->to.scale, t);
+    blendVec3s(&this->pose.translation, &this->from.translation, &this->to.translation, t);
 }
 
-/* out = (to * t + from * (ONE - t)) >> 12, through the GTE's GPF and GPL.
- * Compiled C (lhu of halfword operands, filled jr delay slot): a C draft over
- * GTE macros has the same instructions, but the original keeps v1 free while
- * loading to and v0 while reading the result, so the registers differ; the
- * cause was not found. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/animator", blendVec3s);
+/* out = (to * t + from * (ONE - t)) >> 12, through the GTE's GPF and GPL
+ * (sf 0), the components passed to the GTE as they are loaded (lhu). */
+void blendVec3s(Vec3s *out, Vec3s *from, Vec3s *to, s32 t) {
+    s32 x, y, z;
+
+    gte_scale0(t, to->vx, to->vy, to->vz);
+    gte_scaleAdd0(ONE - t, from->vx, from->vy, from->vz, x, y, z);
+    out->vx = x >> 12;
+    out->vy = y >> 12;
+    out->vz = z >> 12;
+}
 
 /* Blends from to to by t (4.12). */
 void blendQuaternion(Quaternion *out, Quaternion *from, Quaternion *to, s32 t) {

@@ -33,11 +33,11 @@ func_8002BD80 entityOperatorNewAt
 func_8002BD88 entityOperatorNew
 func_8002BDA8 entityOperatorDelete
 func_8002BDC8 getEntityByHandle
-func_8002BDF4 entityGetGroup
 func_8002BE14 allocEntityMemory
 func_8002BE3C freeEntityMemory
 func_8002BE64 destroyEntityByHandle
-func_8002BEB4 entityFindGroup
+# the accessor itself; func_8002BDF4, which only calls it, keeps splat's name
+func_8002BEB4 entityGetGroup
 func_8002BEE8 entityRenewHandle
 func_8002BF34 entityAddSibling
 func_8002BF6C entityGroupInit

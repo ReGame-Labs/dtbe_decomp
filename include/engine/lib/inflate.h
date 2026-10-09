@@ -4,16 +4,15 @@
 /* The inflate of zlib 1.1.3, unpacking the game's compressed files: streams and tables. */
 
 #include "common.h"
-#include "engine/cd/cdfs.h"
 
 EXTERN_C_BEGIN
 
 /*
  * zlib 1.1.3's decompressor (inflate.c, adler32.c, infblock.c, infcodes.c,
  * inftrees.c, infutil.c, inffast.c and zutil.c), which unpacks the game's
- * compressed files. The functions keep their addresses as names; each one's
- * comment gives its zlib name. It was built with inlining on: the small
- * functions are copied into their callers in the same file.
+ * compressed files. The functions and tables keep zlib's names. It was built
+ * with inlining on: the small functions are copied into their callers in the
+ * same file.
  */
 
 /* the return codes */
@@ -44,6 +43,13 @@ EXTERN_C_BEGIN
 /* the largest prime below 65536: adler32 sums modulo it */
 #define ADLER_BASE 65521
 
+/* A stream's allocator and its free (zlib's alloc_func and free_func). The
+ * game's allocator multiplies items by size signed, so they are s32 here
+ * where zlib has unsigned. */
+typedef void *(*AllocFunc)(void *opaque, s32 items, s32 size);
+typedef void (*FreeFunc)(void *opaque, void *address);
+
+/* a check of the uncompressed data (adler32) */
 typedef u32 (*CheckFunc)(u32 check, const u8 *buf, u32 len);
 
 /* An entry of a Huffman decoding table (inflate_huft). */
@@ -196,6 +202,7 @@ typedef struct ZStream {
 /* the version of zlib */
 #define ZLIB_VERSION "1.1.3"
 
+/* allocate and free through the stream's functions, as zlib's zutil.h */
 #define ZALLOC(strm, items, size) (*((strm)->zalloc))((strm)->opaque, (items), (size))
 #define ZFREE(strm, addr) (*((strm)->zfree))((strm)->opaque, (void *)(addr))
 
@@ -261,7 +268,7 @@ s32 inflate_trees_fixed(u32 *bl, u32 *bd, InflateHuft **tl, InflateHuft **td, ZS
 s32 inflate_flush(InflateBlocksState *s, ZStream *z, s32 r);
 const char *zlibVersion(void);
 const char *zError(s32 err);
-void *zcalloc(void *opaque, u32 items, u32 size);
+void *zcalloc(void *opaque, s32 items, s32 size);
 void zcfree(void *opaque, void *ptr);
 
 EXTERN_C_END

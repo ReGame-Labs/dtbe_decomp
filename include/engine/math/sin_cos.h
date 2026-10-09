@@ -9,10 +9,11 @@ EXTERN_C_BEGIN
 
 /* One step of the 4096-step cosine and sine table, in 4.12 fixed point. */
 typedef struct {
-    s16 cos;
-    s16 sin;
+    /* 0x0 */ s16 cos;
+    /* 0x2 */ s16 sin;
 } CosSin;
 
+/* the cosine and sine of each of the 4096 angles of a turn */
 extern CosSin COS_SIN_TABLE[4096];
 
 s16 getCos(s32 angle);

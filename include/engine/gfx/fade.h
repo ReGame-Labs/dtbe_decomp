@@ -15,7 +15,11 @@ typedef struct FadeControl {
     /* 0x20 */ Lerp level; /* how black, 0 to 255 */
 } FadeControl;
 
+/* the level of a fully black screen */
 #define FADE_BLACK 255
+
+/* the priority of the fade task */
+#define FADE_CONTROL_PRIORITY 0xF000
 
 extern struct TaskVtable FADE_CONTROL_VTABLE; /* the virtual table of FadeControl */
 

@@ -9,8 +9,9 @@
 #define BOX_FACE 0xC0
 #define BOX_DARK 0x80
 #define BOX_BLACK 0x00
-/* the texture page of darkenRect's shadow: it subtracts its color */
-#define TPAGE_SUBTRACT 0x40
+
+/* the grey darkenRect subtracts from the screen, 128 of each component */
+#define BOX_DARKEN_COLOR 0x808080
 
 /* Draws the edges of a box: the top and left ones in one grey, the bottom
  * and right ones in another. */
@@ -36,7 +37,7 @@ void darkenRect(u_long *ot, RECT *rect) {
     TileWords *tile = (TileWords *)allocTile();
     RectWords *words = (RectWords *)rect;
 
-    tile->rgbCode = (((TILE *)tile)->code << 24) | 0x02808080;
+    tile->rgbCode = (((TILE *)tile)->code << 24) | (PRIM_SEMI_TRANS << 24) | BOX_DARKEN_COLOR;
     tile->xy = words->xy;
     tile->wh = words->wh;
     AddPrim(ot, tile);

@@ -19,11 +19,11 @@ typedef struct {
 
 extern u8 PADDING[64]; /* the MD5 padding: 0x80, then zeros */
 
-void MD5Final(Md5 *ctx, u8 *digest);
+void MD5Final(Md5 *md5, u8 *digest);
 void MD5Transform(u32 *state, u8 *block);
-Md5 *func_800383B4(Md5 *ctx);
-void MD5Init(Md5 *ctx);
-void MD5Update(Md5 *ctx, u8 *input, u32 len);
+Md5 *md5Init(Md5 *md5);
+void MD5Init(Md5 *md5);
+void MD5Update(Md5 *md5, u8 *input, u32 len);
 void Encode(u8 *output, u32 *input, u32 len);
 void Decode(u32 *output, u8 *input, u32 len);
 void MD5_memcpy(u8 *output, u8 *input, u32 len);

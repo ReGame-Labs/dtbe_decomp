@@ -7,10 +7,8 @@
 #include "engine/gfx/tmd.h"
 #include "engine/lib/list.h"
 #include "engine/system/memory.h"
-#include "vtable.h"
-#include "libgpu.h"
-#include "kernel.h"
 #include "psyq.h"
+#include "vtable.h"
 
 /* ApplyMatrix, which nothing calls through this pointer */
 VECTOR *(*APPLY_MATRIX_FUNC)(MATRIX *m, SVECTOR *v, VECTOR *r) = func_80053DF0;
@@ -30,8 +28,21 @@ Transform *transformInit(Transform *this) {
     return this;
 }
 
+/*
+ * The functions of this file left in asm but meshSetTmd copy a MATRIX as a
+ * block move (four loads then four stores), which GCC 2.95.2 does not emit
+ * for 32 bytes (see "Block moves" in TODO.md): transformAttach,
+ * transformDetach, meshDraw, meshCull, meshPartUpdate, transformGetWorld,
+ * transformSetLocal and func_8002099C.
+ */
+
+/* Makes parent the parent of the transform, keeping where it is in the
+ * world: the local matrix becomes the inverse of the parent's world matrix
+ * times it. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", transformAttach);
 
+/* Takes the transform from its parent, keeping where it is in the world:
+ * the local matrix becomes the parent's world matrix times it. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", transformDetach);
 
 /* Destroys the scene object, taking it out of its group. */
@@ -156,8 +167,13 @@ void groupDraw(Group *this, Camera *camera) {
     }
 }
 
+/* Draws the TMD object of the mesh in camera with its world matrix, and,
+ * with MESH_SHOW_BOUNDS in debug, its bounding box as 12 white lines. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", meshDraw);
 
+/* Whether the mesh is out of view of camera: 1 with no TMD object, else
+ * whether the sphere around it misses the view. Counts the tests in
+ * MESH_CULL_COUNT and the misses in MESH_OUT_OF_VIEW_COUNT. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", meshCull);
 
 /* Clears the culling counters. */
@@ -193,19 +209,77 @@ SVECTOR *meshGetCorners(Mesh *this) {
     return this->corners;
 }
 
-/* Has the mesh draw tmd, and works out its bounding box and sphere. The
- * register allocation differs; a permuter run found only junk forms. */
+/*
+ * Has the mesh draw tmd, and works out its bounding box and sphere. C that
+ * reads the bounds into s16 locals has the game's 81 instructions (its six
+ * lh and three lhu reloads of max), but not their order: the game reloads
+ * after all 24 corner stores and stores the center after the reloads, as if
+ * stores through this could overlap the stack copy of the bounds. Stock GCC
+ * 2.95.2 rules that out (alias.c, base_alias_check), in C and C++ alike: it
+ * only allows it when the base of this is unknown, as for a u32 parameter or a
+ * helper's pointer argument, which then keep an addiu per corner.
+ */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", meshSetTmd);
 
+/* Builds the local matrix of the part from pose, the pose of its node: the
+ * rotation, then the scale, then the translation. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", meshPartUpdate);
 
-/* Builds a model of the objects of tmd, a MeshPart for each node anim
- * moves. C with the part's AnimNode taken into a variable before the
- * null test of its upcast (part != NULL ? node : NULL) has every
- * instruction, but the variable gets v0 where the game has s0; the game's
- * choice leaves tmd no saved register, so it keeps tmd in its argument
- * slot and reloads it each pass. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", modelInit);
+/* the most nodes modelInit links up: the size of its table of parts */
+#define MODEL_NODE_MAX 64
+
+/*
+ * Builds a model of the objects of tmd, a MeshPart for each node anim moves,
+ * then makes each part's transform a child of its parent node's (of the
+ * model's for the roots).
+ *
+ * Each part is built as g++ builds a `new MeshPart` (Mesh's constructor, then
+ * the vtables), and its AnimNode is taken right away, before the calls: the
+ * scheduler then moves it down to its use, but it is still allocated as a
+ * value that lives across calls, which is why the game keeps it in s0 and,
+ * out of saved registers, keeps tmd in its argument slot, reloaded each pass.
+ * The null tests are those of g++'s conversion of a pointer to a base class
+ * that is not the first one.
+ */
+Model *modelInit(Model *this, TmdHeader *tmd, AnimData *anim) {
+    MeshPart *parts[MODEL_NODE_MAX]; /* by node */
+    s32 count;
+    s32 i;
+
+    groupInit(&this->group);
+    this->group.object.vtable = &MODEL_VTABLE;
+    animatorInit(&this->animator, anim);
+    count = animatorGetNodeCount(&this->animator);
+    this->parts = operatorVecNew(count * sizeof(MeshPart *));
+    for (i = 0; i < count; i++) {
+        MeshPart *part = operatorNew(sizeof(MeshPart));
+        AnimNode *node = &part->node;
+        s32 object;
+
+        meshInit(&part->mesh, NULL, 0);
+        part->node.vtable = &MESH_PART_ANIM_NODE_VTABLE;
+        part->mesh.object.vtable = &MESH_PART_VTABLE;
+        object = animatorGetNodeObject(&this->animator, i);
+        meshSetTmd(&part->mesh, tmdHeaderGetObject(tmd, object));
+        animatorSetNode(&this->animator, i, part != NULL ? node : NULL);
+        groupAddChild(&this->group, &part->mesh.object);
+        this->parts[object] = part;
+        parts[i] = part;
+    }
+    for (i = 0; i < count; i++) {
+        s32 parent = animatorGetNodeParent(&this->animator, i);
+
+        if (parent < 0) {
+            transformSetParentKeepLocalInline(&parts[i]->mesh.object.transform,
+                                              &this->group.object.transform);
+        } else {
+            transformSetParentKeepLocalInline(&parts[i]->mesh.object.transform,
+                                              parts[parent] != NULL ? &parts[parent]->mesh.object.transform : NULL);
+        }
+    }
+    this->lights = NULL;
+    return this;
+}
 
 /* Destroys the model. */
 void modelDestroy(Model *this, s32 flags) {
@@ -213,27 +287,32 @@ void modelDestroy(Model *this, s32 flags) {
     if (this->parts != NULL) {
         operatorVecDelete(this->parts);
     }
-    animatorDestroy(&this->animator, 2);
+    animatorDestroy(&this->animator, DESTROY_BASES);
     groupDestroy(&this->group, flags);
 }
 
+/* How many frames the playing clip has. */
 s32 modelGetFrameCount(Model *this) {
     return animatorGetFrameCount(&this->animator);
 }
 
+/* The frame the animation is at. */
 s32 modelGetFrame(Model *this) {
     return animatorGetFrame(&this->animator);
 }
 
+/* The clip playing. */
 s32 modelGetClip(Model *this) {
     return animatorGetClip(&this->animator);
 }
 
+/* Whether the animation has stopped. */
 s32 modelIsStopped(Model *this) {
     return animatorIsStopped(&this->animator);
 }
 
-void modelStepAnimation(Model *this) {
+/* Moves the animation on a frame. */
+void modelUpdateAnimation(Model *this) {
     animatorUpdate(&this->animator);
 }
 
@@ -254,7 +333,7 @@ void modelDraw(Model *this, Camera *camera) {
     if (this->lights != NULL) {
         lightsOverrideInit(&lights, camera, this->lights);
         groupDraw(&this->group, camera);
-        lightsOverrideDestroy(&lights, 2);
+        lightsOverrideDestroy(&lights, DESTROY_BASES);
     } else {
         groupDraw(&this->group, camera);
     }
@@ -265,6 +344,8 @@ void modelSetLights(Model *this, Lights *lights) {
     this->lights = lights;
 }
 
+/* The world matrix: the parent's world matrix times the local one, worked
+ * out again when the transform changed; the local matrix at the root. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", transformGetWorld);
 
 /* Marks the world matrix out of date, or up to date. */
@@ -284,8 +365,11 @@ MATRIX *transformGetLocal(Transform *this) {
     return &this->local.m;
 }
 
+/* Sets the matrix relative to the parent, so the world matrix is worked
+ * out again. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", transformSetLocal);
 
+/* The same code as transformSetLocal. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", func_8002099C);
 
 /* Sets the parent, keeping the matrix relative to it. */

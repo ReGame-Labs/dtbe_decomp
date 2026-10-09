@@ -6,6 +6,7 @@
 #include "engine/cd/xa_player.h"
 #include "engine/debug/system_menu.h"
 #include "engine/game/game_state.h"
+#include "engine/game/sequencer.h"
 #include "engine/gfx/display.h"
 #include "engine/gfx/fade.h"
 #include "engine/gfx/ordering_table.h"
@@ -19,11 +20,9 @@
 #include "engine/system/memory.h"
 #include "engine/task/entity.h"
 #include "engine/task/task.h"
-#include "vtable.h"
 #include "libetc.h"
-#include "libsnd.h"
-#include "memory.h"
 #include "psyq.h"
+#include "vtable.h"
 
 /* what the random seed is the MD5 of */
 #define RAM ((u8 *)0x80000000)
@@ -88,16 +87,30 @@ INCLUDE_RODATA("asm/jp/main/nonmatchings/system/main", STATIC_DESTRUCTORS);
 
 INCLUDE_RODATA("asm/jp/main/nonmatchings/system/main", BUILD_NAME);
 
-/* The game's entry point: starts the system, then runs the frames in a
- * thread. It passes $fp to func_800403C0, which needs inline asm, and splat
- * merged the thread's function (D_8001B090) into it. */
+/* The game's entry point: starts the system, loads the font and the system
+ * TIMs, then runs the frames in a thread (runFramesThread). It passes $fp to
+ * func_800403C0, which needs inline asm. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/system/main", main);
+
+/* The function of main's thread: every frame, makes the sequencer again if
+ * its task is gone, runs the frame and switches back to main's thread. */
+void runFramesThread(Thread *thread) {
+    for (;;) {
+        if (handleTableGet(TASK_HANDLES, APP_SEQUENCER_HANDLE) == NULL) {
+            AppSequencer *sequencer = appSequencerInit(operatorNew(sizeof(AppSequencer)), 0);
+
+            schedulerInsertTask(&SCHEDULER, &sequencer->task);
+        }
+        runFrame();
+        threadSwitchBack(thread, 0);
+    }
+}
 
 /* Runs a frame: waits for the vertical blank, starts the next primitive
  * buffer and ordering table, reads the pads, services the CD, runs the tasks
  * and has the frame's ordering table drawn. */
 void runFrame(void) {
-    SYSTEM_CONTEXT.unk24 = displayWaitFrame(&DISPLAY);
+    SYSTEM_CONTEXT.vsyncTime = displayWaitFrame(&DISPLAY);
     swapPrimBuffers();
     orderingTableClear(&FRAME_OT);
     padManagerUpdate(&PAD_MANAGER);
@@ -114,7 +127,7 @@ void seedRandom(MersenneTwister *random) {
     Md5 md5;
     u32 digest[4];
 
-    func_800383B4(&md5);
+    md5Init(&md5);
     MD5Update(&md5, RAM, RAM_SEED_SIZE);
     MD5Update(&md5, SCRATCHPAD, SCRATCHPAD_SIZE);
     /* the digest is read back as words */
@@ -167,12 +180,12 @@ void func_8001B314(void) {
 }
 
 /* the memory allocator handed to the CD file system */
-void *allocForCdfs(void *this, s32 count, s32 size) {
-    return mainHeapAllocPrev(size * count);
+void *allocForCdfs(void *opaque, s32 items, s32 size) {
+    return mainHeapAllocPrev(size * items);
 }
 
 /* the memory release handed to the CD file system */
-void freeForCdfs(void *this, void *ptr) {
+void freeForCdfs(void *opaque, void *ptr) {
     mainHeapFree(ptr);
 }
 

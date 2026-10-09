@@ -6,15 +6,15 @@
 #include "engine/lib/string.h"
 #include "engine/system/log.h"
 #include "memory.h"
-#include "psyq.h"
 #include "strings.h"
+#include "psyq.h"
 
 /* the largest size: zlib reads and writes until the stream ends */
 #define ZSTREAM_SIZE_UNKNOWN 0x7FFFFFFF
 
 /* Sets the reader up, running; also initializes the drive unless noInit. */
 s32 initCdfs(s32 noInit) {
-    bzero(&CDFS, sizeof(Cdfs));
+    bzero((u8 *)&CDFS, sizeof(Cdfs)); /* bzero takes bytes */
     initVfsPool();
     nodePoolInit(&CDFS.requests, CDFS.requestNodes, sizeof(CdfsRequest),
                   CDFS_REQUEST_MAX);
@@ -89,16 +89,16 @@ void setVfsAllocator(AllocFunc zalloc, FreeFunc zfree, void *opaque) {
     CDFS.opaque = opaque;
 }
 
-/* Inflates the zlib stream at source into dest; returns 0, or 1 on an
+/* Inflates the zlib stream at src into dst; returns 0, or 1 on an
  * error. */
-s32 decompressStream(VfsEntry *dest, u8 *source) {
+s32 decompressStream(VfsEntry *dst, u8 *src) {
     ZStream stream;
     s32 result;
     s32 failed;
 
     /* the table inflates as bytes */
-    stream.nextOut = (u8 *)dest;
-    stream.nextIn = source;
+    stream.nextOut = (u8 *)dst;
+    stream.nextIn = src;
     stream.availIn = ZSTREAM_SIZE_UNKNOWN;
     stream.availOut = ZSTREAM_SIZE_UNKNOWN;
     stream.zalloc = CDFS.zalloc;
@@ -126,16 +126,16 @@ s32 decompressStream(VfsEntry *dest, u8 *source) {
 
 /* Reads and inflates the VFS archive's table into table and makes its
  * entries point: a directory at its entries, a file at its sector. */
-void vfsLoadTable(Vfs *vfs, VfsEntry *table, VfsInfo *info) {
+void vfsLoadTable(Vfs *this, VfsEntry *table, VfsInfo *info) {
     CdlLOC loc;
     VfsEntry *entry = table;
     u32 size;
     u8 *packed;
     s32 i;
 
-    vfs->entries = entry;
+    this->entries = entry;
     /* the names follow the entries */
-    vfs->names = (char *)(entry + info->count);
+    this->names = (char *)(entry + info->count);
     size = (info->dataSector - info->tableSector) << CD_SECTOR_SHIFT;
     packed = CDFS.zalloc(CDFS.opaque, 1, size);
     func_80046B60(info->tableSector, &loc);

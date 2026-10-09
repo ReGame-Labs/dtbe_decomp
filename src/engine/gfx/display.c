@@ -3,7 +3,6 @@
 #include "engine/gfx/prim_buffer.h"
 #include "libetc.h"
 #include "libgpu.h"
-#include "kernel.h"
 #include "psyq.h"
 
 /* the display, set when it is built */
@@ -30,7 +29,7 @@ Display *displayInit(Display *this, s32 width, s32 height, s32 vsyncMode) {
     displayDisable(this, DISPLAY_INTERLACE);
     displayDisable(this, DISPLAY_RGB24);
     displayEnable(this, DISPLAY_DITHER);
-    displayEnable(this, DISPLAY_UNK4);
+    displayEnable(this, DISPLAY_NO_DRAW_SYNC);
     this->ot = NULL;
     this->override = NULL;
     return this;
@@ -97,7 +96,7 @@ void flipDisplay(void) {
     ot = display->ot;
     /* displayWaitFrame does not wait for the drawing then */
     unsynced = 0;
-    if (display->interlaced || display->unk10C) {
+    if (display->interlaced || display->noDrawSync) {
         unsynced = 1;
     }
     disp = display->dispOf[buffer];
@@ -144,7 +143,7 @@ s32 displayGetDrawEndCount(Display *this) {
 
 /* Waits for the end of the frame. Returns VSync's time. */
 s32 displayWaitFrame(Display *this) {
-    if (!this->interlaced && !this->unk10C) {
+    if (!this->interlaced && !this->noDrawSync) {
         DrawSync(0);
         this->redraw = 1;
     }
@@ -168,7 +167,7 @@ void displaySetSize(Display *this, s32 width, s32 height) {
         setRECT(&this->disp[0].disp, 0, 0, width, height);
         setRECT(&this->disp[1].disp, 0, height, width, height);
         this->interlaced = 0;
-        if (this->unk110) {
+        if (this->forceInterlace) {
             this->disp[0].isinter = 1;
             this->disp[1].isinter = 1;
         } else {
@@ -245,7 +244,7 @@ void displayEnable(Display *this, s32 setting) {
         this->draw[1].isbg = 1;
         break;
     case DISPLAY_INTERLACE:
-        this->unk110 = 1;
+        this->forceInterlace = 1;
         this->disp[0].isinter = 1;
         this->disp[1].isinter = 1;
         break;
@@ -258,8 +257,8 @@ void displayEnable(Display *this, s32 setting) {
         this->draw[1].dtd = 1;
         DRAW_DITHER = 1;
         break;
-    case DISPLAY_UNK4:
-        this->unk10C = 1;
+    case DISPLAY_NO_DRAW_SYNC:
+        this->noDrawSync = 1;
         break;
     }
 }
@@ -273,7 +272,7 @@ void displayDisable(Display *this, s32 setting) {
         this->draw[1].isbg = 0;
         break;
     case DISPLAY_INTERLACE:
-        this->unk110 = 0;
+        this->forceInterlace = 0;
         if (this->interlaced) {
             this->disp[0].isinter = 1;
             this->disp[1].isinter = 1;
@@ -291,8 +290,8 @@ void displayDisable(Display *this, s32 setting) {
         this->draw[1].dtd = 0;
         DRAW_DITHER = 0;
         break;
-    case DISPLAY_UNK4:
-        this->unk10C = 0;
+    case DISPLAY_NO_DRAW_SYNC:
+        this->noDrawSync = 0;
         break;
     }
 }
@@ -343,23 +342,15 @@ void getDrawBufferRect(RECT *rect) {
     *rect = (CURRENT_DISPLAY->disp + (CURRENT_DISPLAY->buffer ^ 1))->disp;
 }
 
-/*
- * These functions left in asm copy a MATRIX as a block move (four loads then
- * four stores), which GCC 2.95.2 does not emit for 32 bytes (see "Block
- * moves" in TODO.md). They are
- * transformAttach, transformDetach, meshDraw, meshCull, meshPartUpdate,
- * transformGetWorld, transformSetLocal and func_8002099C.
- */
-
 /* The area of the buffer shown. */
 RECT *getShownBufferRect(void) {
     return &CURRENT_DISPLAY->disp[CURRENT_DISPLAY->buffer].disp;
 }
 
-/* Copies the buffer shown to dest; rect gets its area. */
-void displayCopyShownBuffer(Display *this, RECT *rect, u_long *dest) {
+/* Copies the buffer shown to dst; rect gets its area. */
+void displayCopyShownBuffer(Display *this, RECT *rect, u_long *dst) {
     *rect = (this->disp + this->buffer)->disp;
-    func_80058084(rect, dest);
+    func_80058084(rect, dst);
 }
 
 /* The display. */

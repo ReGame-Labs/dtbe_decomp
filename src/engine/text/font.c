@@ -6,16 +6,18 @@
 #include "engine/gfx/vram_cache.h"
 #include "engine/system/memory.h"
 #include "engine/text/text_printer.h"
-#include "vtable.h"
+#include "libapi.h"
 #include "psyq.h"
+#include "vtable.h"
 
-/* the texture page of the characters: 4-bit, at (960, 0) */
-#define TEXT_TPAGE 0x1F
+/* the texture page of the characters: 4-bit, at (960, 256), with the 8 by 16
+ * font and the FontCache's cells */
+#define TEXT_TPAGE getTPage(0, 0, 960, 256)
 
 /* a glyph's cell in VRAM: 16 4-bit pixels (4 VRAM pixels) wide, a row
  * taller than the glyph */
-#define FONT_CELL_W (FONT_GLYPH_W / 4)
-#define FONT_CELL_H 16
+#define FONT_CELL_WIDTH (FONT_GLYPH_WIDTH / 4)
+#define FONT_CELL_HEIGHT 16
 
 /* the palettes of the characters: the glyphs' (FONT_PALETTE_RECT), and the 8 by 16
  * font's */
@@ -49,7 +51,7 @@ static FontCache *FONT_CACHE = NULL;
 static RECT FONT_PALETTE_RECT = { 960, 511, 16, 1 };
 
 /* where a glyph is loaded: its cell (fontCacheLoadGlyph sets where) */
-static RECT FONT_GLYPH_RECT = { 0, 0, FONT_CELL_W, FONT_CELL_H };
+static RECT FONT_GLYPH_RECT = { 0, 0, FONT_CELL_WIDTH, FONT_CELL_HEIGHT };
 
 /* The FontCache, made the first time. */
 FontCache *getFontCache(void) {
@@ -62,8 +64,8 @@ FontCache *getFontCache(void) {
 /* Builds the FontCache in its VRAM, in cells of 16 by 16 pixels, and loads
  * the palette of the glyphs. */
 FontCache *fontCacheInit(FontCache *this) {
-    cacheInit(&this->cache, FONT_CACHE_AREAS, sizeof(FONT_CACHE_AREAS) / sizeof(RECT), FONT_CELL_W,
-                  FONT_CELL_H);
+    cacheInit(&this->cache, FONT_CACHE_AREAS, sizeof(FONT_CACHE_AREAS) / sizeof(RECT), FONT_CELL_WIDTH,
+                  FONT_CELL_HEIGHT);
     this->cache.vtable = &FONT_CACHE_VTABLE;
     func_80057F98(&FONT_PALETTE_RECT, (u_long *)FONT_PALETTE);
     this->font = NULL;
@@ -74,7 +76,7 @@ FontCache *fontCacheInit(FontCache *this) {
  * the font's glyph, else the BIOS ROM's for the codes it has, else an empty
  * box. */
 void fontCacheLoadGlyph(FontCache *this, s16 x, s16 y, u32 code) {
-    u8 image[FONT_CELL_H][FONT_GLYPH_W / 2];
+    u8 image[FONT_CELL_HEIGHT][FONT_GLYPH_WIDTH / 2];
     u8 *glyph;
     u8 *out;
     s32 row;
@@ -89,16 +91,17 @@ void fontCacheLoadGlyph(FontCache *this, s16 x, s16 y, u32 code) {
     if (glyph == NULL) {
         if (code - KROM_NONKANJI_FIRST < KROM_NONKANJI_COUNT ||
             code - KROM_KANJI_FIRST < KROM_KANJI_COUNT) {
-            glyph = func_80040390(code);
+            /* libapi.h has it return a long: the glyph's address */
+            glyph = (u8 *)Krom2RawAdd(code);
         } else {
             glyph = FONT_NO_GLYPH;
         }
     }
     out = image[0];
-    for (row = FONT_GLYPH_H - 1; row != -1; row--) {
+    for (row = FONT_GLYPH_HEIGHT - 1; row != -1; row--) {
         /* the row, a big-endian halfword, leftmost pixel first */
         u32 bits = *glyph++;
-        u8 *next = out + FONT_GLYPH_W / 2;
+        u8 *next = out + FONT_GLYPH_WIDTH / 2;
         s32 i;
 
         bits <<= 8;
@@ -161,8 +164,8 @@ u8 *fontFindGlyph(Font *this, u16 code) {
 TextPrinter *textPrinterInit(TextPrinter *this, u_long *ot) {
     this->printer.vtable = &TEXT_PRINTER_VTABLE;
     this->ot = addNestedOt(ot, allocDrTpage(TEXT_TPAGE));
-    this->color = 0x808080;
-    this->shadowColor = 0x404040;
+    this->color = TEXT_PRINTER_COLOR;
+    this->shadowColor = TEXT_PRINTER_SHADOW_COLOR;
     this->cache = getFontCache();
     textPrinterSetShadow(this, 0);
     return this;
@@ -186,18 +189,18 @@ void textPrinterSetShadowColor(TextPrinter *this, u32 color) {
 /* Prints a character at (x, y) and moves the cursor past it; a newline
  * moves it to the start of the next line. */
 void textPrinterPutChar(TextPrinter *this, s32 x, s32 y, u32 code) {
-    s32 width = TEXT_KANJI_W;
+    s32 width = TEXT_KANJI_WIDTH;
 
     if (code >= SJIS_FIRST) {
         if (code != SJIS_SPACE) {
             textPrinterDrawKanji(this, x, y, code);
         }
     } else {
-        width = TEXT_ASCII_W;
+        width = TEXT_ASCII_WIDTH;
         if (code != ' ') {
             if (code == '\n') {
                 this->printer.x = this->left;
-                this->printer.y += TEXT_LINE_H;
+                this->printer.y += TEXT_LINE_HEIGHT;
                 return;
             }
             textPrinterDrawAscii(this, x, y, code);
@@ -238,8 +241,8 @@ void textPrinterDrawKanji(TextPrinter *this, s32 x, s32 y, u32 code) {
 /* Draws a one-byte character from the 8 by 16 font, and its shadow. */
 void textPrinterDrawAscii(TextPrinter *this, s32 x, s32 y, u32 code) {
     u32 cell = code - ASCII_FIRST;
-    u8 u = (cell % ASCII_PER_ROW) * TEXT_ASCII_W;
-    u8 v = (cell / ASCII_PER_ROW) * TEXT_LINE_H;
+    u8 u = (cell % ASCII_PER_ROW) * TEXT_ASCII_WIDTH;
+    u8 v = (cell / ASCII_PER_ROW) * TEXT_LINE_HEIGHT;
     SprtColorWords *sprt = (SprtColorWords *)allocSprt();
     u32 rgbCode = this->color | (((SPRT *)sprt)->code << 24);
     u32 uvClut;
@@ -247,7 +250,7 @@ void textPrinterDrawAscii(TextPrinter *this, s32 x, s32 y, u32 code) {
     sprt->xy = (y << 16) | x;
     uvClut = (ASCII_CLUT << 16) | (v << 8) | u;
     sprt->uvClut = uvClut;
-    sprt->wh = (TEXT_LINE_H << 16) | TEXT_ASCII_W;
+    sprt->wh = (TEXT_LINE_HEIGHT << 16) | TEXT_ASCII_WIDTH;
     sprt->rgbCode = rgbCode;
     AddPrim(this->ot, sprt);
     if (this->shadow) {
@@ -257,7 +260,7 @@ void textPrinterDrawAscii(TextPrinter *this, s32 x, s32 y, u32 code) {
         rgbCode = this->shadowColor | (((SPRT *)sprt)->code << 24);
         sprt->xy = (y << 16) | x;
         sprt->uvClut = uvClut;
-        sprt->wh = (TEXT_LINE_H << 16) | TEXT_ASCII_W;
+        sprt->wh = (TEXT_LINE_HEIGHT << 16) | TEXT_ASCII_WIDTH;
         sprt->rgbCode = rgbCode;
         AddPrim(this->ot, sprt);
     }

@@ -10,12 +10,12 @@
 #endif
 
 #include "common.h"
-#include "engine/gfx/animator.h"
 #include "engine/gfx/camera.h"
 #include "engine/gfx/scene_graph.h"
 #include "engine/gfx/tmd.h"
 #include "engine/lib/list.h"
 #include "engine/math/quaternion.h"
+#include "engine/math/vector.h"
 
 EXTERN_C_BEGIN
 
@@ -55,8 +55,8 @@ typedef struct MeshSceneFile {
 
 /* Where a node is posed relative to its parent. */
 typedef struct MeshScenePose {
-    /* 0x0 */ Quaternion rot;
-    /* 0x8 */ Vec3s pos;
+    /* 0x0 */ Quaternion rotation;
+    /* 0x8 */ Vec3s translation;
     /* 0xE */ s16 pad;
 } MeshScenePose;
 

@@ -5,7 +5,6 @@
 #include "engine/lib/format.h"
 #include "engine/system/memory.h"
 #include "vtable.h"
-#include "libpad.h"
 
 /* a Console's font: 8x16 glyphs from ' ' on, 32 to a row, 4-bit, with its clut below it */
 #define CONSOLE_GLYPH_WIDTH 8

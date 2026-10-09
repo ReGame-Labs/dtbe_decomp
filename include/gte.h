@@ -145,6 +145,26 @@
 #define gte_scaleByIr0_12() __asm__ volatile("nop\n\tnop\n\tcop2 0x198003D")
 #define gte_scaleByIr0() __asm__ volatile("nop\n\tnop\n\tcop2 0x190003D")
 
+/* GPF (sf 0) of t and x, y, z: IR0 = t, IR1-IR3 = x, y, z, then
+ * MAC1-MAC3 = IR0 * IR1-IR3. The two nops let the last mtc2 reach the GTE
+ * (blendVec3s). */
+#define gte_scale0(t, x, y, z) __asm__ volatile(                              \
+    "mtc2 %0, $8\n\tmtc2 %1, $9\n\tmtc2 %2, $10\n\tmtc2 %3, $11\n\t"           \
+    "nop\n\tnop\n\tcop2 0x190003D"                                             \
+    : : "r"(t), "r"(x), "r"(y), "r"(z))
+
+/* GPL (sf 0) of t and x, y, z, the result read into a, b and c:
+ * MAC1-MAC3 += t * x, y, z (blendVec3s). The mfc2 to $0 first waits for the
+ * command before it, the GTE stalling a read while it is busy, so that IR0
+ * is not written under it. a, b and c are not early-clobber, but as outputs
+ * of an asm with several they take none of the inputs' registers. */
+#define gte_scaleAdd0(t, x, y, z, a, b, c) __asm__ volatile(                  \
+    "mfc2 $0, $25\n\t"                                                        \
+    "mtc2 %3, $8\n\tmtc2 %4, $9\n\tmtc2 %5, $10\n\tmtc2 %6, $11\n\t"           \
+    "nop\n\tnop\n\tcop2 0x1A0003E\n\t"                                         \
+    "mfc2 %0, $25\n\tmfc2 %1, $26\n\tmfc2 %2, $27"                              \
+    : "=r"(a), "=r"(b), "=r"(c) : "r"(t), "r"(x), "r"(y), "r"(z))
+
 /* Meant to store IR1-IR3 to the SVECTOR v through x, y and z, but the mfc2s
  * have their operands swapped, a bug of the game's (svecScale12,
  * svecScale): they read the GTE registers numbered like x, y and z into

@@ -10,8 +10,8 @@ EXTERN_C_BEGIN
 
 /* A short vector as two words, to copy two of its elements at once. */
 typedef union {
-    SVECTOR v;
-    u32 words[2];
+    /* 0x0 */ SVECTOR v;
+    /* 0x0 */ u32 words[2];
 } SVectorWords;
 
 SVECTOR *func_800261A8(SVECTOR *v);

@@ -12,14 +12,15 @@ EXTERN_C_BEGIN
  * longer finds the node. 0 is never a valid handle. */
 typedef union {
     struct {
-        u32 index : 12;
-        u32 serial : 20;
+        /* 0x0 */ u32 index : 12;
+        /* 0x0 */ u32 serial : 20;
     } f;
-    u32 word;
+    /* 0x0 */ u32 word;
 } Handle;
 
 #define HANDLE_TABLE_MAX 0x1000 /* what a 12-bit index can address */
 
+/* A node of a handle table: a link of one of its lists, and its handle. */
 typedef struct HandleNode {
     /* 0x0 */ struct HandleNode *next;
     /* 0x4 */ struct HandleNode *prev;
@@ -35,15 +36,14 @@ typedef struct {
     /* 0x8 */ s32 capacity;
 } HandleTable;
 
-HandleTable *handleTableInit(HandleTable *table, s32 capacity);
-void handleTableDestroy(HandleTable *table, s32 flags);
-u32 handleTableAdd(HandleTable *table, void *owner);
-
-void *handleTableRemove(HandleTable *table, u32 handle);
-void *handleTableGet(HandleTable *table, u32 handle);
-s32 handleTableCountList(HandleTable *table, HandleNode *list);
-s32 handleTableCountUsed(HandleTable *table);
-s32 handleTableCountFree(HandleTable *table);
+HandleTable *handleTableInit(HandleTable *handleTable, s32 capacity);
+void handleTableDestroy(HandleTable *handleTable, s32 flags);
+u32 handleTableAdd(HandleTable *handleTable, void *owner);
+void *handleTableRemove(HandleTable *handleTable, u32 handle);
+void *handleTableGet(HandleTable *handleTable, u32 handle);
+s32 handleTableCountList(HandleTable *handleTable, HandleNode *list);
+s32 handleTableCountUsed(HandleTable *handleTable);
+s32 handleTableCountFree(HandleTable *handleTable);
 
 EXTERN_C_END
 

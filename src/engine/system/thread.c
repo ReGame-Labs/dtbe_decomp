@@ -1,10 +1,9 @@
 #include "common.h"
 #include "engine/system/thread.h"
 #include "engine/system/memory.h"
-#include "vtable.h"
-#include "libgpu.h"
 #include "kernel.h"
-#include "psyq.h"
+#include "libapi.h"
+#include "vtable.h"
 
 /* the kernel's table of the thread control blocks (SysToT[2].head), read from
  * where the kernel keeps it */
@@ -18,9 +17,9 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/system/thread", threadInit);
 
 /* Destroys the thread and frees its stack. */
 void threadDestroy(Thread *this, s32 flags) {
-    func_80040360();
-    func_80040310(this->id);
-    func_80040370();
+    EnterCriticalSection();
+    CloseTh(this->id);
+    ExitCriticalSection();
     if (this->stack != NULL) {
         operatorVecDelete(this->stack);
     }
@@ -51,7 +50,7 @@ void switchThread(s32 id, s32 value) {
     tcb += THREAD_INDEX(id);
     tcb->reg[R_V0] = value;
     CURRENT_THREAD = id;
-    func_80040320(id);
+    ChangeTh(id);
 }
 
 /* The id of the thread. */

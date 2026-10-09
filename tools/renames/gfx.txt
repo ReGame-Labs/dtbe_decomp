@@ -80,7 +80,7 @@ func_80020720 modelGetFrameCount
 func_80020740 modelGetFrame
 func_80020760 modelGetClip
 func_80020780 modelIsStopped
-func_800207A0 modelStepAnimation
+func_800207A0 modelUpdateAnimation
 func_800207C0 modelStartClip
 func_800207E8 modelSetLoopFrame
 func_80020808 modelDraw
@@ -212,7 +212,7 @@ func_8002DBC0 rectSplitCells
 func_8002DCC8 spriteSetSemiTrans
 func_8002DCE4 spriteResetColor
 func_8002DCF4 spriteSetColor
-func_8002DD18 spriteSetGray
+func_8002DD18 spriteSetGrey
 func_8002DD34 spriteSetFlags
 func_8002DD48 spriteClearFlags
 func_8002DD5C allocPolyFT4

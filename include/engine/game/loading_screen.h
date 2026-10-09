@@ -11,9 +11,10 @@
 EXTERN_C_BEGIN
 
 /* Two 16-bit and two 8-bit fields packed low first */
-#define PACK16(lo, hi) (((u16)(hi) << 16) | (u16)(lo))
-#define PACK8(lo, hi) (((u8)(hi) << 8) | (u8)(lo))
+#define PACK16(low, high) (((u16)(high) << 16) | (u16)(low))
+#define PACK8(low, high) (((u8)(high) << 8) | (u8)(low))
 
+/* the virtual table of LoadingScreen */
 typedef struct LoadingScreenVtable {
     /* 0x00 */ VtableEntry unused;
     /* 0x08 */ VtableEntry load; /* (LoadingScreen *) */
@@ -37,7 +38,7 @@ typedef struct LoadingScreen {
     /* 0x10 */ LoadingScreenVtable *vtable;
 } LoadingScreen;
 
-extern struct LoadingScreenVtable LOADING_SCREEN_VTABLE;
+extern struct LoadingScreenVtable LOADING_SCREEN_VTABLE; /* of LoadingScreen */
 
 LoadingScreen *loadingScreenInit(LoadingScreen *loadingScreen);
 void loadingScreenUpdate(LoadingScreen *loadingScreen);

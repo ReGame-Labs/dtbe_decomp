@@ -1,8 +1,9 @@
 #include "common.h"
 #include "engine/lib/heap.h"
 
-s32 heapLargestFree(Heap *heap) {
-    HeapBlock *block = heap->rover;
+/* Returns the size the largest free block can hand out (its size without the header). */
+s32 heapGetLargestFree(Heap *this) {
+    HeapBlock *block = this->rover;
     s32 largest = 0;
 
     do {
@@ -10,15 +11,17 @@ s32 heapLargestFree(Heap *heap) {
             largest = block->size;
         }
         block = block->next;
-    } while (block != heap->rover);
+    } while (block != this->rover);
     return largest - sizeof(HeapBlock);
 }
 
-s32 heapCheck(Heap *heap) {
-    HeapBlock *block = heap->rover;
-    s32 count = heap->count;
-    HeapBlock *first = heap->first;
-    HeapBlock *end = heap->end;
+/* Checks that the blocks are inside the heap, aligned, linked both ways and
+ * as many as it counts: 0 if so, else -1. */
+s32 heapCheck(Heap *this) {
+    HeapBlock *block = this->rover;
+    s32 count = this->count;
+    HeapBlock *first = this->first;
+    HeapBlock *end = this->end;
     HeapBlock *next;
 
     do {
@@ -34,14 +37,16 @@ s32 heapCheck(Heap *heap) {
         }
         block = next;
         count--;
-    } while (block != heap->rover);
+    } while (block != this->rover);
     if (count != 0) {
         return -1;
     }
     return 0;
 }
 
-void heapFree(Heap *heap, void *ptr) {
+/* Frees the allocation at ptr (nothing for NULL), merging its block with the
+ * free blocks right before and after it. */
+void heapFree(Heap *this, void *ptr) {
     HeapBlock *block = ptr;
     HeapBlock *neighbor;
     HeapBlock *next;
@@ -53,7 +58,7 @@ void heapFree(Heap *heap, void *ptr) {
         neighbor = block->next;
         size = -block->size;
         block->size = size;
-        rover = heap->rover;
+        rover = this->rover;
         if (neighbor->size > 0 && (HeapBlock *)((u8 *)block + size) == neighbor) {
             block->size = size + neighbor->size;
             block->next = neighbor->next;
@@ -61,7 +66,7 @@ void heapFree(Heap *heap, void *ptr) {
             if (rover == neighbor) {
                 rover = block;
             }
-            heap->count--;
+            this->count--;
         }
         neighbor = block->prev;
         if (neighbor->size > 0 && (HeapBlock *)((u8 *)block - neighbor->size) == neighbor) {
@@ -72,29 +77,31 @@ void heapFree(Heap *heap, void *ptr) {
             if (rover == block) {
                 rover = neighbor;
             }
-            heap->count--;
+            this->count--;
         }
-        heap->rover = rover;
+        this->rover = rover;
     }
 }
 
-void heapInit(Heap *heap, void *base, s32 size) {
+/* Sets up a heap in size bytes at base, aligned to words: one free block. */
+void heapInit(Heap *this, void *base, s32 size) {
     HeapBlock *first = (HeapBlock *)(((u32)base + 3) & ~3);
 
     size -= (u32)first - (u32)base;
     size &= ~3;
-    heap->count = 1;
-    heap->rover = first;
-    heap->first = first;
-    heap->end = (HeapBlock *)((u8 *)first + size);
+    this->count = 1;
+    this->rover = first;
+    this->first = first;
+    this->end = (HeapBlock *)((u8 *)first + size);
     first->size = size;
     first->next = first;
     first->prev = first;
 }
 
-/* best fit: the free block that leaves the least over */
-void *heapAllocBest(Heap *heap, s32 size) {
-    HeapBlock *block = heap->first;
+/* Allocates size bytes from the best fit: the free block that leaves the
+ * least over; its start is handed out. NULL when none is big enough. */
+void *heapAllocBest(Heap *this, s32 size) {
+    HeapBlock *block = this->first;
     HeapBlock *best = NULL;
     s32 bestLeft = 0x7FFFFFFF;
     s32 left;
@@ -103,24 +110,27 @@ void *heapAllocBest(Heap *heap, s32 size) {
     do {
         left = block->size - size;
         if (left == 0) {
-            goto exact;
+            this->rover = block->next;
+            block->size = -block->size;
+            return block + 1;
         }
         if (left > 0 && left < bestLeft) {
             bestLeft = left;
             best = block;
         }
         block = block->next;
-    } while (block != heap->first);
+    } while (block != this->first);
     if (best == NULL) {
         return NULL;
     }
     if (bestLeft <= HEAP_MIN_SPLIT) {
-        goto whole;
+        best->size = -best->size;
+        return best + 1;
     }
     /* the rest of the block becomes a free block after it */
     block = (HeapBlock *)((u8 *)best + size);
-    heap->rover = block;
-    heap->count++;
+    this->rover = block;
+    this->count++;
     block->size = bestLeft;
     best->size = -size;
     best->next->prev = block;
@@ -128,45 +138,43 @@ void *heapAllocBest(Heap *heap, s32 size) {
     block->prev = best;
     best->next = block;
     return best + 1;
-exact:
-    heap->rover = block->next;
-    block->size = -block->size;
-    return block + 1;
-whole:
-    best->size = -best->size;
-    return best + 1;
 }
 
-/* the largest free block, from its end */
-void *heapAllocLargest(Heap *heap, s32 size) {
+/* Allocates size bytes from a free block that fits exactly, else from the
+ * end of the largest one; searches backward from the last block. NULL when
+ * none is big enough. */
+void *heapAllocLargest(Heap *this, s32 size) {
     HeapBlock *block;
     HeapBlock *best = NULL;
     s32 bestLeft = 0;
     s32 left;
 
     size = HEAP_BLOCK_SIZE(size);
-    block = heap->first->prev;
+    block = this->first->prev;
     do {
         left = block->size - size;
         if (left == 0) {
-            goto exact;
+            this->rover = block->prev;
+            block->size = -block->size;
+            return block + 1;
         }
         if (left > 0 && bestLeft < left) {
             bestLeft = left;
             best = block;
         }
         block = block->prev;
-    } while (block != heap->first->prev);
+    } while (block != this->first->prev);
     if (best == NULL) {
         return NULL;
     }
     if (bestLeft <= HEAP_MIN_SPLIT) {
-        goto whole;
+        best->size = -best->size;
+        return best + 1;
     }
     /* the block keeps its start, free, and hands out its end */
     block = (HeapBlock *)((u8 *)best + bestLeft);
-    heap->rover = best;
-    heap->count++;
+    this->rover = best;
+    this->count++;
     best->size = bestLeft;
     block->size = -size;
     best->next->prev = block;
@@ -174,23 +182,95 @@ void *heapAllocLargest(Heap *heap, s32 size) {
     best->next = block;
     block->prev = best;
     return block + 1;
-exact:
-    heap->rover = block->prev;
-    block->size = -block->size;
-    return block + 1;
-whole:
-    best->size = -best->size;
-    return best + 1;
 }
 
-/* Only matches when heap->rover is read again after the store, a fake form. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/lib/heap", heapAllocNext);
+/*
+ * Allocates size bytes from the first free block big enough, searching
+ * forward from the rover: a block that fits exactly, or leaves no more than
+ * HEAP_MIN_SPLIT, is taken whole; a bigger one is split, its start given
+ * out and the rover left on the rest. NULL when the search comes back to the
+ * rover. The exact fit is handled inside the loop: that keeps the load of
+ * this->rover in it, as in the game.
+ */
+void *heapAllocNext(Heap *this, s32 size) {
+    HeapBlock *block = this->rover;
+    HeapBlock *rest;
+    s32 left;
 
-/* Same as heapAllocNext: only the fake reload of heap->rover matches. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/lib/heap", heapAllocPrev);
+    size = HEAP_BLOCK_SIZE(size);
+    for (;;) {
+        left = block->size - size;
+        if (left == 0) {
+            this->rover = block->next;
+            block->size = -block->size;
+            return block + 1;
+        }
+        if (left > 0) {
+            break;
+        }
+        block = block->next;
+        if (block == this->rover) {
+            return NULL;
+        }
+    }
+    if (left <= HEAP_MIN_SPLIT) {
+        block->size = -block->size;
+        return block + 1;
+    }
+    rest = (HeapBlock *)((u8 *)block + size);
+    this->rover = rest;
+    this->count++;
+    rest->size = left;
+    rest->prev = block;
+    block->size = -size;
+    block->next->prev = rest;
+    rest->next = block->next;
+    block->next = rest;
+    return block + 1;
+}
 
-s32 heapTotalFree(Heap *heap) {
-    HeapBlock *block = heap->rover;
+/* heapAllocNext searching backward, and giving out the end of a block it
+ * splits, the rover left on the start. */
+void *heapAllocPrev(Heap *this, s32 size) {
+    HeapBlock *block = this->rover;
+    HeapBlock *rest;
+    s32 left;
+
+    size = HEAP_BLOCK_SIZE(size);
+    for (;;) {
+        left = block->size - size;
+        if (left == 0) {
+            this->rover = block->prev;
+            block->size = -block->size;
+            return block + 1;
+        }
+        if (left > 0) {
+            break;
+        }
+        block = block->prev;
+        if (block == this->rover) {
+            return NULL;
+        }
+    }
+    if (left <= HEAP_MIN_SPLIT) {
+        block->size = -block->size;
+        return block + 1;
+    }
+    rest = (HeapBlock *)((u8 *)block + left);
+    this->rover = block;
+    this->count++;
+    rest->size = -size;
+    rest->prev = block;
+    block->size = left;
+    block->next->prev = rest;
+    rest->next = block->next;
+    block->next = rest;
+    return rest + 1;
+}
+
+/* Returns the size of the free blocks, headers included. */
+s32 heapGetTotalFree(Heap *this) {
+    HeapBlock *block = this->rover;
     s32 total = 0;
 
     do {
@@ -198,14 +278,14 @@ s32 heapTotalFree(Heap *heap) {
             total += block->size;
         }
         block = block->next;
-    } while (block != heap->rover);
+    } while (block != this->rover);
     return total;
 }
 
 /* Shrinks the allocation at ptr to size bytes. What it gives back joins the
  * next block when that one is free and follows it, or else becomes a free
  * block of its own when it is big enough. */
-void heapShrink(Heap *heap, void *ptr, s32 size) {
+void heapShrink(Heap *this, void *ptr, s32 size) {
     HeapBlock *block = (HeapBlock *)ptr - 1;
     HeapBlock *rest;
     HeapBlock *next;
@@ -216,8 +296,8 @@ void heapShrink(Heap *heap, void *ptr, s32 size) {
     next = block->next;
     left = -HEAP_SIZE_BEFORE(ptr) - size;
     if (block < next && next->size > 0) {
-        if (heap->rover == next) {
-            heap->rover = rest;
+        if (this->rover == next) {
+            this->rover = rest;
         }
         HEAP_SIZE_BEFORE(ptr) = -size;
         rest->size = left + block->next->size;
@@ -232,6 +312,6 @@ void heapShrink(Heap *heap, void *ptr, s32 size) {
         rest->prev = block;
         block->next = rest;
         rest->size = left;
-        heap->count++;
+        this->count++;
     }
 }

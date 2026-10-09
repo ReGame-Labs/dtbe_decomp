@@ -9,6 +9,7 @@
 
 EXTERN_C_BEGIN
 
+/* the heaps of debugHeapAlloc and of mainHeapInit, mainHeapAllocBest and the other main heap functions */
 extern Heap DEBUG_HEAP;
 extern Heap MAIN_HEAP;
 
