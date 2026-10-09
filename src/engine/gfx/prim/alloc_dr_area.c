@@ -28,7 +28,7 @@ DR_MODE *allocDrMode(s32 tpage, RECT *tw) {
 
     PRIM_BUFFER_FREE += sizeof(DR_MODE);
     setlen(prim, 2);
-    /* the game's g++ took the address before the value */
+    /* the address is taken before the value is built */
     mode = &prim->code[0];
     *mode = _get_mode(DRAW_ON_DISPLAY, DRAW_DITHER, tpage);
     prim->code[1] = _get_tw(tw);

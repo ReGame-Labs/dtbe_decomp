@@ -6,9 +6,9 @@
 #include "engine/gfx/tmd.h"
 #include "engine/lib/list.h"
 #include "engine/system/memory.h"
-#include "vtable.h"
-#include "psyq.h"
 #include "stdio.h"
+#include "psyq.h"
+#include "vtable.h"
 
 /* Refers to file, which is ours to free unless it is NULL; returns fileRef. */
 FileRef *fileRefInit(FileRef *fileRef, void *file) {
@@ -59,8 +59,8 @@ Chara *charaInit(Chara *chara, s32 id) {
     chara->pack = NULL;
     chara->lowerHalf = 0;
     chara->tint.hue = 0;
-    chara->tint.sat = TINT_SCALE_ONE;
-    chara->tint.val = TINT_SCALE_ONE;
+    chara->tint.saturation = TINT_SCALE_ONE;
+    chara->tint.value = TINT_SCALE_ONE;
     /* add it at the end of the loaded characters */
     head = &LOADED_CHARAS;
     chara->link.next = head;
@@ -74,9 +74,9 @@ Chara *charaInit(Chara *chara, s32 id) {
  * DESTROY_FREE. */
 void charaDestroy(Chara *chara, s32 flags) {
     mainHeapFree(chara->pack);
-    fileRefDestroy(&chara->loop, DESTROY_DELETE & ~DESTROY_FREE);
-    fileRefDestroy(&chara->mop, DESTROY_DELETE & ~DESTROY_FREE);
-    fileRefDestroy(&chara->tmd, DESTROY_DELETE & ~DESTROY_FREE);
+    fileRefDestroy(&chara->loop, DESTROY_BASES);
+    fileRefDestroy(&chara->mop, DESTROY_BASES);
+    fileRefDestroy(&chara->tmd, DESTROY_BASES);
     chara->link.next->prev = chara->link.prev;
     chara->link.prev->next = chara->link.next;
     chara->link.next = &chara->link;
@@ -115,7 +115,7 @@ void charaLoad(Chara *chara) {
 
     fileRefInit(&tims, charaLoadFile(chara, ".tim"));
     charaLoadTims(chara, (u32 *)tims.file);
-    fileRefDestroy(&tims, DESTROY_DELETE & ~DESTROY_FREE);
+    fileRefDestroy(&tims, DESTROY_BASES);
     other = charaFindSameId(chara);
     if (other != NULL && other->mop.file != NULL) {
         fileRefSetBorrowed(&chara->mop, &other->mop);
@@ -158,7 +158,7 @@ void charaLoadTims(Chara *chara, u32 *tims) {
             tim.crect->y += 256;
             tim.prect->y += 256;
         }
-        if (chara->tint.val != 0) {
+        if (chara->tint.value != 0) {
             tintTim(&tim, &chara->tint);
         }
         if (tim.caddr != NULL) {
@@ -246,22 +246,22 @@ AnimData *charaGetAnimData(Chara *chara) {
     return (AnimData *)chara->mop.file;
 }
 
-/* The first value of the .loop for clip. */
-u16 func_80031258(Chara *chara, s32 clip) {
+/* The frame where clip's loops start again, from the .loop. */
+u16 charaGetLoopFrame(Chara *chara, s32 clip) {
     if (chara->pack != NULL) {
-        return chara->pack->loops[clip].unk0;
+        return chara->pack->loops[clip].loopFrame;
     }
     /* a FileRef holds a file of any kind */
-    return ((CharaLoop *)chara->loop.file)[clip].unk0;
+    return ((CharaLoop *)chara->loop.file)[clip].loopFrame;
 }
 
-/* The second value of the .loop for clip. */
-u16 func_80031298(Chara *chara, s32 clip) {
+/* How many times clip plays, from the .loop. */
+u16 charaGetClipPlays(Chara *chara, s32 clip) {
     if (chara->pack != NULL) {
-        return chara->pack->loops[clip].unk2;
+        return chara->pack->loops[clip].plays;
     }
     /* a FileRef holds a file of any kind */
-    return ((CharaLoop *)chara->loop.file)[clip].unk2;
+    return ((CharaLoop *)chara->loop.file)[clip].plays;
 }
 
 /* What tmdHeaderGetObjectCount gives for the character's model. */

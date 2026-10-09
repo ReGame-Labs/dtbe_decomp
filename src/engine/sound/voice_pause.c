@@ -1,8 +1,6 @@
 #include "common.h"
 #include "engine/sound/voice_pause.h"
 #include "engine/sound/sound.h"
-#include "libsnd.h"
-#include "memory.h"
 #include "psyq.h"
 
 /* Pauses or resumes the sound effects. Pausing keeps the pitch and volume of
@@ -27,7 +25,7 @@ void setSoundEffectsPaused(s32 paused) {
         volume = SOUND_SYSTEM.pausedVolume;
         voices = getSoundEffectVoices();
         attr.mask = SPU_VOICE_VOLL | SPU_VOICE_VOLR | SPU_VOICE_VOLMODEL | SPU_VOICE_VOLMODER | SPU_VOICE_PITCH;
-        for (i = 0; i < SND_MAX_VOICES; i++) {
+        for (i = 0; i < SND_VOICE_MAX; i++) {
             attr.voice = 1 << i;
             if (voices & attr.voice) {
                 func_80048BF0(&attr);
@@ -70,7 +68,7 @@ void resumeVoices(s32 voices) {
     attr.volmode.right = 0;
     pitch = SOUND_SYSTEM.pausedPitch;
     volume = SOUND_SYSTEM.pausedVolume;
-    for (i = 0; i < SND_MAX_VOICES; i++) {
+    for (i = 0; i < SND_VOICE_MAX; i++) {
         bit = 1 << i;
         if (voices & bit) {
             voicePitch = pitch[i];

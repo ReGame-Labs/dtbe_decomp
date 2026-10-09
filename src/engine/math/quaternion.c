@@ -3,8 +3,9 @@
 #include "engine/math/divide.h"
 #include "engine/math/matrix.h"
 #include "engine/math/sin_cos.h"
-#include "gte.h"
+#include "engine/math/trig.h"
 #include "psyq.h"
+#include "gte.h"
 
 /* Sets q to the rotation by angle about axis, a unit vector in 4.12 fixed
  * point of which only the low 16 bits of each component are read. The game
@@ -96,30 +97,67 @@ Quaternion *quaternionNormalize(Quaternion *out, Quaternion *q) {
     return out;
 }
 
-/* Sets dst to the conjugate of q, the inverse of a unit quaternion's
- * rotation. q is read whole first, so dst may be q. */
-Quaternion *quaternionConjugate(Quaternion *dst, Quaternion *q) {
+/* Sets out to the conjugate of q, the inverse of a unit quaternion's
+ * rotation. q is read whole first, so out may be q. */
+Quaternion *quaternionConjugate(Quaternion *out, Quaternion *q) {
     s16 x = q->x;
     s16 y = q->y;
     s16 z = q->z;
     s16 w = q->w;
 
-    dst->x = -x;
-    dst->y = -y;
-    dst->z = -z;
-    dst->w = w;
-    return dst;
+    out->x = -x;
+    out->y = -y;
+    out->z = -z;
+    out->w = w;
+    return out;
 }
 
-/* quaternionSlerp (out = the spherical interpolation from a to b by t, the
- * shorter way: b negated when the dot product is negative; linear when
- * ONE - cos < 16) differs only in the stores to out: the game copies out from
- * $v0, the return value, where this compiler reloads it from the stack. The
- * C that gives every other instruction (8 lines differ) reads all of a before
- * storing (out may be a), tests ONE - cos >= 16 first, indexes the sine table
- * by getArcCos's result and by the products shifted unsigned, and takes
- * (s16) of ONE - t, t and the angle. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/quaternion", quaternionSlerp);
+/* Sets out to the spherical interpolation from a to b by t, the shorter way:
+ * b is negated when the dot product is negative, and the interpolation is
+ * linear when ONE - cos < 16. All of a is read before storing (out may be a).
+ * out is a const parameter: as a read-only pointer, reload may copy it from
+ * $v0, the return value, for each store instead of reloading it from the
+ * stack. */
+Quaternion *quaternionSlerp(Quaternion *const out, Quaternion *a, Quaternion *b, s32 t) {
+    s32 bx = b->x;
+    s32 by = b->y;
+    s32 bz = b->z;
+    s32 bw = b->w;
+    s32 cos = (a->x * bx + a->y * by + a->z * bz + a->w * bw) >> 12;
+    s32 scaleA;
+    s32 scaleB;
+
+    if (cos < 0) {
+        cos = -cos;
+        bx = -bx;
+        by = -by;
+        bz = -bz;
+        bw = -bw;
+    }
+    if (ONE - cos >= 16) {
+        s32 angle = getArcCos(cos);
+        s16 sin = COS_SIN_TABLE[angle & 0xFFF].sin;
+
+        scaleA = divide12(COS_SIN_TABLE[((u32)((s16)(ONE - t) * (s16)angle) >> 12) & 0xFFF].sin, sin);
+        scaleB = divide12(COS_SIN_TABLE[((u32)((s16)t * (s16)angle) >> 12) & 0xFFF].sin, sin);
+    } else {
+        scaleA = ONE - t;
+        scaleB = t;
+    }
+    bx *= scaleB;
+    by *= scaleB;
+    bz *= scaleB;
+    bw *= scaleB;
+    bx += a->x * scaleA;
+    by += a->y * scaleA;
+    bz += a->z * scaleA;
+    bw += a->w * scaleA;
+    out->x = bx >> 12;
+    out->y = by >> 12;
+    out->z = bz >> 12;
+    out->w = bw >> 12;
+    return out;
+}
 
 /* Sets q to the rotation of the rotation matrix m. Each element of q comes
  * from the trace or from the largest diagonal element: root is the square
@@ -198,11 +236,6 @@ Quaternion *quaternionInitFromMatrix(Quaternion *q, MATRIX *m) {
 /* Sets m to the rotation of q, without translation. */
 void quaternionGetMatrix(Quaternion *q, MATRIX *m) {
     matrixInitFromQuaternion(m, q);
-}
-
-/* Returns the product of a and b, in 4.12 fixed point, taken in 64 bits. */
-static inline s32 mul12(s32 a, s32 b) {
-    return ((s64)a * b) >> 12;
 }
 
 /* Sets out to the product of the quaternions a and b: the rotation by b, then

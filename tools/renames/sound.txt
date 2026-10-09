@@ -103,3 +103,21 @@ D_801168D8 SOUND_EFFECT_HANDLES
 # the static inline copies of a function, named after it
 releaseEffect sndPlayingEffectFreeInline
 keyOffEffect sndPlayingEffectKeyOffInline
+
+# PsyQ's libsnd: each matches only that function of Digimon World 3's
+# (named by matching the SDK), relocations masked and the callees named alike
+func_8004BEA0 SsStart
+func_8004F120 SsUtReverbOff
+func_8004F140 SsUtReverbOn
+func_80049180 SsSepClose
+func_8004D038 SsSepStop
+func_8004D638 SsSepSetVol
+
+# g++'s static constructor and destructor of SOUND_EFFECT_HANDLES, the file's
+# global object (as initOrDestroyMainGlobals for system/main's)
+func_80039EEC initOrDestroySoundEffectHandles
+func_80039FAC initSoundEffectHandles
+func_80039FD0 destroySoundEffectHandles
+# the debug menu's Select on a sound effect: plays it 3 times, 15 frames
+# apart, at halving volumes
+func_8001BEC8 soundControlPlayEcho

@@ -69,6 +69,9 @@ RECT SCREEN_CHAR_RECT = { 0, 0, SCREEN_GLYPH_SIZE, SCREEN_GLYPH_SIZE };
  * glyph's rows (each widened by a pixel) into it and writes it back. The C
  * (a row loop around a pixel loop that stops early) matches but for the
  * allocation: the original has x/y in s0/s1, the RECT in s2 and the glyph in
- * s3, and sets the RECT argument up before the row loop.
+ * s3, and sets the RECT argument up before the row loop (39 lines differ).
+ * That argument is a pseudo of its own in a0 across the loop, which shortens
+ * the RECT's life so it gets s2 first; GCC sets a0 from the symbol, and GCSE
+ * folds an explicit copy. Const parameters and C++ change nothing.
  */
 INCLUDE_ASM("asm/jp/main/nonmatchings/text/screen_print", screenPutChar);

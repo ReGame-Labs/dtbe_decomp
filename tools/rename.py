@@ -39,7 +39,7 @@ IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 SPLAT_NAME = re.compile(r"^(func|D)_(8[0-9A-F]{7})$")
 SOURCE_SUFFIXES = {".c", ".cpp", ".h", ".s", ".inc"}
 COMMENT_OR_STRING = re.compile(r'/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\\n])*"', re.S)
-SECTION = re.compile(r"^// src/engine/([\w/]+)/")
+SECTION = re.compile(r"^// src/engine/([\w/]+)/$")
 
 
 def word(name):

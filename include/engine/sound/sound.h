@@ -55,12 +55,13 @@ typedef struct {
     /* 0x5 */ s8 tone;
     /* 0x6 */ u8 note;
     /* 0x7 */ u8 fine;
-    /* 0x8 */ u8 volLeft;
-    /* 0x9 */ u8 volRight;
+    /* 0x8 */ u8 volumeLeft;
+    /* 0x9 */ u8 volumeRight;
     /* 0xA */ u8 group; /* a new effect stops the playing ones of its group */
     /* 0xB */ u8 unkB[5];
 } SndEffect;
 
+/* SndEffect.flags: the effect loops */
 #define SND_EFFECT_LOOP 1
 
 /* a song of the definition: a sequence of a SEP */
@@ -68,8 +69,8 @@ typedef struct {
     /* 0x0 */ u16 sep;
     /* 0x2 */ s16 seq;
     /* 0x4 */ u16 loops;
-    /* 0x6 */ u8 volLeft;
-    /* 0x7 */ u8 volRight;
+    /* 0x6 */ u8 volumeLeft;
+    /* 0x7 */ u8 volumeRight;
 } SndSong;
 
 /* a song that plays */
@@ -77,8 +78,8 @@ typedef struct {
     /* 0x00 */ LinkNode link;
     /* 0x08 */ s32 flags;
     /* 0x0C */ u16 song;
-    /* 0x0E */ u8 volLeft;
-    /* 0x0F */ u8 volRight;
+    /* 0x0E */ u8 volumeLeft;
+    /* 0x0F */ u8 volumeRight;
     /* 0x10 */ s16 fade;     /* its volume, 0 to SND_FADE_FULL */
     /* 0x12 */ s16 fadeStep; /* taken off fade every frame */
 } SndPlayingSong;
@@ -101,17 +102,19 @@ typedef struct {
     /* 0x1A */ s8 tone;
     /* 0x1B */ u8 note;
     /* 0x1C */ u8 fine;
-    /* 0x1D */ u8 volLeft;
-    /* 0x1E */ u8 volRight;
+    /* 0x1D */ u8 volumeLeft;
+    /* 0x1E */ u8 volumeRight;
     /* 0x1F */ u8 group;
 } SndPlayingEffect;
 
+/* SndPlayingEffect.priority: set for a looping effect */
 #define SND_PRIORITY_LOOP 0x80
 #define SND_VOICE_NUMBER 0x1F /* the voice it plays on */
 #define SND_VOICE_NONE 0x20   /* no voice was free */
 #define SND_VOICE_KEYED 0x80
 
-#define SND_MAX_VOICES 24
+/* the SPU's voices: how many effects can play at once */
+#define SND_VOICE_MAX 24
 
 /* the SPU's full volume */
 #define SPU_VOLUME_MAX 0x3FFF
@@ -119,9 +122,10 @@ typedef struct {
 /* frames from turning reverb on to setting its depth: 3 seconds */
 #define REVERB_DEPTH_DELAY 180
 
+/* a node of the pool at SoundSystem 0x358 */
 typedef struct {
-    /* 0x0 */ u8 unk0[8];
-    /* 0x8 */ u8 index;
+    /* 0x0 */ LinkNode link;
+    /* 0x8 */ u8 index; /* its place in the pool */
     /* 0x9 */ u8 unk9[3];
 } SndUnk370;
 
@@ -141,19 +145,20 @@ typedef struct SoundSystem {
     /* 0x024 */ NodePool songPool;
     /* 0x038 */ void *songMemory; /* the song nodes, then libsnd's SEQ table */
     /* 0x03C */ NodePool effectPool;
-    /* 0x050 */ SndPlayingEffect effectNodes[SND_MAX_VOICES];
+    /* 0x050 */ SndPlayingEffect effectNodes[SND_VOICE_MAX];
     /* 0x350 */ s16 reverbDepthLeft;
     /* 0x352 */ s16 reverbDepthRight;
     /* 0x354 */ s16 reverbDelay; /* frames until the depth is set */
     /* 0x356 */ u16 reverbStart; /* VSync count when the delay began */
     /* 0x358 */ NodePool unk358;
     /* 0x36C */ s32 unk36C;
-    /* 0x370 */ SndUnk370 unk370[SND_MAX_VOICES];
-    /* 0x490 */ s16 pausedPitch[SND_MAX_VOICES];
-    /* 0x4C0 */ SpuVolume pausedVolume[SND_MAX_VOICES];
+    /* 0x370 */ SndUnk370 unk370[SND_VOICE_MAX];
+    /* 0x490 */ s16 pausedPitch[SND_VOICE_MAX];
+    /* 0x4C0 */ SpuVolume pausedVolume[SND_VOICE_MAX];
     /* 0x520 */ u8 nextGroup; /* the group of the next effect, when not 0 */
 } SoundSystem;
 
+/* how many handles SOUND_EFFECT_HANDLES holds */
 #define SND_HANDLE_CAPACITY 0x30
 
 /* the handles of the playing sound effects */
@@ -176,35 +181,35 @@ s32 setSndDef(SndDef *def);
 void updateSoundEffects(void);
 void updateSongFades(void);
 void updateSoundSystem(void);
-void sndPlayingEffectKeyOn(SndPlayingEffect *effect);
-void closeSep(u16 sep);
+void sndPlayingEffectKeyOn(SndPlayingEffect *sndPlayingEffect);
+void closeSep(u16 sepIndex);
 void fadeSongs(s16 fadeStep);
-s16 openSep(u16 sep, void *data);
+s16 openSep(u16 sepIndex, void *data);
 void playSong(u16 song);
-void playSongAtVolume(u16 song, u8 volLeft, u8 volRight);
+void playSongAtVolume(u16 song, u8 volumeLeft, u8 volumeRight);
 void freeEndedSongs(void);
 void stopAllSongs(void);
-void sndPlayingSongStop(SndPlayingSong *song);
-void closeVab(u16 vab);
+void sndPlayingSongStop(SndPlayingSong *sndPlayingSong);
+void closeVab(u16 vabIndex);
 void setNextSoundEffectGroup(u8 group);
-s16 openVabHead(u16 vab, void *header);
+s16 openVabHead(u16 vabIndex, void *header);
 s32 playSoundEffect(u16 effect);
-SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volLeft, u8 volRight);
-u32 playSoundEffectAtVolume(u16 effect, u8 volLeft, u8 volRight);
-void sndPlayingEffectFree(SndPlayingEffect *effect);
-void sndPlayingEffectKeyOff(SndPlayingEffect *effect);
-void sndPlayingEffectStop(SndPlayingEffect *effect);
+SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volumeLeft, u8 volumeRight);
+u32 playSoundEffectAtVolume(u16 effect, u8 volumeLeft, u8 volumeRight);
+void sndPlayingEffectFree(SndPlayingEffect *sndPlayingEffect);
+void sndPlayingEffectKeyOff(SndPlayingEffect *sndPlayingEffect);
+void sndPlayingEffectStop(SndPlayingEffect *sndPlayingEffect);
 s32 canPlaySoundEffect(u16 effect);
 void keyOffSoundEffectGroup(s32 group);
 s32 getSoundEffectVoice(u32 handle);
 void stopSoundEffect(u32 handle);
 s32 transferVabBody(u16 vab, u8 *data);
-void func_80039EEC(s32 initialize, s32 priority);
+void initOrDestroySoundEffectHandles(s32 initialize, s32 priority);
 u32 allocSoundEffectHandle(SndPlayingEffect *effect);
 SndPlayingEffect *findPlayingEffect(u32 handle);
 void freeSoundEffectHandle(u32 handle);
-void func_80039FAC(void);
-void func_80039FD0(void);
+void initSoundEffectHandles(void);
+void destroySoundEffectHandles(void);
 
 EXTERN_C_END
 

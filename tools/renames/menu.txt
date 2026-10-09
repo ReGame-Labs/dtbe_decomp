@@ -20,7 +20,7 @@ func_8002C810 stepperGroupOpen
 func_8002C858 stepperGroupInputIfOpen
 func_8002C8D4 stepperGroupDrawIfOpen
 func_8002C93C stepperGroupAddChild
-func_8002C9A4 stepperGroupRemoveChildren
+func_8002C9A4 stepperGroupDestroyChildren
 func_8002CA28 stepperGroupCancel
 func_8002CA5C stepperGroupInput
 func_8002CBC8 stepperGroupInputCurrent
@@ -29,7 +29,7 @@ func_8002CDC0 stepperGroupPressConfirm
 func_8002CEB4 stepperGroupMoveCurrent
 func_8002CFB0 stepperGroupDraw
 func_8002D0A0 stepperGroupRefresh
-func_8002D108 stepperGroupRemoveChild
+func_8002D108 stepperGroupDestroyChild
 func_8002D1CC stepperGroupCountChildren
 func_8002D1F4 stepperGroupNumberChildren
 func_8002D220 stepperGroupGetChild
@@ -44,12 +44,21 @@ func_8002D2E8 stepperBlur
 func_8002D2F0 stepperInput
 func_8002D2F8 stepperDraw
 func_8002D300 stepperRefresh
-func_8002D308 stepperDestroy
 func_8002D360 stepperGetValue
 func_8002D36C stepperSetValue
 func_8002D374 stepperSetMin
 func_8002D37C stepperSetMax
 func_8002D384 stepperGetIndex
 
-# the static inline copies of a function, named after it
-isClosed stepperGroupIsClosedInline
+# not a copy of stepperGroupIsClosed (which also tests keepOpen): the closed
+# flag alone, like the other flag accessors
+stepperGroupIsClosedInline isClosed
+
+# what the callers show
+func_8002D2C4 stepperGroupGetCloseValue
+
+# the group's hooks, from their one caller each: moving past the first or the
+# last child (stepperGroupMoveCurrent), and a current child whose confirm did
+# not take the buttons (stepperGroupPressConfirm)
+func_8002D390 stepperGroupMoveOffEnd
+func_8002D398 stepperGroupConfirmRefused

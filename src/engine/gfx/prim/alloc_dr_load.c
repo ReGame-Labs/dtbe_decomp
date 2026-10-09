@@ -6,7 +6,6 @@
 /* Takes a VRAM load primitive from the frame's primitive buffer, set to load
  * rect. */
 DR_LOAD *allocDrLoad(RECT *rect) {
-    /* the buffer holds primitives of every type */
     DR_LOAD *load = (DR_LOAD *)PRIM_BUFFER_FREE;
 
     PRIM_BUFFER_FREE += sizeof(DR_LOAD);

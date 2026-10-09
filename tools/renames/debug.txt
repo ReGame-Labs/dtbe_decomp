@@ -20,19 +20,23 @@ D_80018A14 STR_BLACKWARGREYMON
 D_80018A7C STR_BONUS_0_BALL_SHOOT
 D_80018A90 STR_BONUS_1_EVOLUTION_COMPETITION
 D_80018AB0 STR_BONUS_2_JEWELRY_HUNTING
-func_80028258 createSequencerTask
-func_80028284 createAgeingSequencerTask
-func_800282B0 createTitleTask
-func_800282E0 createMinigameGuideTask
-func_80028314 createRankingTask
-func_80028348 createCreditsTask
-func_80028378 createCharacterSelectTask
-func_800283AC createGameTask
-func_8002849C createModelViewTask
-func_800284CC createMapViewTask
+func_80028258 debugCreateSequencerTask
+func_80028284 debugCreateAgeingSequencerTask
+func_800282B0 debugCreateTitleTask
+func_800282E0 debugCreateBonusGuideTask
+func_80028314 debugCreateRankingTask
+func_80028348 debugCreateCreditsTask
+func_80028378 debugCreateCharacterSelectTask
+func_800283AC debugCreateFightTask
+func_800283DC debugCreateHanamasuTestTask
+func_8002840C debugCreateIwanagaTestTask
+func_8002843C debugCreateShohyamaTestTask
+func_8002846C debugCreateTeradaTestTask
+func_8002849C debugCreateModelViewTask
+func_800284CC debugCreateMapViewTask
 func_800284FC reloadExecutable
-func_80028520 createOptionTask
-func_80028548 createMainMenuTask
+func_80028520 debugCreateOptionTask
+func_80028548 debugCreateMainMenuTask
 func_80028574 systemEntryStepUp
 func_800285FC systemEntryStepDown
 func_80028684 startEntryLine
@@ -101,3 +105,6 @@ D_80064294 STR_SHRINE
 D_8006429C STR_ICEBERG
 D_800642A4 STR_VOLCANO
 D_800642AC STR_BOSS
+
+# where the overlays are loaded
+D_800643E0 OVERLAY_MEMORY

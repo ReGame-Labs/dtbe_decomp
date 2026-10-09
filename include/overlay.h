@@ -28,7 +28,7 @@ struct Task *func_8006A43C(void *memory, struct SystemContext *context);
 struct Task *func_8006AAF8(void *memory, struct SystemContext *context, s32 arg);
 struct Task *func_8006E1CC(void *memory, struct SystemContext *context);
 struct Task *func_800709B0(void *memory, s32 arg);
-struct Task *func_80071F28(void *memory, struct SystemContext *context, s32 arg);
+struct Task *func_80071F28(void *memory, struct SystemContext *context, u16 arg);
 struct Task *func_8007360C(void *memory, struct SystemContext *context, s32 arg);
 struct Task *func_80076504(void *memory, struct SystemContext *context);
 struct Task *func_800794E0(void *memory);
@@ -37,7 +37,8 @@ void func_80076A5C(struct ListNode *node);
 
 EXTERN_C_END
 
-/* where the overlays are loaded, over the end of the .bss */
-extern u8 D_800643E0[];
+/* where the overlays are loaded: the start of the game's .bss, the part crt0
+ * does not clear (it clears from 0x800DA320 on) */
+extern u8 OVERLAY_MEMORY[];
 
 #endif /* OVERLAY_H */

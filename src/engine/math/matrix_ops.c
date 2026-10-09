@@ -1,6 +1,5 @@
 #include "common.h"
 #include "engine/math/matrix_ops.h"
-#include "engine/gfx/lights.h"
 #include "engine/math/matrix.h"
 #include "gte.h"
 

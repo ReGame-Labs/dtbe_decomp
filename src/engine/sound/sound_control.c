@@ -5,17 +5,15 @@
 #include "engine/cd/xa_player.h"
 #include "engine/lib/list.h"
 #include "engine/math/lerp.h"
-#include "engine/math/shuffle.h"
 #include "engine/sound/sound.h"
 #include "engine/sound/voice_pause.h"
 #include "engine/system/memory.h"
 #include "engine/task/task.h"
-#include "vtable.h"
 #include "libsnd.h"
 #include "memory.h"
-#include "psyq.h"
 #include "stdio.h"
-#include "strings.h"
+#include "psyq.h"
+#include "vtable.h"
 #include "overlay.h"
 
 /* Builds a SoundFile with nothing loaded. */
@@ -47,8 +45,8 @@ void soundFileSetResident(SoundFile *this) {
     this->resident = 1;
 }
 
-/* Loads /sound/<name><ext> into file, through the file's setData. */
-void soundFileLoad(SoundFile *file, char *name, char *ext) {
+/* Loads /sound/<name><ext> into this, through its setData. */
+void soundFileLoad(SoundFile *this, char *name, char *ext) {
     char path[128];
     s32 size;
     void *buffer;
@@ -59,7 +57,7 @@ void soundFileLoad(SoundFile *file, char *name, char *ext) {
     turnXaOff();
     setCdfsDone(finishSoundFileRead);
     /* the read hands the file to finishSoundFileRead as its user word */
-    setCdfsUser((s32)file);
+    setCdfsUser((s32)this);
     queueFileLoad(buffer, path, 0, size);
     setCdfsDone(NULL);
     setCdfsUser(0);
@@ -220,8 +218,8 @@ SoundControl *soundControlInit(SoundControl *this) {
     this->vtable = &SOUND_CONTROL_VTABLE;
     listInit(&this->vabs);
     listInit(&this->seps);
-    lerpInit(&this->volume, 80);
-    this->unk54 = 0;
+    lerpInit(&this->volume, SOUND_VOLUME_NORMAL);
+    this->echoVolume = 0;
     this->pauseCount = 0;
     return this;
 }
@@ -229,14 +227,14 @@ SoundControl *soundControlInit(SoundControl *this) {
 /* Starts the sound library, the sound definitions and the XA audio, and
  * loads the sound effects every scene uses for good. */
 void soundControlStart(SoundControl *this) {
-    u32 size = getSongMemorySize(8, 8);
+    u32 size = getSongMemorySize(SOUND_SEP_MAX, SOUND_SEQ_MAX);
     void *sdf;
 
-    startSoundSystem(operatorVecNew((size >> 2) * 4), 8, 8);
+    startSoundSystem(operatorVecNew((size >> 2) * 4), SOUND_SEP_MAX, SOUND_SEQ_MAX);
     SsSetTickMode(SS_TICKVSYNC);
-    func_8004BEA0();
-    setReverb(2, 42, 42);
-    func_800479E0(1);
+    SsStart();
+    setReverb(SS_REV_TYPE_STUDIO_A, 42, 42);
+    func_800479E0(SPU_ON);
     sdf = loadFile("/sound/digimon.sdf");
     this->sdf = sdf;
     setSndDef(sdf);
@@ -260,7 +258,7 @@ SoundFile *soundControlLoadVab(SoundControl *this, s32 id) {
         if (file != NULL) {
             return file;
         }
-        if (listCount(&this->vabs) >= SOUND_MAX_VABS) {
+        if (listCount(&this->vabs) >= SOUND_VAB_MAX) {
             soundControlUnloadVabs(this);
         }
         file = soundFileInitVab(operatorNew(sizeof(SoundFile)), id);
@@ -281,7 +279,7 @@ SoundFile *soundControlLoadSep(SoundControl *this, s32 id) {
         if (file != NULL) {
             return file;
         }
-        if (listCount(&this->seps) >= SOUND_MAX_SEPS) {
+        if (listCount(&this->seps) >= SOUND_SEP_MAX) {
             soundControlUnloadSeps(this);
         }
         file = soundFileInitSep(operatorNew(sizeof(SoundFile)), id);
@@ -302,23 +300,23 @@ void soundControlUnloadSeps(SoundControl *this) {
     listUnloadFiles(&this->seps);
 }
 
-/* The sound task's update: applies the volume and every 15 frames halves
- * unk54 down to 16. */
+/* The sound task's update: pauses or resumes the sound effects, runs the
+ * sound system, applies the volume and plays the echo's next repeat. */
 void soundControlUpdate(SoundControl *this) {
     s16 volume;
-    s32 level;
+    s32 echoVolume;
     s32 frame;
 
     setSoundEffectsPaused(this->pauseCount != 0);
     updateSoundSystem();
     volume = lerpUpdate(&this->volume);
     SsSetSerialVol(SS_SERIAL_A, volume, volume);
-    level = this->unk54;
-    if (level > 16) {
-        frame = this->frame++;
-        if (frame == frame / 15 * 15) {
-            playSoundEffectAtVolume(this->unk50 & 0xFFFF, level & 0xFF, level & 0xFF);
-            this->unk54 -= level >> 1;
+    echoVolume = this->echoVolume;
+    if (echoVolume > SOUND_ECHO_END) {
+        frame = this->echoFrame++;
+        if (frame == frame / SOUND_ECHO_INTERVAL * SOUND_ECHO_INTERVAL) {
+            playSoundEffectAtVolume(this->echoEffect & 0xFFFF, echoVolume & 0xFF, echoVolume & 0xFF);
+            this->echoVolume -= echoVolume >> 1;
         }
     }
 }
@@ -356,11 +354,12 @@ s32 soundControlPlaySound(SoundControl *this, s32 id, u8 group) {
     return playSoundEffect(id);
 }
 
-/* Sets unk50 and unk54 and restarts the frame count of the update. */
-void func_8001BEC8(SoundControl *this, s32 arg1) {
-    this->unk50 = arg1;
-    this->unk54 = 127;
-    this->frame = 0;
+/* Plays a sound effect as an echo: now, then twice more SOUND_ECHO_INTERVAL
+ * frames apart, each at half the volume (soundControlUpdate plays them). */
+void soundControlPlayEcho(SoundControl *this, s32 effect) {
+    this->echoEffect = effect;
+    this->echoVolume = SOUND_ECHO_START;
+    this->echoFrame = 0;
 }
 
 /* Stops the sound effect of handle. */
@@ -463,10 +462,12 @@ void soundControlResumeMusicFull(SoundControl *this) {
     playXa();
 }
 
+/* Pauses the music. */
 void pauseMusic(void) {
     pauseXa();
 }
 
+/* Stops the music. */
 void stopMusic(void) {
     stopXa();
 }
@@ -494,7 +495,7 @@ void soundControlPause(SoundControl *this, s32 pause) {
     soundControlCountPause(this, pause);
     if (pause) {
         pauseMusic();
-        soundControlPlaySound(this, 0x14, 0);
+        soundControlPlaySound(this, SOUND_PAUSE, 0);
         return;
     }
     soundControlResumeMusic(this);

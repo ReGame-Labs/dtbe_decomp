@@ -4,14 +4,12 @@
 #include "engine/gfx/ordering_table.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/math/lerp.h"
-#include "engine/math/shuffle.h"
 #include "engine/task/task.h"
-#include "gte.h"
 #include "libgpu.h"
 
 /* Builds the fade task, with the screen not faded. */
 FadeControl *fadeControlInit(FadeControl *this) {
-    taskInit(&this->task, 0xF000, "Fade Control");
+    taskInit(&this->task, FADE_CONTROL_PRIORITY, "Fade Control");
     this->task.vtable = &FADE_CONTROL_VTABLE;
     lerpInit(&this->level, 0);
     return this;
@@ -54,7 +52,7 @@ void fadeControlDraw(FadeControl *this) {
         displayGetSize(display, &tile->w);
         SetSemiTrans(tile, 1);
         AddPrim(ot, tile);
-        AddPrim(ot, allocDrTpage(0x40));
+        AddPrim(ot, allocDrTpage(TPAGE_SUBTRACT));
     }
 }
 

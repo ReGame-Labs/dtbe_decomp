@@ -8,7 +8,6 @@
 #include "engine/gfx/ordering_table.h"
 #include "engine/gfx/scene_graph.h"
 #include "engine/menu/stepper.h"
-#include "engine/menu/stepper_group.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound.h"
 #include "engine/sound/sound_control.h"
@@ -18,16 +17,20 @@
 #include "engine/task/task.h"
 #include "engine/text/console.h"
 #include "stdio.h"
-#include "overlay.h"
 #include "psyq.h"
+#include "overlay.h"
 
 /* the sound of a menu entry stepping */
 #define SOUND_STEP 0x13
 /* the console column the menu entries start at */
 #define MENU_COLUMN 2
-/* the gray of the current menu entry and of the others */
+/* the grey of the current menu entry and of the others */
 #define MENU_BRIGHT 0x80
 #define MENU_DIM 0x40
+/* how far the VRAM viewer moves per press, and the size of VRAM */
+#define VRAM_VIEWER_STEP 8
+#define VRAM_WIDTH 1024
+#define VRAM_HEIGHT 512
 
 /*
  * The buttons of the system menu's pages: up and down to move, circle or
@@ -60,72 +63,73 @@ extern const char STR_WARGREYMON[] = "WARGREYMON";
 extern const char STR_BLACKWARGREYMON[] = "BLACKWARGREYMON";
 
 /* Creates the sequencer, without random fights (the "SEQUENCER (REAL THING MODE)" command). */
-Task *createSequencerTask(void) {
+Task *debugCreateSequencerTask(void) {
     return &appSequencerInit((AppSequencer *)operatorNew(sizeof(AppSequencer)), 0)->task;
 }
 
 /* Creates the sequencer with random fights (the "BATTLE AGEING SEQUENCER" command). */
-Task *createAgeingSequencerTask(void) {
+Task *debugCreateAgeingSequencerTask(void) {
     return &appSequencerInit((AppSequencer *)operatorNew(sizeof(AppSequencer)), 1)->task;
 }
 
-/* Creates the title screen (the "TITLE" command). */
-Task *createTitleTask(void) {
+/* Creates the title scene (the "TITLE" command). */
+Task *debugCreateTitleTask(void) {
     return func_80067170(operatorNew(0x110C), &SYSTEM_CONTEXT);
 }
 
-/* Creates the minigame guide (the "MINIGAME GUIDE" command). */
-Task *createMinigameGuideTask(void) {
+/* Creates the guide of bonus game 0 (the "MINIGAME GUIDE" command). */
+Task *debugCreateBonusGuideTask(void) {
     return func_80071F28(operatorNew(0xA90), &SYSTEM_CONTEXT, 0);
 }
 
-/* Creates the ranking screen (the "RANKING" command). */
-Task *createRankingTask(void) {
+/* Creates the ranking scene (the "RANKING" command). */
+Task *debugCreateRankingTask(void) {
     return func_8007360C(operatorNew(0x474), &SYSTEM_CONTEXT, 1);
 }
 
-/* Creates the credits (the "CREDIT" command). */
-Task *createCreditsTask(void) {
+/* Creates the credits scene (the "CREDIT" command). */
+Task *debugCreateCreditsTask(void) {
     return func_80076504(operatorNew(0x44), &SYSTEM_CONTEXT);
 }
 
-/* Creates the character select screen (the "CHARACTER SELECT" command). */
-Task *createCharacterSelectTask(void) {
-    return func_8006AAF8(operatorNew(0x234), &SYSTEM_CONTEXT, 0x25);
+/* Creates the character select scene (the "CHARACTER SELECT" command), as for
+ * a versus fight against the computer (gameStateSetUpVersus). */
+Task *debugCreateCharacterSelectTask(void) {
+    return func_8006AAF8(operatorNew(0x234), &SYSTEM_CONTEXT, SELECT_SIDE_0 | SELECT_VERSUS | SELECT_COMPUTER_1);
 }
 
-/* Creates the task of an overlay's func_8006E1CC (a system menu command). */
-Task *createGameTask(void) {
+/* Creates the fight scene (the game debug menu's "GAME START" command, overlay "game"). */
+Task *debugCreateFightTask(void) {
     return func_8006E1CC(operatorNew(0x64), &SYSTEM_CONTEXT);
 }
 
-/* Creates the task of an overlay's func_80065AE4 (a system menu command). */
-Task *func_800283DC(void) {
+/* Creates a testing ground of the "test" overlay (the "Testing ground for HANAMASU" command). */
+Task *debugCreateHanamasuTestTask(void) {
     return func_80065AE4(operatorNew(0xF4C), &SYSTEM_CONTEXT);
 }
 
-/* Creates the task of an overlay's func_80066084 (a system menu command). */
-Task *func_8002840C(void) {
+/* Creates a testing ground of the "test" overlay (the "Testing ground for IWANAGA" command). */
+Task *debugCreateIwanagaTestTask(void) {
     return func_80066084(operatorNew(0x14C), &SYSTEM_CONTEXT);
 }
 
-/* Creates the task of an overlay's func_800673A4 (a system menu command). */
-Task *func_8002843C(void) {
+/* Creates a testing ground of the "test" overlay (the "Testing ground for SHOHYAMA" command). */
+Task *debugCreateShohyamaTestTask(void) {
     return func_800673A4(operatorNew(0xA1C), &SYSTEM_CONTEXT);
 }
 
-/* Creates the task of an overlay's func_80066F74 (a system menu command). */
-Task *func_8002846C(void) {
+/* Creates a testing ground of the "test" overlay (the "Testing ground for TERADA" command). */
+Task *debugCreateTeradaTestTask(void) {
     return func_80066F74(operatorNew(0xA5C), &SYSTEM_CONTEXT);
 }
 
 /* Creates the model viewer (the "ModelView" command). */
-Task *createModelViewTask(void) {
+Task *debugCreateModelViewTask(void) {
     return func_800681A4(operatorNew(0x30), &SYSTEM_CONTEXT);
 }
 
 /* Creates the map viewer (the "MapView" command). */
-Task *createMapViewTask(void) {
+Task *debugCreateMapViewTask(void) {
     return func_8006A43C(operatorNew(0x30), &SYSTEM_CONTEXT);
 }
 
@@ -135,18 +139,18 @@ Task *reloadExecutable(void) {
     return NULL;
 }
 
-/* Creates the option screen (the "OPTION" command). */
-Task *createOptionTask(void) {
+/* Creates the option scene (the "OPTION" command). */
+Task *debugCreateOptionTask(void) {
     return func_800794E0(operatorNew(0x8C));
 }
 
-/* Creates the main menu (the "MAIN MENU" command). */
-Task *createMainMenuTask(void) {
+/* Creates the main menu scene (the "MAIN MENU" command). */
+Task *debugCreateMainMenuTask(void) {
     return func_8006A360(operatorNew(0x90), 0);
 }
 
 /* Steps an entry up: 16 at a time with L1 held, 128 with L2, else once. */
-void SystemEntry::stepUp(s32 arg, s32 held, u32 pressed) {
+void SystemEntry::stepUp(s32 arg, s32 held, u32 buttons) {
     s32 steps = 1;
 
     if (held & PADL1) {
@@ -162,7 +166,7 @@ void SystemEntry::stepUp(s32 arg, s32 held, u32 pressed) {
 }
 
 /* Steps an entry down: 16 at a time with L1 held, 128 with L2, else once. */
-void SystemEntry::stepDown(s32 arg, s32 held, u32 pressed) {
+void SystemEntry::stepDown(s32 arg, s32 held, u32 buttons) {
     s32 steps = 1;
 
     if (held & PADL1) {
@@ -321,11 +325,11 @@ s32 SystemGameMenu::confirm(s32 arg, s32 held, s32 own) {
         stepperGroupAddChild(character2);
         control2 = new SystemChoice(" ctrl", controls, GAME_CONTROL_COUNT);
         stepperGroupAddChild(control2);
-        level = new SystemChoice("level", LEVEL_NAMES, GAME_LEVEL_COUNT);
+        level = new SystemChoice("level", LEVEL_NAMES, LEVEL_COUNT);
         stepperGroupAddChild(level);
-        phase = new SystemNumber("phase", 0, GAME_PHASE_MAX);
+        phase = new SystemNumber("phase", 0, RUN_PHASE_LAST);
         stepperGroupAddChild(phase);
-        stepperGroupAddChild(new SystemCommand("GAME START", createGameTask, "game"));
+        stepperGroupAddChild(new SystemCommand("GAME START", debugCreateFightTask, "game"));
         return 0;
     }
     GAME_STATE.arena = stage->value;
@@ -335,14 +339,14 @@ s32 SystemGameMenu::confirm(s32 arg, s32 held, s32 own) {
     GAME_STATE.fighters[1].character = character2->value;
     GAME_STATE.fighters[1].computer = control2->value == GAME_CONTROL_COMPUTER;
     GAME_STATE.fighters[1].unk14 = 7;
-    GAME_STATE.unk2A8 = level->value;
-    GAME_STATE.unk2AC = phase->value;
+    GAME_STATE.level = level->value;
+    GAME_STATE.phase = phase->value;
     return 0;
 }
 
 /* Leaves the page. */
 s32 SystemGameMenu::cancel(s32 arg, s32 held, s32 own) {
-    stepperGroupRemoveChildren();
+    stepperGroupDestroyChildren();
     return 0;
 }
 
@@ -399,13 +403,13 @@ s32 SystemSound::cancel(s32 arg, s32 held, s32 own) {
 }
 
 /*
- * Select hands the stepper's value to func_8001BEC8, L1 passes the handle of
+ * Select hands the stepper's value to soundControlPlayEcho, L1 passes the handle of
  * the last effect played to stopSound, any other button plays the sound
  * effects of the stepper's value and keeps the handle.
  */
 s32 SystemSound::confirm(s32 arg, s32 held, s32 own) {
     if (held & PADselect) {
-        func_8001BEC8(&SOUND_CONTROL, value);
+        soundControlPlayEcho(&SOUND_CONTROL, value);
         return -1;
     }
     if (held & PADL1) {
@@ -473,14 +477,14 @@ s32 SystemFlag::confirm(s32 arg, s32 held, s32 own) {
 }
 
 /* Sets the flag. */
-void SystemFlag::stepUp(s32 arg, s32 held, u32 pressed) {
-    Stepper::stepUp(arg, held, pressed);
+void SystemFlag::stepUp(s32 arg, s32 held, u32 buttons) {
+    Stepper::stepUp(arg, held, buttons);
     SYSTEM_CONTEXT.flags |= 1 << index;
 }
 
 /* Clears the flag. */
-void SystemFlag::stepDown(s32 arg, s32 held, u32 pressed) {
-    Stepper::stepDown(arg, held, pressed);
+void SystemFlag::stepDown(s32 arg, s32 held, u32 buttons) {
+    Stepper::stepDown(arg, held, buttons);
     SYSTEM_CONTEXT.flags &= ~(1 << index);
 }
 
@@ -524,10 +528,40 @@ SystemVramViewer::SystemVramViewer() : SystemFlag("VRAM VIEWER") {
 
 /*
  * Moves the area of VRAM shown by 8 pixels with the d-pad, inside VRAM
- * (virtual input). The C is right but not the allocation: the original keeps
- * this in a1 and the bound in a0, and loads x before w.
+ * (virtual input). Each limit is a local of its own block: with one for the
+ * whole function, w is loaded before x and the registers differ.
  */
-INCLUDE_ASM("asm/jp/main/nonmatchings/debug/system_menu", systemVramViewerInput);
+s32 SystemVramViewer::input(s32 arg, s32 held, u32 buttons) {
+    if (held & PADLleft) {
+        env.disp.x -= VRAM_VIEWER_STEP;
+        if (env.disp.x < 0) {
+            env.disp.x = 0;
+        }
+    }
+    if (held & PADLright) {
+        s16 limit;
+        env.disp.x += VRAM_VIEWER_STEP;
+        limit = VRAM_WIDTH - env.disp.w;
+        if (env.disp.x > limit) {
+            env.disp.x = limit;
+        }
+    }
+    if (held & PADLup) {
+        env.disp.y -= VRAM_VIEWER_STEP;
+        if (env.disp.y < 0) {
+            env.disp.y = 0;
+        }
+    }
+    if (held & PADLdown) {
+        s16 limit;
+        env.disp.y += VRAM_VIEWER_STEP;
+        limit = VRAM_HEIGHT - env.disp.h;
+        if (env.disp.y > limit) {
+            env.disp.y = limit;
+        }
+    }
+    return 1;
+}
 
 /* Shows the area of VRAM. */
 s32 SystemVramViewer::confirm(s32 arg, s32 held, s32 own) {
@@ -561,24 +595,28 @@ SystemTask::SystemTask()
     systemTaskSetUpDisplay();
     flagsMenuOpen = 0;
     menu.stepperGroupSetKeepOpen(1);
-    menu.stepperGroupAddChild(new SystemCommand("SEQUENCER (REAL THING MODE)", createSequencerTask, NULL));
+    menu.stepperGroupAddChild(new SystemCommand("SEQUENCER (REAL THING MODE)", debugCreateSequencerTask, NULL));
     menu.stepperGroupAddChild(new SystemGameMenu);
-    menu.stepperGroupAddChild(new SystemCommand("BATTLE AGEING SEQUENCER", createAgeingSequencerTask, NULL));
-    menu.stepperGroupAddChild(new SystemCommand("TITLE", createTitleTask, "title"));
-    menu.stepperGroupAddChild(new SystemCommand("MAIN MENU", createMainMenuTask, "title"));
-    menu.stepperGroupAddChild(new SystemCommand("OPTION", createOptionTask, "title"));
-    menu.stepperGroupAddChild(new SystemCommand("CHARACTER SELECT", createCharacterSelectTask, "title"));
-    menu.stepperGroupAddChild(new SystemCommand("RANKING", createRankingTask, "title"));
-    menu.stepperGroupAddChild(new SystemCommand("CREDIT", createCreditsTask, "title"));
-    menu.stepperGroupAddChild(new SystemCommand("MINIGAME GUIDE", createMinigameGuideTask, "title"));
-    menu.stepperGroupAddChild(new SystemCommand("ModelView", createModelViewTask, "test"));
-    menu.stepperGroupAddChild(new SystemCommand("MapView", createMapViewTask, "test"));
+    menu.stepperGroupAddChild(new SystemCommand("BATTLE AGEING SEQUENCER", debugCreateAgeingSequencerTask, NULL));
+    menu.stepperGroupAddChild(new SystemCommand("TITLE", debugCreateTitleTask, "title"));
+    menu.stepperGroupAddChild(new SystemCommand("MAIN MENU", debugCreateMainMenuTask, "title"));
+    menu.stepperGroupAddChild(new SystemCommand("OPTION", debugCreateOptionTask, "title"));
+    menu.stepperGroupAddChild(new SystemCommand("CHARACTER SELECT", debugCreateCharacterSelectTask, "title"));
+    menu.stepperGroupAddChild(new SystemCommand("RANKING", debugCreateRankingTask, "title"));
+    menu.stepperGroupAddChild(new SystemCommand("CREDIT", debugCreateCreditsTask, "title"));
+    menu.stepperGroupAddChild(new SystemCommand("MINIGAME GUIDE", debugCreateBonusGuideTask, "title"));
+    menu.stepperGroupAddChild(new SystemCommand("ModelView", debugCreateModelViewTask, "test"));
+    menu.stepperGroupAddChild(new SystemCommand("MapView", debugCreateMapViewTask, "test"));
     menu.stepperGroupAddChild(new SystemCommand("LoadExec", reloadExecutable, NULL));
     if (TESTING_GROUNDS) {
-        menu.stepperGroupAddChild(new SystemCommand("Testing ground for HANAMASU", func_800283DC, "test"));
-        menu.stepperGroupAddChild(new SystemCommand("Testing ground for IWANAGA", func_8002840C, "test"));
-        menu.stepperGroupAddChild(new SystemCommand("Testing ground for SHOHYAMA", func_8002843C, "test"));
-        menu.stepperGroupAddChild(new SystemCommand("Testing ground for TERADA", func_8002846C, "test"));
+        menu.stepperGroupAddChild(new SystemCommand(
+            "Testing ground for HANAMASU", debugCreateHanamasuTestTask, "test"));
+        menu.stepperGroupAddChild(new SystemCommand(
+            "Testing ground for IWANAGA", debugCreateIwanagaTestTask, "test"));
+        menu.stepperGroupAddChild(new SystemCommand(
+            "Testing ground for SHOHYAMA", debugCreateShohyamaTestTask, "test"));
+        menu.stepperGroupAddChild(new SystemCommand(
+            "Testing ground for TERADA", debugCreateTeradaTestTask, "test"));
     }
     menu.stepperGroupAddChild(new SystemBgm);
     menu.stepperGroupAddChild(new SystemSound);
@@ -607,8 +645,8 @@ void SystemTask::systemTaskSetUpDisplay() {
     displaySetSize(display, 512, 480);
     displaySetVsyncMode(display, 1);
     displaySetClearColor(display, 0, 0x40, 0);
-    displayDisable(display, 1);
-    displayEnable(display, 0);
+    displayDisable(display, DISPLAY_INTERLACE);
+    displayEnable(display, DISPLAY_CLEAR);
 }
 
 /*
@@ -638,7 +676,7 @@ void SystemTask::update(s32 arg) {
         break;
     case 1:
         if (handleTableGet(TASK_HANDLES, taskHandle) != NULL) {
-            if ((held & PADselect) && (pressed & PADstart) && SYSTEM_CONTEXT.unk1C == 0) {
+            if ((held & PADselect) && (pressed & PADstart) && !SYSTEM_CONTEXT.resetDisabled) {
                 killTaskByHandle(taskHandle);
             }
         } else {
@@ -655,10 +693,12 @@ void SystemTask::update(s32 arg) {
         consoleSetColor(console, 0xFF, 0xFF, 0xFF);
         consolePrint(console, "\n");
         if ((SYSTEM_CONTEXT.flags >> SYSTEM_FLAG_HSYNCDISP) & 1) {
-            consolePrint(console, "H-SYNC: %d %d\n", SYSTEM_CONTEXT.unk24, displayGetDrawEndCount(SYSTEM_CONTEXT.display));
+            consolePrint(console, "H-SYNC: %d %d\n",
+                SYSTEM_CONTEXT.vsyncTime, displayGetDrawEndCount(SYSTEM_CONTEXT.display));
         }
         if ((SYSTEM_CONTEXT.flags >> SYSTEM_FLAG_HEAPDISP) & 1) {
-            consolePrint(console, "HEAP: AVAIL(%dK) BLOCK(%d)", mainHeapGetLargestFree() >> 10, mainHeapGetBlockCount());
+            consolePrint(console, "HEAP: AVAIL(%dK) BLOCK(%d)",
+                mainHeapGetLargestFree() >> 10, mainHeapGetBlockCount());
         }
         if ((SYSTEM_CONTEXT.flags >> SYSTEM_FLAG_CLIPDISP) & 1) {
             culled = getMeshOutOfViewCount();
@@ -693,15 +733,15 @@ void SystemTask::systemTaskStartTask(Task *(*create)(void), char *overlay) {
 
     if (overlay != NULL) {
         sprintf(path, "/bin/%s.bin", overlay);
-        loadCompressedFileInto(D_800643E0, path);
+        loadCompressedFileInto(OVERLAY_MEMORY, path);
     }
     display = SYSTEM_CONTEXT.display;
     padManagerSetRepeat(SYSTEM_CONTEXT.pads, 16, 4);
     displaySetSize(display, SCREEN_WIDTH, SCREEN_HEIGHT);
     displaySetVsyncMode(display, 1);
     displaySetClearColor(display, 0, 0, 0);
-    displayDisable(display, 1);
-    displayEnable(display, 0);
+    displayDisable(display, DISPLAY_INTERLACE);
+    displayEnable(display, DISPLAY_CLEAR);
     task = create();
     taskHandle = task->handle;
     schedulerInsertTask(scheduler, task);

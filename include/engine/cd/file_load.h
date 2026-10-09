@@ -23,7 +23,7 @@ extern u8 D_1[];
 
 extern char LAST_LOADED_PATH[]; /* the path of the file loadCompressedFileInto loaded last */
 
-void loadCompressedFileInto(void *dest, char *path);
+void loadCompressedFileInto(void *dst, char *path);
 void uploadTim(u32 *tim);
 void uploadTims(u32 *tims);
 u32 *findTim(u32 *tim, s32 index);
@@ -38,7 +38,7 @@ s32 loadFileAsync(char *path, void **result);
 void finishLoadFileAsync(void *buffer, u32 size, char *name, s32 user);
 void *decompressFileIfCompressed(CompressedHeader *file, s32 size);
 void *decompressFile(CompressedHeader *file);
-void *decompressStreamTo(void *dest, u8 *source);
+void *decompressStreamTo(void *dst, u8 *src);
 
 s32 isFileCompressed(CompressedHeader *file);
 

@@ -1,7 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-/* The game's integer types, NULL, and the macros that give C linkage in the C++ files. */
+/* The game's integer types, NULL, offsetof, and the macros that give C linkage in the C++ files. */
 
 #include "include_asm.h"
 
@@ -20,6 +20,11 @@ typedef unsigned long long u64;
 #else
 #define NULL ((void *)0)
 #endif
+#endif
+
+/* the offset of a member in its struct, in bytes */
+#ifndef offsetof
+#define offsetof(type, member) ((s32) & ((type *)0)->member)
 #endif
 
 /* Gives the C functions declared between them C linkage in a C++ file. */

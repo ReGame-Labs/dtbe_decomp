@@ -1373,7 +1373,7 @@ const char STR_EMPTY[] = "";
 
 /* zlibVersion: the version of zlib. */
 const char *zlibVersion(void) {
-    return "1.1.3";
+    return ZLIB_VERSION;
 }
 
 /* zError: the message of an error code. */
@@ -1382,9 +1382,9 @@ const char *zError(s32 err) {
 }
 
 /* zcalloc: allocates memory for the stream with calloc(). */
-void *zcalloc(void *opaque, u32 items, u32 size) {
+void *zcalloc(void *opaque, s32 items, s32 size) {
     /* calloc and free were linked to the same break stub, which takes nothing */
-    return ((void *(*)(u32, u32))breakForever)(items, size);
+    return ((void *(*)(s32, s32))breakForever)(items, size);
 }
 
 /* zcfree: frees memory for the stream with free(). */

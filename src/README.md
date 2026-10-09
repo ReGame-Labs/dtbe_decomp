@@ -14,15 +14,15 @@ overlays in `A.VFS` are not decompiled yet.
 | `system/` | `main` and the global objects, threads, running another executable, the main heap, the log, handle tables |
 | `game/` | the sequencer that runs the scenes, the game state, the save data, the loading screen, characters |
 | `task/` | the tasks the scheduler runs every frame, and the entities |
-| `gfx/` | the display, the screen fade, the scene graph, the cameras, TMD models and their lights, sprites, colors, grey boxes and darkened rectangles |
-| `gfx/prim/` | the primitives: taking them from the frame's buffer (`alloc_*`), projecting shapes into packets (`build_*`) and the faces of a model (`face_*`) |
-| `math/` | fixed-point vectors, matrices and quaternions, trigonometry, interpolation, random numbers |
+| `gfx/` | the display, ordering tables and primitive buffers, the screen fade, the scene graph and its animations, mesh scenes, the cameras and look-at views, TMD models and their lights, sprites, the VRAM image cache, colors, grey boxes and darkened rectangles |
+| `gfx/prim/` | the primitives: taking them from the frame's buffer (`alloc_*`) and projecting shapes (a flags word, vertex pointers, colors, texture words) into packets (`build_*`) |
+| `math/` | fixed-point division, vectors, matrices and quaternions, trigonometry, interpolation, random numbers and shuffles |
 | `pad/` | the pads and the map of their buttons |
 | `sound/` | the SPU sound system, the sound files a scene loads, pausing the voices |
 | `cd/` | reading the CD-ROM, the file system of `A.VFS`, loading compressed files, the XA player |
 | `text/` | the debug console, printing on the screen, the font cache, Shift JIS text |
 | `menu/` | countdowns, and the steppers: values the buttons step between a minimum and a maximum, alone or in groups |
-| `debug/` | the debug menu (C++) |
+| `debug/` | the debug menu |
 | `lib/` | code the game linked as is: strings, `vsprintf`, MD5, lists, node pools, the heap, zlib's inflate |
 
 ## Files
@@ -31,9 +31,12 @@ Where one file ends and the next starts comes from the build, not from what
 the code does: each file's `.rodata` and `.sdata` are one piece in the
 executable, the data a file reads through `$gp` is its own, and g++ puts a
 file's synthesized functions, vtables and static constructors at its end
-(the TODO has the rest). The comment at the top of a file's first function
-says what it is about; `config/<version>/main.yaml` lists the files in the
-executable's order.
+(the TODO has the rest). The comment after the include guard of a file's
+header says what the file is about; `config/<version>/main.yaml` lists the
+files in the executable's order.
+
+A `.cpp` file is one that only g++ builds as the game has it (the TODO says
+why for each); the rest are C.
 
 The files that hold a single kind of primitive keep the name of the first
 one (`gfx/prim/alloc_sprt.c` also takes the tiles), since each is one of a

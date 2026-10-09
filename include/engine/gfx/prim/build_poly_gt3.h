@@ -4,10 +4,11 @@
 /* Projecting a textured, Gouraud-shaded triangle into a POLY_GT3 packet. */
 
 #include "common.h"
+#include <sys/types.h>
 
 EXTERN_C_BEGIN
 
-void *buildPolyGT3(void *arg0, void *arg1, s32 arg2, s32 arg3);
+void *buildPolyGT3(void *shape, void *packet, u_long *ot, s32 shift);
 
 EXTERN_C_END
 

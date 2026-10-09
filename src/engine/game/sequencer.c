@@ -9,58 +9,73 @@
 #include "engine/system/thread.h"
 #include "engine/task/task.h"
 #include "libetc.h"
-#include "memory.h"
-#include "strings.h"
+#include "vtable.h"
 #include "overlay.h"
 
-/* The scenes the sequencer runs (appSequencerRunScene), each a task built in an overlay. */
+/* The scenes the sequencer runs (appSequencerRunScene), each a task built in
+ * an overlay; the names in quotes are the tasks'. */
 
-Task *func_8001C36C(void) {
+/* Creates the boot logo ("Boot Logo"). */
+Task *createBootLogoTask(void) {
     return func_80066D58(operatorNew(0x34), &SYSTEM_CONTEXT);
 }
 
-Task *createTitleScene(void) {
+/* Creates the title ("Title Logo"); a result other than 0 starts the demo. */
+Task *createTitleTask(void) {
     return func_80067170(operatorNew(0x110C), &SYSTEM_CONTEXT);
 }
 
-Task *createCharacterSelectScene(void) {
-    return func_8006AAF8(operatorNew(0x234), &SYSTEM_CONTEXT, D_8005FB80[0]);
+/* Creates the select scene ("Character Select"): the characters, and the
+ * arena or the bonus game, as GameState.selectFlags says. */
+Task *createCharacterSelectTask(void) {
+    return func_8006AAF8(operatorNew(0x234), &SYSTEM_CONTEXT, GAME_STATE.selectFlags);
 }
 
-Task *createFightScene(void) {
+/* Creates the fight scene ("game main process"): fights and bonus games; its
+ * result is a FIGHT_RESULT_*. */
+Task *createFightTask(void) {
     return func_8006E1CC(operatorNew(0x64), &SYSTEM_CONTEXT);
 }
 
-Task *createMinigameGuideScene(void) {
-    return func_80071F28(operatorNew(0xA90), &SYSTEM_CONTEXT, D_8005F92C[0]);
+/* Creates the guide of the bonus game ("Guide Logo"). */
+Task *createBonusGuideTask(void) {
+    return func_80071F28(operatorNew(0xA90), &SYSTEM_CONTEXT, GAME_STATE.bonusGame);
 }
 
-Task *createCreditsScene(void) {
+/* Creates the credits. */
+Task *createCreditsTask(void) {
     return func_80076504(operatorNew(0x44), &SYSTEM_CONTEXT);
 }
 
-Task *createRankingScene(void) {
-    return func_8007360C(operatorNew(0x474), &SYSTEM_CONTEXT, D_8005FB90[0] == 0);
+/* Creates the ranking; its argument is 0 after the demo. */
+Task *createRankingTask(void) {
+    return func_8007360C(operatorNew(0x474), &SYSTEM_CONTEXT, !GAME_STATE.demo);
 }
 
-Task *createMovieScene(void) {
+/* Creates the movie scene, which plays /a.str. */
+Task *createMovieTask(void) {
     return func_80064494(operatorNew(0x28));
 }
 
-Task *createMainMenuScene(void) {
+/* Creates the main menu ("MainMenu"): its result is the choice (0 to 5), or
+ * another to go back. */
+Task *createMainMenuTask(void) {
     return func_8006A360(operatorNew(0x90), 0);
 }
 
-Task *createOptionScene(void) {
+/* Creates the options ("Option"). */
+Task *createOptionTask(void) {
     return func_800794E0(operatorNew(0x8C));
 }
 
-Task *func_8001C554(void) {
-    return func_800709B0(operatorNew(0x58), 2);
+/* Creates the memory card scene that loads the save. */
+Task *createLoadTask(void) {
+    return func_800709B0(operatorNew(0x58), MEMORY_CARD_LOAD);
 }
 
-Task *createSaveScene(void) {
-    return func_800709B0(operatorNew(0x58), 3);
+/* Creates the memory card scene that saves. */
+Task *createSaveTask(void) {
+    return func_800709B0(operatorNew(0x58), MEMORY_CARD_SAVE);
 }
 
 /* Builds the sequencer. With randomFights, it only runs random fights. */
@@ -73,7 +88,7 @@ AppSequencer *appSequencerInit(AppSequencer *this, s32 randomFights) {
     if (randomFights) {
         this->state = SEQUENCER_RANDOM_FIGHTS;
     } else {
-        this->state = 0;
+        this->state = SEQUENCER_BOOT;
     }
     return this;
 }
@@ -87,7 +102,7 @@ INCLUDE_RODATA("asm/jp/main/nonmatchings/game/sequencer", OVERLAY_PATH_FORMAT);
 
 INCLUDE_RODATA("asm/jp/main/nonmatchings/game/sequencer", APP_SEQUENCER_VTABLE);
 
-/* whether the game just started: the scene of func_8001C554 only runs then */
+/* whether the game just started: the save is only loaded then */
 static s32 JUST_BOOTED = 1;
 
 /* the overlays of the title, the movie and the game scenes */
@@ -104,67 +119,67 @@ void appSequencerRunScenes(AppSequencer *this) {
     stopMusic();
 next:
     switch (this->state) {
-    case 0:
-        appSequencerRunScene(this, func_8001C36C, TITLE_OVERLAY, 0);
+    case SEQUENCER_BOOT:
+        appSequencerRunScene(this, createBootLogoTask, TITLE_OVERLAY, 0);
         if (JUST_BOOTED) {
             JUST_BOOTED = 0;
-            appSequencerRunScene(this, func_8001C554, TITLE_OVERLAY, 0);
+            appSequencerRunScene(this, createLoadTask, TITLE_OVERLAY, 0);
         }
         /* fall through */
-    case 1:
-        appSequencerRunScene(this, createMovieScene, MOVIE_OVERLAY, 0);
+    case SEQUENCER_MOVIE:
+        appSequencerRunScene(this, createMovieTask, MOVIE_OVERLAY, 0);
         /* fall through */
-    case 2:
-        if (appSequencerRunScene(this, createTitleScene, TITLE_OVERLAY, 1)) {
-            func_8001E264(&GAME_STATE);
-            appSequencerRunScene(this, createFightScene, GAME_OVERLAY, 0);
-            appSequencerRunScene(this, createRankingScene, TITLE_OVERLAY, 1);
-            this->state = 0;
+    case SEQUENCER_TITLE:
+        if (appSequencerRunScene(this, createTitleTask, TITLE_OVERLAY, 1)) {
+            gameStateSetUpDemo(&GAME_STATE);
+            appSequencerRunScene(this, createFightTask, GAME_OVERLAY, 0);
+            appSequencerRunScene(this, createRankingTask, TITLE_OVERLAY, 1);
+            this->state = SEQUENCER_BOOT;
             break;
         }
         /* fall through */
-    case 3:
-        func_8001D1C8(&GAME_STATE);
-        switch (appSequencerRunScene(this, createMainMenuScene, TITLE_OVERLAY, 0)) {
+    case SEQUENCER_MAIN_MENU:
+        gameStateResetLastPicks(&GAME_STATE);
+        switch (appSequencerRunScene(this, createMainMenuTask, TITLE_OVERLAY, 0)) {
         case 0:
-            this->state = 4;
+            this->state = SEQUENCER_VS_COMPUTER;
             break;
         case 1:
-            this->state = 5;
+            this->state = SEQUENCER_VERSUS;
             break;
         case 2:
-            this->state = 6;
+            this->state = SEQUENCER_VERSUS_COMPUTER;
             break;
         case 3:
-            this->state = 7;
+            this->state = SEQUENCER_BONUS_VS_COMPUTER;
             break;
         case 4:
-            this->state = 8;
+            this->state = SEQUENCER_BONUS_VERSUS;
             break;
         case 5:
-            this->state = 9;
+            this->state = SEQUENCER_OPTIONS;
             break;
         default:
-            this->state = 2;
+            this->state = SEQUENCER_TITLE;
             break;
         }
         break;
-    case 4:
+    case SEQUENCER_VS_COMPUTER:
         this->state = appSequencerRunVsComputer(this);
         break;
-    case 5:
+    case SEQUENCER_VERSUS:
         this->state = appSequencerRunVersus(this, 0);
         break;
-    case 6:
+    case SEQUENCER_VERSUS_COMPUTER:
         this->state = appSequencerRunVersus(this, 1);
         break;
-    case 7:
-        this->state = appSequencerRunMinigameVsComputer(this);
+    case SEQUENCER_BONUS_VS_COMPUTER:
+        this->state = appSequencerRunBonusVsComputer(this);
         break;
-    case 8:
-        this->state = appSequencerRunMinigameVersus(this);
+    case SEQUENCER_BONUS_VERSUS:
+        this->state = appSequencerRunBonusVersus(this);
         break;
-    case 9:
+    case SEQUENCER_OPTIONS:
         this->state = appSequencerRunOptions(this);
         break;
     case SEQUENCER_RANDOM_FIGHTS:
@@ -175,143 +190,143 @@ next:
 }
 
 /* Runs a run against the computer (gameStateSetUpVsComputer): the select scene
- * (createCharacterSelectScene), then the fights until the run ends, recording a cleared run
+ * (createCharacterSelectTask), then the fights until the run ends, recording a cleared run
  * (gameStateRecordClear). Returns the state the sequencer runs next. */
 s32 appSequencerRunVsComputer(AppSequencer *this) {
     s32 result;
-    s32 next = 2;
+    s32 next = SEQUENCER_TITLE;
 
 start:
     gameStateSetUpVsComputer(&GAME_STATE);
-    result = appSequencerRunScene(this, createCharacterSelectScene, TITLE_OVERLAY, 1);
+    result = appSequencerRunScene(this, createCharacterSelectTask, TITLE_OVERLAY, 1);
     if (result < 0) {
-        return 3;
+        return SEQUENCER_MAIN_MENU;
     }
-    if (result == 1) {
-        func_8001DF70(&GAME_STATE);
+    if (result == CHARACTER_SELECT_CHALLENGE) {
+        gameStateSetUpChallenge(&GAME_STATE);
     }
 step:
-    if (func_8001DF34(&GAME_STATE)) {
-        if (appSequencerRunScene(this, createFightScene, GAME_OVERLAY, 0) == 5) {
+    if (gameStateIsOutsideRun(&GAME_STATE)) {
+        if (appSequencerRunScene(this, createFightTask, GAME_OVERLAY, 0) == FIGHT_RESULT_SELECT) {
             goto start;
         }
         gameStateRestoreFighters(&GAME_STATE);
     }
 fight:
-    switch (appSequencerRunScene(this, createFightScene, GAME_OVERLAY, 0)) {
-    case 0: /* listed in the game: its jump table starts at 0 */
+    switch (appSequencerRunScene(this, createFightTask, GAME_OVERLAY, 0)) {
+    case FIGHT_RESULT_RUN_OVER: /* listed in the game: its jump table starts at 0 */
         break;
-    case 1:
-        appSequencerRunScene(this, createMinigameGuideScene, TITLE_OVERLAY, 1);
+    case FIGHT_RESULT_BONUS_GAME:
+        appSequencerRunScene(this, createBonusGuideTask, TITLE_OVERLAY, 1);
         goto fight;
-    case 2:
-        if (!GAME_STATE.unk2B8) {
+    case FIGHT_RESULT_RUN_CLEARED:
+        if (!GAME_STATE.challenge) {
             gameStateRecordClear(&GAME_STATE);
-            next = 0;
-            appSequencerRunScene(this, createCreditsScene, TITLE_OVERLAY, 0);
+            next = SEQUENCER_BOOT;
+            appSequencerRunScene(this, createCreditsTask, TITLE_OVERLAY, 0);
         }
         break;
-    case 3:
-        func_8001DF70(&GAME_STATE);
-        while (appSequencerRunScene(this, createCharacterSelectScene, TITLE_OVERLAY, 1) < 0) {
+    case FIGHT_RESULT_CHALLENGE:
+        gameStateSetUpChallenge(&GAME_STATE);
+        while (appSequencerRunScene(this, createCharacterSelectTask, TITLE_OVERLAY, 1) < 0) {
         }
         goto step;
-    case 4:
+    case FIGHT_RESULT_FIGHT_AGAIN:
         goto fight;
-    case 5:
+    case FIGHT_RESULT_SELECT:
         goto start;
     }
-    if (!GAME_STATE.unk2B8) {
-        appSequencerRunScene(this, createRankingScene, TITLE_OVERLAY, 1);
+    if (!GAME_STATE.challenge) {
+        appSequencerRunScene(this, createRankingTask, TITLE_OVERLAY, 1);
     }
     if (gameStateHasUnsavedProgress(&GAME_STATE)) {
-        appSequencerRunScene(this, createSaveScene, TITLE_OVERLAY, 1);
+        appSequencerRunScene(this, createSaveTask, TITLE_OVERLAY, 1);
     }
     return next;
 }
 
-/* Runs fights of two sides (gameStateSetUpVersus; arg1 gives side 2 to the
+/* Runs fights of two sides (gameStateSetUpVersus; computer gives side 2 to the
  * computer), back to the select scene after each, until it is left. The
  * fight loop keeps its head on top, as in the game, only with a goto. */
-s32 appSequencerRunVersus(AppSequencer *this, s32 arg1) {
+s32 appSequencerRunVersus(AppSequencer *this, s32 computer) {
     s32 result;
 
     for (;;) {
-        gameStateSetUpVersus(&GAME_STATE, arg1);
-        result = appSequencerRunScene(this, createCharacterSelectScene, TITLE_OVERLAY, 1);
+        gameStateSetUpVersus(&GAME_STATE, computer);
+        result = appSequencerRunScene(this, createCharacterSelectTask, TITLE_OVERLAY, 1);
         if (result < 0) {
             break;
         }
-        if (result == 1) {
-            func_8001DF70(&GAME_STATE);
+        if (result == CHARACTER_SELECT_CHALLENGE) {
+            gameStateSetUpChallenge(&GAME_STATE);
         }
     fight:
-        if (GAME_STATE.unk2B8) {
-            GAME_STATE.unk2B8 = 0;
-            if (appSequencerRunScene(this, createFightScene, GAME_OVERLAY, 0) == 5) {
+        if (GAME_STATE.challenge) {
+            GAME_STATE.challenge = 0;
+            if (appSequencerRunScene(this, createFightTask, GAME_OVERLAY, 0) == FIGHT_RESULT_SELECT) {
                 continue;
             }
             gameStateRestoreFighters(&GAME_STATE);
         }
-        if (appSequencerRunScene(this, createFightScene, GAME_OVERLAY, 0) != 3) {
+        if (appSequencerRunScene(this, createFightTask, GAME_OVERLAY, 0) != FIGHT_RESULT_CHALLENGE) {
             continue;
         }
-        func_8001DF70(&GAME_STATE);
-        while (appSequencerRunScene(this, createCharacterSelectScene, TITLE_OVERLAY, 1) < 0) {
+        gameStateSetUpChallenge(&GAME_STATE);
+        while (appSequencerRunScene(this, createCharacterSelectTask, TITLE_OVERLAY, 1) < 0) {
         }
         goto fight;
     }
-    return 3;
+    return SEQUENCER_MAIN_MENU;
 }
 
-/* Runs fights set up by gameStateSetUpMinigameVsComputer until the select scene is left. */
-s32 appSequencerRunMinigameVsComputer(AppSequencer *this) {
+/* Runs fights set up by gameStateSetUpBonusVsComputer until the select scene is left. */
+s32 appSequencerRunBonusVsComputer(AppSequencer *this) {
     s32 result;
 
     for (;;) {
-        gameStateSetUpMinigameVsComputer(&GAME_STATE);
-        result = appSequencerRunScene(this, createCharacterSelectScene, TITLE_OVERLAY, 1);
+        gameStateSetUpBonusVsComputer(&GAME_STATE);
+        result = appSequencerRunScene(this, createCharacterSelectTask, TITLE_OVERLAY, 1);
         if (result < 0) {
             break;
         }
-        if (result == 1) {
-            func_8001DF70(&GAME_STATE);
+        if (result == CHARACTER_SELECT_CHALLENGE) {
+            gameStateSetUpChallenge(&GAME_STATE);
         }
-        GAME_STATE.unk50 = GAME_STATE.arena - ARENA_RANDOM_COUNT;
-        appSequencerRunScene(this, createMinigameGuideScene, TITLE_OVERLAY, 1);
-        appSequencerRunScene(this, createFightScene, GAME_OVERLAY, 0);
+        GAME_STATE.bonusGame = GAME_STATE.arena - ARENA_BONUS;
+        appSequencerRunScene(this, createBonusGuideTask, TITLE_OVERLAY, 1);
+        appSequencerRunScene(this, createFightTask, GAME_OVERLAY, 0);
     }
-    return 3;
+    return SEQUENCER_MAIN_MENU;
 }
 
-/* Runs fights set up by gameStateSetUpMinigameVersus until the select scene is left. */
-s32 appSequencerRunMinigameVersus(AppSequencer *this) {
+/* Runs fights set up by gameStateSetUpBonusVersus until the select scene is left. */
+s32 appSequencerRunBonusVersus(AppSequencer *this) {
     for (;;) {
-        gameStateSetUpMinigameVersus(&GAME_STATE);
-        if (appSequencerRunScene(this, createCharacterSelectScene, TITLE_OVERLAY, 1) < 0) {
+        gameStateSetUpBonusVersus(&GAME_STATE);
+        if (appSequencerRunScene(this, createCharacterSelectTask, TITLE_OVERLAY, 1) < 0) {
             break;
         }
-        GAME_STATE.unk50 = GAME_STATE.arena - ARENA_RANDOM_COUNT;
-        appSequencerRunScene(this, createMinigameGuideScene, TITLE_OVERLAY, 1);
-        appSequencerRunScene(this, createFightScene, GAME_OVERLAY, 0);
+        GAME_STATE.bonusGame = GAME_STATE.arena - ARENA_BONUS;
+        appSequencerRunScene(this, createBonusGuideTask, TITLE_OVERLAY, 1);
+        appSequencerRunScene(this, createFightTask, GAME_OVERLAY, 0);
     }
-    return 3;
+    return SEQUENCER_MAIN_MENU;
 }
 
 /* Runs the option scene, and the save scene if the progress changed. */
 s32 appSequencerRunOptions(AppSequencer *this) {
-    appSequencerRunScene(this, createOptionScene, TITLE_OVERLAY, 0);
+    appSequencerRunScene(this, createOptionTask, TITLE_OVERLAY, 0);
     if (gameStateHasUnsavedProgress(&GAME_STATE)) {
-        appSequencerRunScene(this, createSaveScene, TITLE_OVERLAY, 0);
+        appSequencerRunScene(this, createSaveTask, TITLE_OVERLAY, 0);
     }
-    return 3;
+    return SEQUENCER_MAIN_MENU;
 }
 
 /* Runs random fights, forever. */
 void appSequencerRunRandomFights(AppSequencer *this) {
     for (;;) {
         gameStateSetUpRandomFight(&GAME_STATE);
-        appSequencerRunScene(this, createFightScene, GAME_OVERLAY, 0);
+        appSequencerRunScene(this, createFightTask, GAME_OVERLAY, 0);
     }
 }
 
@@ -320,10 +335,12 @@ void appSequencerRunRandomFights(AppSequencer *this) {
  * screen, locals of two different blocks, in one stack slot, which g++ does
  * and gcc does not. Under cc1plus the C matches whole: a counter declared in
  * each for (the loading screen's counts 3 down to 0), and scene's handle
- * stored before schedulerInsertTask. This file can't be C++ as it is laid
- * out, though: APP_SEQUENCER_VTABLE sits in the middle of its .rodata, before
- * appSequencerRunScenes' jump tables, where g++ writes a class's vtable at
- * the end of the file. */
+ * stored before schedulerInsertTask, each `display` in a block of its own.
+ * The whole file comes out of g++ as a class AppSequencer : Task (Init its
+ * constructor, the others inline members under #pragma interface, written
+ * after the vtable in the game's order) but for its destructor: only a
+ * synthesized one leaves out the vtable store, as the game's does, and g++
+ * writes that one right after the vtable, where the game has it last. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/game/sequencer", appSequencerRunScene);
 
 /* The update of the sequencer task: resets the game on L1 R1 Select Start.
@@ -341,7 +358,7 @@ void appSequencerUpdate(AppSequencer *this) {
         }
         return;
     }
-    if (!SYSTEM_CONTEXT.unk1C) {
+    if (!SYSTEM_CONTEXT.resetDisabled) {
         pads = PAD_MANAGER_INSTANCE;
         for (port = 0; port < 2; port++) {
             held = padManagerGetHeld(pads, port);
@@ -370,6 +387,6 @@ s32 appSequencerSurvives(AppSequencer *this) {
 
 /* Destroys the sequencer. */
 void appSequencerDestroy(AppSequencer *this, s32 flags) {
-    threadDestroy(&this->thread, 2);
+    threadDestroy(&this->thread, DESTROY_BASES);
     taskDestroy(&this->task, flags);
 }

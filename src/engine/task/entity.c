@@ -70,9 +70,9 @@ Entity *getEntityByHandle(u32 handle) {
     return handleTableGet(ENTITY_HANDLES, handle);
 }
 
-/* Returns the group of an entity, or NULL if it is in none. */
-EntityGroup *entityGetGroup(Entity *entity) {
-    return entityFindGroup(entity);
+/* The same as entityGetGroup, which it calls. */
+EntityGroup *func_8002BDF4(Entity *this) {
+    return entityGetGroup(this);
 }
 
 /* Allocates from the entities' heap. */
@@ -91,11 +91,11 @@ void destroyEntityByHandle(u32 handle) {
 }
 
 /* Returns the group of an entity, or NULL if it is in none. */
-EntityGroup *entityFindGroup(Entity *entity) {
-    if (listIsAlone(&entity->link)) {
+EntityGroup *entityGetGroup(Entity *this) {
+    if (listIsAlone(&this->link)) {
         return NULL;
     }
-    return entity->group;
+    return this->group;
 }
 
 /* Gives an entity a new handle, so that the old one no longer finds it. */
@@ -105,9 +105,9 @@ void entityRenewHandle(Entity *this) {
 }
 
 /* Adds another entity to the pending list of this entity's group. */
-void entityAddSibling(Entity *this, Entity *entity) {
-    if (entity != NULL) {
-        entityGroupAppend(entityGetGroup(this), entity);
+void entityAddSibling(Entity *this, Entity *other) {
+    if (other != NULL) {
+        entityGroupAppend(func_8002BDF4(this), other);
     }
 }
 
@@ -138,12 +138,67 @@ void entityGroupDestroy(EntityGroup *this, s32 flags) {
 }
 
 /* Moves both lists into a local list, then each entity back to the end of
- * the entities, calling its unk8. The original keeps the local list's
- * address in two registers and reads its fields in an order C did not
- * reproduce. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/task/entity", entityGroupGather);
+ * the entities, calling its gather (virtual). The game's compiler read most fields of
+ * the lists at their offsets from the frame or from this, but each
+ * `x->prev->next = ...` through a register holding the list's address, as
+ * in entityGroupDestroy: gathered's fields are read directly here, list is
+ * the address the loop keeps in a register, and head the one the closing
+ * listRemove(&gathered) works through. */
+void entityGroupGather(EntityGroup *this, s32 arg) {
+    ListNode gathered;
+    ListNode *list = &gathered;
+    ListNode *head;
+    ListNode *node;
+    s32 alone;
 
-/* Updates the group's entities, stopping as soon as the game is paused. */
+    gathered.next = &gathered;
+    gathered.prev = &gathered;
+    /* splice the entities, then the pending ones, onto the end of gathered */
+    if (!listIsAlone(&this->entities)) {
+        ListNode *first = this->entities.next;
+        ListNode *last = this->entities.prev;
+
+        this->entities.next = &this->entities;
+        this->entities.prev = &this->entities;
+        first->prev = gathered.prev;
+        last->next = &gathered;
+        list->prev->next = first;
+        gathered.prev = last;
+    }
+    /* listIsAlone(&this->pending), reading at offsets from this */
+    alone = this->pending.next == &this->pending && &this->pending == this->pending.prev;
+    if (!alone) {
+        ListNode *first = this->pending.next;
+        ListNode *last = this->pending.prev;
+
+        this->pending.next = &this->pending;
+        this->pending.prev = &this->pending;
+        first->prev = gathered.prev;
+        last->next = &gathered;
+        list->prev->next = first;
+        gathered.prev = last;
+    }
+    for (node = list->next; node != list; node = list->next) {
+        /* link is the first member of an Entity */
+        Entity *entity = (Entity *)node;
+
+        /* back to the end of the entities */
+        listRemove(node);
+        node->next = &this->entities;
+        node->prev = this->entities.prev;
+        this->entities.prev->next = node;
+        this->entities.prev = node;
+        entity->vtable->gather.func((u8 *)entity + entity->vtable->gather.delta, arg);
+    }
+    /* listRemove(&gathered), in the access order the game's compiler used */
+    head = &gathered;
+    gathered.next->prev = gathered.prev;
+    head->prev->next = gathered.next;
+    gathered.next = head;
+    gathered.prev = head;
+}
+
+/* Updates the group's entities, stopping when the frame's primitive buffer is nearly full. */
 void entityGroupUpdate(EntityGroup *this, s32 arg) {
     Entity *entity;
     Entity *next;
@@ -198,7 +253,7 @@ s32 entityGroupGetCount(EntityGroup *this) {
     return count;
 }
 
-/* Does nothing (virtual unk8 of Entity). */
+/* Does nothing (virtual gather of Entity). */
 void entityGather(void) {
 }
 

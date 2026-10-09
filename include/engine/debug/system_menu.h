@@ -5,7 +5,9 @@
 
 #include "common.h"
 #include <libgpu.h>
+#include "engine/game/game_state.h"
 #include "engine/gfx/display.h"
+#include "engine/math/random.h"
 #include "engine/menu/stepper.h"
 #include "engine/pad/pad.h"
 #include "engine/task/task.h"
@@ -30,21 +32,21 @@ typedef struct SystemContext {
     /* 0x00 */ struct Display *display;
     /* 0x04 */ struct PadManager *pads;
     /* 0x08 */ Console *console;
-    /* 0x0C */ s32 unkC[4];
-    /* 0x1C */ s32 unk1C;
+    /* 0x0C */ s32 unkC;
+    /* 0x10 */ struct GameState *gameState;
+    /* 0x14 */ MersenneTwister *random;
+    /* 0x18 */ s32 unk18;
+    /* 0x1C */ s32 resetDisabled; /* the buttons that end the running task do nothing */
     /* 0x20 */ u32 flags; /* a bit by SYSTEM_FLAG_* */
-    /* 0x24 */ s32 unk24;
+    /* 0x24 */ s32 vsyncTime; /* the frame's, from displayWaitFrame */
 } SystemContext;
 
 /* who plays a side in the game debug menu: its "ctrl" choices */
 #define GAME_CONTROL_PAD 0
 #define GAME_CONTROL_COMPUTER 1
 #define GAME_CONTROL_COUNT 2
-/* the arenas and the 3 bonus games the game debug menu can start */
-#define GAME_STAGE_COUNT 10
-/* the levels (GameState.unk2A8) and the last phase (GameState.unk2AC) */
-#define GAME_LEVEL_COUNT 3
-#define GAME_PHASE_MAX 6
+/* the arenas and the bonus games the game debug menu can start (STAGE_NAMES) */
+#define GAME_STAGE_COUNT (ARENA_BONUS + BONUS_GAME_COUNT)
 
 #ifdef __cplusplus
 
@@ -60,8 +62,8 @@ public:
 
     static void *operator new(u32 size) __asm__("debugHeapAlloc");
     static void operator delete(void *ptr) __asm__("debugHeapFree");
-    void stepUp(s32 arg, s32 held, u32 pressed) __asm__("systemEntryStepUp");
-    void stepDown(s32 arg, s32 held, u32 pressed) __asm__("systemEntryStepDown");
+    void stepUp(s32 arg, s32 held, u32 buttons) __asm__("systemEntryStepUp");
+    void stepDown(s32 arg, s32 held, u32 buttons) __asm__("systemEntryStepDown");
 };
 
 /*
@@ -191,8 +193,8 @@ public:
         max = 1;
     }
     s32 confirm(s32 arg, s32 held, s32 own) __asm__("systemFlagConfirm");
-    void stepUp(s32 arg, s32 held, u32 pressed) __asm__("systemFlagStepUp");
-    void stepDown(s32 arg, s32 held, u32 pressed) __asm__("systemFlagStepDown");
+    void stepUp(s32 arg, s32 held, u32 buttons) __asm__("systemFlagStepUp");
+    void stepDown(s32 arg, s32 held, u32 buttons) __asm__("systemFlagStepDown");
     void draw(s32 arg, s32 isCurrent, s32 active) __asm__("systemFlagDraw");
     void refresh(s32 arg) __asm__("systemFlagRefresh");
 };
@@ -212,6 +214,8 @@ public:
 
 EXTERN_C_BEGIN
 
+/* 14 zero words: systemXaDraw takes the first as the number of XA tracks;
+ * the rest is unknown */
 extern s32 D_8005F870[14];
 
 extern struct SystemContext SYSTEM_CONTEXT; /* what the tasks are given */
@@ -219,30 +223,32 @@ extern struct SystemContext SYSTEM_CONTEXT; /* what the tasks are given */
 EXTERN_C_END
 
 /* the names the game debug menu picks from: by character, level and stage */
-extern char *CHARACTER_NAMES[]; /* CHARACTER_COUNT of them */
-extern char *LEVEL_NAMES[GAME_LEVEL_COUNT];
+extern char *CHARACTER_NAMES[CHARACTER_COUNT];
+extern char *LEVEL_NAMES[LEVEL_COUNT];
 extern char *STAGE_NAMES[GAME_STAGE_COUNT];
 
 EXTERN_C_BEGIN
 
-/* the commands' task creators */
-Task *createSequencerTask(void);
-Task *createAgeingSequencerTask(void);
-Task *createTitleTask(void);
-Task *createMinigameGuideTask(void);
-Task *createRankingTask(void);
-Task *createCreditsTask(void);
-Task *createCharacterSelectTask(void);
-Task *createGameTask(void);
-Task *func_800283DC(void);
-Task *func_8002840C(void);
-Task *func_8002843C(void);
-Task *func_8002846C(void);
-Task *createModelViewTask(void);
-Task *createMapViewTask(void);
+/* the commands' task creators; the scenes among them are the sequencer's
+ * (createTitleTask, ...), with the select flags, the bonus game and the
+ * ranking's argument fixed */
+Task *debugCreateSequencerTask(void);
+Task *debugCreateAgeingSequencerTask(void);
+Task *debugCreateTitleTask(void);
+Task *debugCreateBonusGuideTask(void);
+Task *debugCreateRankingTask(void);
+Task *debugCreateCreditsTask(void);
+Task *debugCreateCharacterSelectTask(void);
+Task *debugCreateFightTask(void);
+Task *debugCreateHanamasuTestTask(void);
+Task *debugCreateIwanagaTestTask(void);
+Task *debugCreateShohyamaTestTask(void);
+Task *debugCreateTeradaTestTask(void);
+Task *debugCreateModelViewTask(void);
+Task *debugCreateMapViewTask(void);
 Task *reloadExecutable(void);
-Task *createOptionTask(void);
-Task *createMainMenuTask(void);
+Task *debugCreateOptionTask(void);
+Task *debugCreateMainMenuTask(void);
 Console *startEntryLine(s32 arg, s32 isCurrent, s32 index);
 void loadDebugTim(void);
 

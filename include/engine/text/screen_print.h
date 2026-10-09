@@ -10,7 +10,7 @@ EXTERN_C_BEGIN
 
 void screenPrint(const char *fmt, ...);
 void screenVprint(const char *fmt, VaList args);
-void screenPutChar(s16 arg0, s16 arg1, s32 arg2);
+void screenPutChar(s16 x, s16 y, s32 code);
 
 EXTERN_C_END
 

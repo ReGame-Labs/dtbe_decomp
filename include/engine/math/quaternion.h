@@ -22,7 +22,7 @@ Quaternion *quaternionInitRotationY(Quaternion *q, s32 angle);
 Quaternion *quaternionInitRotationZ(Quaternion *q, s32 angle);
 Quaternion *quaternionNormalize(Quaternion *out, Quaternion *q);
 
-Quaternion *quaternionConjugate(Quaternion *dst, Quaternion *q);
+Quaternion *quaternionConjugate(Quaternion *out, Quaternion *q);
 Quaternion *quaternionSlerp(Quaternion *out, Quaternion *a, Quaternion *b, s32 t);
 Quaternion *quaternionInitFromMatrix(Quaternion *q, MATRIX *m);
 void quaternionGetMatrix(Quaternion *q, MATRIX *m);

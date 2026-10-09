@@ -3,46 +3,47 @@
 
 /* Continues an MD5 operation with len more bytes of the message; Final
  * has it inline. */
-static inline void MD5UpdateInline(Md5 *ctx, u8 *input, u32 len) {
+static inline void MD5UpdateInline(Md5 *this, u8 *input, u32 len) {
     u32 i;
     u32 index;
     u32 partLen;
 
-    index = (ctx->count[0] >> 3) & 0x3F;
-    if ((ctx->count[0] += len << 3) < (len << 3)) {
-        ctx->count[1]++;
+    index = (this->count[0] >> 3) & 0x3F;
+    if ((this->count[0] += len << 3) < (len << 3)) {
+        this->count[1]++;
     }
-    ctx->count[1] += len >> 29;
+    this->count[1] += len >> 29;
     partLen = 64 - index;
     if (len >= partLen) {
-        MD5_memcpy(&ctx->buffer[index], input, partLen);
-        MD5Transform(ctx->state, ctx->buffer);
+        MD5_memcpy(&this->buffer[index], input, partLen);
+        MD5Transform(this->state, this->buffer);
         for (i = partLen; i + 63 < len; i += 64) {
-            MD5Transform(ctx->state, &input[i]);
+            MD5Transform(this->state, &input[i]);
         }
         index = 0;
     } else {
         i = 0;
     }
-    MD5_memcpy(&ctx->buffer[index], &input[i], len - i);
+    MD5_memcpy(&this->buffer[index], &input[i], len - i);
 }
 
 /* Ends an MD5 operation: pads the message, appends its length and writes
  * the 16-byte digest, then clears the context. */
-void MD5Final(Md5 *ctx, u8 *digest) {
+void MD5Final(Md5 *this, u8 *digest) {
     u8 bits[8];
     u32 index;
     u32 padLen;
 
-    Encode(bits, ctx->count, 8);
-    index = (ctx->count[0] >> 3) & 0x3F;
+    Encode(bits, this->count, 8);
+    index = (this->count[0] >> 3) & 0x3F;
     padLen = (index < 56) ? (56 - index) : (120 - index);
-    MD5UpdateInline(ctx, PADDING, padLen);
-    MD5UpdateInline(ctx, bits, 8);
-    Encode(digest, ctx->state, 16);
-    MD5_memset((u8 *)ctx, 0, sizeof(Md5)); /* clears the whole context */
+    MD5UpdateInline(this, PADDING, padLen);
+    MD5UpdateInline(this, bits, 8);
+    Encode(digest, this->state, 16);
+    MD5_memset((u8 *)this, 0, sizeof(Md5)); /* clears the whole context */
 }
 
+/* RFC 1321's auxiliary functions, rotation and round steps */
 #define MD5_F(x, y, z) (((x) & (y)) | ((~x) & (z)))
 #define MD5_G(x, y, z) (((x) & (z)) | ((y) & (~z)))
 #define MD5_H(x, y, z) ((x) ^ (y) ^ (z))
@@ -156,24 +157,25 @@ void MD5Transform(u32 *state, u8 *block) {
     MD5_memset((u8 *)x, 0, sizeof(x));
 }
 
-/* Constructs an MD5 context, ready for a new message. */
-Md5 *func_800383B4(Md5 *ctx) {
-    MD5Init(ctx);
-    return ctx;
+/* The game's constructor of an MD5 context, around RSA's MD5Init: readies it
+ * for a new message and returns it. */
+Md5 *md5Init(Md5 *this) {
+    MD5Init(this);
+    return this;
 }
 
 /* Begins an MD5 operation. */
-void MD5Init(Md5 *ctx) {
-    ctx->count[0] = ctx->count[1] = 0;
-    ctx->state[0] = 0x67452301;
-    ctx->state[1] = 0xEFCDAB89;
-    ctx->state[2] = 0x98BADCFE;
-    ctx->state[3] = 0x10325476;
+void MD5Init(Md5 *this) {
+    this->count[0] = this->count[1] = 0;
+    this->state[0] = 0x67452301;
+    this->state[1] = 0xEFCDAB89;
+    this->state[2] = 0x98BADCFE;
+    this->state[3] = 0x10325476;
 }
 
 /* Continues an MD5 operation with len more bytes of the message. */
-void MD5Update(Md5 *ctx, u8 *input, u32 len) {
-    MD5UpdateInline(ctx, input, len);
+void MD5Update(Md5 *this, u8 *input, u32 len) {
+    MD5UpdateInline(this, input, len);
 }
 
 /* Writes words as little-endian bytes; len counts the bytes. */

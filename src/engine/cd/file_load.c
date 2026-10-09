@@ -4,15 +4,16 @@
 #include "engine/cd/read.h"
 #include "engine/cd/xa_player.h"
 #include "engine/system/memory.h"
+#include "libapi.h"
 #include "libgpu.h"
-#include "psyq.h"
 #include "strings.h"
+#include "psyq.h"
 
 /*
- * Loads the compressed file at path, inflated, into dest, unless it is the
+ * Loads the compressed file at path, inflated, into dst, unless it is the
  * one loaded last.
  */
-void loadCompressedFileInto(void *dest, char *path) {
+void loadCompressedFileInto(void *dst, char *path) {
     CompressedHeader *file;
 
     /* D_1 is a symbol the linker put at 1: the test always passes */
@@ -20,9 +21,9 @@ void loadCompressedFileInto(void *dest, char *path) {
         strcpy(LAST_LOADED_PATH, path);
         file = mainHeapAllocLargest(getFileSize(path));
         loadFileSync(file, path, 0, 0);
-        decompressStreamTo(dest, (u8 *)(file + 1));
+        decompressStreamTo(dst, (u8 *)(file + 1));
         mainHeapFree(file);
-        func_800402B0();
+        FlushCache();
     }
 }
 
@@ -210,10 +211,10 @@ void *decompressFile(CompressedHeader *file) {
     return data;
 }
 
-/* Inflates the zlib stream at source into dest; returns dest. */
-void *decompressStreamTo(void *dest, u8 *source) {
-    decompressStream(dest, source);
-    return dest;
+/* Inflates the zlib stream at src into dst; returns dst. */
+void *decompressStreamTo(void *dst, u8 *src) {
+    decompressStream(dst, src);
+    return dst;
 }
 
 /* Returns whether a loaded file is compressed. */

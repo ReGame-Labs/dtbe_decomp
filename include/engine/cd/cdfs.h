@@ -4,12 +4,10 @@
 /* The VFS archives: their tables on the disc, mounting them on a path, inflating them. */
 
 #include "common.h"
+#include "engine/lib/inflate.h"
 #include "engine/lib/list.h"
 
 EXTERN_C_BEGIN
-
-typedef void *(*AllocFunc)(void *opaque, u32 items, u32 size);
-typedef void (*FreeFunc)(void *opaque, void *address);
 
 #define CDFS_VFS_PROBE 0x20      /* reading a VFS archive's head */
 
@@ -25,6 +23,8 @@ typedef struct VfsEntry {
     /* 0xA */ u16 flags;      /* VFS_DIRECTORY | the file's offset in its sector */
 } VfsEntry;
 
+/* VfsEntry.flags: the entry is a directory, and the bits of the file's offset
+ * in its sector */
 #define VFS_DIRECTORY 0x800
 #define VFS_OFFSET_MASK 0x7FF
 
@@ -55,6 +55,7 @@ typedef struct {
     /* 0x10 */ char mountPoint[0x70];
 } Vfs;
 
+/* how many reads the queue holds */
 #define CDFS_REQUEST_MAX 16
 
 /* what mountVfs returns when it mounts nothing */
@@ -70,7 +71,7 @@ void skipCdfsHook(void);
 Vfs *mountVfs(char *path, VfsEntry *table, VfsInfo *info);
 s32 loadVfsInfo(VfsInfo *info, char *path);
 void setVfsAllocator(AllocFunc zalloc, FreeFunc zfree, void *opaque);
-s32 decompressStream(VfsEntry *dest, u8 *source);
+s32 decompressStream(VfsEntry *dst, u8 *src);
 void vfsLoadTable(Vfs *vfs, VfsEntry *table, VfsInfo *info);
 
 EXTERN_C_END

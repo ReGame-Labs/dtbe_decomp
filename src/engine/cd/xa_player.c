@@ -49,8 +49,8 @@ static inline s32 setXaMixModeInline(s32 mixMode) {
 /* Reads the track from the stream's position. */
 static inline void startXaReadInline(void) {
     XA_PLAYER.flags |= XA_STARTING;
-    XA_STREAM.startSector = func_80046C70(&XA_STREAM.pos);
-    func_80043998(XA_STREAM.track->mode, &XA_STREAM.pos, CdlReadS, receiveXaReadComplete, -1);
+    XA_STREAM.startSector = func_80046C70(&XA_STREAM.position);
+    func_80043998(XA_STREAM.track->mode, &XA_STREAM.position, CdlReadS, receiveXaReadComplete, -1);
 }
 
 /* Stops the track and tells the callback. */
@@ -99,7 +99,7 @@ void seekXaTrack(u32 track) {
         setXaVolume(0);
         XA_STREAM.track = &XA_PLAYER.tracks[track];
         func_80046B60(XA_STREAM.track->start, &XA_STREAM.start);
-        XA_STREAM.pos = XA_STREAM.start;
+        XA_STREAM.position = XA_STREAM.start;
         func_80043724(CdlSetmode, &XA_STREAM.track->mode, NULL, -1);
         func_80043724(CdlSetfilter, &XA_STREAM.track->filter, NULL, -1);
         func_80043998(XA_STREAM.track->mode, &XA_STREAM.start, CdlSeekP, receiveXaSeek, -1);
@@ -114,8 +114,8 @@ void receiveXaSector(u8 intr) {
     if (intr != CdlDataReady) {
         func_80046DC0(NULL);
         estimateXaPosition();
-        XA_STREAM.startSector = func_80046C70(&XA_STREAM.pos);
-        func_80043998(XA_STREAM.track->mode, &XA_STREAM.pos, CdlReadS, receiveXaRestart, -1);
+        XA_STREAM.startSector = func_80046C70(&XA_STREAM.position);
+        func_80043998(XA_STREAM.track->mode, &XA_STREAM.position, CdlReadS, receiveXaRestart, -1);
         return;
     }
     func_80046930(&header, sizeof(header) / 4);
@@ -160,7 +160,7 @@ void updateXa(void) {
         }
         if (rose & XA_LOOP) {
             XA_PLAYER.flags &= ~XA_LOOP;
-            XA_STREAM.pos = XA_STREAM.start;
+            XA_STREAM.position = XA_STREAM.start;
             startXaReadInline();
             XA_PLAYER.callback(XA_EVENT_LOOPED);
         }
@@ -180,14 +180,14 @@ void updateXa(void) {
 
 /* Sets the player up, off, and makes CDFS turn it off before reading. */
 void initXa(void) {
-    bzero(&XA_PLAYER, sizeof(XaPlayer));
+    bzero((u8 *)&XA_PLAYER, sizeof(XaPlayer)); /* bzero takes bytes */
     XA_PLAYER.cdfsHook = CDFS.hook;
     CDFS.hook = turnXaOff;
     setXaCallback(NULL);
     setXaVolume(0);
     SsSetSerialVol(SS_SERIAL_A, XA_VOLUME_MAX, XA_VOLUME_MAX);
     XA_PLAYER.flags |= XA_SEEKED;
-    XA_STREAM.frameRate = func_80040294() == MODE_NTSC ? 60 : 50;
+    XA_STREAM.frameRate = GetVideoMode() == MODE_NTSC ? 60 : 50;
 }
 
 /* Pauses the track. */
@@ -286,7 +286,7 @@ void estimateXaPosition(void) {
     }
     /* VSyncs to sectors, times frameRate */
     elapsed *= XA_SECTORS_PER_SECOND;
-    func_80046B60(XA_STREAM.startSector + elapsed / XA_STREAM.frameRate, &XA_STREAM.pos);
+    func_80046B60(XA_STREAM.startSector + elapsed / XA_STREAM.frameRate, &XA_STREAM.position);
 }
 
 /* Returns whether a seek is under way. */

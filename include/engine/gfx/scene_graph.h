@@ -11,6 +11,7 @@
 #include "engine/gfx/lights.h"
 #include "engine/gfx/tmd.h"
 #include "engine/lib/list.h"
+#include "engine/math/matrix.h"
 
 EXTERN_C_BEGIN
 
@@ -25,13 +26,15 @@ typedef struct Transform {
 
 struct SceneObject;
 
+/* the virtual table of SceneObject */
 typedef struct SceneObjectVtable {
     /* 0x00 */ VtableEntry unused;
     /* 0x08 */ VtableEntry invalidate; /* (SceneObject *): its world moved */
     /* 0x10 */ struct {
-        s16 delta;
-        s16 index;
-        s32 (*func)(); /* (SceneObject *, Camera *): whether it is out of view */
+        /* 0x10 */ s16 delta;
+        /* 0x12 */ s16 index;
+        /* (SceneObject *, Camera *): whether it is out of view */
+        /* 0x14 */ s32 (*func)();
     } cull;
     /* 0x18 */ VtableEntry draw;    /* (SceneObject *, Camera *) */
     /* 0x20 */ VtableEntry destroy; /* (SceneObject *, s32 flags) */
@@ -89,6 +92,7 @@ extern struct SceneObjectVtable GROUP_VTABLE; /* of Group */
 
 extern struct SceneObjectVtable SCENE_OBJECT_VTABLE; /* of SceneObject */
 
+/* ApplyMatrix, which nothing calls through this pointer */
 extern VECTOR *(*APPLY_MATRIX_FUNC)(MATRIX *m, SVECTOR *v, VECTOR *r);
 
 /* How many meshes were culled, and how many of them were out of view, since
@@ -115,14 +119,14 @@ s32 getMeshOutOfViewCount(void);
 Mesh *meshInit(Mesh *mesh, TmdObject *tmd, s32 unused);
 SVECTOR *meshGetCorners(Mesh *mesh);
 void meshSetTmd(Mesh *mesh, TmdObject *tmd);
-void meshPartUpdate(MeshPart *meshPart);
+void meshPartUpdate(MeshPart *meshPart, AnimPose *pose);
 Model *modelInit(Model *model, TmdHeader *tmd, AnimData *anim);
 void modelDestroy(Model *model, s32 flags);
 s32 modelGetFrameCount(Model *model);
 s32 modelGetFrame(Model *model);
 s32 modelGetClip(Model *model);
 s32 modelIsStopped(Model *model);
-void modelStepAnimation(Model *model);
+void modelUpdateAnimation(Model *model);
 void modelStartClip(Model *model, s32 clip, s32 blendFrames, s32 plays, s32 frame);
 void modelSetLoopFrame(Model *model, s32 frame);
 void modelDraw(Model *model, Camera *camera);

@@ -1,21 +1,26 @@
 #include "common.h"
 #include "engine/gfx/sprite.h"
+#include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/system/memory.h"
 #include "psyq.h"
+#include "vtable.h"
 
+/* Builds a sprite with no texture, drawn with its texture's own colors. */
 Sprite *spriteInit(Sprite *this) {
     this->pieces = NULL;
     this->x = 0;
     this->y = 0;
-    this->color = 0x808080;
+    this->color = SPRITE_COLOR_NEUTRAL;
     this->flags = 0;
     return this;
 }
 
+/* Builds a sprite of the texture of a TIM, loading it into VRAM first if
+ * asked. */
 Sprite *spriteInitFromTim(Sprite *this, TIM_IMAGE *tim, s32 load) {
     this->x = 0;
     this->y = 0;
-    this->color = 0x808080;
+    this->color = SPRITE_COLOR_NEUTRAL;
     this->flags = 0;
     this->pieces = NULL;
     spriteSetTim(this, tim, load);
@@ -24,7 +29,7 @@ Sprite *spriteInitFromTim(Sprite *this, TIM_IMAGE *tim, s32 load) {
 
 /* Takes the texture of a TIM, loading it into VRAM first if asked. */
 void spriteSetTim(Sprite *this, TIM_IMAGE *tim, s32 load) {
-    RECT pieces[32];
+    RECT pieces[SPRITE_PIECE_MAX];
     RECT *copy;
     s32 count;
     s32 i;
@@ -43,9 +48,9 @@ void spriteSetTim(Sprite *this, TIM_IMAGE *tim, s32 load) {
     } else {
         this->clut = 0;
     }
-    count = rectCountCells(tim->prect, 6, 8);
+    count = rectCountCells(tim->prect, TPAGE_WSHIFT, TPAGE_HSHIFT);
     this->count = count;
-    rectSplitCells(pieces, tim->prect, 6, 8);
+    rectSplitCells(pieces, tim->prect, TPAGE_WSHIFT, TPAGE_HSHIFT);
     this->mode = tim->mode & 3;
     copy = (RECT *)operatorVecNew(count * sizeof(RECT));
     this->pieces = copy;
@@ -54,6 +59,7 @@ void spriteSetTim(Sprite *this, TIM_IMAGE *tim, s32 load) {
     }
 }
 
+/* Frees the pieces: the sprite has no texture any more. */
 void spriteFreePieces(Sprite *this) {
     if (this->pieces != NULL) {
         operatorVecDelete(this->pieces);
@@ -61,9 +67,10 @@ void spriteFreePieces(Sprite *this) {
     this->pieces = NULL;
 }
 
+/* Destroys the sprite. */
 void spriteDestroy(Sprite *this, s32 flags) {
     spriteFreePieces(this);
-    if (flags & 1) {
+    if (flags & DESTROY_FREE) {
         operatorDelete(this);
     }
 }
@@ -81,19 +88,20 @@ void *spriteDraw(Sprite *this, u8 *prims, u_long *ot) {
     sprts = (SpritePrim *)prims;
     prims += this->count * sizeof(SpritePrim);
     {
-        /* the color and code all the SPRTs share: textured (0x64), raw
-         * (+1) when asked or when the color would not change the texture,
-         * semi-transparent (+2) */
+        /* the color and code all the SPRTs share: raw when asked or when the
+         * color would not change the texture, semi-transparent when asked;
+         * SPRITE_RAW and SPRITE_SEMI_TRANS shifted down are the code's
+         * PRIM_RAW_TEXTURE and PRIM_SEMI_TRANS */
         SpritePrim *sprt = sprts;
-        u32 n = this->count;
+        u32 left = this->count;
 
         color = this->color & 0xFFFFFF;
-        if (color == 0x808080) {
-            color |= (0x65 | ((this->flags >> 2) & 2)) << 24;
+        if (color == SPRITE_COLOR_NEUTRAL) {
+            color |= (SPRT_CODE | PRIM_RAW_TEXTURE | ((this->flags >> 2) & PRIM_SEMI_TRANS)) << 24;
         } else {
-            color |= (0x64 | ((this->flags >> 2) & 3)) << 24;
+            color |= (SPRT_CODE | ((this->flags >> 2) & (PRIM_RAW_TEXTURE | PRIM_SEMI_TRANS))) << 24;
         }
-        while (n--) {
+        while (left--) {
             setlen(sprt, 4);
             sprt->color = color;
             sprt->clut = this->clut;
@@ -104,16 +112,16 @@ void *spriteDraw(Sprite *this, u8 *prims, u_long *ot) {
         /* where each piece goes, from the first piece's corner; a VRAM
          * pixel holds 4, 2 or 1 texels by mode, hence the shift */
         SpritePrim *sprt = sprts;
-        u32 n = this->count;
+        u32 left = this->count;
         RECT *piece = this->pieces;
         s32 shift = 2 - this->mode;
         s16 x0 = piece->x;
         s16 y0 = piece->y;
 
-        while (n--) {
+        while (left--) {
             sprt->xy = ((u16)(this->y + (piece->y - y0)) << 16)
                      | (u16)(this->x + ((piece->x - x0) << shift));
-            sprt->uv = ((u8)piece->y << 8) | (u8)((piece->x & 0x3F) << shift);
+            sprt->uv = ((u8)piece->y << 8) | (u8)((piece->x & TPAGE_WMASK) << shift);
             sprt->wh = ((u16)piece->h << 16) | (u16)(piece->w << shift);
             piece++;
             sprt++;
@@ -125,15 +133,15 @@ void *spriteDraw(Sprite *this, u8 *prims, u_long *ot) {
          * code word, as in allocDrTpage */
         SpritePrim *sprt = sprts;
         DR_TPAGE *tp = (DR_TPAGE *)prims;
-        u32 n = this->count;
+        u32 left = this->count;
         RECT *piece = this->pieces;
         s32 tpage;
         u_long *code;
         u_long mode;
 
-        prims += n * sizeof(DR_TPAGE);
-        while (n--) {
-            tpage = getTPage(this->mode, this->flags, piece->x & ~0x3F, piece->y);
+        prims += left * sizeof(DR_TPAGE);
+        while (left--) {
+            tpage = getTPage(this->mode, this->flags, piece->x & ~TPAGE_WMASK, piece->y);
             piece++;
             AddPrim(ot, sprt++);
             setlen(tp, 1);
@@ -147,51 +155,52 @@ void *spriteDraw(Sprite *this, u8 *prims, u_long *ot) {
     return prims;
 }
 
-/* Number of (1 << wshift) x (1 << hshift) aligned cells that rect touches. */
-s32 rectCountCells(RECT *rect, s32 wshift, s32 hshift) {
-    s32 cellW = 1 << wshift;
-    s32 cellH = 1 << hshift;
-    s32 cols = ((-cellW & (rect->x + rect->w + cellW - 1)) - (-cellW & rect->x)) >> wshift;
-    s32 rows = ((-cellH & (rect->y + rect->h + cellH - 1)) - (-cellH & rect->y)) >> hshift;
+/* Number of (1 << widthShift) x (1 << heightShift) aligned cells that rect
+ * touches. */
+s32 rectCountCells(RECT *rect, s32 widthShift, s32 heightShift) {
+    s32 cellWidth = 1 << widthShift;
+    s32 cellHeight = 1 << heightShift;
+    s32 cols = ((-cellWidth & (rect->x + rect->w + cellWidth - 1)) - (-cellWidth & rect->x)) >> widthShift;
+    s32 rows = ((-cellHeight & (rect->y + rect->h + cellHeight - 1)) - (-cellHeight & rect->y)) >> heightShift;
 
     return cols * rows;
 }
 
-/* Splits rect at the (1 << wshift) x (1 << hshift) aligned cells it touches,
- * column by column, into out; returns the end of what it wrote. A piece
- * reaches the next cell boundary, or the rect's own edge in the last column
- * and row. */
-RECT *rectSplitCells(RECT *out, RECT *rect, s32 wshift, s32 hshift) {
-    s32 cellW = 1 << wshift;
-    s32 cellH = 1 << hshift;
-    s32 cols = ((-cellW & (rect->x + rect->w + cellW - 1)) - (-cellW & rect->x)) >> wshift;
-    s32 rows = ((-cellH & (rect->y + rect->h + cellH - 1)) - (-cellH & rect->y)) >> hshift;
+/* Splits rect at the (1 << widthShift) x (1 << heightShift) aligned cells it
+ * touches, column by column, into out; returns the end of what it wrote. A
+ * piece reaches the next cell boundary, or the rect's own edge in the last
+ * column and row. */
+RECT *rectSplitCells(RECT *out, RECT *rect, s32 widthShift, s32 heightShift) {
+    s32 cellWidth = 1 << widthShift;
+    s32 cellHeight = 1 << heightShift;
+    s32 cols = ((-cellWidth & (rect->x + rect->w + cellWidth - 1)) - (-cellWidth & rect->x)) >> widthShift;
+    s32 rows = ((-cellHeight & (rect->y + rect->h + cellHeight - 1)) - (-cellHeight & rect->y)) >> heightShift;
     s32 x = rect->x;
     s32 nextX;
     s32 col;
 
     for (col = cols - 1; col >= 0; col--, x = nextX) {
-        s32 w;
+        s32 width;
         s32 y;
         s32 row;
 
         if (col == 0) {
-            w = rect->x + rect->w - x;
+            width = rect->x + rect->w - x;
         } else {
-            w = (-cellW & (x + cellW)) - x;
+            width = (-cellWidth & (x + cellWidth)) - x;
         }
         y = rect->y;
-        nextX = x + w;
+        nextX = x + width;
         for (row = rows - 1; row >= 0; row--) {
-            s32 h;
+            s32 height;
 
             if (row == 0) {
-                h = rect->y + rect->h - y;
+                height = rect->y + rect->h - y;
             } else {
-                h = (-cellH & (y + cellH)) - y;
+                height = (-cellHeight & (y + cellHeight)) - y;
             }
-            setRECT(out, x, y, w, h);
-            y += h;
+            setRECT(out, x, y, width, height);
+            y += height;
             out++;
         }
     }
@@ -205,21 +214,25 @@ void spriteSetSemiTrans(Sprite *this, s32 abr) {
 
 /* Draws the texture with its own colors. */
 void spriteResetColor(Sprite *this) {
-    this->color = 0x808080;
+    this->color = SPRITE_COLOR_NEUTRAL;
 }
 
+/* Sets the color the texture is drawn with. */
 void spriteSetColor(Sprite *this, u8 r, u8 g, u8 b) {
     this->color = r | (g << 8) | (b << 16);
 }
 
-void spriteSetGray(Sprite *this, u8 gray) {
-    this->color = gray | (gray << 8) | (gray << 16);
+/* Sets a grey the texture is drawn with. */
+void spriteSetGrey(Sprite *this, u8 grey) {
+    this->color = grey | (grey << 8) | (grey << 16);
 }
 
+/* Turns flags on. */
 void spriteSetFlags(Sprite *this, s32 flags) {
     this->flags |= flags;
 }
 
+/* Turns flags off. */
 void spriteClearFlags(Sprite *this, s32 flags) {
     this->flags &= ~flags;
 }

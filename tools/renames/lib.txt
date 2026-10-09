@@ -109,3 +109,9 @@ poolFree nodePoolFreeInline
 poolRelease nodePoolReleaseInline
 poolPushFront nodePoolPushFrontInline
 poolPushBack nodePoolPushBackInline
+
+# the verbs of CONTRIBUTING, and what the callers show
+func_80035F10 copyChangingCase
+func_800383B4 md5Init
+heapLargestFree heapGetLargestFree
+heapTotalFree heapGetTotalFree

@@ -17,7 +17,7 @@ Quaternion *quaternionMulInPlace(Quaternion *q, Quaternion *b) {
     return quaternionMul(q, q, b);
 }
 
-/* Sets out to the product a b, through a copy, so out may be a or b. */
+/* Sets out to the product a b, built in a copy on the stack first. */
 QuaternionWords *func_80026954(QuaternionWords *out, Quaternion *a, Quaternion *b) {
     QuaternionWords product;
     QuaternionWords *result = (QuaternionWords *)quaternionMul(&product.q, a, b);

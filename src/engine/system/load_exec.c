@@ -1,8 +1,9 @@
 #include "common.h"
 #include "engine/system/load_exec.h"
 #include "engine/lib/string.h"
-#include "stdio.h"
+#include "libapi.h"
 #include "libpad.h"
+#include "stdio.h"
 #include "psyq.h"
 
 /* the top of the stack of the executable run by runExecutable */
@@ -21,6 +22,6 @@ void runExecutable(char *path) {
     ResetGraph(3);
     PadStopCom();
     func_8003F874();
-    func_800402D0();
-    func_800402C0(file, EXEC_STACK_TOP, 0);
+    _96_init();
+    LoadExec(file, EXEC_STACK_TOP, 0);
 }

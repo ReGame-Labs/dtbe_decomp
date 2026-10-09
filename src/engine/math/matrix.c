@@ -1,10 +1,9 @@
 #include "common.h"
 #include "engine/math/matrix.h"
-#include "engine/gfx/lights.h"
 #include "engine/math/quaternion.h"
 #include "engine/math/sin_cos.h"
-#include "gte.h"
 #include "inline_c.h"
+#include "gte.h"
 
 /* Swaps the two words at a with the two at b, by xor, without a third
  * buffer. */
@@ -130,8 +129,12 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixTranslate);
  * slot. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixMul);
 
-/* matrixInitInverseRotationAxis (m = the rotation by -angle about axis, without translation)
- * differs only in register allocation. */
+/* matrixInitInverseRotationAxis (m = the rotation by -angle about axis,
+ * without translation) differs only in register allocation (28 lines): the
+ * game's registers need the cosine allocated before the axis's x, which in
+ * the C outranks it in local-alloc (priorities about 3600 to 3100). Moving
+ * the cosine's first use earlier or its last use later doesn't reorder them,
+ * so the original's instructions came in another order before sched2. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixInitInverseRotationAxis);
 
 /* Sets m to a rotation by angle about the x axis, without translation. */
@@ -169,16 +172,34 @@ MATRIX *matrixInitRotationZ(MATRIX *m, s32 angle) {
  * vecCross needs). What is left is where GCC keeps the vectors' stack
  * addresses: the game recomputes &x and &y at each use and holds &z in $s0,
  * then $s1, saving $s0-$s3; the C keeps all three in saved registers and needs
- * $s4. Not understood yet. */
+ * $s4. An asm with no outputs or clobbers for the outer products makes CSE
+ * forget the addresses (65 lines left), but not the game's &z, built straight
+ * into a0/a1 for vecNormalize and again for vecDot12; a Vec class with inline
+ * members gives more differences. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixInitLookAt);
 
-/* matrixInvertRigid (out = the inverse of the rigid transform m) keeps the
- * address of its negated translation in $s1 from before TransposeMatrix, as
- * g++ does for a reference bound to a temporary; C only gets there with a
- * pointer variable for it. matrixInvert copies a MATRIX as a block move
- * (see "Block moves" in TODO.md). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixInvertRigid);
+/* Sets out to the inverse of the rigid transform m: the transposed rotation
+ * and the negated translation turned by it. The match depends on negated, a
+ * copy of &translation: the game takes the address before the negation (addiu
+ * $s1, $sp, 0x10) and keeps it in $s1 across TransposeMatrix, where
+ * &translation written at the call, or the negation written through negated,
+ * computes it after. matrixInvert also takes it first (it keeps it at
+ * 0x40(sp)). */
+MATRIX *matrixInvertRigid(MATRIX *out, MATRIX *m) {
+    VECTOR translation;
+    VECTOR *negated = &translation;
 
+    translation.vx = -m->t[0];
+    translation.vy = -m->t[1];
+    translation.vz = -m->t[2];
+    TransposeMatrix(m, out);
+    /* t laid out as the vx, vy, vz of a VECTOR, all matrixRotateVec stores */
+    matrixRotateVec(out, (VECTOR *)out->t, negated);
+    return out;
+}
+
+/* matrixInvert copies a MATRIX as a block move (see "Block moves" in
+ * TODO.md). */
 INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixInvert);
 
 /* Sets m to the rotation of a unit quaternion, without translation. The

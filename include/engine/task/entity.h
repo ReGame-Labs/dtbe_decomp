@@ -13,9 +13,10 @@ EXTERN_C_BEGIN
 
 struct EntityGroup;
 
+/* the virtual table of Entity, as the C files see it */
 typedef struct EntityVtable {
     /* 0x00 */ VtableEntry unused;
-    /* 0x08 */ VtableEntry unk8;    /* (Entity *, s32 arg), when its group gathers it */
+    /* 0x08 */ VtableEntry gather;  /* (Entity *, s32 arg), when its group gathers it */
     /* 0x10 */ VtableEntry update;  /* (Entity *, s32 arg) */
     /* 0x18 */ VtableEntry destroy; /* (Entity *, s32 flags) */
 } EntityVtable;
@@ -37,6 +38,7 @@ typedef struct EntityGroup {
     /* 0x08 */ ListNode pending;
 } EntityGroup;
 
+/* the heap allocEntityMemory takes from */
 extern Heap ENTITY_HEAP;
 
 /* the handles of the entities */
@@ -54,11 +56,11 @@ void *entityOperatorNewAt(s32 size, void *place);
 void *entityOperatorNew(s32 size);
 void entityOperatorDelete(void *ptr);
 Entity *getEntityByHandle(u32 handle);
-EntityGroup *entityGetGroup(Entity *entity);
+EntityGroup *func_8002BDF4(Entity *entity);
 void *allocEntityMemory(s32 size);
 void freeEntityMemory(void *ptr);
 void destroyEntityByHandle(u32 handle);
-EntityGroup *entityFindGroup(Entity *entity);
+EntityGroup *entityGetGroup(Entity *entity);
 void entityRenewHandle(Entity *entity);
 void entityAddSibling(Entity *entity, Entity *other);
 EntityGroup *entityGroupInit(EntityGroup *entityGroup);

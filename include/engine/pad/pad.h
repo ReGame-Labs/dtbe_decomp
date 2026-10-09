@@ -7,19 +7,23 @@
 
 EXTERN_C_BEGIN
 
-#ifndef offsetof
-#define offsetof(type, member) ((s32) & ((type *)0)->member)
-#endif
-
 /* Button bits of Pad's button fields (the pad's active-high reading). */
 #define PAD_UP 0x1000
 #define PAD_RIGHT 0x2000
 #define PAD_DOWN 0x4000
 #define PAD_LEFT 0x8000
 
-/* PadInfoMode's terminal ids */
+/* The terminal ids of the controllers (PadInfoMode's, and the high nibble of
+ * a pad's second received byte), as the hardware numbers them */
+#define PAD_ID_NONE 0
+#define PAD_ID_MOUSE 1
+#define PAD_ID_NEGCON 2
+#define PAD_ID_KONAMI_GUN 3
 #define PAD_ID_DIGITAL 4
+#define PAD_ID_ANALOG_STICK 5
+#define PAD_ID_GUNCON 6
 #define PAD_ID_ANALOG 7
+#define PAD_ID_MULTITAP 8
 
 /* Vibration's setupStep */
 #define SETUP_UNSUPPORTED -1
@@ -31,6 +35,12 @@ EXTERN_C_BEGIN
 #define SETUP_DONE 71
 #define SETUP_FAILED 99
 
+/* Vibration's mode: how the rumble's power goes */
+#define VIBRATION_NONE -1
+#define VIBRATION_STEADY 0
+#define VIBRATION_FADE_OUT 1
+#define VIBRATION_FADE_IN 2
+
 /* Vibration's alignStep */
 #define ALIGN_NONE 0
 #define ALIGN_SEND 1 /* send the actuator alignment */
@@ -39,47 +49,53 @@ EXTERN_C_BEGIN
 
 /* The vibration of one pad: its actuator setup and the current rumble. */
 typedef struct {
-    s32 setupStep;    /* where the pad's mode and actuator setup is */
-    s32 hasActuators;
-    s32 alignStep;    /* where sending the actuator alignment is */
-    s32 mode;         /* how the rumble fades; -1 when there is none */
-    s32 priority;     /* a new rumble replaces the current one only at no lower priority */
-    s32 timer;        /* frames left */
-    s32 duration;     /* frames in all */
-    s32 power[2];     /* the motors' power at full strength */
-    u8 motor[2];      /* what is sent to the motors this frame */
-    u8 unk26[4];
-    u8 align[6];      /* the actuator alignment sent to the pad */
+    /* 0x00 */ s32 setupStep; /* where the pad's mode and actuator setup is */
+    /* 0x04 */ s32 hasActuators;
+    /* 0x08 */ s32 alignStep; /* where sending the actuator alignment is */
+    /* 0x0C */ s32 mode;      /* VIBRATION_* */
+    /* 0x10 */ s32 priority;  /* a new rumble replaces the current one only at no lower priority */
+    /* 0x14 */ s32 timer;     /* frames left */
+    /* 0x18 */ s32 duration;  /* frames in all */
+    /* 0x1C */ s32 power[2];  /* the motors' power at full strength */
+    /* 0x24 */ u8 motor[2];   /* what is sent to the motors this frame */
+    /* 0x26 */ u8 unk26[4];
+    /* 0x2A */ u8 align[6];   /* the actuator alignment sent to the pad */
 } Vibration;
 
 /* The analog sticks of a pad, each axis from -0x1000 to 0x1000. */
 typedef struct {
-    s32 leftX;
-    s32 leftY;
-    s32 rightX;
-    s32 rightY;
+    /* 0x0 */ s32 leftX;
+    /* 0x4 */ s32 leftY;
+    /* 0x8 */ s32 rightX;
+    /* 0xC */ s32 rightY;
 } Sticks;
 
 /* One controller port and the state read from it. */
 typedef struct {
-    u8 buf[0x22];     /* what PadInitDirect receives into */
-    u8 unk22[2];
-    s32 port;         /* the port, as PadGetState and the like take it */
-    s32 state;        /* PadGetState's last answer */
-    s32 stable;       /* whether the pad is connected and set up */
-    s32 type;         /* the terminal type of the pad */
-    s32 deadZone;     /* how far from the centre an analog stick must go to count */
-    u32 raw;          /* the buttons, with the left stick as the d-pad */
-    u32 held;         /* the buttons, without opposite directions */
-    u32 pressed;      /* the buttons pressed this frame */
-    u32 released;     /* the buttons released this frame */
-    u32 repeated;     /* the buttons pressed this frame or repeating */
-    s32 repeatTimer;
-    s32 repeatDelay;  /* frames until a held button repeats */
-    s32 repeatRestart; /* where the timer restarts after a repeat */
-    Sticks sticks;
-    Vibration vibration;
+    /* 0x00 */ u8 buffer[0x22];    /* what PadInitDirect receives into */
+    /* 0x22 */ u8 unk22[2];
+    /* 0x24 */ s32 port;           /* the port, as PadGetState and the like take it */
+    /* 0x28 */ s32 state;          /* PadGetState's last answer */
+    /* 0x2C */ s32 stable;         /* whether the pad is connected and set up */
+    /* 0x30 */ s32 type;           /* the terminal type of the pad */
+    /* 0x34 */ s32 deadZone;       /* how far from the center an analog stick must go to count */
+    /* 0x38 */ u32 raw;            /* the buttons, with the left stick as the d-pad */
+    /* 0x3C */ u32 held;           /* the buttons, without opposite directions */
+    /* 0x40 */ u32 pressed;        /* the buttons pressed this frame */
+    /* 0x44 */ u32 released;       /* the buttons released this frame */
+    /* 0x48 */ u32 repeated;       /* the buttons pressed this frame or repeating */
+    /* 0x4C */ s32 repeatTimer;
+    /* 0x50 */ s32 repeatDelay;    /* frames until a held button repeats */
+    /* 0x54 */ s32 repeatRestart;  /* where the timer restarts after a repeat */
+    /* 0x58 */ Sticks sticks;
+    /* 0x68 */ Vibration vibration;
 } Pad;
+
+/* a pad's settings until the game changes them: the dead zone, and after how
+ * many frames, then every how many, a held button repeats */
+#define PAD_DEAD_ZONE 0x25
+#define PAD_REPEAT_DELAY 16
+#define PAD_REPEAT_RATE 4
 
 /* The game's controllers, as one object; its state is static. */
 typedef struct PadManager PadManager;

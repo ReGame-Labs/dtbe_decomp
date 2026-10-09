@@ -10,6 +10,7 @@
 
 EXTERN_C_BEGIN
 
+/* the virtual table of SoundFile */
 typedef struct SoundFileVtable {
     /* 0x00 */ VtableEntry unused;
     /* 0x08 */ VtableEntry setData; /* (SoundFile *, void *data) */
@@ -27,8 +28,8 @@ typedef struct SoundFile {
 } SoundFile;
 
 /* the most files of each kind SoundControl keeps loaded */
-#define SOUND_MAX_VABS 16
-#define SOUND_MAX_SEPS 8
+#define SOUND_VAB_MAX 16
+#define SOUND_SEP_MAX 8
 
 /* the bit of a sound id that says it is a song; the rest is its number */
 #define SOUND_ID_SONG 0x8000
@@ -54,9 +55,9 @@ typedef struct SoundControl {
     /* 0x2C */ ListNode vabs;
     /* 0x34 */ ListNode seps;
     /* 0x3C */ Lerp volume;
-    /* 0x50 */ s32 unk50;
-    /* 0x54 */ s32 unk54;
-    /* 0x58 */ s32 frame;
+    /* 0x50 */ s32 echoEffect; /* the sound effect the echo repeats */
+    /* 0x54 */ s32 echoVolume; /* of its next repeat; it ends at SOUND_ECHO_END */
+    /* 0x58 */ s32 echoFrame;
     /* 0x5C */ s32 pauseCount;
 } SoundControl;
 
@@ -64,18 +65,32 @@ typedef struct SoundControl {
 #define SOUND_VOLUME_FULL 0x7F
 #define SOUND_VOLUME_NORMAL 0x50
 
+/* the echo of soundControlPlayEcho: the effect plays at the start volume,
+ * then again every SOUND_ECHO_INTERVAL frames at half the volume, while that
+ * is above SOUND_ECHO_END */
+#define SOUND_ECHO_START 127
+#define SOUND_ECHO_INTERVAL 15
+#define SOUND_ECHO_END 16
+
+/* the most sequences of a SEP, which libsnd's table is sized for */
+#define SOUND_SEQ_MAX 8
+
+/* the sound effect of the pause */
+#define SOUND_PAUSE 0x14
+
 /* the virtual tables of the VAB, the .sep and the base SoundFile */
 extern struct SoundFileVtable VAB_FILE_VTABLE;
 extern struct SoundFileVtable SEP_FILE_VTABLE;
 extern struct SoundFileVtable SOUND_FILE_VTABLE;
 extern struct SoundControlVtable SOUND_CONTROL_VTABLE;
 
+/* the game's sound task */
 extern struct SoundControl SOUND_CONTROL;
 
 SoundFile *soundFileInit(SoundFile *soundFile, s32 id);
 void soundFileDestroy(SoundFile *soundFile, s32 flags);
 void soundFileSetResident(SoundFile *soundFile);
-void soundFileLoad(SoundFile *file, char *name, char *ext);
+void soundFileLoad(SoundFile *soundFile, char *name, char *ext);
 void finishSoundFileRead(void *data, u32 size, char *name, s32 user); /* a CdfsDoneFunc */
 SoundFile *soundFileInitSep(SoundFile *soundFile, s32 id);
 void soundFileDestroySep(SoundFile *soundFile, s32 flags);
@@ -100,7 +115,7 @@ void soundControlLoadSound(SoundControl *soundControl, s32 id, s32 wait);
 s32 isSoundLoaded(void);
 void soundControlUnloadSound(SoundControl *soundControl, s32 id);
 s32 soundControlPlaySound(SoundControl *soundControl, s32 id, u8 group);
-void func_8001BEC8(SoundControl *soundControl, s32 arg1);
+void soundControlPlayEcho(SoundControl *soundControl, s32 effect);
 void stopSound(u32 handle);
 u32 isSoundPlaying(u32 handle);
 void stopSongs(void);

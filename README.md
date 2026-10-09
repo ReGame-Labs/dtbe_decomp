@@ -68,6 +68,13 @@ Extract the game's files from your disc image into `disks/jp`:
 python3 tools/extract_disc.py "DigimonTamers - Battle Evolution (Japan).bin" disks/jp
 ```
 
+To look at the overlays and the game's data, unpack `A.VFS` into `assets/jp`
+(not needed to build):
+
+```sh
+python3 tools/unpack_vfs.py disks/jp/A.VFS assets/jp
+```
+
 Then split the executable, build it and check it against the original:
 
 ```sh

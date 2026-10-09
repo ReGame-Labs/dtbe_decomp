@@ -64,3 +64,23 @@ func_8002B364 operatorNew
 func_8002B3D0 operatorDelete
 func_8002B3F8 operatorVecDelete
 func_8003DEE8 operatorVecNew
+
+# die's own string
+D_800191B4 STR_DIE_CALLED_AT
+
+# main's strings, and the function of its thread, which splat had merged into it
+D_80010038 STR_ASCII_TIM
+D_80010044 STR_SYSTEM_TIM
+D_8001B090 runFramesThread
+
+# PsyQ: the BIOS's stubs the game calls, by their function numbers: A(51h),
+# A(71h) (not _96_remove, which is A(72h)), B(0Fh) and B(10h)
+func_800402C0 LoadExec
+func_800402D0 _96_init
+func_80040310 CloseTh
+func_80040320 ChangeTh
+
+# PsyQ: the BIOS's syscall stubs, by the number in $a0: syscall(1) and
+# syscall(2)
+func_80040360 EnterCriticalSection
+func_80040370 ExitCriticalSection

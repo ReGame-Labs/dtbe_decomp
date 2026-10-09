@@ -13,6 +13,7 @@ typedef struct LinkNode {
     /* 0x4 */ struct LinkNode *prev;
 } LinkNode;
 
+/* A list of LinkNodes: its first and last nodes, and how many it has. */
 typedef struct {
     /* 0x0 */ LinkNode *head;
     /* 0x4 */ LinkNode *tail;
@@ -34,12 +35,11 @@ typedef struct ListNode {
 EXTERN_C_BEGIN
 
 LinkNode *linkNodeSort(LinkNode *nodes, LinkCompare compare);
-void linkListSort(LinkList *list, LinkCompare compare);
+void linkListSort(LinkList *linkList, LinkCompare compare);
 LinkNode *mergeSortLinkNodes(LinkCompare compare, LinkNode *nodes);
 LinkNode *mergeLinkNodes(LinkCompare compare, LinkNode *a, LinkNode *b);
-void linkListInsertBefore(LinkList *list, LinkNode *before, LinkNode *node);
-
-void linkListRemove(LinkList *list, LinkNode *node);
+void linkListInsertBefore(LinkList *linkList, LinkNode *before, LinkNode *node);
+void linkListRemove(LinkList *linkList, LinkNode *node);
 
 EXTERN_C_END
 
@@ -57,11 +57,11 @@ static inline s32 listIsAlone(ListNode *node) {
 }
 
 /* Puts a node into a list right after another node of it. */
-static inline void listInsertAfter(ListNode *pos, ListNode *node) {
-    node->prev = pos;
-    node->next = pos->next;
-    pos->next->prev = node;
-    pos->next = node;
+static inline void listInsertAfter(ListNode *after, ListNode *node) {
+    node->prev = after;
+    node->next = after->next;
+    after->next->prev = node;
+    after->next = node;
 }
 
 #ifdef __cplusplus
@@ -80,6 +80,28 @@ public:
         prev->next = next;
         next = this;
         prev = next;
+    }
+};
+
+/*
+ * A list node that starts as a list of its own and leaves its list when it
+ * is destroyed. Stepper derives from it: its constructor links the node
+ * before it sets the virtual table pointer, which g++ 2.95 does for a base
+ * class and not for a member, and StepperGroup's destructor unlinks it after
+ * resetting that pointer to Stepper's. The name is ours. It is not declared
+ * in engine/menu/stepper.h: under that header's #pragma interface, g++
+ * would write its constructor and destructor out in stepper.cpp, which the
+ * game's code doesn't have.
+ */
+class ListItem : public ListNode {
+public:
+    ListItem() {
+        next = this;
+        prev = this;
+    }
+
+    ~ListItem() {
+        listRemove(this);
     }
 };
 #endif

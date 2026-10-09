@@ -15,6 +15,7 @@ typedef struct HeapBlock {
     /* 0x8 */ s32 size; /* with the header; negated while the block is in use */
 } HeapBlock;
 
+/* A heap: the memory from first up to end, cut into blocks. */
 typedef struct {
     /* 0x0 */ HeapBlock *rover; /* where the next search starts */
     /* 0x4 */ HeapBlock *first;
@@ -28,10 +29,12 @@ typedef struct {
  * bigger than a header */
 #define HEAP_MIN_SPLIT ((s32)sizeof(HeapBlock))
 /* the size word of the block an allocation belongs to: the last word of the
- * header, right before the memory handed out */
+ * header, right before the memory handed out. heapShrink reaches it through
+ * ptr (-4($a1)); block->size there would read it through the block
+ * (8($t1)). */
 #define HEAP_SIZE_BEFORE(ptr) (((s32 *)(ptr))[-1])
 
-s32 heapLargestFree(Heap *heap);
+s32 heapGetLargestFree(Heap *heap);
 s32 heapCheck(Heap *heap);
 void heapFree(Heap *heap, void *ptr);
 void heapInit(Heap *heap, void *base, s32 size);
@@ -39,7 +42,7 @@ void *heapAllocBest(Heap *heap, s32 size);
 void *heapAllocLargest(Heap *heap, s32 size);
 void *heapAllocNext(Heap *heap, s32 size);
 void *heapAllocPrev(Heap *heap, s32 size);
-s32 heapTotalFree(Heap *heap);
+s32 heapGetTotalFree(Heap *heap);
 void heapShrink(Heap *heap, void *ptr, s32 size);
 
 EXTERN_C_END

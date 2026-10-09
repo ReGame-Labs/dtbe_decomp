@@ -16,14 +16,14 @@ typedef struct {
     /* 0x10 */ void *nodes; /* the memory the nodes were cut from */
 } NodePool;
 
-void nodePoolInit(NodePool *pool, void *nodes, s32 size, s32 count);
-void nodePoolInitFree(NodePool *pool, void *nodes, s32 size, s32 count);
-LinkNode *nodePoolAlloc(NodePool *pool);
-void nodePoolFree(NodePool *pool, LinkNode *node);
-void nodePoolRelease(NodePool *pool, LinkNode *node);
-void nodePoolPushFront(NodePool *pool, LinkNode *node);
-void nodePoolPushBack(NodePool *pool, LinkNode *node);
-void linkListInsertAfter(LinkList *list, LinkNode *after, LinkNode *node);
+void nodePoolInit(NodePool *nodePool, void *nodes, s32 size, s32 count);
+void nodePoolInitFree(NodePool *nodePool, void *nodes, s32 size, s32 count);
+LinkNode *nodePoolAlloc(NodePool *nodePool);
+void nodePoolFree(NodePool *nodePool, LinkNode *node);
+void nodePoolRelease(NodePool *nodePool, LinkNode *node);
+void nodePoolPushFront(NodePool *nodePool, LinkNode *node);
+void nodePoolPushBack(NodePool *nodePool, LinkNode *node);
+void linkListInsertAfter(LinkList *linkList, LinkNode *after, LinkNode *node);
 
 EXTERN_C_END
 

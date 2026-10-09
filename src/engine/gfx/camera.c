@@ -6,15 +6,14 @@
 #include "engine/math/matrix.h"
 #include "engine/math/sin_cos.h"
 #include "engine/system/memory.h"
-#include "vtable.h"
-#include "gte.h"
 #include "inline_c.h"
 #include "stdio.h"
+#include "gte.h"
+#include "vtable.h"
 
-/* a * b, both in 4.12 fixed point. */
-static inline s32 mul12(s32 a, s32 b) {
-    return ((s64)a * b) >> 12;
-}
+/* the field of view a new camera starts with: about 30 degrees, ONE being a
+ * full turn */
+#define CAMERA_DEFAULT_FOV 0x155
 
 /* Builds a camera with an ordering table of 1 << length slots, and lights and
  * a projection of its own. */
@@ -25,7 +24,7 @@ Camera *cameraInit(Camera *this, s32 length) {
     this->view = operatorNew(sizeof(CameraView));
     this->lights = operatorNew(sizeof(Lights));
     this->gsot.length = length;
-    this->view->fov = 0x155;
+    this->view->fov = CAMERA_DEFAULT_FOV;
     return this;
 }
 
@@ -52,10 +51,15 @@ void cameraDestroy(Camera *this, s32 flags) {
     }
 }
 
-/* cameraReset, cameraSetLightColor2, cameraSetLightDirection0, cameraSetLightDirection1, cameraSetLightDirection2 and
- * cameraApplyLights copy a MATRIX as a block move (four loads then four stores),
- * which GCC 2.95.2 does not emit for 32 bytes (see "Block moves" in
- * TODO.md). */
+/* cameraReset, cameraSetLightColor2, cameraSetLightDirection0,
+ * cameraSetLightDirection1, cameraSetLightDirection2 and cameraApplyLights
+ * copy a MATRIX as a block move (four loads then four stores), which GCC
+ * 2.95.2 does not emit for 32 bytes (see "Block moves" in TODO.md). */
+
+/* Puts the camera back to its defaults: a 320x240 screen in 4:3, the
+ * nearest near plane, the far plane at 0x3200, a view from the eye at
+ * z = -projection and the default lights, whose light matrix it copies to
+ * the scratchpad. Also zeroes D_8011A2D0 to D_8011A2F8. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraReset);
 
 /* Sets the color of light 0. */
@@ -68,6 +72,8 @@ void cameraSetLightColor1(Camera *this, VECTOR *color) {
     lightsSetColor1(this->lights, color);
 }
 
+/* Sets the color of light 2, then copies the light matrix to the scratchpad
+ * as the direction setters do (light 0 and 1's color setters don't). */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetLightColor2);
 
 /* Sets the back color. */
@@ -75,12 +81,20 @@ void cameraSetBackColor(Camera *this, VECTOR *color) {
     lightsSetBackColor(this->lights, color);
 }
 
+/* Points light 0 along direction and copies the light matrix to the
+ * scratchpad. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetLightDirection0);
 
+/* Points light 1 along direction and copies the light matrix to the
+ * scratchpad. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetLightDirection1);
 
+/* Points light 2 along direction and copies the light matrix to the
+ * scratchpad. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetLightDirection2);
 
+/* Hands the light colors to the GTE and copies the light matrix to the
+ * scratchpad. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraApplyLights);
 
 /* The lights of the camera. */
@@ -88,8 +102,12 @@ Lights *cameraGetLights(Camera *this) {
     return this->lights;
 }
 
-/* cameraSetView copies MATRIXes with four loads then four stores, as
- * cameraReset does. */
+/* Sets the view matrix: keeps it, builds in the scratchpad the view scaled
+ * for the shape of a pixel (SCRATCH_VIEW_MATRIX), keeps its inverse's
+ * rotation, and puts the frustum's planes in the world: turned by that
+ * rotation, the sides through the eye, the near and the far plane through
+ * the points near and far ahead of it. It copies MATRIXes with four loads
+ * then four stores, as cameraReset does. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetView);
 
 /* Moves the plane to pass through point. */
@@ -122,10 +140,10 @@ void setModelMatrix(MATRIX *m) {
 s32 cameraIsSphereVisible(Camera *this, VECTOR *center, s32 radius) {
     Plane *planes = this->view->planes;
 
-    if (!(planeIsSphereInside(&planes[0], center, radius) &&
-          planeIsSphereInside(&planes[1], center, radius) &&
-          planeIsSphereInside(&planes[2], center, radius) &&
-          planeIsSphereInside(&planes[3], center, radius) &&
+    if (!(planeIsSphereInside(&planes[PLANE_LEFT], center, radius) &&
+          planeIsSphereInside(&planes[PLANE_RIGHT], center, radius) &&
+          planeIsSphereInside(&planes[PLANE_TOP], center, radius) &&
+          planeIsSphereInside(&planes[PLANE_BOTTOM], center, radius) &&
           planeIsSphereInside(&planes[PLANE_NEAR], center, radius) &&
           planeIsSphereInside(&planes[PLANE_FAR], center, radius))) {
         return 0;
@@ -234,7 +252,9 @@ void cameraClearOt(Camera *this) {
  * screen offset to its center. In C (ctc2 $24/$25 of (size / 2) << 16) it
  * matches but for the load of aspectY from the stack: GCC 2.95.2 converts
  * that parameter at the entry and schedules its lh before the load of
- * this->view, the game has it after. */
+ * this->view, the game has it after. The two tie in both scheduling passes
+ * and the one later in the insn stream wins, which the entry conversion
+ * never is; const parameters and C++ change nothing. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetScreen);
 
 /* Sets the field of view: the distance of the screen from the eye (half the
@@ -265,27 +285,27 @@ void cameraSetFov(Camera *this, s16 fov) {
     /* the left and the right side */
     cosX = COS_SIN_TABLE[angle & 0xFFF].cos;
     sinX = COS_SIN_TABLE[angle & 0xFFF].sin;
-    view->localPlanes[0].normal[0] = cosX;
-    view->localPlanes[0].normal[1] = 0;
-    view->localPlanes[0].normal[2] = sinX;
-    view->localPlanes[0].distance = 0;
-    view->localPlanes[1].normal[0] = -cosX;
-    view->localPlanes[1].normal[1] = 0;
-    view->localPlanes[1].normal[2] = sinX;
-    view->localPlanes[1].distance = 0;
+    view->localPlanes[PLANE_LEFT].normal[0] = cosX;
+    view->localPlanes[PLANE_LEFT].normal[1] = 0;
+    view->localPlanes[PLANE_LEFT].normal[2] = sinX;
+    view->localPlanes[PLANE_LEFT].distance = 0;
+    view->localPlanes[PLANE_RIGHT].normal[0] = -cosX;
+    view->localPlanes[PLANE_RIGHT].normal[1] = 0;
+    view->localPlanes[PLANE_RIGHT].normal[2] = sinX;
+    view->localPlanes[PLANE_RIGHT].distance = 0;
 
     /* the top and the bottom, half the vertical field of view away */
     vertical = angle * view->aspectY / view->aspectX;
     cosY = COS_SIN_TABLE[vertical & 0xFFF].cos;
     sinY = COS_SIN_TABLE[vertical & 0xFFF].sin;
-    view->localPlanes[2].normal[0] = 0;
-    view->localPlanes[2].normal[1] = cosY;
-    view->localPlanes[2].normal[2] = sinY;
-    view->localPlanes[2].distance = 0;
-    view->localPlanes[3].normal[0] = 0;
-    view->localPlanes[3].normal[1] = -cosY;
-    view->localPlanes[3].normal[2] = sinY;
-    view->localPlanes[3].distance = 0;
+    view->localPlanes[PLANE_TOP].normal[0] = 0;
+    view->localPlanes[PLANE_TOP].normal[1] = cosY;
+    view->localPlanes[PLANE_TOP].normal[2] = sinY;
+    view->localPlanes[PLANE_TOP].distance = 0;
+    view->localPlanes[PLANE_BOTTOM].normal[0] = 0;
+    view->localPlanes[PLANE_BOTTOM].normal[1] = -cosY;
+    view->localPlanes[PLANE_BOTTOM].normal[2] = sinY;
+    view->localPlanes[PLANE_BOTTOM].distance = 0;
 
     view->localPlanes[PLANE_NEAR].normal[0] = 0;
     view->localPlanes[PLANE_NEAR].normal[1] = 0;

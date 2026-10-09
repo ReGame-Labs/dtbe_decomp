@@ -1,8 +1,8 @@
 #include "common.h"
 #include "engine/math/vector.h"
 #include "engine/math/divide.h"
-#include "gte.h"
 #include "psyq.h"
+#include "gte.h"
 
 /* vecNormalize shifts the components down until the largest has 18 leading
  * zeros (sign bits), small enough for the GTE's 16-bit IR registers. */
@@ -74,7 +74,10 @@ s32 vecGetLengthSquared16(VECTOR *v) {
  * 64-bit products. Compiled C, not handwritten: GCC's split 64-bit shifts are
  * there, dead high words included. The C computing the six products in
  * locals before storing comes out in other registers: the original moves t
- * from a3 to v0 first and needs only s0. Why is not known.
+ * from a3 to v0 first and needs only s0. GCC 2.95.2 keeps t in a3, the
+ * register local-alloc suggests for its copy, so the a.x product can't use
+ * a2/a3 and an s1 is saved (64 lines differ at best). No source found that
+ * drops the suggestion.
  */
 INCLUDE_ASM("asm/jp/main/nonmatchings/math/vector", vecLerp);
 

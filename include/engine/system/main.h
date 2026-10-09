@@ -6,6 +6,7 @@
 #include "common.h"
 #include "engine/math/random.h"
 #include "engine/system/handle_table.h"
+#include "engine/system/thread.h"
 
 EXTERN_C_BEGIN
 
@@ -30,12 +31,13 @@ void initGlobals(void);
 void destroyGlobals(void);
 void breakForever(void);
 void main(void);
+void runFramesThread(Thread *thread);
 void runFrame(void);
 void seedRandom(MersenneTwister *random);
 void startSystem(void);
 void func_8001B314(void);
-void *allocForCdfs(void *context, s32 count, s32 size);
-void freeForCdfs(void *context, void *ptr);
+void *allocForCdfs(void *opaque, s32 items, s32 size);
+void freeForCdfs(void *opaque, void *ptr);
 void initOrDestroyMainGlobals(s32 initialize, s32 priority);
 void initMainGlobals(void);
 void destroyMainGlobals(void);

@@ -1,53 +1,53 @@
 #include "common.h"
 #include "engine/system/handle_table.h"
 #include "engine/system/memory.h"
+#include "vtable.h"
 
 /* Constructs a handle table with room for capacity - 1 handles: every node
  * but the two list heads starts out free. */
-HandleTable *handleTableInit(HandleTable *table, s32 capacity) {
+HandleTable *handleTableInit(HandleTable *this, s32 capacity) {
     HandleNode *usedList;
     s32 i;
 
     if (capacity > HANDLE_TABLE_MAX) {
         capacity = HANDLE_TABLE_MAX;
     }
-    table->capacity = capacity;
-    /* psyq.h declares operator new[] as returning s32 */
-    table->nodes = (HandleNode *)operatorVecNew((capacity + 1) * sizeof(HandleNode));
-    usedList = table->nodes + capacity;
-    table->usedList = usedList;
+    this->capacity = capacity;
+    this->nodes = operatorVecNew((capacity + 1) * sizeof(HandleNode));
+    usedList = this->nodes + capacity;
+    this->usedList = usedList;
     usedList->next = usedList;
     usedList->prev = usedList;
     for (i = 1; i < capacity; i++) {
-        table->nodes[i].next = &table->nodes[i] + 1;
-        table->nodes[i].prev = &table->nodes[i] - 1;
-        table->nodes[i].owner = NULL;
-        table->nodes[i].handle.f.index = i;
-        table->nodes[i].handle.f.serial = 0;
+        this->nodes[i].next = &this->nodes[i] + 1;
+        this->nodes[i].prev = &this->nodes[i] - 1;
+        this->nodes[i].owner = NULL;
+        this->nodes[i].handle.f.index = i;
+        this->nodes[i].handle.f.serial = 0;
     }
-    table->nodes[1].prev = table->nodes;
-    table->nodes[capacity - 1].next = table->nodes;
-    table->nodes[0].next = &table->nodes[1];
-    table->nodes[0].prev = table->nodes + capacity - 1;
-    return table;
+    this->nodes[1].prev = this->nodes;
+    this->nodes[capacity - 1].next = this->nodes;
+    this->nodes[0].next = &this->nodes[1];
+    this->nodes[0].prev = this->nodes + capacity - 1;
+    return this;
 }
 
-/* Destroys a handle table; flags bit 0 also frees the table itself. */
-void handleTableDestroy(HandleTable *table, s32 flags) {
-    HandleNode *nodes = table->nodes;
+/* Destroys a handle table; DESTROY_FREE in flags also frees the table itself. */
+void handleTableDestroy(HandleTable *this, s32 flags) {
+    HandleNode *nodes = this->nodes;
 
     if (nodes != NULL) {
         operatorVecDelete(nodes);
     }
-    if (flags & 1) {
-        operatorDelete(table);
+    if (flags & DESTROY_FREE) {
+        operatorDelete(this);
     }
 }
 
 /* Moves a free node to the used list and returns a new handle for owner,
  * or 0 when the table is full. */
-u32 handleTableAdd(HandleTable *table, void *owner) {
-    HandleNode *freeList = table->nodes;
+u32 handleTableAdd(HandleTable *this, void *owner) {
+    HandleNode *freeList = this->nodes;
     HandleNode *node = freeList->next;
 
     if (node == freeList) {
@@ -55,10 +55,10 @@ u32 handleTableAdd(HandleTable *table, void *owner) {
     }
     node->next->prev = node->prev;
     node->prev->next = node->next;
-    node->next = table->usedList->next;
-    node->prev = table->usedList;
-    table->usedList->next->prev = node;
-    table->usedList->next = node;
+    node->next = this->usedList->next;
+    node->prev = this->usedList;
+    this->usedList->next->prev = node;
+    this->usedList->next = node;
     node->owner = owner;
     node->handle.f.serial++;
     return node->handle.word;
@@ -66,7 +66,7 @@ u32 handleTableAdd(HandleTable *table, void *owner) {
 
 /* Gives back a handle: its node goes to the end of the free list. Returns
  * what the handle stood for, or NULL when it is not a live handle. */
-void *handleTableRemove(HandleTable *table, u32 handle) {
+void *handleTableRemove(HandleTable *this, u32 handle) {
     HandleNode *node;
     void *owner;
     u32 index;
@@ -75,10 +75,10 @@ void *handleTableRemove(HandleTable *table, u32 handle) {
         return NULL;
     }
     index = handle & (HANDLE_TABLE_MAX - 1);
-    if (index >= table->capacity) {
+    if (index >= this->capacity) {
         return NULL;
     }
-    node = &table->nodes[index];
+    node = &this->nodes[index];
     if (node->handle.word != handle) {
         return NULL;
     }
@@ -86,22 +86,22 @@ void *handleTableRemove(HandleTable *table, u32 handle) {
     node->owner = NULL;
     node->next->prev = node->prev;
     node->prev->next = node->next;
-    node->next = table->nodes;
-    node->prev = table->nodes->prev;
-    table->nodes->prev->next = node;
-    table->nodes->prev = node;
+    node->next = this->nodes;
+    node->prev = this->nodes->prev;
+    this->nodes->prev->next = node;
+    this->nodes->prev = node;
     return owner;
 }
 
 /* Returns what a handle stands for, or NULL when it is not a live handle. */
-void *handleTableGet(HandleTable *table, u32 handle) {
+void *handleTableGet(HandleTable *this, u32 handle) {
     HandleNode *node;
     u32 index = handle & (HANDLE_TABLE_MAX - 1);
 
-    if (handle == 0 || index >= table->capacity) {
+    if (handle == 0 || index >= this->capacity) {
         return NULL;
     }
-    node = &table->nodes[index];
+    node = &this->nodes[index];
     if (node->handle.word != handle) {
         return NULL;
     }
@@ -109,7 +109,7 @@ void *handleTableGet(HandleTable *table, u32 handle) {
 }
 
 /* Counts the nodes of one of the table's lists, without its head. */
-s32 handleTableCountList(HandleTable *table, HandleNode *list) {
+s32 handleTableCountList(HandleTable *this, HandleNode *list) {
     HandleNode *node;
     s32 count = 0;
 
@@ -120,8 +120,8 @@ s32 handleTableCountList(HandleTable *table, HandleNode *list) {
 }
 
 /* Counts the handles in use. */
-s32 handleTableCountUsed(HandleTable *table) {
-    HandleNode *list = table->usedList;
+s32 handleTableCountUsed(HandleTable *this) {
+    HandleNode *list = this->usedList;
     HandleNode *node;
     s32 count = 0;
 
@@ -132,8 +132,8 @@ s32 handleTableCountUsed(HandleTable *table) {
 }
 
 /* Counts the free handles. */
-s32 handleTableCountFree(HandleTable *table) {
-    HandleNode *list = table->nodes;
+s32 handleTableCountFree(HandleTable *this) {
+    HandleNode *list = this->nodes;
     HandleNode *node;
     s32 count = 0;
 
