@@ -10,3 +10,6 @@
 [submodule "external/psyq_headers"]
 	path = external/psyq_headers
 	url = https://github.com/jype0/psyq_headers.git
+[submodule "external/doxygen-awesome-css"]
+	path = external/doxygen-awesome-css
+	url = https://github.com/jothepro/doxygen-awesome-css.git

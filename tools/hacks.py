@@ -184,7 +184,7 @@ def scan():
     for top in DIRS:
         for path in sorted((ROOT / top).rglob("*")):
             rel = path.relative_to(ROOT).as_posix()
-            if path.suffix not in (".c", ".h"):
+            if path.suffix not in (".c", ".cpp", ".h"):
                 continue
             text = path.read_text(errors="replace")
             tokens = list(TOKEN.finditer(text))

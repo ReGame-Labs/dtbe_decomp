@@ -47,6 +47,7 @@ BIN_DIR ?= bin
 # (2.7.2 and 2.8.x don't)
 GCC_VERSION ?= 2.95.2
 CC1 ?= $(BIN_DIR)/gcc-$(GCC_VERSION)-psx/cc1
+CC1PLUS ?= $(BIN_DIR)/gcc-$(GCC_VERSION)-psx/cc1plus
 
 MASPSX := $(PYTHON) external/maspsx/maspsx.py
 OBJDIFF ?= $(BIN_DIR)/objdiff-cli-linux-x86_64
@@ -57,9 +58,12 @@ CPPFLAGS := $(INC) -undef -nostdinc -Wundef \
 	    -D__GNUC__=2 -D__GNUC_MINOR__=$(word 2,$(subst ., ,$(GCC_VERSION))) -Dmips -D__mips__ -D__mips -Dpsx -D__psx__ -D__psx \
 	    -D_PSYQ -D__EXTENSIONS__ -D_MIPSEL -D_LANGUAGE_C -DLANGUAGE_C \
 	    -DVERSION_$(VERSION_UPPER) -DASM_DIR='"$(ASM_DIR)"'
-CC1FLAGS := -quiet -O2 -G0 -mips1 -mcpu=3000 -mgas -msoft-float \
+CC1FLAGS := -quiet -O2 -G8 -mips1 -mcpu=3000 -mgas -msoft-float \
 	    -fgnu-linker -fsigned-char -Wall -Wno-unused
-MASPSXFLAGS := --aspsx-version=2.86 -G0
+# the game is C++; its virtual tables have no type info in their first
+# slot, and it has no exception tables
+CC1PLUSFLAGS = $(CC1FLAGS) -fno-rtti -fno-exceptions
+MASPSXFLAGS := --aspsx-version=2.86 -G8
 ASFLAGS := -EL -march=r3000 -mtune=r3000 -no-pad-sections -O1 -G0 $(INC)
 LDFLAGS := -nostdlib --no-check-sections -Map $(MAP) \
 	   -T $(GENDIR)/main.ld \
@@ -68,13 +72,14 @@ LDFLAGS := -nostdlib --no-check-sections -Map $(MAP) \
 	   -T $(GENDIR)/undefined_funcs_auto_main.txt
 
 C_SRC := $(shell find src -name '*.c' 2> /dev/null)
-# splat's full disassembly of each C file is objdiff's target, not part of
-# the build
-TARGET_ASM := $(C_SRC:src/%.c=$(ASM_DIR)/%.s)
+CXX_SRC := $(shell find src -name '*.cpp' 2> /dev/null)
+# splat's full disassembly of each C and C++ file is objdiff's target, not
+# part of the build; src/engine holds the executable's (asm/<version>/main)
+TARGET_ASM := $(C_SRC:src/engine/%.c=$(ASM_DIR)/main/%.s) $(CXX_SRC:src/engine/%.cpp=$(ASM_DIR)/main/%.s)
 ASM_SRC := $(filter-out $(TARGET_ASM),$(shell find $(ASM_DIR) -name '*.s' \
 	   -not -path '*/nonmatchings/*' -not -path '*/matchings/*' 2> /dev/null))
 
-C_OBJ := $(C_SRC:%.c=$(BUILDDIR)/%.c.o)
+C_OBJ := $(C_SRC:%.c=$(BUILDDIR)/%.c.o) $(CXX_SRC:%.cpp=$(BUILDDIR)/%.cpp.o)
 ASM_OBJ := $(ASM_SRC:%.s=$(BUILDDIR)/%.s.o)
 TARGET_OBJ := $(TARGET_ASM:%.s=$(BUILDDIR)/%.s.o)
 OBJ := $(C_OBJ) $(ASM_OBJ)
@@ -108,6 +113,23 @@ $(BUILDDIR)/%.c.o: %.c
 	$(MASPSX) $(MASPSXFLAGS) < $(@:.o=.cc1.s) > $(@:.o=.s)
 	$(AS) $(ASFLAGS) -o $@ $(@:.o=.s)
 
+# The host's cpp has no C++ mode for this target, so C++ files are
+# preprocessed as C with __cplusplus defined; cc1plus does the rest.
+$(BUILDDIR)/%.cpp.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CPP) -x c $(CPPFLAGS) -D__cplusplus -MMD -MP -MT $@ -MF $(@:.o=.d) $< -o $(@:.o=.ii)
+	$(CC1PLUS) $(CC1PLUSFLAGS) -o $(@:.o=.cc1.s) $(@:.o=.ii)
+	$(MASPSX) $(MASPSXFLAGS) < $(@:.o=.cc1.s) > $(@:.o=.s)
+	$(AS) $(ASFLAGS) -o $@ $(@:.o=.s)
+
+# the game was built with -G8 (its strings up to 8 bytes are in .sdata), but
+# these two read their handle tables (TASK_HANDLES in .data, ENTITY_HANDLES
+# in .bss), out of .sdata, as -G0 code does
+G0_UNITS := task/task task/entity
+G0_OBJ := $(G0_UNITS:%=$(BUILDDIR)/src/engine/%.c.o)
+$(G0_OBJ): CC1FLAGS := $(subst -G8,-G0,$(CC1FLAGS))
+$(G0_OBJ): MASPSXFLAGS := $(subst -G8,-G0,$(MASPSXFLAGS))
+
 # gas aligns these sections to 16 bytes, psylink packed them to 4
 $(BUILDDIR)/%.s.o: %.s
 	@mkdir -p $(dir $@)
@@ -136,4 +158,28 @@ reset: clean
 
 -include $(C_OBJ:.o=.d)
 
-.PHONY: all generate regenerate compare expected objdiff report clean reset
+# The API documentation, $(DOCS_DIR)/html/index.html (docs/Doxyfile):
+# doxygen reads the C's comments through tools/doxygen_filter.py, and the
+# folders' descriptions from src/README.md (tools/doxygen_dirs.py). It needs
+# doxygen, graphviz for the graphs, and the theme, the doxygen-awesome-css
+# submodule, whose scripts go in doxygen's own header
+# (docs/doxygen_head.html).
+DOXYGEN ?= doxygen
+DOCS_DIR := build/docs
+DOXYGEN_THEME := external/doxygen-awesome-css
+docs:
+	@command -v $(DOXYGEN) > /dev/null || { echo "make docs needs doxygen, and graphviz for the graphs (apt install doxygen graphviz)" >&2; exit 1; }
+	@test -f $(DOXYGEN_THEME)/doxygen-awesome.css || { echo "make docs needs the theme: git submodule update --init $(DOXYGEN_THEME)" >&2; exit 1; }
+	@mkdir -p $(DOCS_DIR)
+	$(PYTHON) tools/doxygen_dirs.py $(DOCS_DIR)/dirs.dox
+	$(DOXYGEN) -w html $(DOCS_DIR)/default_header.html $(DOCS_DIR)/default_footer.html $(DOCS_DIR)/default.css docs/Doxyfile
+	awk '/<\/head>/ { while ((getline line < "docs/doxygen_head.html") > 0) print line } 1' \
+		$(DOCS_DIR)/default_header.html > $(DOCS_DIR)/header.html
+	{ cat docs/Doxyfile; echo "HTML_HEADER = $(DOCS_DIR)/header.html"; \
+		command -v dot > /dev/null || echo "HAVE_DOT = NO"; } | $(DOXYGEN) -
+	@echo "$(DOCS_DIR)/html/index.html; doxygen's warnings: $(DOCS_DIR)/warnings.log"
+
+docs-clean:
+	rm -rf $(DOCS_DIR)
+
+.PHONY: all generate regenerate compare expected objdiff report clean reset docs docs-clean

@@ -19,12 +19,14 @@ game to build it.
 
 ## Status
 
-The build already gives back the original executable byte for byte: every
-function is still splat's assembly behind `INCLUDE_ASM`, and decompiling
-them one by one, keeping the match, is the work. Progress is measured by
+The build gives back the original executable byte for byte. Most of the
+game's functions are C already; the rest are still splat's assembly behind
+`INCLUDE_ASM`, and decompiling them one by one, keeping the match, is the
+work. Progress is measured by
 [objdiff](https://github.com/encounter/objdiff) and tracked on
 [decomp.dev](https://decomp.dev/ReGame-Labs/dtbe_decomp).
 
+<a name="the-executable"></a>
 ## The executable
 
 `SLPS_033.57` loads at `0x80010000` and starts at crt0 (`0x8003DD74`):
@@ -32,7 +34,7 @@ them one by one, keeping the match, is the work. Progress is measured by
 | Address | What |
 |---|---|
 | `0x80010000` | `.rodata` (psylink places it ahead of `.text`) |
-| `0x8001AE18` | the game's code, `main` at `0x8001AF68` (`src/main/*.c`) |
+| `0x8001AE18` | the game's code, `main` at `0x8001AF68` (`src/engine/`, [by module](src/README.md)) |
 | `0x8003DD74` | crt0: the entry point, `__main` and its constructor loop |
 | `0x8003DEE8` | SN's runtime wrappers and the PsyQ libraries |
 | `0x8005EE40` | `.data`, with `$gp` at `0x8006414C` |
@@ -77,10 +79,17 @@ make compare
 `make report` writes objdiff's progress report (`build/jp/report.json`), and
 `make objdiff` the `objdiff.json` that objdiff's GUI opens.
 
+`make docs` writes the source's documentation, `build/docs/html/index.html`,
+with [doxygen](https://www.doxygen.nl) and the
+[doxygen-awesome](https://github.com/jothepro/doxygen-awesome-css) theme
+(`sudo apt install doxygen graphviz`). It takes the code's comments as they
+are: the comment above a function, a type or a global is its description.
+
+<a name="toolchain"></a>
 ## Toolchain
 
 - **Compiler:** GCC 2.95.2 for the PlayStation (`cc1`, from
-  [decompals/old-gcc](https://github.com/decompals/old-gcc)) at `-O2 -G0`.
+  [decompals/old-gcc](https://github.com/decompals/old-gcc)) at `-O2 -G8`.
   Its instruction scheduling is the one the game's code has; 2.7.2 and
   2.8.x schedule the loads differently.
 - **Assembler:** [maspsx](https://github.com/mkst/maspsx) turns GCC's output
@@ -93,7 +102,7 @@ make compare
 
 ## Contributing
 
-Pick a function behind `INCLUDE_ASM` in `src/main/`, write it as C, and check
+Pick a function behind `INCLUDE_ASM` in `src/engine/`, write it as C, and check
 that `make compare` still passes. Only byte-identical matches go in.
 [CONTRIBUTING](CONTRIBUTING.md) describes the tools and the rules, and the
 [TODO](TODO.md) lists what comes next.

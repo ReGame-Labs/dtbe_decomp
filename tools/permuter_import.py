@@ -12,6 +12,7 @@ function of that name. The result goes to permuter/<func_name>/; run it with
 
 import glob
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -39,6 +40,11 @@ def main():
     asm = asm[0]
 
     cc1 = f"{BIN}/gcc-2.95.2-psx/cc1"
+    # the Makefile's G0_UNITS were built with -G0, the rest with -G8
+    unit = os.path.basename(os.path.dirname(asm))
+    makefile = open(f"{ROOT}/Makefile").read()
+    g0_units = re.search(r"^G0_UNITS :=(.*)", makefile, re.M).group(1).split()
+    g = "-G0" if unit in g0_units else "-G8"
 
     out = f"{ROOT}/permuter/{func}"
     os.makedirs(out, exist_ok=True)
@@ -64,9 +70,9 @@ def main():
 # usage: compile.sh input.c -o output.o
 set -e
 IN="$1"; OUT="$3"; T="$OUT.tmp"
-{cc1} -quiet -O2 -G0 -mips1 -mcpu=3000 -mgas -msoft-float \\
+{cc1} -quiet -O2 {g} -mips1 -mcpu=3000 -mgas -msoft-float \\
     -fsigned-char -w -o "$T.s" "$IN"
-python3 {ROOT}/external/maspsx/maspsx.py --aspsx-version=2.86 -G0 \\
+python3 {ROOT}/external/maspsx/maspsx.py --aspsx-version=2.86 {g} \\
     < "$T.s" > "$T.ms.s"
 mipsel-linux-gnu-as -EL -march=r3000 -mtune=r3000 -no-pad-sections -O1 -G0 \\
     -I{ROOT}/include -o "$OUT" "$T.ms.s"
