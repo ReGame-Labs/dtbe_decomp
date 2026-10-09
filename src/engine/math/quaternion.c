@@ -111,9 +111,14 @@ Quaternion *quaternionConjugate(Quaternion *dst, Quaternion *q) {
     return dst;
 }
 
-/* quaternionSlerp (out = the spherical interpolation from a to b by t) differs
- * only in the stores to out: the game copies out from $v0, the return
- * value, where this compiler reloads it from the stack. */
+/* quaternionSlerp (out = the spherical interpolation from a to b by t, the
+ * shorter way: b negated when the dot product is negative; linear when
+ * ONE - cos < 16) differs only in the stores to out: the game copies out from
+ * $v0, the return value, where this compiler reloads it from the stack. The
+ * C that gives every other instruction (8 lines differ) reads all of a before
+ * storing (out may be a), tests ONE - cos >= 16 first, indexes the sine table
+ * by getArcCos's result and by the products shifted unsigned, and takes
+ * (s16) of ONE - t, t and the angle. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/math/quaternion", quaternionSlerp);
 
 /* Sets q to the rotation of the rotation matrix m. Each element of q comes

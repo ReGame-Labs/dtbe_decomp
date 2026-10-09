@@ -55,7 +55,11 @@ typedef struct {
 extern char CHARA_PATH_FORMAT[]; /* "/chara/%02d%s" */
 
 /* the loaded characters */
+#ifdef __cplusplus
+extern List LOADED_CHARAS;
+#else
 extern ListNode LOADED_CHARAS;
+#endif
 
 FileRef *fileRefInit(FileRef *fileRef, void *file);
 void fileRefDestroy(FileRef *fileRef, s32 flags);
@@ -79,9 +83,6 @@ s32 func_80031300(void);
 s32 func_80031308(void);
 void tintTim(TIM_IMAGE *tim, HsvColor *tint);
 
-void initOrDestroyCharaList(s32 initialize, s32 priority);
-void initCharaList(void);
-void destroyCharaList(void);
 
 EXTERN_C_END
 

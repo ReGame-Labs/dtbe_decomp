@@ -12,7 +12,11 @@ EXTERN_C_BEGIN
 typedef struct {
     /* 0x0 */ s16 delta;
     /* 0x2 */ s16 index;
+#ifdef __cplusplus
+    /* 0x4 */ void (*func)(...); /* C++ has no unprototyped functions */
+#else
     /* 0x4 */ void (*func)();
+#endif
 } VtableEntry;
 
 /* the flags a deleting destructor is called with */
