@@ -1,0 +1,4 @@
+/* the .prev halves of the lists LOADED_CHARAS and D_8006437C, which the asm of
+ * initOrDestroyCharaList and func_80031E04 names */
+D_80064358 = 0x80064358;
+D_80064380 = 0x80064380;

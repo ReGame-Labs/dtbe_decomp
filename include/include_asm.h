@@ -1,6 +1,8 @@
 #ifndef INCLUDE_ASM_H
 #define INCLUDE_ASM_H
 
+/* INCLUDE_ASM and INCLUDE_RODATA: the functions and rodata still in splat's assembly. */
+
 #if !defined(M2CTX) && !defined(PERMUTER) && !defined(SKIP_ASM)
 
 #ifndef INCLUDE_ASM

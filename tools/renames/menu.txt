@@ -1,0 +1,55 @@
+# src/engine/menu/: names from the code, its comments, its strings, its calls and its callers
+
+func_8002C378 countdownInit
+func_8002C384 countdownStart
+func_8002C390 countdownGetFrames
+func_8002C39C countdownUpdate
+func_8002C3C0 countdownIsOver
+func_8002C3CC stepperInit
+func_8002C3F8 stepperStepUp
+func_8002C418 stepperStepUpClamp
+func_8002C448 stepperStepUpWrap
+func_8002C474 stepperStepDown
+func_8002C494 stepperStepDownClamp
+func_8002C4C4 stepperStepDownWrap
+func_8002C4F4 stepperGetGroup
+func_8002C500 stepperSetGroupCurrentOnly
+func_8002C530 stepperCloseGroup
+func_8002C554 stepperGroupInit
+func_8002C810 stepperGroupOpen
+func_8002C858 stepperGroupInputIfOpen
+func_8002C8D4 stepperGroupDrawIfOpen
+func_8002C93C stepperGroupAddChild
+func_8002C9A4 stepperGroupRemoveChildren
+func_8002CA28 stepperGroupCancel
+func_8002CA5C stepperGroupInput
+func_8002CBC8 stepperGroupInputCurrent
+func_8002CD24 stepperGroupPressCancel
+func_8002CDC0 stepperGroupPressConfirm
+func_8002CEB4 stepperGroupMoveCurrent
+func_8002CFB0 stepperGroupDraw
+func_8002D0A0 stepperGroupRefresh
+func_8002D108 stepperGroupRemoveChild
+func_8002D1CC stepperGroupCountChildren
+func_8002D1F4 stepperGroupNumberChildren
+func_8002D220 stepperGroupGetChild
+func_8002D258 stepperGroupSetPendingIndex
+func_8002D260 stepperGroupSetKeepOpen
+func_8002D284 stepperGroupIsChildActive
+func_8002D298 stepperGroupIsClosed
+func_8002D2D0 stepperConfirm
+func_8002D2D8 stepperCancel
+func_8002D2E0 stepperFocus
+func_8002D2E8 stepperBlur
+func_8002D2F0 stepperInput
+func_8002D2F8 stepperDraw
+func_8002D300 stepperRefresh
+func_8002D308 stepperDestroy
+func_8002D360 stepperGetValue
+func_8002D36C stepperSetValue
+func_8002D374 stepperSetMin
+func_8002D37C stepperSetMax
+func_8002D384 stepperGetIndex
+
+# the static inline copies of a function, named after it
+isClosed stepperGroupIsClosedInline

@@ -21,8 +21,11 @@ A=str(version.ASM_DIR); BIN=str(version.BIN_DIR)
 src=sys.argv[1]; want=set(sys.argv[2:])
 w=os.path.join(tempfile.mkdtemp(prefix='try_match_'),'draft')
 cc1=os.environ.get('CC1',f'{BIN}/gcc-2.95.2-psx/cc1')
-cflags=os.environ.get('CFLAGS','-O2 -G0 -fsigned-char')
-mflags=os.environ.get('MASPSXFLAGS','--aspsx-version=2.86 -G0')
+# the Makefile's G0_UNITS were built with -G0, the rest with -G8
+g0_units=re.search(r'^G0_UNITS :=(.*)',open(f'{D}/Makefile').read(),re.M).group(1).split()
+g='-G0' if os.path.basename(src)[:-2] in g0_units else '-G8'
+cflags=os.environ.get('CFLAGS',f'-O2 {g} -fsigned-char')
+mflags=os.environ.get('MASPSXFLAGS',f'--aspsx-version=2.86 {g}')
 cmd=f"mipsel-linux-gnu-cpp -P -undef -D__GNUC__=2 -D__GNUC_MINOR__=95 -Dmips -D__mips__ -D__mips -Dpsx -D__psx__ -D__psx -D_PSYQ -D__EXTENSIONS__ -D_MIPSEL -D_LANGUAGE_C -DLANGUAGE_C -I{D}/include -I{D}/external/psyq_headers/psyq_lib47/include -DSKIP_ASM -DVERSION_{version.VERSION.upper()} {src} > {w}.i && {cc1} -quiet -mips1 -mcpu=3000 -mgas -msoft-float -fgnu-linker -Wall -Wno-unused {cflags} -o {w}.s {w}.i && python3 {D}/external/maspsx/maspsx.py {mflags} < {w}.s > {w}.ms.s && mipsel-linux-gnu-as -EL -march=r3000 -no-pad-sections -O1 -G0 -o {w}.o {w}.ms.s"
 r=subprocess.run(cmd,shell=True,capture_output=True,text=True)
 if r.returncode: print(r.stderr); sys.exit(1)

@@ -1,0 +1,62 @@
+# Doxygen's settings for the API documentation, run from the repository's
+# root by make docs, which writes build/docs/dirs.dox, adds the theme's
+# scripts to the header and turns HAVE_DOT off without graphviz. Only the
+# settings that differ from doxygen's defaults are here.
+
+PROJECT_NAME           = "Digimon Rumble Arena decomp"
+PROJECT_BRIEF          = "Digimon Tamers: Battle Evolution, the Japanese release (SLPS_033.57)"
+OUTPUT_DIRECTORY       = build/docs
+# the generated dirs.dox is no folder of the source's
+STRIP_FROM_PATH        = . build/docs
+STRIP_FROM_INC_PATH    = include src
+OPTIMIZE_OUTPUT_FOR_C  = YES
+JAVADOC_AUTOBRIEF      = YES
+# the descriptions as they are written ("The pads: ..."); blank would cut
+# a leading "The", "A" or "An"
+ABBREVIATE_BRIEF       = "$name is"
+TYPEDEF_HIDES_STRUCT   = YES
+NUM_PROC_THREADS       = 0
+QUIET                  = YES
+WARN_LOGFILE           = build/docs/warnings.log
+
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+# in the order they link, as in the source
+SORT_MEMBER_DOCS       = NO
+
+INPUT                  = README.md CONTRIBUTING.md TODO.md src include build/docs/dirs.dox
+FILE_PATTERNS          = *.c *.cpp *.h *.md
+RECURSIVE              = YES
+EXCLUDE                = external asm build expected disks bin permuter
+# ./: the root's README only, not src/'s
+USE_MDFILE_AS_MAINPAGE = ./README.md
+# the C's plain comments as doc comments, for doxygen only
+FILTER_PATTERNS        = "*.c=python3 tools/doxygen_filter.py" \
+                         "*.cpp=python3 tools/doxygen_filter.py" \
+                         "*.h=python3 tools/doxygen_filter.py"
+
+SOURCE_BROWSER         = YES
+REFERENCED_BY_RELATION = YES
+
+# The build's preprocessor, with no assembly; the C++ declarations, and their
+# members without the labels that give them the game's symbols
+MACRO_EXPANSION        = YES
+INCLUDE_PATH           = include external/psyq_headers/psyq_lib47/include
+PREDEFINED             = VERSION_JP=1 SKIP_ASM __cplusplus "__asm__(x)=" "__attribute__(x)="
+
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+HTML_COLORSTYLE        = LIGHT
+HTML_EXTRA_STYLESHEET  = external/doxygen-awesome-css/doxygen-awesome.css \
+                         external/doxygen-awesome-css/doxygen-awesome-sidebar-only.css \
+                         external/doxygen-awesome-css/doxygen-awesome-sidebar-only-darkmode-toggle.css
+HTML_EXTRA_FILES       = external/doxygen-awesome-css/doxygen-awesome-darkmode-toggle.js \
+                         external/doxygen-awesome-css/doxygen-awesome-paragraph-link.js
+
+HAVE_DOT               = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+MAX_DOT_GRAPH_DEPTH    = 2
+DOT_IMAGE_FORMAT       = svg
