@@ -1,7 +1,7 @@
 # TODO
 
-The executable builds byte for byte (`make compare`); 1023 of the game's 1118
-functions are C. What keeps the other 95 in assembly is listed below.
+The executable builds byte for byte (`make compare`); 1034 of the game's 1118
+functions are C. What keeps the other 84 in assembly is listed below.
 
 ## Splitting
 
@@ -40,16 +40,21 @@ functions are C. What keeps the other 95 in assembly is listed below.
   constructors and destructors of classes with a virtual base (they copy the
   vtable to the stack and fix it up) only come out of `cc1plus`, so their
   files have to be C++: `src/engine/menu/stepper.cpp` (Countdown, Stepper,
-  StepperGroup) and `src/engine/debug/system_menu.cpp` (the debug menu) are. Their headers
+  StepperGroup), `src/engine/debug/system_menu.cpp` (the debug menu) and
+  `src/engine/gfx/vram_cache.cpp` (cacheInit's variable-length array) and
+  `src/engine/game/character.cpp` and `src/engine/gfx/mesh_scene.cpp` (a
+  global `List` each, set up and taken down by g++'s static constructor and
+  destructor) are. Their headers
   declare the classes for C++ and the same objects as structs for C; the
   game's headers give their functions C linkage (`EXTERN_C_BEGIN`). g++
   writes the synthesized destructors and the inline constructors a class
   with a vtable here needs at the end of the file, the vtables after them in
   reverse order of definition, and file-scope `static const` objects last,
-  which is how `system_menu`'s order was found. Still to do: the g++ static
-  constructor/destructor `initOrDestroyCharaList` / `func_80031E04`, and the other
-  files with C++-only code (`game/sequencer`, `math/matrix`,
-  `gfx/vram_cache`).
+  which is how `system_menu`'s order was found. The inline functions of a
+  header under `#pragma interface` come out after the static constructor,
+  in the file that has `#pragma implementation` (`gfx/mesh_scene`'s
+  accessors). Still to do: the other files with C++-only code
+  (`game/sequencer`, `math/matrix`).
 - [ ] `menu/stepper.cpp` and `menu/stepper_group.c` are likely one file: Stepper's vtable
   sits in the first one's rodata while the functions g++ would have emitted
   it with (Stepper's first virtual functions, its out-of-line destructor
@@ -113,7 +118,7 @@ functions are C. What keeps the other 95 in assembly is listed below.
   one SDK function matches).
 - [x] Name the game's functions from the strings, calls and data they use
   (`tools/renames/`).
-- [ ] Name the 73 game functions left with splat's names: copies of other
+- [ ] Name the 70 game functions left with splat's names: copies of other
   functions with no caller to tell them apart, accessors of fields not
   understood yet, the g++ static constructors and destructors (their names
   come from a symbol of their file's), and the scenes and `GameState`

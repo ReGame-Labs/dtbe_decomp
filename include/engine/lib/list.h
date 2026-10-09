@@ -64,4 +64,24 @@ static inline void listInsertAfter(ListNode *pos, ListNode *node) {
     pos->next = node;
 }
 
+#ifdef __cplusplus
+/* A circular list's head in g++ code, empty from its construction on. Its
+ * destructor takes it out of its circle, as listRemove does; for a global
+ * one, these run in g++'s static constructor and destructor. (Declared ahead
+ * of listRemove, it changes how g++ inlines ~ListItem in debug/system_menu.) */
+class List : public ListNode {
+public:
+    List() {
+        next = this;
+        prev = next;
+    }
+    ~List() {
+        next->prev = prev;
+        prev->next = next;
+        next = this;
+        prev = next;
+    }
+};
+#endif
+
 #endif /* DTBE_LIB_LIST_H */

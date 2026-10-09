@@ -3,6 +3,12 @@
 
 /* The meshes of a file's TMD models, placed in a hierarchy of nodes that can be hidden. */
 
+#ifdef __cplusplus
+/* The inline functions below are written out once, in mesh_scene.cpp, at
+ * the end of its code (after its static constructor). */
+#pragma interface
+#endif
+
 #include "common.h"
 #include "engine/gfx/animator.h"
 #include "engine/gfx/camera.h"
@@ -72,8 +78,13 @@ typedef struct MeshScene {
     /* 0xAC */ Group group;                     /* of the meshes */
 } MeshScene;
 
-/* a list built and taken down by func_80031E04 */
+/* a list set up and taken down by mesh_scene's static constructor and
+ * destructor */
+#ifdef __cplusplus
+extern List D_8006437C;
+#else
 extern ListNode D_8006437C;
+#endif
 
 MeshScene *meshSceneInit(MeshScene *meshScene);
 void meshSceneDestroy(MeshScene *meshScene, s32 flags);
@@ -92,7 +103,67 @@ MATRIX *meshSceneGetLocalMatrix(MeshScene *meshScene, s32 node);
 MATRIX *meshSceneGetWorldMatrix(MeshScene *meshScene, s32 node);
 void meshSceneHideNode(MeshScene *meshScene, s32 node);
 void meshSceneShowNode(MeshScene *meshScene, s32 node);
-void func_80031E04(s32 initialize, s32 priority);
+
+#ifdef __cplusplus
+
+/* Whether the node of the link is hidden. */
+inline s32 meshSceneLinkIsHidden(MeshSceneLink *meshSceneLink) {
+    return meshSceneLink->shown ^ 1;
+}
+
+inline s32 *func_80031E68(MeshSceneLink *meshSceneLink) {
+    return meshSceneLink->unk8;
+}
+
+/* The world matrix of the node of the link. */
+inline MATRIX *meshSceneLinkGetWorldMatrix(MeshSceneLink *meshSceneLink) {
+    return meshSceneLink->world;
+}
+
+inline s32 func_80031E80(MeshSceneLink *meshSceneLink) {
+    return meshSceneLink->unk10;
+}
+
+/* Draws the meshes that are in view. */
+inline void meshSceneDraw(MeshScene *meshScene, Camera *camera) {
+    sceneObjectDrawInView(&meshScene->group.object, camera);
+}
+
+/* The same as meshSceneDraw. */
+inline void func_80031EAC(MeshScene *meshScene, Camera *camera) {
+    sceneObjectDrawInView(&meshScene->group.object, camera);
+}
+
+/* Marks the world matrices of the meshes out of date. */
+inline void meshSceneInvalidate(MeshScene *meshScene) {
+    groupInvalidate(&meshScene->group);
+}
+
+/* The links of the nodes, by node. */
+inline MeshSceneLink *meshSceneGetLinks(MeshScene *meshScene) {
+    return meshScene->links;
+}
+
+/* Adds a scene object to the group of the meshes. */
+inline void meshSceneAddChild(MeshScene *meshScene, SceneObject *child) {
+    groupAddChild(&meshScene->group, child);
+}
+
+/* Takes a node out of its list. */
+inline void meshSceneRemoveFromList(MeshScene *meshScene, ListNode *node) {
+    node->next->prev = node->prev;
+    node->prev->next = node->next;
+    node->next = node;
+    node->prev = node;
+}
+
+/* The same as meshSceneGetMesh. */
+inline Mesh *func_80031F44(MeshScene *meshScene, s32 node) {
+    return meshScene->meshes[node];
+}
+
+#else
+
 s32 meshSceneLinkIsHidden(MeshSceneLink *meshSceneLink);
 s32 *func_80031E68(MeshSceneLink *meshSceneLink);
 MATRIX *meshSceneLinkGetWorldMatrix(MeshSceneLink *meshSceneLink);
@@ -104,8 +175,8 @@ MeshSceneLink *meshSceneGetLinks(MeshScene *meshScene);
 void meshSceneAddChild(MeshScene *meshScene, SceneObject *child);
 void meshSceneRemoveFromList(MeshScene *meshScene, ListNode *node);
 Mesh *func_80031F44(MeshScene *meshScene, s32 node);
-void func_80031F58(void);
-void func_80031F7C(void);
+
+#endif
 
 EXTERN_C_END
 

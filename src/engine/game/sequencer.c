@@ -318,7 +318,12 @@ void appSequencerRunRandomFights(AppSequencer *this) {
 /* Runs a scene: loads its overlay, behind the loading screen when asked, and
  * waits for its task to end. The game keeps the path buffer and the loading
  * screen, locals of two different blocks, in one stack slot, which g++ does
- * and gcc does not; registers differ too. */
+ * and gcc does not. Under cc1plus the C matches whole: a counter declared in
+ * each for (the loading screen's counts 3 down to 0), and scene's handle
+ * stored before schedulerInsertTask. This file can't be C++ as it is laid
+ * out, though: APP_SEQUENCER_VTABLE sits in the middle of its .rodata, before
+ * appSequencerRunScenes' jump tables, where g++ writes a class's vtable at
+ * the end of the file. */
 INCLUDE_ASM("asm/jp/main/nonmatchings/game/sequencer", appSequencerRunScene);
 
 /* The update of the sequencer task: resets the game on L1 R1 Select Start.

@@ -6,20 +6,67 @@
 
 INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/vram_cache", CACHE_VTABLE);
 
-/* Cache constructor: sizes a local array from its argument after statements,
- * a g++ variable-length array. C needs an inner block, which saves and restores
- * sp; left for the C++ build. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/vram_cache", cacheInit);
+/* a texture page of VRAM is 1 << 6 by 1 << 8 pixels */
+#define TPAGE_WSHIFT 6
+#define TPAGE_HSHIFT 8
+
+/*
+ * Cache constructor: cuts the areas of VRAM at the texture pages, then the
+ * pages into cellW x cellH cells, a slot each (the last cells first), and
+ * empties the cache. The pages are kept in a variable-length array, which
+ * is why this file is C++.
+ */
+Cache *cacheInit(Cache *cache, RECT *areas, s32 count, s32 cellW, s32 cellH) {
+    u32 pageCount = 0;
+    s32 i;
+
+    cache->vtable = &CACHE_VTABLE;
+    for (i = 0; i < count; i++) {
+        pageCount += func_8002EB94(&areas[i], TPAGE_WSHIFT, TPAGE_HSHIFT);
+    }
+    RECT pages[pageCount];
+    RECT *page = pages;
+    for (i = 0; i < count; i++) {
+        page = func_8002EC00(page, areas++, TPAGE_WSHIFT, TPAGE_HSHIFT);
+    }
+    page = pages;
+    u32 slotCount = 0;
+    for (i = pageCount; i != 0; i--, page++) {
+        slotCount += (page->w / cellW) * (page->h / cellH);
+    }
+    cache->count = slotCount;
+    cache->slots = new CacheSlot[slotCount];
+    CacheSlot *slot = cache->slots + slotCount;
+    page = pages;
+    for (i = pageCount; i != 0; i--, page++) {
+        s32 cols = page->w / cellW;
+        s32 rows = page->h / cellH;
+        s32 row;
+        s32 col;
+
+        if (cols != 0 && rows != 0) {
+            for (row = 0; row < rows; row++) {
+                for (col = 0; col < cols; col++) {
+                    slot--;
+                    slot->x = page->x + col * cellW;
+                    slot->y = page->y + cellH * row;
+                }
+            }
+        }
+    }
+    cacheReset(cache);
+    return cache;
+}
 
 /* Empties the cache: links all its slots into the use list, in order, and
  * drops the tree. Each slot is linked to the one after it, kept in next. */
-void cacheReset(Cache *this) {
-    CacheSlot *slot = this->slots;
-    ListNode *prev = &this->used;
-    u32 n = this->count;
+void cacheReset(Cache *cache) {
+    CacheSlot *slot = cache->slots;
+    ListNode *prev = &cache->used;
+    u32 n = cache->count;
     CacheSlot *next = slot + 1;
 
-    this->used.next = &slot->link;
+    cache->used.next = &slot->link;
     while (n--) {
         slot->link.prev = prev;
         slot->link.next = &next->link;
@@ -27,56 +74,56 @@ void cacheReset(Cache *this) {
         slot++;
         next = slot + 1;
     }
-    this->used.prev = prev;
-    prev->next = &this->used;
-    this->root = NULL;
+    cache->used.prev = prev;
+    prev->next = &cache->used;
+    cache->root = NULL;
 }
 
-void cacheDestroy(Cache *this, s32 flags) {
-    this->vtable = &CACHE_VTABLE;
-    if (this->slots != NULL) {
-        operatorVecDelete(this->slots);
+void cacheDestroy(Cache *cache, s32 flags) {
+    cache->vtable = &CACHE_VTABLE;
+    if (cache->slots != NULL) {
+        operatorVecDelete(cache->slots);
     }
     if (flags & DESTROY_FREE) {
-        operatorDelete(this);
+        operatorDelete(cache);
     }
 }
 
 /* Loads the keys from first to last, middle first so that the tree stays
  * balanced. */
-void cacheLoadRange(Cache *this, u32 first, u32 last) {
+void cacheLoadRange(Cache *cache, u32 first, u32 last) {
     u32 middle;
 
     if (first <= last) {
         if (first == last) {
-            cacheGetSlot(this, last);
+            cacheGetSlot(cache, last);
         } else {
             middle = (first + last) >> 1;
-            cacheGetSlot(this, middle);
-            cacheLoadRange(this, first, middle - 1);
-            cacheLoadRange(this, middle + 1, last);
+            cacheGetSlot(cache, middle);
+            cacheLoadRange(cache, first, middle - 1);
+            cacheLoadRange(cache, middle + 1, last);
         }
     }
 }
 
 /* Returns the slot holding key, loading it into the least recently used slot
  * if it is not there. */
-CacheSlot *cacheGetSlot(Cache *this, u32 key) {
-    CacheSlot *slot = cacheFindSlot(this, key);
+CacheSlot *cacheGetSlot(Cache *cache, u32 key) {
+    CacheSlot *slot = cacheFindSlot(cache, key);
 
     if (slot == NULL) {
-        slot = (CacheSlot *)this->used.prev;
-        cacheRemoveSlot(this, slot);
-        cacheAddSlot(this, slot, key);
-        this->vtable->load.func((u8 *)this + this->vtable->load.delta, slot->x, slot->y, key);
+        slot = (CacheSlot *)cache->used.prev;
+        cacheRemoveSlot(cache, slot);
+        cacheAddSlot(cache, slot, key);
+        cache->vtable->load.func((u8 *)cache + cache->vtable->load.delta, slot->x, slot->y, key);
     }
-    cacheMarkSlotUsed(this, slot);
+    cacheMarkSlotUsed(cache, slot);
     return slot;
 }
 
 /* Finds the slot holding key. */
-CacheSlot *cacheFindSlot(Cache *this, u32 key) {
-    CacheSlot *node = this->root;
+CacheSlot *cacheFindSlot(Cache *cache, u32 key) {
+    CacheSlot *node = cache->root;
 
     while (node != NULL) {
         if (node->key == key) {
@@ -92,8 +139,8 @@ CacheSlot *cacheFindSlot(Cache *this, u32 key) {
 }
 
 /* Makes slot the most recently used. */
-void cacheMarkSlotUsed(Cache *this, CacheSlot *slot) {
-    ListNode *head = &this->used;
+void cacheMarkSlotUsed(Cache *cache, CacheSlot *slot) {
+    ListNode *head = &cache->used;
 
     if (head->next != &slot->link) {
         slot->link.prev->next = slot->link.next;
@@ -106,8 +153,8 @@ void cacheMarkSlotUsed(Cache *this, CacheSlot *slot) {
 }
 
 /* Adds slot to the tree under key. */
-void cacheAddSlot(Cache *this, CacheSlot *slot, u32 key) {
-    CacheSlot **link = &this->root;
+void cacheAddSlot(Cache *cache, CacheSlot *slot, u32 key) {
+    CacheSlot **link = &cache->root;
 
     slot->higher = NULL;
     slot->lower = NULL;
