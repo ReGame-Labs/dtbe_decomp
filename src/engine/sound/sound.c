@@ -12,7 +12,7 @@
 #include "vtable.h"
 
 /* Sets the reverb type; any type but 0 turns reverb on and sets its depth
- * REVERB_DEPTH_DELAY frames later. 0 on success, else negative. */
+ * SND_REVERB_DEPTH_DELAY frames later. 0 on success, else negative. */
 s32 setReverb(s32 type, s16 depthLeft, s16 depthRight) {
     if (SsUtSetReverbType(type) == -1) {
         return -1;
@@ -28,7 +28,7 @@ s32 setReverb(s32 type, s16 depthLeft, s16 depthRight) {
     if (func_80047CF0(-2) == 1) {
         func_800479E0(SPU_ON);
         SsUtReverbOn();
-        SOUND_SYSTEM.reverbDelay = REVERB_DEPTH_DELAY;
+        SOUND_SYSTEM.reverbDelay = SND_REVERB_DEPTH_DELAY;
         SOUND_SYSTEM.reverbDepthLeft = depthLeft;
         SOUND_SYSTEM.reverbDepthRight = depthRight;
         SOUND_SYSTEM.reverbStart = VSync(-1);
@@ -90,8 +90,8 @@ void startSoundSystem(void *memory, s16 sepMax, s16 seqMax) {
     SsUtSetReverbType(SS_REV_TYPE_OFF);
     SsSetSerialAttr(SS_SERIAL_A, SS_MIX, SS_SON);
     attr.mask = SPU_COMMON_MVOLL | SPU_COMMON_MVOLR;
-    attr.mvol.left = SPU_VOLUME_MAX;
-    attr.mvol.right = SPU_VOLUME_MAX;
+    attr.mvol.left = SND_SPU_VOLUME_MAX;
+    attr.mvol.right = SND_SPU_VOLUME_MAX;
     SpuSetCommonAttr(&attr);
 }
 
@@ -644,7 +644,7 @@ s32 transferVabBody(u16 vab, u8 *data) {
 /* Builds (initialize) or destroys the handle table of the playing sound
  * effects: g++'s __static_initialization_and_destruction_0 of this file. */
 void initOrDestroySoundEffectHandles(s32 initialize, s32 priority) {
-    if (priority == 0xFFFF) {
+    if (priority == INIT_PRIORITY_DEFAULT) {
         if (initialize) {
             handleTableInit(&SOUND_EFFECT_HANDLES, SND_HANDLE_CAPACITY);
             return;
@@ -671,11 +671,11 @@ void freeSoundEffectHandle(u32 handle) {
 /* Builds the handle table of the playing sound effects: the file's global
  * constructor. */
 void initSoundEffectHandles(void) {
-    initOrDestroySoundEffectHandles(1, 0xFFFF);
+    initOrDestroySoundEffectHandles(1, INIT_PRIORITY_DEFAULT);
 }
 
 /* Destroys the handle table of the playing sound effects: the file's global
  * destructor. */
 void destroySoundEffectHandles(void) {
-    initOrDestroySoundEffectHandles(0, 0xFFFF);
+    initOrDestroySoundEffectHandles(0, INIT_PRIORITY_DEFAULT);
 }

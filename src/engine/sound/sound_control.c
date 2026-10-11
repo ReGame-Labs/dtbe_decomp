@@ -145,13 +145,13 @@ ListNode *listInit(ListNode *this) {
     return this;
 }
 
-/* Deletes the files of list that are not resident. */
-void listUnloadFiles(ListNode *list) {
-    ListNode *node = list->next;
+/* Deletes the files of the list that are not resident. */
+void soundFileListUnloadAll(ListNode *this) {
+    ListNode *node = this->next;
     ListNode *next;
     SoundFile *file;
 
-    if (list != node) {
+    if (this != node) {
         do {
             /* the link is the first member of the file */
             file = (SoundFile *)node;
@@ -160,51 +160,51 @@ void listUnloadFiles(ListNode *list) {
                 file->vtable->destroy.func((u8 *)file + file->vtable->destroy.delta, DESTROY_DELETE);
             }
             node = next;
-        } while (list != node);
+        } while (this != node);
     }
 }
 
-/* Adds node at the end of list. */
-void listPushBack(ListNode *list, ListNode *node) {
-    node->next = list;
-    node->prev = list->prev;
-    list->prev->next = node;
-    list->prev = node;
+/* Adds node at the end of the list. */
+void listPushBack(ListNode *this, ListNode *node) {
+    node->next = this;
+    node->prev = this->prev;
+    this->prev->next = node;
+    this->prev = node;
 }
 
-/* Counts the nodes of list. */
-s32 listCount(ListNode *list) {
-    ListNode *node = list->next;
+/* Counts the nodes of the list. */
+s32 listCount(ListNode *this) {
+    ListNode *node = this->next;
     s32 count = 0;
 
-    if (list != node) {
+    if (this != node) {
         do {
             node = node->next;
             count++;
-        } while (list != node);
+        } while (this != node);
     }
     return count;
 }
 
-/* Finds the file of list with the id, or NULL. */
-SoundFile *listFindFile(ListNode *list, s32 id) {
-    ListNode *node = list->next;
+/* Finds the file of the list with the id, or NULL. */
+SoundFile *soundFileListFind(ListNode *this, s32 id) {
+    ListNode *node = this->next;
 
-    if (list != node) {
+    if (this != node) {
         do {
             /* the link is the first member of the file */
             if (((SoundFile *)node)->id == id) {
                 return (SoundFile *)node;
             }
             node = node->next;
-        } while (list != node);
+        } while (this != node);
     }
     return NULL;
 }
 
-/* Deletes the file of list with the id unless it is resident. */
-void listUnloadFile(ListNode *list, s32 id) {
-    SoundFile *file = listFindFile(list, id);
+/* Deletes the file of the list with the id unless it is resident. */
+void soundFileListUnload(ListNode *this, s32 id) {
+    SoundFile *file = soundFileListFind(this, id);
 
     if (file != NULL && !file->resident) {
         file->vtable->destroy.func((u8 *)file + file->vtable->destroy.delta, DESTROY_DELETE);
@@ -214,7 +214,7 @@ void listUnloadFile(ListNode *list, s32 id) {
 /* Builds the sound task. */
 SoundControl *soundControlInit(SoundControl *this) {
     /* SoundControl starts with a Task (see engine/sound/sound_control.h) */
-    taskInit((Task *)this, 0x1000, "Sound Control");
+    taskInit((Task *)this, SOUND_CONTROL_PRIORITY, "Sound Control");
     this->vtable = &SOUND_CONTROL_VTABLE;
     listInit(&this->vabs);
     listInit(&this->seps);
@@ -252,9 +252,9 @@ SoundFile *soundControlLoadVab(SoundControl *this, s32 id) {
     if (id < 0) {
         this->pauseCount = 0;
         setSoundEffectsPaused(0);
-        listUnloadFile(&this->vabs, -id);
+        soundFileListUnload(&this->vabs, -id);
     } else {
-        file = listFindFile(&this->vabs, id);
+        file = soundFileListFind(&this->vabs, id);
         if (file != NULL) {
             return file;
         }
@@ -273,9 +273,9 @@ SoundFile *soundControlLoadSep(SoundControl *this, s32 id) {
     SoundFile *file = NULL;
 
     if (id < 0) {
-        listUnloadFile(&this->seps, -id);
+        soundFileListUnload(&this->seps, -id);
     } else {
-        file = listFindFile(&this->seps, id);
+        file = soundFileListFind(&this->seps, id);
         if (file != NULL) {
             return file;
         }
@@ -292,12 +292,12 @@ SoundFile *soundControlLoadSep(SoundControl *this, s32 id) {
 void soundControlUnloadVabs(SoundControl *this) {
     this->pauseCount = 0;
     setSoundEffectsPaused(0);
-    listUnloadFiles(&this->vabs);
+    soundFileListUnloadAll(&this->vabs);
 }
 
 /* Unloads the sequences that are not resident. */
 void soundControlUnloadSeps(SoundControl *this) {
-    listUnloadFiles(&this->seps);
+    soundFileListUnloadAll(&this->seps);
 }
 
 /* The sound task's update: pauses or resumes the sound effects, runs the

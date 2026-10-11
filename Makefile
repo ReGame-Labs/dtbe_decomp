@@ -5,6 +5,10 @@
 # A rule whose check fails deletes what it made, so that make runs it again
 .DELETE_ON_ERROR:
 
+# a recipe's pipe fails when any of its commands does (iconv in the asm rule)
+SHELL := /bin/bash
+.SHELLFLAGS := -o pipefail -c
+
 -include local.mk
 
 # The version of the game to build. Only the Japanese release exists.
@@ -73,31 +77,108 @@ LDFLAGS := -nostdlib --no-check-sections -Map $(MAP) \
 
 C_SRC := $(shell find src -name '*.c' 2> /dev/null)
 CXX_SRC := $(shell find src -name '*.cpp' 2> /dev/null)
-# splat's full disassembly of each C and C++ file is objdiff's target, not
-# part of the build; src/engine holds the executable's (asm/<version>/main)
-TARGET_ASM := $(C_SRC:src/engine/%.c=$(ASM_DIR)/main/%.s) $(CXX_SRC:src/engine/%.cpp=$(ASM_DIR)/main/%.s)
-ASM_SRC := $(filter-out $(TARGET_ASM),$(shell find $(ASM_DIR) -name '*.s' \
-	   -not -path '*/nonmatchings/*' -not -path '*/matchings/*' 2> /dev/null))
+
+# The code overlays, the files of A.VFS's bin/: the executable loads
+# movie.bin, title.bin and game.bin at OVERLAY_MEMORY (include/overlay.h),
+# and game.bin loads the battle's stage, st<NN>.bin, after itself. Each one
+# has its own splat config ($(CONFIG_DIR)/<name>.yaml), symbols
+# ($(CONFIG_DIR)/symbols_<name>.txt), sources (its config's src_path, and
+# $(ASM_DIR)/<name>/) and output ($(BUILDDIR)/bin/<name>.bin), checked by
+# $(CONFIG_DIR)/overlays.sha1.
+STAGES := st00 st01 st02 st03 st04 st05 st06 st07 st08 st09
+OVERLAYS := movie title game $(STAGES)
+# a stage links against game.bin's symbols too
+$(foreach s,$(STAGES),$(eval OVL_PARENT_$(s) := game))
+BINARIES := main $(OVERLAYS)
+
+# The overlays' configs read them from A.VFS unpacked (tools/unpack_vfs.py),
+# inflated
+VFS := disks/$(VERSION)/A.VFS
+ASSETS_DIR := assets/$(VERSION)
+VFS_UNPACKED := $(ASSETS_DIR)/.unpacked
+$(VFS_UNPACKED): $(VFS) tools/unpack_vfs.py
+	$(PYTHON) tools/unpack_vfs.py $(VFS) $(ASSETS_DIR)
+	@touch $@
+
+# Each binary's sources are under its config's src_path (src/engine for
+# main), and splat's full disassembly of each of its C and C++ files, under
+# $(ASM_DIR)/<binary>/, is objdiff's target, not part of the build
+$(foreach b,$(BINARIES),$(eval SRC_DIR_$(b) := $(shell sed -n 's/^ *src_path: *//p' $(CONFIG_DIR)/$(b).yaml)))
+# (a binary's files are those under its folder but not under another
+# binary's folder inside it: the stages' are inside the battle's)
+own_files = $(filter-out $(foreach c,$(filter-out $(1),$(BINARIES)),\
+	$(if $(filter $(SRC_DIR_$(1))/%,$(SRC_DIR_$(c))),$(SRC_DIR_$(c))/%)),$(filter $(SRC_DIR_$(1))/%,$(2)))
+$(foreach b,$(BINARIES),$(eval $(b)_C_SRC := $(call own_files,$(b),$(C_SRC))))
+$(foreach b,$(BINARIES),$(eval $(b)_CXX_SRC := $(call own_files,$(b),$(CXX_SRC))))
+$(foreach b,$(BINARIES),$(eval $(b)_TARGET_ASM := \
+	$(patsubst $(SRC_DIR_$(b))/%.c,$(ASM_DIR)/$(b)/%.s,$($(b)_C_SRC)) \
+	$(patsubst $(SRC_DIR_$(b))/%.cpp,$(ASM_DIR)/$(b)/%.s,$($(b)_CXX_SRC))))
+TARGET_ASM := $(foreach b,$(BINARIES),$($(b)_TARGET_ASM))
+$(foreach b,$(BINARIES),$(eval $(b)_ASM_SRC := $(filter-out $(TARGET_ASM),\
+	$(shell find $(ASM_DIR)/$(b) -name '*.s' -not -path '*/nonmatchings/*' -not -path '*/matchings/*' 2> /dev/null))))
+$(foreach b,$(BINARIES),$(eval $(b)_OBJ := $($(b)_C_SRC:%.c=$(BUILDDIR)/%.c.o) \
+	$($(b)_CXX_SRC:%.cpp=$(BUILDDIR)/%.cpp.o) $($(b)_ASM_SRC:%.s=$(BUILDDIR)/%.s.o)))
 
 C_OBJ := $(C_SRC:%.c=$(BUILDDIR)/%.c.o) $(CXX_SRC:%.cpp=$(BUILDDIR)/%.cpp.o)
-ASM_OBJ := $(ASM_SRC:%.s=$(BUILDDIR)/%.s.o)
 TARGET_OBJ := $(TARGET_ASM:%.s=$(BUILDDIR)/%.s.o)
-OBJ := $(C_OBJ) $(ASM_OBJ)
+OBJ := $(main_OBJ)
 
-all: $(EXE)
+# The executable's own symbols, for the overlays to link against: all but
+# those it names in the overlays' memory, 0x800643E0-0x800DA320, where every
+# overlay has its own
+NM := $(TOOLCHAIN)nm
+MAIN_SYMS := $(BUILDDIR)/main_syms.ld
+$(MAIN_SYMS): $(ELF)
+	$(NM) $< | awk '$$2 ~ /^[TDRBSG]$$/ && ($$1 < "800643e0" || $$1 >= "800da320") \
+		{ printf "%s = 0x%s;\n", $$3, $$1 }' > $@
+
+# An overlay loaded after another one, its parent (OVL_PARENT_<name>), also
+# links against the parent's own symbols
+$(BUILDDIR)/%_syms.ld: $(BUILDDIR)/bin/%.elf
+	$(NM) $< | awk '$$2 ~ /^[TDRBSG]$$/ { printf "%s = 0x%s;\n", $$3, $$1 }' > $@
+
+# An overlay links against the executable's symbols and its parent's, and
+# takes the rest of what it uses from splat's symbol files
+# (tools/link_imports.py)
+define OVERLAY_template
+$$(GENDIR)/$(1).ld: .EXTRA_PREREQS :=
+$$(GENDIR)/$(1).ld: $$(CONFIG_DIR)/$(1).yaml $$(CONFIG_DIR)/symbols.txt $$(CONFIG_DIR)/symbols_$(1).txt \
+		$$(if $$(OVL_PARENT_$(1)),$$(CONFIG_DIR)/symbols_$$(OVL_PARENT_$(1)).txt) $$(VFS_UNPACKED)
+	$$(SPLAT) $$< --disassemble-all --make-full-disasm-for-code
+	@touch $$@
+
+$(1)_SYMS := $$(MAIN_SYMS) $$(if $$(OVL_PARENT_$(1)),$$(BUILDDIR)/$$(OVL_PARENT_$(1))_syms.ld)
+$(1)_AUTO_SYMS := $$(BUILDDIR)/$(1)_auto_syms.ld
+$$($(1)_AUTO_SYMS): $$($(1)_OBJ) $$(GENDIR)/$(1).ld $$($(1)_SYMS) tools/link_imports.py
+	$$(PYTHON) tools/link_imports.py $$@ $$($(1)_OBJ) \
+		--from $$(GENDIR)/undefined_syms_auto_$(1).txt $$(GENDIR)/undefined_funcs_auto_$(1).txt \
+		--linked $$($(1)_SYMS)
+
+$$(BUILDDIR)/bin/$(1).elf: $$($(1)_OBJ) $$(GENDIR)/$(1).ld $$($(1)_SYMS) $$($(1)_AUTO_SYMS)
+	@mkdir -p $$(dir $$@)
+	$$(LD) -nostdlib --no-check-sections -Map $$(BUILDDIR)/bin/$(1).map \
+		-T $$(GENDIR)/$(1).ld $$(addprefix -T ,$$($(1)_SYMS) $$($(1)_AUTO_SYMS)) -o $$@
+
+$$(BUILDDIR)/bin/$(1).bin: $$(BUILDDIR)/bin/$(1).elf
+	$$(OBJCOPY) -O binary $$< $$@
+endef
+$(foreach o,$(OVERLAYS),$(eval $(call OVERLAY_template,$(o))))
+OVL_BIN := $(OVERLAYS:%=$(BUILDDIR)/bin/%.bin)
+
+all: $(EXE) $(OVL_BIN)
 
 # Only rerun splat when its own inputs change, never for Makefile edits
 $(GENDIR)/main.ld: .EXTRA_PREREQS :=
-$(GENDIR)/main.ld: $(CONFIG_DIR)/main.yaml $(CONFIG_DIR)/symbols.txt
+$(GENDIR)/main.ld: $(CONFIG_DIR)/main.yaml $(CONFIG_DIR)/symbols.txt $(CONFIG_DIR)/symbols_main.txt
 	$(SPLAT) $< --disassemble-all --make-full-disasm-for-code
 
-generate: $(GENDIR)/main.ld
+generate: $(GENDIR)/main.ld $(OVERLAYS:%=$(GENDIR)/%.ld)
 
 regenerate: reset
 	$(MAKE) generate
 
-compare: $(EXE)
-	@sha1sum -c $(CONFIG_DIR)/$(EXE_NAME).sha1
+compare: $(EXE) $(OVL_BIN)
+	@sha1sum -c $(CONFIG_DIR)/$(EXE_NAME).sha1 $(CONFIG_DIR)/overlays.sha1
 
 $(EXE): $(ELF)
 	$(OBJCOPY) -O binary $< $@
@@ -130,10 +211,12 @@ G0_OBJ := $(G0_UNITS:%=$(BUILDDIR)/src/engine/%.c.o)
 $(G0_OBJ): CC1FLAGS := $(subst -G8,-G0,$(CC1FLAGS))
 $(G0_OBJ): MASPSXFLAGS := $(subst -G8,-G0,$(MASPSXFLAGS))
 
-# gas aligns these sections to 16 bytes, psylink packed them to 4
+# splat writes the game's Shift JIS text as UTF-8 (string_encoding), which
+# gas would keep: the assembly is assembled in Shift JIS. gas aligns these
+# sections to 16 bytes, psylink packed them to 4.
 $(BUILDDIR)/%.s.o: %.s
 	@mkdir -p $(dir $@)
-	$(AS) $(ASFLAGS) -o $@ $<
+	iconv -f UTF-8 -t SHIFT-JIS $< | $(AS) $(ASFLAGS) -o $@
 	@$(OBJCOPY) --set-section-alignment .text=4 \
 				--set-section-alignment .rodata=4 \
 				--set-section-alignment .data=4 \

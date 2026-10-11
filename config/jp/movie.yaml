@@ -1,0 +1,54 @@
+name: movie
+sha1: 02634ab309b547847dab9854b6100932ceccbca9
+options:
+  basename: movie
+  target_path: assets/jp/bin/movie.bin
+  base_path: ../..
+  platform: psx
+  compiler: GCC
+
+  asm_path: asm/jp/movie
+  src_path: src/movie
+  build_path: build/jp
+
+  ld_script_path: build/jp/generated/movie.ld
+
+  global_vram_start: 0x80000000
+  global_vram_end: 0x80200000
+
+  find_file_boundaries: True
+  gp_value: 0x8006414C
+
+  generate_asm_macros_files: False
+
+  section_order: [".rodata", ".text", ".data", ".bss"]
+
+  symbol_addrs_path:
+    - config/jp/symbols.txt
+    - config/jp/symbols_movie.txt
+
+  undefined_funcs_auto_path: build/jp/generated/undefined_funcs_auto_movie.txt
+  undefined_syms_auto_path: build/jp/generated/undefined_syms_auto_movie.txt
+
+  string_encoding: SHIFT-JIS
+  data_string_encoding: SHIFT-JIS
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+  ld_bss_is_noload: True
+
+  migrate_rodata_to_functions: True
+  create_data_pads: False
+
+segments:
+  - name: movie
+    type: code
+    start: 0x0
+    vram: 0x800643E0
+    align: 4
+    subalign: 4
+    subsegments:
+      - [0x0, .rodata, movie]
+      - [0xB4, c, movie]
+      - [0x19A4, data, movie]
+  - [0x2944]

@@ -1,0 +1,1 @@
+// st03.bin's own names (config/jp/st03.yaml)

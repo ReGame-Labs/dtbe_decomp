@@ -1,0 +1,57 @@
+name: st06
+sha1: 1580dd8c3b2df14079cb1149e4a0507ffe11c360
+options:
+  basename: st06
+  target_path: assets/jp/bin/st06.bin
+  base_path: ../..
+  platform: psx
+  compiler: GCC
+
+  asm_path: asm/jp/st06
+  src_path: src/battle/stages/st06
+  build_path: build/jp
+
+  ld_script_path: build/jp/generated/st06.ld
+
+  global_vram_start: 0x80000000
+  global_vram_end: 0x80200000
+
+  find_file_boundaries: True
+  gp_value: 0x8006414C
+
+  generate_asm_macros_files: False
+
+  section_order: [".rodata", ".text", ".data", ".bss"]
+
+  symbol_addrs_path:
+    - config/jp/symbols.txt
+    - config/jp/symbols_game.txt
+    - config/jp/symbols_st06.txt
+
+  undefined_funcs_auto_path: build/jp/generated/undefined_funcs_auto_st06.txt
+  undefined_syms_auto_path: build/jp/generated/undefined_syms_auto_st06.txt
+
+  string_encoding: SHIFT-JIS
+  data_string_encoding: SHIFT-JIS
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+  ld_bss_is_noload: True
+
+  # the whole overlay is one file until it is split into its modules, so its
+  # .rodata stays one piece in its order, not spread over the functions
+  migrate_rodata_to_functions: False
+  create_data_pads: False
+
+segments:
+  - name: st06
+    type: code
+    start: 0x0
+    vram: 0x800D3820
+    align: 4
+    subalign: 4
+    subsegments:
+      - [0x0, rodata, st06]
+      - [0x3F0, c, st06]
+      - [0x233C, data, st06]
+  - [0x234C]

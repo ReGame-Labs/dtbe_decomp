@@ -1,0 +1,1 @@
+// st06.bin's own names (config/jp/st06.yaml)

@@ -38,7 +38,7 @@ jobs:
 
     - run: |
         mkdir -p "disks/$VERSION"
-        cp "dependencies/$VERSION/$EXE" "disks/$VERSION/"
+        cp "dependencies/$VERSION/$EXE" "dependencies/$VERSION/A.VFS" "disks/$VERSION/"
         rm -rf dependencies
       env:
         EXE: ${{ matrix.exe }}

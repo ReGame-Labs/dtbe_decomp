@@ -61,6 +61,9 @@ typedef struct SoundControl {
     /* 0x5C */ s32 pauseCount;
 } SoundControl;
 
+/* the priority of the sound task */
+#define SOUND_CONTROL_PRIORITY 0x1000
+
 /* SoundControl.volume: the full volume, and the most a fade goes to */
 #define SOUND_VOLUME_FULL 0x7F
 #define SOUND_VOLUME_NORMAL 0x50
@@ -99,11 +102,11 @@ SoundFile *soundFileInitVab(SoundFile *soundFile, s32 id);
 void soundFileDestroyVab(SoundFile *soundFile, s32 flags);
 void soundFileSetVabData(SoundFile *soundFile, void *data);
 ListNode *listInit(ListNode *listNode);
-void listUnloadFiles(ListNode *list);
+void soundFileListUnloadAll(ListNode *list);
 void listPushBack(ListNode *list, ListNode *node);
 s32 listCount(ListNode *list);
-SoundFile *listFindFile(ListNode *list, s32 id);
-void listUnloadFile(ListNode *list, s32 id);
+SoundFile *soundFileListFind(ListNode *list, s32 id);
+void soundFileListUnload(ListNode *list, s32 id);
 SoundControl *soundControlInit(SoundControl *soundControl);
 void soundControlStart(SoundControl *soundControl);
 SoundFile *soundControlLoadVab(SoundControl *soundControl, s32 id);

@@ -821,11 +821,11 @@ soundFileInitVab = 0x8001B778; // type:func
 soundFileDestroyVab = 0x8001B7EC; // type:func
 soundFileSetVabData = 0x8001B838; // type:func
 listInit = 0x8001B898; // type:func
-listUnloadFiles = 0x8001B8A8; // type:func
+soundFileListUnloadAll = 0x8001B8A8; // type:func
 listPushBack = 0x8001B928; // type:func
 listCount = 0x8001B94C; // type:func
-listFindFile = 0x8001B974; // type:func
-listUnloadFile = 0x8001B9B4; // type:func
+soundFileListFind = 0x8001B974; // type:func
+soundFileListUnload = 0x8001B9B4; // type:func
 soundControlInit = 0x8001BA0C; // type:func
 soundControlStart = 0x8001BA70; // type:func
 soundControlLoadVab = 0x8001BB48; // type:func
@@ -1232,7 +1232,6 @@ STR_SHRINE = 0x80064294;
 STR_ICEBERG = 0x8006429C;
 STR_VOLCANO = 0x800642A4;
 STR_BOSS = 0x800642AC;
-OVERLAY_MEMORY = 0x800643E0;
 
 // src/engine/lib/
 FULL_WIDTH_CHARS = 0x80019548;

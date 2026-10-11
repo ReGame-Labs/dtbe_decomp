@@ -1,0 +1,1 @@
+// st01.bin's own names (config/jp/st01.yaml)

@@ -117,10 +117,10 @@ typedef struct {
 #define SND_VOICE_MAX 24
 
 /* the SPU's full volume */
-#define SPU_VOLUME_MAX 0x3FFF
+#define SND_SPU_VOLUME_MAX 0x3FFF
 
 /* frames from turning reverb on to setting its depth: 3 seconds */
-#define REVERB_DEPTH_DELAY 180
+#define SND_REVERB_DEPTH_DELAY 180
 
 /* a node of the pool at SoundSystem 0x358 */
 typedef struct {

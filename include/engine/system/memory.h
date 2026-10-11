@@ -18,7 +18,7 @@ extern char *OUT_OF_MEMORY_FORMAT[];
 /* the display die shows its message on */
 extern DISPENV DIE_DISPENV;
 
-void die(const char *fmt, ...);
+void die(const char *format, ...);
 
 void debugHeapInit(void *base, s32 size);
 void *debugHeapAlloc(s32 size);

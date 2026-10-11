@@ -2,7 +2,9 @@
 
 | Version | Code | Data | Functions |
 |---|---|---|---|
-| 🇯🇵 Japan (`SLPS_033.57`) | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=code&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=data&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=functions&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp) |
+| 🇯🇵 Japan, the whole game | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=code&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=data&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=functions&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp) |
+| the executable (`SLPS_033.57`) | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=code&category=executable&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=executable) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=data&category=executable&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=executable) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=functions&category=executable&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=executable) |
+| the code overlays (`A.VFS`'s `/bin/`) | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=code&category=overlays&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=overlays) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=data&category=overlays&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=overlays) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=functions&category=overlays&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=overlays) |
 
 [![Build](https://github.com/ReGame-Labs/dtbe_decomp/actions/workflows/build.yaml/badge.svg)](https://github.com/ReGame-Labs/dtbe_decomp/actions/workflows/build.yaml)
 [![Platform](https://img.shields.io/badge/platform-PlayStation-003791)](#the-executable)
@@ -12,17 +14,18 @@
 A work-in-progress matching decompilation of **Digimon Rumble Arena** for
 the PlayStation, from its Japanese release, *Digimon Tamers: Battle
 Evolution* (デジモンテイマーズ バトルエボリューション): C source that compiles
-back into a byte-identical copy of the game's executable.
+back into a byte-identical copy of the game's executable and code overlays.
 
 This repository does not contain any game data. You need your own copy of the
 game to build it.
 
 ## Status
 
-The build gives back the original executable byte for byte. Most of the
-game's functions are C already; the rest are still splat's assembly behind
-`INCLUDE_ASM`, and decompiling them one by one, keeping the match, is the
-work. Progress is measured by
+The build gives back the original executable and its 13 code overlays byte
+for byte. Most of the executable's functions are C already, the overlays'
+are mostly still splat's assembly behind `INCLUDE_ASM`, and decompiling them
+one by one, keeping the match, is the work. The progress counts the whole
+game, executable and overlays, with each part in its own category. Progress is measured by
 [objdiff](https://github.com/encounter/objdiff) and tracked on
 [decomp.dev](https://decomp.dev/ReGame-Labs/dtbe_decomp).
 
@@ -49,6 +52,21 @@ The rest of the game, its code overlays (`/bin/<name>.bin`) included, is in
 the disc's `A.VFS` archive; the movies are in `A.STR` and the sound in
 `A.XAP`.
 
+## The overlays
+
+The code overlays are `A.VFS`'s `/bin/<name>.bin`, zlib-compressed in the
+archive; the build splits and checks them inflated. Each one starts with its
+`.rodata`, and has its own splat config (`config/jp/<name>.yaml`) and symbols
+(`config/jp/symbols_<name>.txt`); it links against the executable's symbols,
+and a stage against `game.bin`'s too.
+
+| File | Loads at | Size | What | Source |
+|---|---|---|---|---|
+| `movie.bin` | `0x800643E0` (`OVERLAY_MEMORY`) | 10 KB | the movie player (MDEC, `/a.str`) | `src/movie/` |
+| `title.bin` | `0x800643E0` | 92 KB | the boot logo, title screen and menus: main menu, character and map select, ranking, credits, options | `src/title/` |
+| `game.bin` | `0x800643E0` | 445 KB | the battle ("game main process") | `src/battle/` |
+| `st00.bin`-`st09.bin` | `0x800D3820`, after `game.bin` | 4-27 KB | the battle's stage, which `game.bin` loads (`/bin/st%02d.bin`) | `src/battle/stages/` |
+
 ## Building
 
 On Linux (Ubuntu 24.04 or similar):
@@ -68,14 +86,11 @@ Extract the game's files from your disc image into `disks/jp`:
 python3 tools/extract_disc.py "DigimonTamers - Battle Evolution (Japan).bin" disks/jp
 ```
 
-To look at the overlays and the game's data, unpack `A.VFS` into `assets/jp`
-(not needed to build):
+The build unpacks `A.VFS` into `assets/jp` itself (`tools/unpack_vfs.py`):
+the overlays are split from there, and the game's data is there to look at.
 
-```sh
-python3 tools/unpack_vfs.py disks/jp/A.VFS assets/jp
-```
-
-Then split the executable, build it and check it against the original:
+Then split the executable and the overlays, build them and check them
+against the originals:
 
 ```sh
 make generate
@@ -111,5 +126,4 @@ are: the comment above a function, a type or a global is its description.
 
 Pick a function behind `INCLUDE_ASM` in `src/engine/`, write it as C, and check
 that `make compare` still passes. Only byte-identical matches go in.
-[CONTRIBUTING](CONTRIBUTING.md) describes the tools and the rules, and the
-[TODO](TODO.md) lists what comes next.
+[CONTRIBUTING](CONTRIBUTING.md) describes the tools and the rules.

@@ -64,10 +64,20 @@ typedef struct SprtColorWords {
 #define TEXT_PRINTER_COLOR 0x808080
 #define TEXT_PRINTER_SHADOW_COLOR 0x404040
 
+/* the texture page of the characters: 4-bit, at (960, 256), with the 8 by 16
+ * font and the FontCache's cells */
+#define TEXT_TPAGE getTPage(0, 0, 960, 256)
+
 /* the sizes of the characters */
 #define TEXT_ASCII_WIDTH 8
 #define TEXT_KANJI_WIDTH 16
 #define TEXT_LINE_HEIGHT 16
+
+/* the 8 by 16 font, which TextPrinter and Console draw with: the characters
+ * from ' ' on, 32 to a row of the page, and its palette */
+#define TEXT_ASCII_FIRST ' '
+#define TEXT_ASCII_PER_ROW 32
+#define TEXT_ASCII_CLUT getClut(960, 320)
 
 /* the Shift JIS full-width space, and the first two-byte code */
 #define SJIS_SPACE 0x8140

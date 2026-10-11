@@ -4,14 +4,9 @@
 #include "engine/gfx/prim_buffer.h"
 #include "engine/lib/format.h"
 #include "engine/system/memory.h"
+#include "engine/text/font.h"
 #include "vtable.h"
 
-/* a Console's font: 8x16 glyphs from ' ' on, 32 to a row, 4-bit, with its clut below it */
-#define CONSOLE_GLYPH_WIDTH 8
-#define CONSOLE_GLYPH_HEIGHT 16
-#define CONSOLE_FONT_COLUMNS 32
-#define CONSOLE_FONT_TPAGE getTPage(0, 0, 960, 256)
-#define CONSOLE_FONT_CLUT getClut(960, 320)
 /* the color that draws the font as it is */
 #define CONSOLE_NEUTRAL 0x80
 /* a tab moves to the next multiple of 4 columns */
@@ -164,50 +159,50 @@ void consoleDraw(Console *this, u_long *ot) {
         for (c = *s++; c != '\0'; c = *s++) {
             if (x > CONSOLE_WRAP_X) {
                 x = 0;
-                y += CONSOLE_GLYPH_HEIGHT;
+                y += TEXT_LINE_HEIGHT;
             }
             if (c == ' ') {
-                x += CONSOLE_GLYPH_WIDTH;
+                x += TEXT_ASCII_WIDTH;
             } else if (c == '\t') {
-                x /= CONSOLE_GLYPH_WIDTH;
+                x /= TEXT_ASCII_WIDTH;
                 x = (x + CONSOLE_TAB_COLUMNS) & ~(CONSOLE_TAB_COLUMNS - 1);
-                x *= CONSOLE_GLYPH_WIDTH;
+                x *= TEXT_ASCII_WIDTH;
             } else if (c == '\n') {
                 x = 0;
-                y += CONSOLE_GLYPH_HEIGHT;
+                y += TEXT_LINE_HEIGHT;
             } else if (c == '<') {
                 s = consoleTextReadLocate(this->text, s);
                 if (this->text->locate[0] >= 0) {
-                    x = this->text->locate[0] * CONSOLE_GLYPH_WIDTH;
+                    x = this->text->locate[0] * TEXT_ASCII_WIDTH;
                 }
                 if (this->text->locate[1] >= 0) {
-                    y = this->text->locate[1] * CONSOLE_GLYPH_HEIGHT;
+                    y = this->text->locate[1] * TEXT_LINE_HEIGHT;
                 }
                 if (*s == '>') {
                     s++;
                 }
             } else if (c == CONSOLE_LOCATE) {
-                x = *s++ * CONSOLE_GLYPH_WIDTH;
-                y = *s++ * CONSOLE_GLYPH_HEIGHT;
+                x = *s++ * TEXT_ASCII_WIDTH;
+                y = *s++ * TEXT_LINE_HEIGHT;
             } else if (c == CONSOLE_COLOR) {
                 r = *s++;
                 g = *s++;
                 b = *s++;
             } else {
                 /* the glyph's column and row in the font */
-                c -= ' ';
-                u = (c % CONSOLE_FONT_COLUMNS) * CONSOLE_GLYPH_WIDTH;
-                v = c / CONSOLE_FONT_COLUMNS;
+                c -= TEXT_ASCII_FIRST;
+                u = (c % TEXT_ASCII_PER_ROW) * TEXT_ASCII_WIDTH;
+                v = c / TEXT_ASCII_PER_ROW;
                 /* allocSprt's SPRT, filled a word at a time */
                 sprt = (SprtWords *)allocSprt();
                 sprt->r0 = r;
                 sprt->g0 = g;
                 sprt->b0 = b;
-                u = u | (CONSOLE_FONT_CLUT << 16);
+                u = u | (TEXT_ASCII_CLUT << 16);
                 screenY = top + y;
                 sprt->xy = (screenY << 16) | (left + x);
-                sprt->wh = (CONSOLE_GLYPH_HEIGHT << 16) | CONSOLE_GLYPH_WIDTH;
-                uvClut = ((v * CONSOLE_GLYPH_HEIGHT) << 8) | u;
+                sprt->wh = (TEXT_LINE_HEIGHT << 16) | TEXT_ASCII_WIDTH;
+                uvClut = ((v * TEXT_LINE_HEIGHT) << 8) | u;
                 sprt->uvClut = uvClut;
                 AddPrim(ot, sprt);
                 sprt = (SprtWords *)allocSprt();
@@ -216,12 +211,12 @@ void consoleDraw(Console *this, u_long *ot) {
                 sprt->b0 = 0;
                 sprt->xy = ((screenY + 1) << 16) | (left + x + 1);
                 sprt->uvClut = uvClut;
-                sprt->wh = (CONSOLE_GLYPH_HEIGHT << 16) | CONSOLE_GLYPH_WIDTH;
+                sprt->wh = (TEXT_LINE_HEIGHT << 16) | TEXT_ASCII_WIDTH;
                 AddPrim(ot, sprt);
-                x += CONSOLE_GLYPH_WIDTH;
+                x += TEXT_ASCII_WIDTH;
             }
         }
-        AddPrim(ot, allocDrTpageMode(0, 0, CONSOLE_FONT_TPAGE));
+        AddPrim(ot, allocDrTpageMode(0, 0, TEXT_TPAGE));
         consoleClear(this);
     }
 }

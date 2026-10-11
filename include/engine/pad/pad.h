@@ -26,14 +26,14 @@ EXTERN_C_BEGIN
 #define PAD_ID_MULTITAP 8
 
 /* Vibration's setupStep */
-#define SETUP_UNSUPPORTED -1
-#define SETUP_START 0
-#define SETUP_FIND_ANALOG 40 /* a DualShock in digital mode: switch it to analog */
-#define SETUP_SET_ANALOG 41
-#define SETUP_WAIT_ANALOG 42
-#define SETUP_ACTUATORS 70
-#define SETUP_DONE 71
-#define SETUP_FAILED 99
+#define VIBRATION_SETUP_UNSUPPORTED -1
+#define VIBRATION_SETUP_START 0
+#define VIBRATION_SETUP_FIND_ANALOG 40 /* a DualShock in digital mode: switch it to analog */
+#define VIBRATION_SETUP_SET_ANALOG 41
+#define VIBRATION_SETUP_WAIT_ANALOG 42
+#define VIBRATION_SETUP_ACTUATORS 70
+#define VIBRATION_SETUP_DONE 71
+#define VIBRATION_SETUP_FAILED 99
 
 /* Vibration's mode: how the rumble's power goes */
 #define VIBRATION_NONE -1
@@ -42,10 +42,10 @@ EXTERN_C_BEGIN
 #define VIBRATION_FADE_IN 2
 
 /* Vibration's alignStep */
-#define ALIGN_NONE 0
-#define ALIGN_SEND 1 /* send the actuator alignment */
-#define ALIGN_WAIT 2 /* wait for the pad to take it */
-#define ALIGN_DONE 3
+#define VIBRATION_ALIGN_NONE 0
+#define VIBRATION_ALIGN_SEND 1 /* send the actuator alignment */
+#define VIBRATION_ALIGN_WAIT 2 /* wait for the pad to take it */
+#define VIBRATION_ALIGN_DONE 3
 
 /* The vibration of one pad: its actuator setup and the current rumble. */
 typedef struct {
@@ -61,6 +61,16 @@ typedef struct {
     /* 0x26 */ u8 unk26[4];
     /* 0x2A */ u8 align[6];   /* the actuator alignment sent to the pad */
 } Vibration;
+
+/* An analog stick's axis as the pad sends it, 0 to 0xFF: the high half counts
+ * from PAD_STICK_CENTER, the low half from the reading just under it, each
+ * PAD_STICK_REACH long. */
+#define PAD_STICK_CENTER 0x80
+#define PAD_STICK_REACH 0x7F
+/* an axis as the game keeps it: a full deflection is 1 << PAD_STICK_SHIFT */
+#define PAD_STICK_SHIFT 12
+/* how far the left stick goes before it counts as the d-pad: half way */
+#define PAD_STICK_DPAD_THRESHOLD ((1 << PAD_STICK_SHIFT) / 2)
 
 /* The analog sticks of a pad, each axis from -0x1000 to 0x1000. */
 typedef struct {

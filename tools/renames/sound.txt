@@ -16,11 +16,11 @@ func_8001B778 soundFileInitVab
 func_8001B7EC soundFileDestroyVab
 func_8001B838 soundFileSetVabData
 func_8001B898 listInit
-func_8001B8A8 listUnloadFiles
+func_8001B8A8 soundFileListUnloadAll
 func_8001B928 listPushBack
 func_8001B94C listCount
-func_8001B974 listFindFile
-func_8001B9B4 listUnloadFile
+func_8001B974 soundFileListFind
+func_8001B9B4 soundFileListUnload
 func_8001BA0C soundControlInit
 func_8001BA70 soundControlStart
 func_8001BB48 soundControlLoadVab

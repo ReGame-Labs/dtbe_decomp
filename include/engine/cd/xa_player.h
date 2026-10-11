@@ -116,7 +116,6 @@ extern struct XaPlayer XA_PLAYER; /* the XA player */
 /* the XA audio tracks, listed by /a.xap */
 extern XaTrack XA_TRACKS[];
 
-s32 setCdfsUser(s32 user);
 void seekXaTrack(u32 track);
 void receiveXaSector(u8 intr);
 void updateXa(void);
