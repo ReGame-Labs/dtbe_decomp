@@ -10,6 +10,7 @@
 #include "engine/menu/stepper.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound.h"
+#include "engine/sound/sound_effect.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/handle_table.h"
 #include "engine/system/load_exec.h"
@@ -74,7 +75,7 @@ Task *debugCreateAgeingSequencerTask(void) {
 
 /* Creates the title scene (the "TITLE" command). */
 Task *debugCreateTitleTask(void) {
-    return titleLogoTaskInit(operatorNew(0x110C), &SYSTEM_CONTEXT);
+    return titleLogoTaskInit(operatorNew(TITLE_LOGO_TASK_SIZE), &SYSTEM_CONTEXT);
 }
 
 /* Creates the guide of bonus game 0 (the "MINIGAME GUIDE" command). */

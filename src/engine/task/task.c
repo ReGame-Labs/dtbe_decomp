@@ -147,7 +147,7 @@ void schedulerRemoveTask(Scheduler *this, Task *task) {
     this->count--;
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/task/task", TASK_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/task/task", TASK_VTABLE);
 
 /*
  * Adds a task to a scheduler. It goes after the last task when its priority is

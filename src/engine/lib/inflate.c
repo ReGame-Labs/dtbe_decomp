@@ -392,7 +392,7 @@ InflateBlocksState *inflate_blocks_new(ZStream *z, CheckFunc c, u32 w) {
     return s;
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/inflate", border);
+INCLUDE_RODATA("main/nonmatchings/lib/inflate", border);
 
 /*
  * The decoders keep the state of the input, the bit buffer and the window
@@ -1229,17 +1229,17 @@ s32 huft_build(u32 *b, u32 n, u32 s, const u32 *d, const u32 *e, InflateHuft **t
     return y != 0 && g != 1 ? Z_BUF_ERROR : Z_OK;
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/inflate", cplens);
+INCLUDE_RODATA("main/nonmatchings/lib/inflate", cplens);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/inflate", cplext);
+INCLUDE_RODATA("main/nonmatchings/lib/inflate", cplext);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/inflate", cpdist);
+INCLUDE_RODATA("main/nonmatchings/lib/inflate", cpdist);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/inflate", cpdext);
+INCLUDE_RODATA("main/nonmatchings/lib/inflate", cpdext);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/inflate", STR_OVERSUBSCRIBED_BIT_LENGTHS_TREE);
+INCLUDE_RODATA("main/nonmatchings/lib/inflate", STR_OVERSUBSCRIBED_BIT_LENGTHS_TREE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/inflate", STR_INCOMPLETE_BIT_LENGTHS_TREE);
+INCLUDE_RODATA("main/nonmatchings/lib/inflate", STR_INCOMPLETE_BIT_LENGTHS_TREE);
 
 /* inflate_trees_dynamic: builds the literal/length and distance decoding
  * tables of a dynamic block from the nl + nd code lengths in c. */

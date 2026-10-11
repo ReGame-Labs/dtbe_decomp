@@ -20,17 +20,20 @@ extern EntityVtable D_800D3A24;
 /* The stage's class, derived from func_8006ED20's (virtual table D_800D3A4C). */
 typedef struct Unk800D3AC4 {
     /* 0x000 */ Unk8006ED20 base;
-    /* 0xD38 */ u8 unkD38[0xD3C - 0xD38];
+    /* 0xD38 */ s32 unkD38; /* counts the stage's updates (func_800D3CB8) */
     /* 0xD3C */ s32 unkD3C;
     /* 0xD40 */ u8 unkD40[0x1D68 - 0xD40];
     /* 0x1D68 */ RECT unk1D68;     /* 16 by 1 pixels at (0x330, 0xE6): a CLUT */
     /* 0x1D70 */ u8 unk1D70[0x1D90 - 0x1D70];
     /* 0x1D90 */ u16 unk1D90[16]; /* that CLUT, read back from VRAM by func_800D40BC */
-    /* 0x1DB0 */ u8 unk1DB0[0x1DEC - 0x1DB0];
+    /* 0x1DB0 */ u8 unk1DB0[0x1DCC - 0x1DB0];
+    /* 0x1DCC */ VECTOR unk1DCC[2]; /* by side: the character's position, each update (func_800D3CB8) */
     /* 0x1DEC */ s32 unk1DEC[2]; /* by side, as the next two (func_800D49D0) */
     /* 0x1DF4 */ s32 unk1DF4[2];
     /* 0x1DFC */ VECTOR unk1DFC[2];
-    /* 0x1E1C */ u8 unk1E1C[0x1E3C - 0x1E1C];
+    /* 0x1E1C */ s32 unk1E1C;
+    /* 0x1E20 */ s32 unk1E20;
+    /* 0x1E24 */ u8 unk1E24[0x1E3C - 0x1E24];
     /* the per-side state func_800D4DEC resets */
     /* 0x1E3C */ s32 unk1E3C[2];
     /* 0x1E44 */ u8 unk1E44[0x1E54 - 0x1E44];
@@ -55,6 +58,7 @@ typedef struct Unk800D3AC4 {
     /* 0x2028 */ VECTOR unk2028[2];
     /* 0x2048 */ VECTOR unk2048[2];
     /* 0x2068 */ VECTOR unk2068[2];
+    /* 0x2088 */ u16 unk2088; /* set while func_8006F1A4 holds the stage's update */
 } Unk800D3AC4;
 
 extern VtableEntry D_800D3A4C[];
@@ -73,9 +77,52 @@ void func_800D3AFC(Unk800D3AC4 *this, s32 flags) {
     func_8006F254(&this->base, flags);
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D3B24);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D3B24);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D3CB8);
+/* game.bin functions missing from game.h */
+void func_80071F6C(void);
+Unk80076F34 *func_800700C8(Unk8006ED20 *this, s32 side);
+Vec3 *func_800775D8(Unk80076F34 *chara, Vec3 *out);
+s32 func_8006F144(Unk8006ED20 *object);
+s32 func_8006F190(Unk8006ED20 *object);
+s32 func_8006F1A4(Unk8006ED20 *object);
+
+/* the stage's own update steps */
+void func_800D3EA4(Unk800D3AC4 *this);
+void func_800D3FC8(Unk800D3AC4 *this);
+void func_800D4104(Unk800D3AC4 *this);
+void func_800D41A4(Unk800D3AC4 *this);
+void func_800D44D4(Unk800D3AC4 *this);
+void func_800D4700(Unk800D3AC4 *this);
+void func_800D49D0(Unk800D3AC4 *this);
+void func_800D4FE0(Unk800D3AC4 *this);
+void func_800D58C0(Unk800D3AC4 *this);
+
+/* The stage's update: func_80071F6C, both characters' positions into 0x1DCC; 0x2088 flags func_8006F1A4;
+ * otherwise, unless func_8006F144 holds without func_8006F190, its nine steps, counted at 0xD38
+ * (st00's func_800D4A70). */
+void func_800D3CB8(Unk800D3AC4 *this) {
+    func_80071F6C();
+    func_800775D8(func_800700C8(&this->base, 0), (Vec3 *)&this->unk1DCC[0]);
+    func_800775D8(func_800700C8(&this->base, 1), (Vec3 *)&this->unk1DCC[1]);
+    if (func_8006F1A4(&this->base)) {
+        this->unk2088 = 1;
+    } else {
+        this->unk2088 = 0;
+        if (!func_8006F144(&this->base) || func_8006F190(&this->base)) {
+            func_800D4FE0(this);
+            func_800D58C0(this);
+            func_800D3EA4(this);
+            func_800D3FC8(this);
+            func_800D4104(this);
+            func_800D49D0(this);
+            func_800D41A4(this);
+            func_800D4700(this);
+            func_800D44D4(this);
+            this->unkD38++;
+        }
+    }
+}
 
 /* Copies the 16 by 32 pixels at (0x2E0, 0x80) and at (0x2E0, 0xC0) in VRAM to (0x2E0, 0xA0) and (0x2E0, 0xE0);
  * the stage's init calls it. */
@@ -111,11 +158,24 @@ void func_800D3E20(Unk800D3AC4 *this) {
     MoveImage(&rect, 0x2E0, 0x40);
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D3EA4);
+/* On even updates, copies the 16 by 64 pixels at (0x2E0, 63 - update % 64) in VRAM to (0x358, 0x30): a
+ * texture that scrolls one line per two updates. The even test is written "(count ^ 1) & 1" (xori, andi). */
+void func_800D3EA4(Unk800D3AC4 *this) {
+    s32 count = this->unkD38;
+    RECT rect;
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D3F04);
+    if ((count ^ 1) & 1) {
+        rect.x = 0x2E0;
+        rect.y = ~count & 0x3F;
+        rect.w = 16;
+        rect.h = 64;
+        MoveImage(&rect, 0x358, 0x30);
+    }
+}
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D3FC8);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D3F04);
+
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D3FC8);
 
 /* Reads the 16-colour CLUT at (0x330, 0xE6) back from VRAM into 0x1D90. */
 void func_800D40BC(Unk800D3AC4 *this) {
@@ -126,11 +186,15 @@ void func_800D40BC(Unk800D3AC4 *this) {
     func_80055B88(&this->unk1D68, (u_long *)this->unk1D90);
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D4104);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D4104);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D4198);
+/* Clears the stage's words at 0x1E20 and 0x1E1C. */
+void func_800D4198(Unk800D3AC4 *this) {
+    this->unk1E20 = 0;
+    this->unk1E1C = 0;
+}
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D41A4);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D41A4);
 
 /* Clears the stage's per-side words at 0x1DEC and 0x1DF4 and its two vectors at 0x1DFC. */
 void func_800D4280(Unk800D3AC4 *this) {
@@ -147,17 +211,17 @@ void func_800D4280(Unk800D3AC4 *this) {
     this->unk1DFC[1].pad = 0;
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D42B4);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D42B4);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D43D4);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D43D4);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D44D4);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D44D4);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D4700);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D4700);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D49D0);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D49D0);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D4BE0);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D4BE0);
 
 /* Clears the four words of a VECTOR. The match depends on this helper: it takes the vector's address once,
  * where the fields written out each add the offset to their store. */
@@ -180,13 +244,13 @@ void func_800D4DEC(Unk800D3AC4 *this, s32 side) {
     this->unk1E6C[side].vz = this->unk1ECC[side].vz;
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D4E6C);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D4E6C);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D4FE0);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D4FE0);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D5430);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D5430);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D5598);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D5598);
 
 /* Resets one side's other state: two vectors and 0x1FF4 cleared, 0x2004 and 0x1FFC set to 0x1000, 0x2008 set back
  * to 0x2028. */
@@ -202,13 +266,13 @@ void func_800D56E4(Unk800D3AC4 *this, s32 side) {
     this->unk2008[side].vz = this->unk2028[side].vz;
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D5770);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D5770);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D58C0);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D58C0);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D5EA4);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D5EA4);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D5F94);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D5F94);
 
 /* The destructor of the entity class of vtable D_800D3A24, which func_800D5F94 installs. */
 void func_800D60E8(Entity *this, s32 flags) {
@@ -219,11 +283,11 @@ void func_800D60E8(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D613C);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D613C);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D6384);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D6384);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D6520);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D6520);
 
 /* The destructor of the entity class of vtable D_800D39FC, which func_800D6520 installs. */
 void func_800D667C(Entity *this, s32 flags) {
@@ -234,11 +298,11 @@ void func_800D667C(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D66D0);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D66D0);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D6938);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D6938);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D6A9C);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D6A9C);
 
 /* The destructor of the entity class of vtable D_800D39D4, which func_800D6A9C installs. */
 void func_800D6B64(Entity *this, s32 flags) {
@@ -249,11 +313,54 @@ void func_800D6B64(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D6BB8);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D6BB8);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D6DC0);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D6DC0);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D6F9C);
+/* The 0x180-byte records of a table in game.bin, indexed by func_80077568's value (st08 reads 0x0's bit 0). */
+typedef struct Unk800656D4 {
+    /* 0x000 */ u16 unk0;
+    /* 0x002 */ s16 unk2; /* half the size of the square of func_800D6F9C */
+    /* 0x004 */ u8 unk4[0x180 - 0x4];
+} Unk800656D4;
+
+extern Unk800656D4 D_800656D4[];
+
+/* the character calls of game.c the entity below makes */
+Vec3 *func_8007A650(Unk80076F34 *chara, Vec3 *out);
+s32 func_80077568(Unk80076F34 *this);
+
+/* The stage's entity of func_800D6F9C (virtual table D_800D39AC): a square around a side's character. */
+typedef struct Unk800D6F9C {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk800D3AC4 *stage;
+    /* 0x1C */ u16 side;
+    /* 0x20 */ u32 unk20; /* 0xF08080 at construction */
+    /* 0x24 */ u8 unk24[0x34 - 0x24];
+    /* 0x34 */ SVECTOR unk34[4]; /* the square's corners, in the z = 0 plane */
+} Unk800D6F9C;
+
+/* Constructs the stage's entity for a side: its corners are +-2 * 0x2 of the character's record.
+ * The match depends on the record taken as "table + index" (an index or a record pointer local swaps
+ * the address registers) and on the chained corner stores (the game stores the last first). */
+Unk800D6F9C *func_800D6F9C(Unk800D6F9C *this, Unk800D3AC4 *stage, u16 side) {
+    Vec3 position;
+    s32 size;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D39AC;
+    this->stage = stage;
+    this->side = side;
+    this->unk20 = 0xF08080;
+    func_8007A650(func_800700C8(&stage->base, side), &position);
+    size = (D_800656D4 + func_80077568(func_800700C8(&this->stage->base, this->side)))->unk2 * 2;
+    this->unk34[0].vz = this->unk34[1].vz = this->unk34[2].vz = this->unk34[3].vz = 0;
+    this->unk34[0].vx = this->unk34[2].vx = -size;
+    this->unk34[1].vx = this->unk34[3].vx = size;
+    this->unk34[0].vy = this->unk34[1].vy = -size;
+    this->unk34[2].vy = this->unk34[3].vy = size;
+    return this;
+}
 
 /* The destructor of the entity class of vtable D_800D39AC, which func_800D6F9C installs. */
 void func_800D7084(Entity *this, s32 flags) {
@@ -264,11 +371,11 @@ void func_800D7084(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D70D8);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D70D8);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D71D0);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D71D0);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D72D8);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D72D8);
 
 /* The destructor of the entity class of vtable D_800D3984, which func_800D72D8 installs. */
 void func_800D7458(Entity *this, s32 flags) {
@@ -279,11 +386,11 @@ void func_800D7458(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D74AC);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D74AC);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D770C);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D770C);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D7900);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D7900);
 
 /* The destructor of the entity class of vtable D_800D395C, which func_800D7900 installs. */
 void func_800D7A64(Entity *this, s32 flags) {
@@ -294,11 +401,11 @@ void func_800D7A64(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D7AB8);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D7AB8);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D7CE4);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D7CE4);
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D7F70);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D7F70);
 
 /* The destructor of the entity class of vtable D_800D3934, which func_800D7F70 installs. */
 void func_800D80C8(Entity *this, s32 flags) {
@@ -322,7 +429,7 @@ void func_800D811C(Unk800D7F70 *this) {
     this->phase++;
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D8158);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D8158);
 
 /* Constructs an object of D_800D3914 for arg, with the vector (0x60, 0, 0). */
 UnkStageObject *func_800D848C(UnkStageObject *this, s32 arg) {
@@ -356,7 +463,7 @@ void func_800D84C8(UnkStageObject *this, Unk80075EE4 *part) {
     part->unk20.vz = z;
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D850C);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D850C);
 
 /* The entity class func_800D850C constructs (virtual table D_800D38EC): an
  * Unk80076308 base at 0x18 and an Unk800761AC member at 0x30. */
@@ -389,7 +496,7 @@ void func_800D8618(Unk800D850C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st04/nonmatchings/st04", func_800D86AC);
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D86AC);
 
 /* The destructor of the class of virtual table D_800D3914: Unk80076308's, inlined. */
 void func_800D8938(Unk80076308 *this, s32 flags) {

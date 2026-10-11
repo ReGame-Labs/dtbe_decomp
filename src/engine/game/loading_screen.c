@@ -86,6 +86,6 @@ void loadingScreenDraw(LoadingScreen *this) {
     AddPrim(ot, tpage);
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/loading_screen", D_800103CC);
+INCLUDE_RODATA("main/nonmatchings/game/loading_screen", D_800103CC);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/loading_screen", LOADING_SCREEN_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/game/loading_screen", LOADING_SCREEN_VTABLE);

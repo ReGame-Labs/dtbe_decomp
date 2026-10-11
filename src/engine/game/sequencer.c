@@ -22,7 +22,7 @@ Task *createBootLogoTask(void) {
 
 /* Creates the title ("Title Logo"); a result other than 0 starts the demo. */
 Task *createTitleTask(void) {
-    return titleLogoTaskInit(operatorNew(0x110C), &SYSTEM_CONTEXT);
+    return titleLogoTaskInit(operatorNew(TITLE_LOGO_TASK_SIZE), &SYSTEM_CONTEXT);
 }
 
 /* Creates the select scene ("Character Select"): the characters, and the
@@ -98,9 +98,9 @@ void runAppSequencerThread(s32 unused, AppSequencer *this) {
     appSequencerRunScenes(this);
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/sequencer", OVERLAY_PATH_FORMAT);
+INCLUDE_RODATA("main/nonmatchings/game/sequencer", OVERLAY_PATH_FORMAT);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/sequencer", APP_SEQUENCER_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/game/sequencer", APP_SEQUENCER_VTABLE);
 
 /* whether the game just started: the save is only loaded then */
 static s32 JUST_BOOTED = 1;
@@ -341,7 +341,7 @@ void appSequencerRunRandomFights(AppSequencer *this) {
  * after the vtable in the game's order) but for its destructor: only a
  * synthesized one leaves out the vtable store, as the game's does, and g++
  * writes that one right after the vtable, where the game has it last. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/game/sequencer", appSequencerRunScene);
+INCLUDE_ASM("main/nonmatchings/game/sequencer", appSequencerRunScene);
 
 /* The update of the sequencer task: resets the game on L1 R1 Select Start.
  * Once killed, it only forgets its scene when the scene's task is gone; else

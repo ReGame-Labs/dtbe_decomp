@@ -124,4 +124,4 @@ void convertHsvToRgb(CVECTOR *rgb, s32 hue, s32 saturation, u8 value) {
 
 /* 12 zero bytes after convertHsvToRgb's jump table: what they are is not
  * known */
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/color", D_80019344);
+INCLUDE_RODATA("main/nonmatchings/gfx/color", D_80019344);

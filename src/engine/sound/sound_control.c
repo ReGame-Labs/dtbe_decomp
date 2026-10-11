@@ -6,6 +6,7 @@
 #include "engine/lib/list.h"
 #include "engine/math/lerp.h"
 #include "engine/sound/sound.h"
+#include "engine/sound/sound_effect.h"
 #include "engine/sound/voice_pause.h"
 #include "engine/system/memory.h"
 #include "engine/task/task.h"
@@ -430,13 +431,13 @@ s32 soundControlLoadAndPlaySoundEffect(SoundControl *this, s32 id) {
     return playSoundEffect(id & 0xFFFF);
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/sound/sound_control", VAB_FILE_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/sound/sound_control", VAB_FILE_VTABLE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/sound/sound_control", SEP_FILE_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/sound/sound_control", SEP_FILE_VTABLE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/sound/sound_control", SOUND_FILE_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/sound/sound_control", SOUND_FILE_VTABLE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/sound/sound_control", SOUND_CONTROL_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/sound/sound_control", SOUND_CONTROL_VTABLE);
 
 /* Seeks to an XA track, to loop it loops times once it plays (the player is
  * turned on; the music starts with soundControlResumeMusic). */

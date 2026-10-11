@@ -21,6 +21,10 @@ carries a comment that says so. This finds them in src/ and include/:
   one version's own form of a loop);
 - functions still in assembly: INCLUDE_ASM lines.
 
+Everything is counted for one version, VERSION from the environment as for
+make (jp by default): the code inside an #if VERSION_<other> is another
+version's, and doesn't count.
+
 --check FILE... compares the counts with a badge and a table in those
 files, once the project has them. The functions still in assembly are counted apart, and
 --list also shows what is assembly without being a hack: the rodata still
@@ -41,6 +45,8 @@ import argparse
 import re
 import sys
 from pathlib import Path
+
+import version
 
 ROOT = Path(__file__).resolve().parent.parent
 DIRS = ("src", "include")
@@ -83,6 +89,9 @@ DIRECTIVE = re.compile(r"^[ \t]*#(?:[^\n]*\\\n)*[^\n]*", re.M)
 # overlay that includes them defines to its prefix
 OVL_NAME = re.compile(r"\bOVL_NAME\s*\(\s*(\w+)\s*\)")
 OVL_ALIAS = re.compile(r"^[ \t]*#[ \t]*define[ \t]+(\w+)[ \t]+OVL_NAME\s*\(\s*(\w+)\s*\)", re.M)
+# the conditionals that pick a version: #if VERSION_US, #if !VERSION_JP
+CONDITIONAL = re.compile(r"^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else|endif)\b(.*)$")
+VERSION_TEST = re.compile(r"^\s*(!?)\s*VERSION_(\w+)\s*$")
 INCLUDE_INC = re.compile(r'^[ \t]*#[ \t]*include[ \t]+"([^"]+\.inc\.c)"', re.M)
 
 
@@ -157,6 +166,31 @@ def function_at(owner, lines, line):
     return ""
 
 
+def other_versions(text):
+    """The lines (from 1) of text inside an #if or #else branch that only
+    another version builds."""
+    lines = set()
+    # per open #if: whether this version builds the branch, None when the
+    # condition isn't a version's
+    stack = []
+    for n, line in enumerate(text.split("\n"), 1):
+        m = CONDITIONAL.match(line)
+        if m:
+            if m[1] in ("if", "ifdef", "ifndef"):
+                v = VERSION_TEST.match(m[2]) if m[1] == "if" else None
+                stack.append(None if v is None else (v[2].lower() == version.VERSION) != bool(v[1]))
+            elif m[1] == "elif":
+                stack[-1] = None
+            elif m[1] == "else" and stack[-1] is not None:
+                stack[-1] = not stack[-1]
+            elif m[1] == "endif":
+                stack.pop()
+            continue
+        if False in stack:
+            lines.add(n)
+    return lines
+
+
 def line_of(text, pos):
     return text.count("\n", 0, pos) + 1
 
@@ -196,11 +230,14 @@ def scan():
             plain = DIRECTIVE.sub(blank, code)
             aliases = {m[1]: m[2] for m in OVL_ALIAS.finditer(code)}
             owner, lines = functions(plain, aliases, shared.get(rel, "OVL_NAME_"))
+            elsewhere = other_versions(text)
             for m in tokens:
                 if m[0][0] != "/":
                     continue
                 words = comment_text(m[0])
                 n = line_of(text, m.start())
+                if n in elsewhere:
+                    continue
                 if words.startswith("fake match:"):
                     kind = "fake"
                 elif words == FRAME_MARKER:
@@ -214,9 +251,11 @@ def scan():
                     words = text.split("\n")[n - 1].split("/*")[0].strip()
                 found[kind].append((rel, n, func, words))
             for m in INCLUDE_ASM.finditer(code):
-                found["asm"].append((rel, line_of(code, m.start()), m[1], ""))
+                if line_of(code, m.start()) not in elsewhere:
+                    found["asm"].append((rel, line_of(code, m.start()), m[1], ""))
             for m in INCLUDE_RODATA.finditer(code):
-                other["rodata"].append((rel, line_of(code, m.start()), m[1]))
+                if line_of(code, m.start()) not in elsewhere:
+                    other["rodata"].append((rel, line_of(code, m.start()), m[1]))
 
             def forbid(pos, why):
                 n = line_of(code, pos)

@@ -17,7 +17,7 @@ if r.returncode:
     sys.exit(r.stdout + r.stderr)
 sec = ELFFile(open(f'{D}/{obj}', 'rb')).get_section_by_name('.sdata')
 have = sec.data() if sec else b''
-exe = open(f'{D}/disks/{version.VERSION}/SLPS_033.57', 'rb').read()
+exe = open(version.DISK_DIR / version.EXE_NAME, 'rb').read()
 want = exe[first - 0x80010000 + 0x800:end - 0x80010000 + 0x800]
 pad = -len(have) % 4
 if have + bytes(pad) == want:

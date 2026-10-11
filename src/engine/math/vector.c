@@ -79,7 +79,7 @@ s32 vecGetLengthSquared16(VECTOR *v) {
  * a2/a3 and an s1 is saved (64 lines differ at best). No source found that
  * drops the suggestion.
  */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/vector", vecLerp);
+INCLUDE_ASM("main/nonmatchings/math/vector", vecLerp);
 
 /* Returns the dot product of a and b. */
 s32 vecDot(VECTOR *a, VECTOR *b) {

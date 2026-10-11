@@ -41,12 +41,12 @@ void swapTwoWords(u32 *a, u32 *b) {
  * in through fixed $8-$11 and in by the high/low split in $8-$13, the same
  * code as one turn of matrixTransformVecs's handwritten loop; nothing in it is
  * GCC's. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixTransformVec);
+INCLUDE_ASM("main/nonmatchings/math/matrix", matrixTransformVec);
 
 /* Handwritten: the count is tested by addiu $a3, -1; li $v0, -1; beq, not
  * as GCC tests a count-down loop (against $zero, the decrement in the
  * branch's delay slot). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixTransformVecs);
+INCLUDE_ASM("main/nonmatchings/math/matrix", matrixTransformVecs);
 
 /* Meant to set out to m in, translation included; gte_setMatrixUnsafe
  * overwrites m with its first word, so the GTE gets the words at that
@@ -61,15 +61,15 @@ void matrixTransformSvec(MATRIX *m, VECTOR *out, SVECTOR *in) {
 /* Handwritten: the same count test as matrixTransformVecs, and the loop
  * software-pipelined (the next vector loaded and the pointers moved before
  * the stores, which use offsets of -16). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixTransformSvecs);
+INCLUDE_ASM("main/nonmatchings/math/matrix", matrixTransformSvecs);
 
 /* Sets out to the 3x3 part of m times in, in is a VECTOR. Handwritten: fixed
  * $8-$13 throughout, the same code as one turn of matrixRotateVecs's handwritten
  * loop; nothing in it is GCC's. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixRotateVec);
+INCLUDE_ASM("main/nonmatchings/math/matrix", matrixRotateVec);
 
 /* Handwritten: the same count test as matrixTransformVecs. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixRotateVecs);
+INCLUDE_ASM("main/nonmatchings/math/matrix", matrixRotateVecs);
 
 /* Rotates m by angle about axis: m = m R, translation kept. */
 MATRIX *matrixRotateAxis(MATRIX *m, VECTOR *axis, s32 angle) {
@@ -120,14 +120,14 @@ MATRIX *matrixScale(MATRIX *m, s32 sx, s32 sy, s32 sz) {
  * fixed-register code ($8-$13) of matrixTransformVec, the translation of
  * matrixMul. It matches as C around a macro used once, but nothing in it
  * is only GCC's (the first move to $v0, m used through it, fits both). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixTranslate);
+INCLUDE_ASM("main/nonmatchings/math/matrix", matrixTranslate);
 
 /* Sets out to the composition of a and b (out = a b, out's translation
  * a b->t + a->t), as PsyQ's CompMatrix. Handwritten: the translation and the
  * product are interleaved instruction by instruction in fixed registers;
  * apart from them there is only the return value's move, in the jr's delay
  * slot. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixMul);
+INCLUDE_ASM("main/nonmatchings/math/matrix", matrixMul);
 
 /* matrixInitInverseRotationAxis (m = the rotation by -angle about axis,
  * without translation) differs only in register allocation (28 lines): the
@@ -135,7 +135,7 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixMul);
  * the C outranks it in local-alloc (priorities about 3600 to 3100). Moving
  * the cosine's first use earlier or its last use later doesn't reorder them,
  * so the original's instructions came in another order before sched2. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixInitInverseRotationAxis);
+INCLUDE_ASM("main/nonmatchings/math/matrix", matrixInitInverseRotationAxis);
 
 /* Sets m to a rotation by angle about the x axis, without translation. */
 MATRIX *matrixInitRotationX(MATRIX *m, s32 angle) {
@@ -176,7 +176,7 @@ MATRIX *matrixInitRotationZ(MATRIX *m, s32 angle) {
  * forget the addresses (65 lines left), but not the game's &z, built straight
  * into a0/a1 for vecNormalize and again for vecDot12; a Vec class with inline
  * members gives more differences. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixInitLookAt);
+INCLUDE_ASM("main/nonmatchings/math/matrix", matrixInitLookAt);
 
 /* Sets out to the inverse of the rigid transform m: the transposed rotation
  * and the negated translation turned by it. The match depends on negated, a
@@ -200,7 +200,7 @@ MATRIX *matrixInvertRigid(MATRIX *out, MATRIX *m) {
 
 /* matrixInvert copies a MATRIX as a block move (see "Block moves" in
  * TODO.md). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix", matrixInvert);
+INCLUDE_ASM("main/nonmatchings/math/matrix", matrixInvert);
 
 /* Sets m to the rotation of a unit quaternion, without translation. The
  * products are in 8.24 fixed point: >> 11 takes them back to 4.12 doubled. */

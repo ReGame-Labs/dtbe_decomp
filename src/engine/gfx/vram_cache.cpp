@@ -5,7 +5,7 @@
 #include "engine/system/memory.h"
 #include "vtable.h"
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/vram_cache", CACHE_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/gfx/vram_cache", CACHE_VTABLE);
 
 /*
  * Cache constructor: cuts the areas of VRAM at the texture pages, then the

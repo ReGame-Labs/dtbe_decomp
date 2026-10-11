@@ -74,4 +74,4 @@ RECT SCREEN_CHAR_RECT = { 0, 0, SCREEN_GLYPH_SIZE, SCREEN_GLYPH_SIZE };
  * the RECT's life so it gets s2 first; GCC sets a0 from the symbol, and GCSE
  * folds an explicit copy. Const parameters and C++ change nothing.
  */
-INCLUDE_ASM("asm/jp/main/nonmatchings/text/screen_print", screenPutChar);
+INCLUDE_ASM("main/nonmatchings/text/screen_print", screenPutChar);

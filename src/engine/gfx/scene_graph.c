@@ -39,11 +39,11 @@ Transform *transformInit(Transform *this) {
 /* Makes parent the parent of the transform, keeping where it is in the
  * world: the local matrix becomes the inverse of the parent's world matrix
  * times it. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", transformAttach);
+INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", transformAttach);
 
 /* Takes the transform from its parent, keeping where it is in the world:
  * the local matrix becomes the parent's world matrix times it. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", transformDetach);
+INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", transformDetach);
 
 /* Destroys the scene object, taking it out of its group. */
 void sceneObjectDestroy(SceneObject *this, s32 flags) {
@@ -169,12 +169,12 @@ void groupDraw(Group *this, Camera *camera) {
 
 /* Draws the TMD object of the mesh in camera with its world matrix, and,
  * with MESH_SHOW_BOUNDS in debug, its bounding box as 12 white lines. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", meshDraw);
+INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", meshDraw);
 
 /* Whether the mesh is out of view of camera: 1 with no TMD object, else
  * whether the sphere around it misses the view. Counts the tests in
  * MESH_CULL_COUNT and the misses in MESH_OUT_OF_VIEW_COUNT. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", meshCull);
+INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", meshCull);
 
 /* Clears the culling counters. */
 void resetMeshCullCounts(void) {
@@ -219,11 +219,11 @@ SVECTOR *meshGetCorners(Mesh *this) {
  * only allows it when the base of this is unknown, as for a u32 parameter or a
  * helper's pointer argument, which then keep an addiu per corner.
  */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", meshSetTmd);
+INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", meshSetTmd);
 
 /* Builds the local matrix of the part from pose, the pose of its node: the
  * rotation, then the scale, then the translation. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", meshPartUpdate);
+INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", meshPartUpdate);
 
 /* the most nodes modelInit links up: the size of its table of parts */
 #define MODEL_NODE_MAX 64
@@ -346,7 +346,7 @@ void modelSetLights(Model *this, Lights *lights) {
 
 /* The world matrix: the parent's world matrix times the local one, worked
  * out again when the transform changed; the local matrix at the root. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", transformGetWorld);
+INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", transformGetWorld);
 
 /* Marks the world matrix out of date, or up to date. */
 void transformSetDirty(Transform *this, s32 dirty) {
@@ -367,10 +367,10 @@ MATRIX *transformGetLocal(Transform *this) {
 
 /* Sets the matrix relative to the parent, so the world matrix is worked
  * out again. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", transformSetLocal);
+INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", transformSetLocal);
 
 /* The same code as transformSetLocal. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/scene_graph", func_8002099C);
+INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", func_8002099C);
 
 /* Sets the parent, keeping the matrix relative to it. */
 void transformSetParentKeepLocal(Transform *this, Transform *parent) {
@@ -430,16 +430,16 @@ void meshPartDestroy(MeshPart *this, s32 flags) {
     sceneObjectDestroy(&this->mesh.object, flags);
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/scene_graph", MESH_BOUNDS_EDGES);
+INCLUDE_RODATA("main/nonmatchings/gfx/scene_graph", MESH_BOUNDS_EDGES);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/scene_graph", MESH_PART_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/gfx/scene_graph", MESH_PART_VTABLE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/scene_graph", MESH_PART_ANIM_NODE_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/gfx/scene_graph", MESH_PART_ANIM_NODE_VTABLE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/scene_graph", MODEL_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/gfx/scene_graph", MODEL_VTABLE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/scene_graph", MESH_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/gfx/scene_graph", MESH_VTABLE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/scene_graph", GROUP_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/gfx/scene_graph", GROUP_VTABLE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/scene_graph", SCENE_OBJECT_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/gfx/scene_graph", SCENE_OBJECT_VTABLE);

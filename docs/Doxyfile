@@ -42,7 +42,7 @@ REFERENCED_BY_RELATION = YES
 # members without the labels that give them the game's symbols
 MACRO_EXPANSION        = YES
 INCLUDE_PATH           = include external/psyq_headers/psyq_lib47/include
-PREDEFINED             = VERSION_JP=1 SKIP_ASM __cplusplus "__asm__(x)=" "__attribute__(x)="
+PREDEFINED             = VERSION_JP=1 VERSION_US=0 SKIP_ASM __cplusplus "__asm__(x)=" "__attribute__(x)="
 
 GENERATE_LATEX         = NO
 GENERATE_TREEVIEW      = YES

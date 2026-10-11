@@ -219,4 +219,4 @@ void MD5_memset(u8 *output, s32 value, u32 len) {
     }
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/md5", PADDING);
+INCLUDE_RODATA("main/nonmatchings/lib/md5", PADDING);

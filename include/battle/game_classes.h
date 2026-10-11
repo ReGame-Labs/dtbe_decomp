@@ -36,7 +36,8 @@ typedef struct Unk80079B24Entry {
  * reads it. */
 typedef struct Unk8007B470Entry {
     /* 0x00 */ s32 unk0;
-    /* 0x04 */ s32 unk4;
+    /* 0x04 */ s16 unk4; /* 0x4 and 0x6: a range of steps (func_800B63BC, lh in func_8007B470) */
+    /* 0x06 */ s16 unk6;
     /* 0x08 */ s32 unk8[6];
     /* 0x20 */ s32 unk20;
 } Unk8007B470Entry;
@@ -47,14 +48,16 @@ typedef struct Unk8007B470Entry {
  * 0x20 only, so the entries are 0x24 bytes, not records of 0x48 at 0x60 and
  * 0xA8 (as func_80099AE8 and func_80092C2C alone would suggest). */
 typedef struct Unk80077698 {
-    /* 0x00 */ s32 unk0;
+    /* 0x00 */ u16 unk0;                 /* bits, read with lhu */
+    /* 0x02 */ s16 unk2;                 /* a size; some callers add it to a y */
     /* 0x04 */ s32 unk4;
     /* 0x08 */ s32 unk8;
     /* 0x0C */ s32 unkC;
     /* 0x10 */ s32 unk10;
     /* 0x14 */ u16 unk14; /* func_8007F184 reads it with lhu */
     /* 0x16 */ u16 unk16;
-    /* 0x18 */ s32 unk18[9];
+    /* 0x18 */ s32 unk18;
+    /* 0x1C */ u16 unk1C[16];               /* func_800788B4 reads one by index */
     /* 0x3C */ Unk8007B470Entry entries[9];
 } Unk80077698;
 
@@ -64,11 +67,14 @@ typedef struct Unk80077698 {
  * to 0) and, in some of the character's states, adds half of it to 0x24. */
 typedef struct Unk8007F184 {
     /* 0x00 */ Unk8007F920 base;
-    /* 0x10 */ u8 unk10[0x1C - 0x10];
+    /* 0x10 */ s32 unk10;
+    /* 0x14 */ s32 unk14; /* func_8007F7F4 acts only when it is not above 0, and sets it to 16 */
+    /* 0x18 */ s32 unk18;
     /* 0x1C */ s32 unk1C; /* the most 0x20 can hold */
     /* 0x20 */ s32 unk20;
     /* 0x24 */ s32 unk24; /* 0 to 0x10000 */
     /* 0x28 */ s32 unk28;
+    /* 0x2C */ s32 unk2C; /* set by func_8007F59C: the amounts stop changing */
 } Unk8007F184;
 
 /* Something timed that an Unk80076F34 runs (two of them, at 0x464 and 0x478):
@@ -82,13 +88,37 @@ typedef struct Unk800774C0 {
     /* 0x10 */ s32 unk10;
 } Unk800774C0;
 
+/* A node of the list whose head is D_8006437C, mesh_scene's global list
+ * (func_80076A00 gives it; func_80076A0C moves a node to its front). func_80076474 rotates with the
+ * matrix at 0xC of the node it picks. */
+typedef struct Unk80076A0C {
+    /* 0x00 */ ListNode link;
+    /* 0x08 */ s32 unk8;
+    /* 0x0C */ MATRIX *unkC;
+    /* 0x10 */ s32 unk10;
+    /* 0x14 */ s32 unk14; /* func_80076AAC sets 1 */
+} Unk80076A0C;
+
+/* The member at 0x260 of Unk80076F34, which func_80076444 constructs. */
+typedef struct Unk80076444 {
+    /* 0x00 */ u8 unk0[0x10];
+    /* 0x10 */ s32 unk10; /* func_800765B4 hands both to func_800765F0 */
+    /* 0x14 */ s32 unk14;
+    /* 0x18 */ u8 unk18[0x48 - 0x18];
+    /* 0x48 */ VECTOR unk48; /* func_80076474's a */
+    /* 0x58 */ VECTOR unk58; /* func_80076474's b */
+    /* 0x68 */ VECTOR unk68; /* func_80078254 takes vecDot12 of it */
+    /* 0x78 */ Unk80076A0C *unk78; /* the node of D_8006437C func_80076474 last picked */
+} Unk80076444;
+
 /* The entity class that func_80076F34 constructs (virtual table D_8006530C),
  * which many classes derive from: 0x4A4 bytes, as the derived constructors'
  * first fields show; they put their own fields from 0x4A4 on. The fields are
  * the ones the C code and the small accessors use. */
 typedef struct Unk80076F34 {
     /* 0x000 */ Entity entity;
-    /* 0x018 */ u8 unk18[0x21C - 0x18];
+    /* 0x018 */ u8 unk18[0x218 - 0x18];
+    /* 0x218 */ s32 unk218;                /* func_80077568; picks the row of D_80067AD4 (func_800776A4) */
     /* 0x21C */ s32 unk21C;                /* func_80077574 */
     /* 0x220 */ Unk80077698 *unk220;       /* func_80077698 */
     /* 0x224 */ Unk80079B24Entry *unk224;  /* func_80079B24 */
@@ -97,12 +127,27 @@ typedef struct Unk80076F34 {
     /* 0x230 */ s32 unk230;
     /* 0x234 */ struct Unk80075000 *unk234; /* its input (func_80078C28, func_800776C4) */
     /* 0x238 */ Unk8007F184 *unk238;
-    /* 0x23C */ u8 unk23C[0x250 - 0x23C];
+    /* 0x23C */ u8 unk23C[0x240 - 0x23C];
+    /* 0x240 */ Entity *unk240;            /* the entity of unk244 (func_8007ADCC) */
+    /* 0x244 */ u32 unk244;                /* the handle of the character the model is attached to, or 0 */
+    /* 0x248 */ u32 unk248;                /* the handle of the entity func_80079420 makes */
+    /* 0x24C */ u8 unk24C[0x250 - 0x24C];
     /* 0x250 */ s32 unk250;                /* a clip of the model, or negative */
     /* 0x254 */ s32 unk254;                /* another clip, or negative */
-    /* 0x258 */ u8 unk258[0x340 - 0x258];
+    /* 0x258 */ s32 unk258;                /* 0x11 or 0x12 (func_80079268, func_8007925C) */
+    /* 0x25C */ s32 unk25C;                /* the handle of the sound func_800784F4 played */
+    /* 0x260 */ Unk80076444 unk260;
+    /* 0x2DC */ u8 unk2DC[0x48];           /* an Unk80075EE4 (defined below; func_80079300 returns it) */
+    /* 0x324 */ s32 unk324;
+    /* 0x328 */ s32 unk328;
+    /* 0x32C */ s32 unk32C;
+    /* 0x330 */ s32 unk330;
+    /* 0x334 */ s32 unk334;
+    /* 0x338 */ s32 unk338;
+    /* 0x33C */ s32 unk33C;
     /* 0x340 */ s32 unk340;
-    /* 0x344 */ u8 unk344[0x37C - 0x344];
+    /* 0x344 */ u8 unk344[0x348 - 0x344];
+    /* 0x348 */ u16 unk348[13][2];         /* Unk8007BF74 counter pairs that func_800788B4 sets */
     /* 0x37C */ u32 flags;
     /* 0x380 */ s32 unk380;
     /* 0x384 */ Vec3 position;             /* in 1/256ths (func_800775D8) */
@@ -114,10 +159,12 @@ typedef struct Unk80076F34 {
     /* 0x3B4 */ Vec3 unk3B4;               /* vx grows by the facing (func_80095008) */
     /* 0x3C0 */ s32 unk3C0;
     /* 0x3C4 */ s32 unk3C4;                /* a 16.16 scale (func_80095008) */
-    /* 0x3C8 */ u8 unk3C8[0x3DC - 0x3C8];
+    /* 0x3C8 */ VECTOR unk3C8;             /* func_800A1160 interpolates it (Unk800A0FF4) */
+    /* 0x3D8 */ s32 unk3D8;                /* with 0x3DC, 0x3E0: angles func_80078578 turns toward 0x3E8.. */
     /* 0x3DC */ s32 unk3DC;
     /* 0x3E0 */ s32 unk3E0;                /* an angle (func_800BBF00 turns toward it) */
-    /* 0x3E4 */ u8 unk3E4[0x3EC - 0x3E4];
+    /* 0x3E4 */ u8 unk3E4[0x3E8 - 0x3E4];
+    /* 0x3E8 */ s32 unk3E8;
     /* 0x3EC */ s32 unk3EC; /* 0x401 or -0x401: func_80079E10 makes it the facing, 1 or -1 */
     /* 0x3F0 */ s32 unk3F0;
     /* 0x3F4 */ u8 unk3F4[0x3FC - 0x3F4];
@@ -131,12 +178,15 @@ typedef struct Unk80076F34 {
     /* 0x454 */ s32 unk454;
     /* 0x458 */ s32 unk458;
     /* 0x45C */ s32 unk45C;
-    /* 0x460 */ u8 unk460[0x464 - 0x460];
+    /* 0x460 */ s32 unk460;
     /* 0x464 */ Unk800774C0 unk464;        /* func_800C9790 runs it */
     /* 0x478 */ Unk800774C0 unk478;        /* func_800C99B0 runs it */
-    /* 0x48C */ u8 unk48C[0x498 - 0x48C];
+    /* 0x48C */ s32 unk48C;
+    /* 0x490 */ u8 unk490[0x494 - 0x490];
+    /* 0x494 */ s32 unk494;                /* func_8007A12C sets it to 5 or clears it */
     /* 0x498 */ s32 unk498;
-    /* 0x49C */ u8 unk49C[0x4A4 - 0x49C];
+    /* 0x49C */ u8 unk49C[0x4A0 - 0x49C];
+    /* 0x4A0 */ s32 unk4A0;                /* func_8009A35C sets it to 1 */
 } Unk80076F34;
 
 /* Entity classes that keep the Unk80076F34 they were created for, named
@@ -193,7 +243,12 @@ typedef struct Unk800C3CFC {
     /* 0x00 */ Entity entity;
     /* 0x18 */ VECTOR unk18; /* a random direction, normalized */
     /* 0x28 */ VECTOR unk28; /* the position it is constructed with */
-    /* 0x38 */ u8 unk38[0x50 - 0x38];
+    /* 0x38 */ s32 unk38; /* the size it is constructed with */
+    /* 0x3C */ s32 unk3C; /* a random angle, turned by unk40 a frame (func_800C3E64) */
+    /* 0x40 */ s32 unk40; /* 0 to 47 at random */
+    /* 0x44 */ s32 unk44; /* size / 32 + 1 to twice that, at random */
+    /* 0x48 */ s32 unk48; /* the color it is constructed with */
+    /* 0x4C */ s32 unk4C; /* frames lived */
     /* 0x50 */ s32 unk50;
 } Unk800C3CFC;
 
@@ -220,6 +275,8 @@ typedef struct Unk800CD140 {
     /* 0x000 */ Unk800CD140Char chars[0x40];
     /* 0x500 */ char text[0x40];
     /* 0x540 */ s32 length;
+    /* 0x544 */ s32 unk544; /* the step between two characters (func_800CBB88 centres the text by it) */
+    /* 0x548 */ s32 unk548;
 } Unk800CD140;
 
 /* An entity of game.bin that keeps copies of two 16-color palettes of VRAM (func_800D1F8C, func_800D23C4) */
@@ -294,6 +351,11 @@ typedef struct Unk800870F0 {
 typedef struct Unk800A0FF4 {
     /* 0x000 */ Unk80076F34 base;
     /* 0x4A4 */ s32 unk4A4;
+    /* 0x4A8 */ u8 unk4A8[0x4B8 - 0x4A8];
+    /* 0x4B8 */ s32 unk4B8; /* 0 to 0x1000: how far base.unk3C8 is from unk4CC to unk4DC */
+    /* 0x4BC */ u8 unk4BC[0x4CC - 0x4BC];
+    /* 0x4CC */ VECTOR unk4CC;
+    /* 0x4DC */ VECTOR unk4DC;
 } Unk800A0FF4;
 
 typedef struct Unk800B45C0 {
@@ -355,7 +417,7 @@ typedef struct Unk800761AC {
     /* 0x00 */ ListNode link;
     /* 0x08 */ void *unk8; /* func_80075EE4's fourth argument: the owner's second base */
     /* 0x0C */ u32 unkC;   /* flags: the constructors clear bits 0 and 1 */
-    /* 0x10 */ u8 unk10[0x14 - 0x10];
+    /* 0x10 */ s32 unk10;
     /* 0x14 */ void *unk14; /* the owning entity (its constructor sets it) */
     /* 0x18 */ u8 unk18[0x30 - 0x18];
     /* 0x30 */ VtableEntry *vtable;

@@ -17,7 +17,28 @@ folder of the part of the game they run:
 | `battle/` | `game.bin` | the battle |
 | `battle/stages/st<NN>/` | `st<NN>.bin` | the battle's stages |
 
-Each overlay is one file until it is split into its modules.
+Each overlay is one file until it is split into its modules. `title/` is
+split, one file per object of the original build in the order of
+`config/<version>/title.yaml`; each file's `.rodata` and `.data` are its own
+pieces of the overlay:
+
+| File | What it is |
+|---|---|
+| `boot_logo.c` | the boot logo |
+| `title_logo.c` | the title screen |
+| `main_menu.c` | the main menu |
+| `chara_select.c` | the character and stage selection |
+| `memory_card.c` | the memory card screens |
+| `guide.c` | the guide: the minigames' explanations |
+| `ranking.c` | the ranking |
+| `name_entry.c` | the name entry, which the ranking and the options open |
+| `credits.c` | the credits |
+| `title_0a.c` | a character model class seen by a camera (boundary unproven) |
+| `option.cpp` | the options |
+| `title_0b.c` | a cache class with a heap block (boundary unproven) |
+| `title_0c.c` | a `Printer` class and a table (boundary unproven) |
+
+`include/title/title_classes.h` has what several of them share.
 
 ## Modules
 
@@ -52,7 +73,7 @@ C:
 
 | File | Why only g++ builds it |
 |---|---|
-| `menu/stepper.cpp`, `debug/system_menu.cpp` | constructors and destructors of classes with a virtual base, which copy the vtable to the stack and fix it up |
+| `menu/stepper.cpp`, `debug/system_menu.cpp`, `title/option.cpp` | constructors and destructors of classes with a virtual base, which copy the vtable to the stack and fix it up |
 | `gfx/vram_cache.cpp` | `cacheInit`'s variable-length array |
 | `game/character.cpp`, `gfx/mesh_scene.cpp` | a global `List` each, set up and taken down by g++'s static constructor and destructor |
 | `game/game_state.cpp` | `JoinState`'s flags are `bool` bit fields, which g++ tests one at a time in `joinStateUpdate` |

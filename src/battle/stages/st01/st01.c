@@ -7,6 +7,7 @@
 #include "engine/gfx/ordering_table.h"
 #include "engine/gfx/mesh_scene.h"
 #include "engine/gfx/scene_graph.h"
+#include "engine/gfx/look_at.h"
 #include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 #include "engine/task/entity.h"
@@ -31,7 +32,9 @@ extern VtableEntry D_800D3D44[];
 /* The stage's class, derived from func_8006ED20's; func_800D3DBC constructs it. */
 typedef struct Unk800D3DBC {
     /* 0x000 */ Unk8006ED20 base;
-    /* 0xD38 */ u8 unkD38[0xD44 - 0xD38];
+    /* 0xD38 */ MeshScene *scene;
+    /* 0xD3C */ u32 unkD3C; /* the frames run by func_800D46D0 */
+    /* 0xD40 */ u8 unkD40[0xD44 - 0xD40];
     /* 0xD44 */ u32 unkD44; /* sound handles, stopped by the destructor */
     /* 0xD48 */ u32 unkD48;
     /* 0xD4C */ Camera unkD4C; /* its table linked after the battle camera's (func_800D48E8) */
@@ -45,14 +48,49 @@ typedef struct Unk800D3DBC {
     /* 0xF40 */ u16 unkF40[16]; /* and a second copy */
     /* 0xF60 */ u8 unkF60[0xF7C - 0xF60];
     /* 0xF7C */ u16 unkF7C; /* the Unk800D5BA0 entities alive */
-    /* 0xF7E */ u8 unkF7E[0xF84 - 0xF7E];
+    /* 0xF7E */ u16 unkF7E;
+    /* 0xF80 */ s32 unkF80;
     /* 0xF84 */ s16 unkF84;
     /* 0xF86 */ s16 unkF86;
     /* 0xF88 */ s16 unkF88;
     /* 0xF8A */ s16 unkF8A;
+    /* 0xF8C */ u8 unkF8C[0xF94 - 0xF8C];
+    /* 0xF94 */ Vec3 unkF94; /* the characters' positions saved by func_800D4674 (sides 0 and 1) */
+    /* 0xFA0 */ u8 unkFA0[0xFA4 - 0xFA0];
+    /* 0xFA4 */ Vec3 unkFA4;
+    /* 0xFB0 */ u8 unkFB0[0xFB4 - 0xFB0];
+    /* 0xFB4 */ Vec3 unkFB4; /* and by func_800D4E80 */
+    /* 0xFC0 */ u8 unkFC0[0xFC4 - 0xFC0];
+    /* 0xFC4 */ Vec3 unkFC4;
+    /* 0xFD0 */ u8 unkFD0[0xFD4 - 0xFD0];
+    /* 0xFD4 */ s16 unkFD4; /* bit 8 of the flags at 0x2C8, copied each frame by func_800D46D0 */
 } Unk800D3DBC;
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D3DBC);
+/* game.bin functions missing from game.h */
+void func_80070314(Unk8006ED20 *object);
+void func_80071F6C(void);
+s32 func_8006F144(Unk8006ED20 *object);
+s32 func_8006F190(Unk8006ED20 *object);
+s32 func_8006F1A4(Unk8006ED20 *object);
+Unk80076F34 *func_800700C8(Unk8006ED20 *object, s32 side);
+Vec3 *func_800775D8(Unk80076F34 *chara, Vec3 *out);
+/* the LookAt of func_8006ED20's object (at 0x12C) */
+LookAt *func_8006EF64(Unk8006ED20 *object);
+
+/* this stage's functions that run each frame (func_800D46D0) */
+void func_800D47B0(Unk800D3DBC *this);
+void func_800D4950(Unk800D3DBC *this);
+void func_800D58BC(Unk800D3DBC *this);
+void func_800D4ECC(Unk800D3DBC *this);
+void func_800D50D8(Unk800D3DBC *this);
+void func_800D5274(Unk800D3DBC *this);
+void func_800D5650(Unk800D3DBC *this);
+void func_800D5A50(Unk800D3DBC *this);
+void func_800D5534(Unk800D3DBC *this);
+void func_800D4DEC(Unk800D3DBC *this);
+void func_800D4C54(Unk800D3DBC *this);
+
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D3DBC);
 
 /* The stage's destructor: stops its two sounds, destroys its group and camera, then the battle
  * object's (func_8006F254). */
@@ -65,13 +103,53 @@ void func_800D3FF0(Unk800D3DBC *this, s32 flags) {
     func_8006F254(&this->base, flags);
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D4060);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D4060);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D4674);
+/* Runs func_80070314 and func_800D47B0, then saves the positions of the characters of sides 0 and 1 at 0xF94
+ * and 0xFA4. */
+void func_800D4674(Unk800D3DBC *this) {
+    func_80070314(&this->base);
+    func_800D47B0(this);
+    func_800775D8(func_800700C8(&this->base, 0), &this->unkF94);
+    func_800775D8(func_800700C8(&this->base, 1), &this->unkFA4);
+}
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D46D0);
+#if VERSION_US
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D49B0);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D47B0);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D49C4);
+#endif
+
+/* One frame of the stage: func_80071F6C, then 0xFD4 from bit 8 of the flags at 0x2C8; while that bit is clear
+ * and (func_8006F144 is false or bit 4 is set), runs the stage's parts, plays sound 0x5A every 256 frames
+ * and counts the frame at 0xD3C. */
+void func_800D46D0(Unk800D3DBC *this) {
+    func_80071F6C();
+    if (func_8006F1A4(&this->base)) {
+        this->unkFD4 = 1;
+        return;
+    }
+    this->unkFD4 = 0;
+    if (func_8006F144(&this->base) && !func_8006F190(&this->base)) {
+        return;
+    }
+    func_800D4950(this);
+    func_800D58BC(this);
+    func_800D4ECC(this);
+    func_800D50D8(this);
+    func_800D5274(this);
+    func_800D5650(this);
+    func_800D5A50(this);
+    func_800D5534(this);
+    func_800D4DEC(this);
+    func_800D4C54(this);
+    if ((u8)this->unkD3C == 0) {
+        soundControlPlaySound(&SOUND_CONTROL, 0x5A, 0);
+    }
+    this->unkD3C++;
+}
+
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D47B0);
 
 /* game.bin's: the camera of func_8006ED20's object (at 0x1B0) */
 Camera *func_8006EF5C(Unk8006ED20 *object);
@@ -98,13 +176,13 @@ void func_800D4934(Unk800D3DBC *this) {
     this->unkE26 = 0;
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D4950);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D4950);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D4B14);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D4B14);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D4BFC);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D4BFC);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D4C54);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D4C54);
 
 /* Reads the 16-colour CLUT at (0x310, 0xFE) back from VRAM twice, into 0xF20 and 0xF40. */
 void func_800D4D88(Unk800D3DBC *this) {
@@ -116,35 +194,90 @@ void func_800D4D88(Unk800D3DBC *this) {
     func_80055B88(&this->unkF18, (u_long *)this->unkF40);
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D4DEC);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D4DEC);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D4E80);
+/* Saves the positions of the characters of sides 0 and 1 at 0xFB4 and 0xFC4. */
+void func_800D4E80(Unk800D3DBC *this) {
+    func_800775D8(func_800700C8(&this->base, 0), &this->unkFB4);
+    func_800775D8(func_800700C8(&this->base, 1), &this->unkFC4);
+}
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D4ECC);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D4ECC);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D500C);
+/* The node of the stage's scene whose mesh func_800D500C moves into the stage's group: the only code
+ * difference of this function between the releases (the scene data behind it was not checked). */
+#if VERSION_JP
+#define ST01_GROUP_NODE 17
+#else
+#define ST01_GROUP_NODE 16
+#endif
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D50D8);
+/* Copies the 8 by 64 pixels at (0x338, 0x80) in VRAM to (0x2E0, 0) and to (0x2E0, 0x40), then moves the mesh of
+ * node ST01_GROUP_NODE of the stage's scene into the stage's group at 0xD88. */
+void func_800D500C(Unk800D3DBC *this) {
+    RECT rect;
+    Mesh *mesh;
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D512C);
+    rect.x = 0x338;
+    rect.y = 0x80;
+    rect.w = 8;
+    rect.h = 64;
+    MoveImage(&rect, 0x2E0, 0);
+    rect.x = 0x338;
+    rect.y = 0x80;
+    rect.w = 8;
+    rect.h = 64;
+    MoveImage(&rect, 0x2E0, 0x40);
+    mesh = this->scene->meshes[ST01_GROUP_NODE];
+    listRemove(&mesh->object.link);
+    groupAddChild(&this->unkD88, &mesh->object);
+}
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D5274);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D50D8);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D54C8);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D512C);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D5534);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D5274);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D5614);
+/* Draws the stage's group at 0xD88 through its own camera at 0xD4C, set to the battle's view. */
+void func_800D54C8(Unk800D3DBC *this) {
+    Camera *camera = &this->unkD4C;
+    MATRIX view;
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D5650);
+    cameraClearOt(camera);
+    lookAtGetView(func_8006EF64(&this->base), &view);
+    cameraSetView(camera, &view);
+    sceneObjectDrawInView(&this->unkD88.object, camera);
+    groupInvalidate(&this->unkD88);
+}
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D58BC);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D5534);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D5974);
+/* Clears 0xF7E and 0xF80 and stops the sound at 0xD48, if any. */
+void func_800D5614(Unk800D3DBC *this) {
+    u32 sound = this->unkD48;
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D59D0);
+    this->unkF7E = 0;
+    this->unkF80 = 0;
+    if (sound != 0) {
+        stopSound(sound);
+        this->unkD48 = 0;
+    }
+}
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D5A50);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D5650);
+
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D58BC);
+
+/* Takes the mesh of node 9 out of the stage's scene's group and hides that node. */
+void func_800D5974(Unk800D3DBC *this) {
+    listRemove(&this->scene->meshes[9]->object.link);
+    meshSceneHideNode(this->scene, 9);
+}
+
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D59D0);
+
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D5A50);
 
 /* Constructs an object of the class of vtable D_800D3D24, which derives from the class of
  * D_80065164, with a word. */
@@ -157,7 +290,7 @@ UnkStageObject *func_800D5B80(UnkStageObject *this, s32 arg) {
 void func_800D5B98(void) {
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D5BA0);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D5BA0);
 
 /* The entity func_800D5BA0 constructs (virtual table D_800D3CFC): a mesh of the stage's scene with an object
  * of D_800D3D24 and a member of func_80075EE4's class. */
@@ -205,27 +338,30 @@ void func_800D5CB0(Unk800D5BA0 *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D5DB0);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D5DB0);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D5E84);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D5E84);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D607C);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D607C);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D63F8);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D63F8);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D64D0);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D64D0);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D652C);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D652C);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D67F8);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D67F8);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D6994);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D6994);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D6C94);
+/* Returns the local matrix of the mesh (transformGetLocal, inlined). */
+MATRIX *func_800D6C94(Unk800D5BA0 *this) {
+    return &this->mesh->object.transform.local.m;
+}
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D6CA0);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D6CA0);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D6D08);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D6D08);
 
 /* The destructor of the entity class of vtable D_800D3CD4, which func_800D6D08 installs. */
 void func_800D6DF4(Entity *this, s32 flags) {
@@ -236,11 +372,11 @@ void func_800D6DF4(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D6E48);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D6E48);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D6EA4);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D6EA4);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D7058);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D7058);
 
 /* The destructor of the entity class of vtable D_800D3CAC, which func_800D7058 installs. */
 void func_800D7124(Entity *this, s32 flags) {
@@ -267,9 +403,9 @@ void func_800D7178(Unk800D7058 *this) {
     this->phase++;
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D71B8);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D71B8);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D737C);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D737C);
 
 /* The destructor of the entity class of vtable D_800D3C84, which func_800D737C installs. */
 void func_800D7408(Entity *this, s32 flags) {
@@ -280,11 +416,11 @@ void func_800D7408(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D745C);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D745C);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D74AC);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D74AC);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D7670);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D7670);
 
 /* The destructor of the entity class of vtable D_800D3C5C, which func_800D7670 installs. */
 void func_800D7750(Entity *this, s32 flags) {
@@ -295,11 +431,11 @@ void func_800D7750(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D77A4);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D77A4);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D7880);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D7880);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D7A94);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D7A94);
 
 /* The destructor of the entity class of vtable D_800D3C34, which func_800D7A94 installs. */
 void func_800D7B8C(Entity *this, s32 flags) {
@@ -310,9 +446,9 @@ void func_800D7B8C(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D7BE0);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D7BE0);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D7CE8);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D7CE8);
 
 /* The entity of vtable D_800D3C0C, which func_800D5650 and func_800D5534 make: a gray particle that starts at a
  * random place and falls (func_800D7EC4) or starts around a position (func_800D7F98). */
@@ -352,7 +488,7 @@ Unk800D7EC4 *func_800D7EC4(Unk800D7EC4 *this, Unk8006ED20 *stage) {
     return this;
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D7F98);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D7F98);
 
 /* The destructor of the entity class of vtable D_800D3C0C, which func_800D7EC4 and func_800D7F98 install. */
 void func_800D8088(Entity *this, s32 flags) {
@@ -363,11 +499,11 @@ void func_800D8088(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D80DC);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D80DC);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D8308);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D8308);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D84B8);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D84B8);
 
 /* The destructor of the entity class of vtable D_800D3BE4, which func_800D84B8 installs. */
 void func_800D85FC(Entity *this, s32 flags) {
@@ -378,11 +514,11 @@ void func_800D85FC(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D8650);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D8650);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D8808);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D8808);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D8994);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D8994);
 
 /* The destructor of the entity class of vtable D_800D3BBC, which func_800D8994 installs. */
 void func_800D8AA0(Entity *this, s32 flags) {
@@ -393,11 +529,11 @@ void func_800D8AA0(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D8AF4);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D8AF4);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D8C70);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D8C70);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D8E1C);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D8E1C);
 
 /* The destructor of the entity class of vtable D_800D3B94, which func_800D8E1C installs. */
 void func_800D8EB4(Entity *this, s32 flags) {
@@ -408,11 +544,11 @@ void func_800D8EB4(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D8F08);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D8F08);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D8FD4);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D8FD4);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D9158);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D9158);
 
 /* The destructor of the entity class of vtable D_800D3B6C, which func_800D9158 installs. */
 void func_800D927C(Entity *this, s32 flags) {
@@ -423,11 +559,11 @@ void func_800D927C(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D92D0);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D92D0);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D9458);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D9458);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D9744);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D9744);
 
 /* The destructor of the entity class of vtable D_800D3B44, which func_800D9744 installs. */
 void func_800D97F8(Entity *this, s32 flags) {
@@ -438,11 +574,11 @@ void func_800D97F8(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D984C);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D984C);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D9A98);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D9A98);
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D9BF4);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D9BF4);
 
 /* The destructor of the entity class of vtable D_800D3B1C, which func_800D9BF4 installs. */
 void func_800D9C90(Entity *this, s32 flags) {
@@ -466,7 +602,7 @@ void func_800D9CE4(Unk800D9BF4 *this) {
     this->unk1C++;
 }
 
-INCLUDE_ASM("asm/jp/st01/nonmatchings/st01", func_800D9CF8);
+INCLUDE_ASM("st01/nonmatchings/st01", func_800D9CF8);
 
 /* The destructor of the class of virtual table D_800D3D24: Unk80076308's, inlined. */
 void func_800D9F74(Unk80076308 *this, s32 flags) {

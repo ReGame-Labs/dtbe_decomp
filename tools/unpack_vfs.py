@@ -18,7 +18,7 @@ The format, as the game reads it (src/engine/cd/cdfs.c, file_load.c):
 - a compressed file starts with a CompressedHeader, "ZP00" and its inflated
   size, followed by its zlib stream.
 
-usage: unpack_vfs.py disks/jp/A.VFS assets/jp
+usage: unpack_vfs.py disks/<version>/A.VFS assets/<version>
 """
 
 import os

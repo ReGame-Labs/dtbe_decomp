@@ -213,7 +213,7 @@ void displaySetTvSize(Display *this, s32 width, s32 height) {
     this->disp[1].screen.h = height;
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/display", VRAM_CLEAR_RECTS);
+INCLUDE_RODATA("main/nonmatchings/gfx/display", VRAM_CLEAR_RECTS);
 
 /* Shows env from both buffers, or each buffer its own environment when env is
  * NULL. */

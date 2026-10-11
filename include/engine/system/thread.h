@@ -16,9 +16,9 @@ typedef struct {
 
 Thread *threadInit(Thread *thread, void (*func)(), u32 stackSize, void *arg, s32 gp);
 void threadDestroy(Thread *thread, s32 flags);
-void threadSwitchTo(Thread *thread, s32 value);
-void threadSwitchBack(Thread *thread, s32 value);
-void switchThread(s32 id, s32 value);
+s32 threadSwitchTo(Thread *thread, s32 value);
+s32 threadSwitchBack(Thread *thread, s32 value);
+s32 switchThread(s32 id, s32 value);
 s32 threadGetId(Thread *thread);
 
 EXTERN_C_END

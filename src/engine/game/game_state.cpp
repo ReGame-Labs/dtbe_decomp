@@ -548,7 +548,7 @@ void gameStateStoreFighters(GameState *gameState) {
  * folds 0x324/0x354 into every offset (36 lines differ): CSE's find_best_addr
  * folds the first word only, the later ones tie on cost. The array form folds
  * them all but puts the base first (get_inner_reference). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/game/game_state", gameStateRestoreFighters);
+INCLUDE_ASM("main/nonmatchings/game/game_state", gameStateRestoreFighters);
 
 /* Gives a side the other colors when both sides look alike. Register
  * allocation of the look comparison differs (14 lines, C and C++ alike):
@@ -557,7 +557,7 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/game/game_state", gameStateRestoreFighters
  * it never ties through a MEM operand. Global pseudos for the looks would give
  * it (global-alloc's set_preference looks through the MEM); no source found
  * that makes them global. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/game/game_state", gameStateSetAltColor);
+INCLUDE_ASM("main/nonmatchings/game/game_state", gameStateSetAltColor);
 
 /* Gives the computer's side character. */
 void gameStateSetOpponent(GameState *gameState, s32 character) {
@@ -663,22 +663,22 @@ void joinStateUpdate(JoinState *joinState) {
     joinState->wasJoined = joinState->joined;
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/game_state", CHARACTER_EVOLUTIONS);
+INCLUDE_RODATA("main/nonmatchings/game/game_state", CHARACTER_EVOLUTIONS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/game_state", STARTING_CHARACTERS);
+INCLUDE_RODATA("main/nonmatchings/game/game_state", STARTING_CHARACTERS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/game_state", CODE_DIGESTS);
+INCLUDE_RODATA("main/nonmatchings/game/game_state", CODE_DIGESTS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/game_state", CLEAR_UNLOCKS);
+INCLUDE_RODATA("main/nonmatchings/game/game_state", CLEAR_UNLOCKS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/game_state", DEMO_CHARACTERS);
+INCLUDE_RODATA("main/nonmatchings/game/game_state", DEMO_CHARACTERS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/game_state", CHARACTER_HOMES);
+INCLUDE_RODATA("main/nonmatchings/game/game_state", CHARACTER_HOMES);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/game_state", D_800102D4);
+INCLUDE_RODATA("main/nonmatchings/game/game_state", D_800102D4);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/game_state", D_80010304);
+INCLUDE_RODATA("main/nonmatchings/game/game_state", D_80010304);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/game_state", CHARACTER_GROUPS);
+INCLUDE_RODATA("main/nonmatchings/game/game_state", CHARACTER_GROUPS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/game_state", ARENA_PREFERENCES);
+INCLUDE_RODATA("main/nonmatchings/game/game_state", ARENA_PREFERENCES);

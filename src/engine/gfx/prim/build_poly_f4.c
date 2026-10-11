@@ -5,10 +5,10 @@
  * the shape is semi-transparent, to the ordering table. Compiled C, the
  * template of buildPolyFT3 with the same early length load into a1: left asm
  * for the same reason. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_poly_f4", buildPolyF4);
+INCLUDE_ASM("main/nonmatchings/gfx/prim/build_poly_f4", buildPolyF4);
 
 /* Projects a shape's vertex and adds a TILE there, and a DR_TPAGE when the
  * shape is semi-transparent, to the ordering table. Compiled C, the template
  * of buildPolyFT3 with the same early length load into a1: left asm for the
  * same reason. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_poly_f4", buildTile);
+INCLUDE_ASM("main/nonmatchings/gfx/prim/build_poly_f4", buildTile);

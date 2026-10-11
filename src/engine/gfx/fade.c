@@ -61,4 +61,4 @@ void fadeControlDestroy(FadeControl *this, s32 flags) {
     taskDestroy(&this->task, flags);
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/fade", FADE_CONTROL_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/gfx/fade", FADE_CONTROL_VTABLE);

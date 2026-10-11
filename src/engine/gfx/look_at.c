@@ -85,7 +85,7 @@ void lookAtTurn(LookAt *this, s32 yaw, s32 pitch) {
 /* Gives the view matrix, rebuilding it first if the view moved. It copies
  * it as a block move (four loads then four stores), which GCC 2.95.2 does not
  * emit for 32 bytes (see "Block moves" in TODO.md). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/look_at", lookAtGetView);
+INCLUDE_ASM("main/nonmatchings/gfx/look_at", lookAtGetView);
 
 /* Gives the inverse of the view matrix, the view's own placement in the
  * world, rebuilding the view first if it moved. */

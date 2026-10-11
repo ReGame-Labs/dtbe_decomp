@@ -19,6 +19,6 @@
  * a div and mflo of their own (inline asm) would explain it. getTan has the
  * same divide inlined. The game also tests numerator from a copy in $v1,
  * which the C does not make. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/divide", divide12);
+INCLUDE_ASM("main/nonmatchings/math/divide", divide12);
 
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/divide", divide16);
+INCLUDE_ASM("main/nonmatchings/math/divide", divide16);

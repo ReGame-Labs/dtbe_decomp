@@ -5,7 +5,7 @@ This reads every directory the ISO9660 path table lists, not only those the
 root directory reaches, and writes its files under OUT, keeping the paths.
 XA and STR files are copied as the 2048-byte user data of their sectors.
 
-usage: extract_disc.py "DigimonTamers - Battle Evolution (Japan).bin" disks/jp
+usage: extract_disc.py <the disc image, .bin> disks/<version>
 """
 
 import os

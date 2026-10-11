@@ -13,7 +13,7 @@
 
 /* Builds the thread. It stays in asm: when given no gp, it gives the thread
  * its own $gp (or $s1, $zero, $gp), which C can't read without inline asm. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/system/thread", threadInit);
+INCLUDE_ASM("main/nonmatchings/system/thread", threadInit);
 
 /* Destroys the thread and frees its stack. */
 void threadDestroy(Thread *this, s32 flags) {
@@ -32,25 +32,28 @@ void threadDestroy(Thread *this, s32 flags) {
 static s32 CURRENT_THREAD = DescTH;
 
 /* Switches to the thread, handing it value; it switches back to the thread
- * running now. */
-void threadSwitchTo(Thread *this, s32 value) {
+ * running now. Returns the value it switches back with. */
+s32 threadSwitchTo(Thread *this, s32 value) {
     this->caller = CURRENT_THREAD;
-    switchThread(this->id, value);
+    return switchThread(this->id, value);
 }
 
-/* Switches back to the thread that switched to this one, handing it value. */
-void threadSwitchBack(Thread *this, s32 value) {
-    switchThread(this->caller, value);
+/* Switches back to the thread that switched to this one, handing it value.
+ * Returns the value of the next switch to this thread. */
+s32 threadSwitchBack(Thread *this, s32 value) {
+    return switchThread(this->caller, value);
 }
 
-/* Switches to thread id, which gets value as what its switch returned. */
-void switchThread(s32 id, s32 value) {
+/* Switches to thread id, which gets value as what its switch returned. Returns
+ * what the switch back to this thread hands it (ChangeTh returns the v0 that
+ * switch stored in this thread's TCB). */
+s32 switchThread(s32 id, s32 value) {
     struct TCB *tcb = TCB_TABLE;
 
     tcb += THREAD_INDEX(id);
     tcb->reg[R_V0] = value;
     CURRENT_THREAD = id;
-    ChangeTh(id);
+    return ChangeTh(id);
 }
 
 /* The id of the thread. */

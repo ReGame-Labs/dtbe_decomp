@@ -1,0 +1,63 @@
+name: movie
+sha1: 93fba61cdd820b4b889e747360b8888dd47b12f5
+options:
+  basename: movie
+  target_path: assets/us/bin/movie.bin
+  base_path: ../..
+  platform: psx
+  compiler: GCC
+
+  asm_path: asm/us/movie
+  src_path: src/movie
+  build_path: build/us
+
+  ld_script_path: build/us/generated/movie.ld
+
+  global_vram_start: 0x80000000
+  global_vram_end: 0x80200000
+
+  find_file_boundaries: True
+  gp_value: 0x80064128
+
+  generate_asm_macros_files: False
+
+  section_order: [".rodata", ".text", ".data", ".bss"]
+
+  symbol_addrs_path:
+    - config/us/symbols.txt
+    - config/us/symbols_movie.txt
+
+  undefined_funcs_auto_path: build/us/generated/undefined_funcs_auto_movie.txt
+  undefined_syms_auto_path: build/us/generated/undefined_syms_auto_movie.txt
+
+  string_encoding: SHIFT-JIS
+  data_string_encoding: SHIFT-JIS
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+  ld_bss_is_noload: True
+
+  migrate_rodata_to_functions: True
+  create_data_pads: False
+
+segments:
+  - name: movie
+    type: code
+    start: 0x0
+    vram: 0x800643C0
+    align: 4
+    subalign: 4
+    subsegments:
+      # the game's objects, then PsyQ's libpress (DecDCT*, MDEC_*), in each
+      # section: libpress stays splat's asm, out of the progress
+      # every overlay starts with a word of its own (title 3, game 5, movie 6,
+      # st00 7 ... st09 16). It is not movie's: movie's vtables are 8-aligned
+      # in their object (g++'s .align 3), which they are only from 0x4 on
+      - [0x0, rodata, header]
+      - [0x4, .rodata, movie]
+      - [0x64, rodata, psyq/libpress]
+      - [0xB4, cpp, movie]
+      - [0xEB0, asm, psyq/libpress]
+      - [0x19B0, data, movie]
+      - [0x19B4, data, psyq/libpress]
+  - [0x2944]

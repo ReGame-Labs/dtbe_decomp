@@ -98,6 +98,12 @@ make -j$(nproc)
 make compare
 ```
 
+The USA release (`SLUS_014.04`) builds the same way, with `VERSION=us` on
+every command: its files go in `disks/us`, and `make VERSION=us compare`
+checks it. `jp` is the default. Both builds share the source; the few
+functions whose code differs in the USA release stay in assembly there,
+behind `#if VERSION_JP`.
+
 `make report` writes objdiff's progress report (`build/jp/report.json`), and
 `make objdiff` the `objdiff.json` that objdiff's GUI opens.
 

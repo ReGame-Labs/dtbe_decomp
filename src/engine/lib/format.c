@@ -5,9 +5,9 @@
 /* whether c is a decimal digit, in one unsigned compare */
 #define IS_DIGIT(c) ((u32)((c) - '0') < 10)
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/format", HEX_DIGITS_UPPER);
+INCLUDE_RODATA("main/nonmatchings/lib/format", HEX_DIGITS_UPPER);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/format", HEX_DIGITS_LOWER);
+INCLUDE_RODATA("main/nonmatchings/lib/format", HEX_DIGITS_LOWER);
 
 /* Formats into buffer like vsprintf, without floating point; returns the
  * length of the output. */
@@ -227,7 +227,7 @@ VaList formatterPrintArg(Formatter *this, s32 conversion, VaList args) {
  * FORMAT_LEFT says, and reverses it in place.
  * The body matches, but the frame is 8 bytes larger (0x28 against 0x20): only an
  * unused 8-byte local array gives it, so the original had a dead local. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/lib/format", formatterPadNumber);
+INCLUDE_ASM("main/nonmatchings/lib/format", formatterPadNumber);
 
 /* vsprintf: formats into buffer and returns the length of the output. */
 s32 vsprintf(u8 *buffer, u8 *format, VaList args) {

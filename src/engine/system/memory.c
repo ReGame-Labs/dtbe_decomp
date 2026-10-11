@@ -117,4 +117,4 @@ void operatorVecDelete(void *ptr) {
  * from and the message (a printf format) on a cleared screen, then crashes on
  * purpose. It reads its return address (move s1, ra), which only inline asm
  * gives, so it stays assembly. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/system/memory", die);
+INCLUDE_ASM("main/nonmatchings/system/memory", die);

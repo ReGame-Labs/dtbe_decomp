@@ -5,7 +5,7 @@
 #include "engine/system/memory.h"
 #include "gte.h"
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/tmd", TMD_PRIM_SIZES);
+INCLUDE_RODATA("main/nonmatchings/gfx/tmd", TMD_PRIM_SIZES);
 
 /* Loads the view matrix alone into the GTE's rotation and translation, for
  * what is drawn in world coordinates. */
@@ -666,8 +666,8 @@ void boundsGrowByVertex(Bounds *this, SVECTOR *vertex) {
     }
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/tmd", TMD_DRAW_FUNCS);
+INCLUDE_RODATA("main/nonmatchings/gfx/tmd", TMD_DRAW_FUNCS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/tmd", TMD_MOVE_TEXTURES_DOWN_FUNCS);
+INCLUDE_RODATA("main/nonmatchings/gfx/tmd", TMD_MOVE_TEXTURES_DOWN_FUNCS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/tmd", TMD_GROW_BOUNDS_FUNCS);
+INCLUDE_RODATA("main/nonmatchings/gfx/tmd", TMD_GROW_BOUNDS_FUNCS);

@@ -1,6 +1,6 @@
 #include "common.h"
 #include "engine/text/font.h"
-#include "engine/gfx/prim/alloc_dr_move.h"
+#include "engine/gfx/prim/alloc_sprt_16.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/gfx/prim_buffer.h"
 #include "engine/gfx/vram_cache.h"
@@ -319,10 +319,10 @@ void printerDestroy(Printer *this, s32 flags) {
     }
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/text/font", TEXT_PRINTER_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/text/font", TEXT_PRINTER_VTABLE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/text/font", FONT_CACHE_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/text/font", FONT_CACHE_VTABLE);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/text/font", FONT_NO_GLYPH);
+INCLUDE_RODATA("main/nonmatchings/text/font", FONT_NO_GLYPH);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/text/font", PRINTER_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/text/font", PRINTER_VTABLE);

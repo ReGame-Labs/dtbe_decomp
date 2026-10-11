@@ -259,4 +259,4 @@ void entityGroupAdd(EntityGroup *this, Entity *entity) {
     entityGroupAppend(this, entity);
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/task/entity", ENTITY_VTABLE);
+INCLUDE_RODATA("main/nonmatchings/task/entity", ENTITY_VTABLE);

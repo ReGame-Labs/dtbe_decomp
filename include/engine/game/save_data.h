@@ -34,7 +34,7 @@ typedef struct {
     /* 0x01C */ u32 unlocked; /* a bit for each character that can be picked */
     /* 0x020 */ u32 cleared;  /* a bit for each character a run was won with */
     /* 0x024 */ u16 buttons[2][BUTTON_SLOT_COUNT]; /* a slot index for each slot, by player */
-    /* 0x03C */ u8 unk3C[0x23C - 0x3C];
+    /* 0x03C */ u8 records[8][0x40]; /* the ranking's records (title.bin's Unk800764F4) */
     /* 0x23C */ u8 md5[MD5_DIGEST_SIZE];
 } SaveData;
 

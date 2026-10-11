@@ -30,16 +30,16 @@
  * __main and crt0 run: psylink's tables, ahead of the files' .rodata. They are
  * here as the first .rodata the executable has (system/globals and
  * system/break_stub have none). */
-INCLUDE_RODATA("asm/jp/main/nonmatchings/system/main", STATIC_CONSTRUCTORS);
+INCLUDE_RODATA("main/nonmatchings/system/main", STATIC_CONSTRUCTORS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/system/main", STATIC_DESTRUCTORS);
+INCLUDE_RODATA("main/nonmatchings/system/main", STATIC_DESTRUCTORS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/system/main", BUILD_NAME);
+INCLUDE_RODATA("main/nonmatchings/system/main", BUILD_NAME);
 
 /* The game's entry point: starts the system, loads the font and the system
  * TIMs, then runs the frames in a thread (runFramesThread). It passes $fp to
  * func_800403C0, which needs inline asm. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/system/main", main);
+INCLUDE_ASM("main/nonmatchings/system/main", main);
 
 /* The function of main's thread: every frame, makes the sequencer again if
  * its task is gone, runs the frame and switches back to main's thread. */

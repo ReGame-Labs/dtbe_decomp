@@ -13,21 +13,41 @@
 /* The stage's class, which func_800D3B74 constructs on func_8006ED20's. */
 typedef struct Unk800D3B74 {
     /* 0x000 */ Unk8006ED20 base;
-    /* 0xD38 */ u8 unkD38[0xD4C - 0xD38];
+    /* 0xD38 */ u8 unkD38[0xD3C - 0xD38];
+    /* 0xD3C */ s32 unkD3C; /* counted up by func_800D4A70 */
+    /* 0xD40 */ u8 unkD40[0xD4C - 0xD40];
     /* 0xD4C */ u32 unkD4C; /* a sound's handle (stopSound) */
     /* 0xD50 */ ListNode unkD50; /* a list node the destructor unlinks */
     /* 0xD58 */ u8 unkD58[0xDA8 - 0xD58];
     /* 0xDA8 */ RECT unkDA8;     /* 16 by 1 pixels at (0x300, 0xFE): a CLUT */
     /* 0xDB0 */ u8 unkDB0[0xE90 - 0xDB0];
     /* 0xE90 */ u16 unkE90[16]; /* that CLUT, read back from VRAM by func_800D4074 */
-    /* 0xEB0 */ u8 unkEB0[0xEF4 - 0xEB0];
+    /* 0xEB0 */ u8 unkEB0[0xEC8 - 0xEB0];
+    /* 0xEC8 */ u32 unkEC8; /* an angle (0..0xFFF), stepped by func_800D704C */
+    /* 0xECC */ u8 unkECC[0xEF4 - 0xECC];
     /* 0xEF4 */ s16 unkEF4;
-    /* 0xEF6 */ u8 unkEF6[0x1060 - 0xEF6];
+    /* 0xEF6 */ u8 unkEF6[0x1020 - 0xEF6];
+    /* 0x1020 */ u32 unk1020[4]; /* func_800D5A34 counts the non-zero ones */
+    /* 0x1030 */ s32 unk1030;
+    /* 0x1034 */ s32 unk1034[4]; /* func_800D59CC fills them with (r + i) & 3 */
+    /* 0x1044 */ s32 unk1044;
+    /* 0x1048 */ s16 unk1048;
+    /* 0x104A */ u8 unk104A[0x1050 - 0x104A];
+    /* 0x1050 */ s32 unk1050; /* while set, func_800D8930's quads turn red */
+    /* 0x1054 */ u8 unk1054[0x1060 - 0x1054];
     /* 0x1060 */ Group unk1060; /* drawn by func_800D7A24's entity */
     /* 0x10C0 */ s32 unk10C0;   /* while set, that group is not drawn */
 } Unk800D3B74;
 
 void func_800D9B9C(void *this);
+void func_800D4BB0(Unk800D3B74 *this);
+
+/* game.bin functions missing from game.h */
+void func_80071F6C(void);
+s32 func_8006F144(Unk8006ED20 *object);
+s32 func_8006F190(Unk8006ED20 *object);
+s32 func_8006F1A4(Unk8006ED20 *object);
+u32 func_8006F004(Unk8006ED20 *object);
 
 /* the virtual tables the functions below install, and the data they read */
 extern EntityVtable D_800D3924;
@@ -42,7 +62,7 @@ extern EntityVtable D_800D3AB4;
 extern VtableEntry D_800D3ADC[];
 extern VtableEntry D_800D3AFC[];
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D3B74);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D3B74);
 
 /* The stage's destructor: virtual table D_800D3AFC, the group at 0x1060, unlinks the node at 0xD50, then
  * func_8006ED20's class's destructor. */
@@ -60,11 +80,11 @@ void func_800D3C34(Unk800D3B74 *this, s32 flags) {
     func_8006F254(&this->base, flags);
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D3CA8);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D3CA8);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D3D94);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D3D94);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D3E80);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D3E80);
 
 /* Reads the 16-colour CLUT at (0x300, 0xFE) back from VRAM into 0xE90. */
 void func_800D4074(Unk800D3B74 *this) {
@@ -76,52 +96,92 @@ void func_800D4074(Unk800D3B74 *this) {
     func_80055B88(&this->unkDA8, (u_long *)this->unkE90);
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D40C0);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D40C0);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D4198);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D4198);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D468C);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D468C);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D47C8);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D47C8);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D4A70);
+/* One frame of the stage: func_80071F6C, then flag 0x10C0 from bit 8 of the flags at 0x2C8; while that bit
+ * is clear and (func_8006F144 is false or bit 4 is set), runs func_800D4BB0 and counts the frame at 0xD3C. */
+void func_800D4A70(Unk800D3B74 *this) {
+    func_80071F6C();
+    if (func_8006F1A4(&this->base)) {
+        this->unk10C0 = 1;
+        return;
+    }
+    this->unk10C0 = 0;
+    if (func_8006F144(&this->base) && !func_8006F190(&this->base)) {
+        return;
+    }
+    func_800D4BB0(this);
+    this->unkD3C++;
+}
 
 /* Stops the sound at 0xD4C. */
 void func_800D4AE8(Unk800D3B74 *this) {
     stopSound(this->unkD4C);
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D4B0C);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D4B0C);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D4BB0);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D4BB0);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D4DC4);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D4DC4);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D508C);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D508C);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D5154);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D5154);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D55B4);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D55B4);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D59CC);
+/* Fills 0x1034 with four consecutive values (mod 4) from a random start, clears 0x1044 and 0x1030, and
+ * sets 0x1048 to a random bit. */
+void func_800D59CC(Unk800D3B74 *this) {
+    u16 value = func_8006F004(&this->base) & 3;
+    s32 i;
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D5A34);
+    for (i = 0; i < 4; i++) {
+        this->unk1034[i] = value++ & 3;
+    }
+    this->unk1044 = 0;
+    this->unk1030 = 0;
+    this->unk1048 = func_8006F004(&this->base) & 1;
+}
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D5A68);
+/* Returns how many of the four words at 0x1020 are set. */
+s32 func_800D5A34(Unk800D3B74 *this) {
+    s32 count = 0;
+    s32 i;
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D5E30);
+    for (i = 0; i < 4; i++) {
+        if (this->unk1020[i] != 0) {
+            count++;
+        }
+    }
+    return count;
+}
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D6534);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D5A68);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D6D74);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D5E30);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D704C);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D6534);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D7064);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D6D74);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D70E4);
+/* Turns the angle at 0xEC8 by 0x40. */
+void func_800D704C(Unk800D3B74 *this) {
+    this->unkEC8 = (this->unkEC8 + 0x40) & 0xFFF;
+}
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D76FC);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D7064);
+
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D70E4);
+
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D76FC);
 
 /* Constructs an entity of D_800D3AB4 for the Unk8006ED20 whose entity group will hold it, and the
  * word that object keeps at 0xEC4 (func_800D4B0C, which also passes 0x1C, unused). */
@@ -151,7 +211,7 @@ void func_800D7A24(UnkSt00Entity *this, Camera *camera) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D7A70);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D7A70);
 
 /* The destructor of the entity class of vtable D_800D3A3C, which func_800D7A70 installs. */
 void func_800D7B78(Entity *this, s32 flags) {
@@ -165,9 +225,9 @@ void func_800D7B78(Entity *this, s32 flags) {
 void func_800D7BCC(void) {
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D7BD4);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D7BD4);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D7E90);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D7E90);
 
 /* The destructor of the entity class of vtable D_800D3A14, which func_800D7E90 installs. */
 void func_800D7F34(Entity *this, s32 flags) {
@@ -178,9 +238,9 @@ void func_800D7F34(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D7F88);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D7F88);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D7FDC);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D7FDC);
 
 /* An entity of the stage (func_800D819C, vtable D_800D39EC; 0x60 bytes): a 1024-wide quad of the owner, from
  * height -0xA8E to -0x68E. */
@@ -216,11 +276,11 @@ void func_800D8228(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D827C);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D827C);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D82D4);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D82D4);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D8470);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D8470);
 
 /* The destructor of the entity class of vtable D_800D39C4, which func_800D8470 installs. */
 void func_800D85F4(Entity *this, s32 flags) {
@@ -231,11 +291,40 @@ void func_800D85F4(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D8648);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D8648);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D875C);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D875C);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D8930);
+/* An entity of the stage (func_800D8930, vtable D_800D399C; func_800D4198 constructs it): two quads side by
+ * side at z -0x400, teal while the stage's 0x1050 is clear and red while it is set. */
+typedef struct Unk800D8930 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk800D3B74 *stage;
+    /* 0x1C */ s32 red; /* the color below is the red one */
+    /* 0x20 */ u32 color;
+    /* 0x24 */ SVECTOR corners[8]; /* two quads of four */
+} Unk800D8930;
+
+/* Constructs the stage's two-quad entity: x from -0x540 to -0x240 and from 0x240 to 0x540, y from 0x60 to
+ * 0x360, z -0x400. */
+Unk800D8930 *func_800D8930(Unk800D8930 *this, Unk800D3B74 *stage) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D399C;
+    this->stage = stage;
+    this->red = 0;
+    this->corners[0].vx = this->corners[2].vx = -0x540;
+    this->corners[1].vx = this->corners[3].vx = -0x240;
+    this->corners[0].vy = this->corners[1].vy = 0x60;
+    this->corners[2].vy = this->corners[3].vy = 0x360;
+    this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = -0x400;
+    this->corners[4].vx = this->corners[6].vx = 0x240;
+    this->corners[5].vx = this->corners[7].vx = 0x540;
+    this->corners[4].vy = this->corners[5].vy = 0x60;
+    this->corners[6].vy = this->corners[7].vy = 0x360;
+    this->corners[4].vz = this->corners[5].vz = this->corners[6].vz = this->corners[7].vz = -0x400;
+    this->color = 0x808010;
+    return this;
+}
 
 /* The destructor of the entity class of vtable D_800D399C, which func_800D8930 installs. */
 void func_800D8A04(Entity *this, s32 flags) {
@@ -246,9 +335,20 @@ void func_800D8A04(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D8A58);
+/* Follows the stage's 0x1050: red (0x101080) while it is set, teal (0x808010) otherwise. */
+void func_800D8A58(Unk800D8930 *this) {
+    if (this->stage->unk1050) {
+        if (this->red != 1) {
+            this->color = 0x101080;
+            this->red = 1;
+        }
+    } else if (this->red != 0) {
+        this->color = 0x808010;
+        this->red = 0;
+    }
+}
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D8AB4);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D8AB4);
 
 /* An entity of the stage (func_800D8C0C, vtable D_800D3974; nothing calls its constructor): a 512 by 512 quad
  * at depth -0x200, color 0x208080. */
@@ -286,11 +386,11 @@ void func_800D8CA0(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D8CF4);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D8CF4);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D8D48);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D8D48);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D8ED4);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D8ED4);
 
 /* The destructor of the entity class of vtable D_800D394C, which func_800D8ED4 installs. */
 void func_800D8FB4(Entity *this, s32 flags) {
@@ -301,13 +401,13 @@ void func_800D8FB4(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D9008);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D9008);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D9128);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D9128);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D9234);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D9234);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D932C);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D932C);
 
 /* The entity func_800D950C constructs (virtual table D_800D3924): up to 16 items that slide out from
  * x = 0x880 (even) or -0x880 (odd), brightest at x = +-0xA80. */
@@ -407,7 +507,7 @@ void func_800D9614(Unk800D950C *this, s32 arg) {
     this->frame++;
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D977C);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D977C);
 
 /* Constructs an object of D_800D3ADC (an UnkStageObject: a part with a virtual table, a word and a
  * vector) for arg, with the vector (0x40, 0, 0). */
@@ -522,7 +622,7 @@ void func_800D9B08(Unk800D99F0 *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D9B9C);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D9B9C);
 
 /* The first method of the entity class of virtual table D_800D3A8C: func_800D9B9C. */
 void func_800D9DBC(void *this) {
@@ -602,9 +702,12 @@ void func_800D9EDC(Unk800D9DDC *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800D9F70);
+INCLUDE_ASM("st00/nonmatchings/st00", func_800D9F70);
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800DA140);
+/* Returns whether the stage's 0x1050 is set. */
+s32 func_800DA140(Unk800D3B74 *this) {
+    return this->unk1050 != 0;
+}
 
 /* The destructor of the class of virtual table D_800D3ADC: Unk80076308's, inlined. */
 void func_800DA14C(Unk80076308 *this, s32 flags) {
@@ -627,4 +730,7 @@ void func_800DA180(UnkStageObject *this, Vec3 *vec) {
     this->unk8.vz = z;
 }
 
-INCLUDE_ASM("asm/jp/st00/nonmatchings/st00", func_800DA19C);
+/* Sets the object's word at 4. */
+void func_800DA19C(UnkStageObject *this, s32 value) {
+    this->unk4 = value;
+}
