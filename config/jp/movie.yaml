@@ -48,7 +48,16 @@ segments:
     align: 4
     subalign: 4
     subsegments:
-      - [0x0, .rodata, movie]
-      - [0xB4, c, movie]
-      - [0x19A4, data, movie]
+      # the game's objects, then PsyQ's libpress (DecDCT*, MDEC_*), in each
+      # section: libpress stays splat's asm, out of the progress
+      # every overlay starts with a word of its own (title 3, game 5, movie 6,
+      # st00 7 ... st09 16). It is not movie's: movie's vtables are 8-aligned
+      # in their object (g++'s .align 3), which they are only from 0x4 on
+      - [0x0, rodata, header]
+      - [0x4, .rodata, movie]
+      - [0x64, rodata, psyq/libpress]
+      - [0xB4, cpp, movie]
+      - [0xEB0, asm, psyq/libpress]
+      - [0x19B0, data, movie]
+      - [0x19B4, data, psyq/libpress]
   - [0x2944]

@@ -51,7 +51,7 @@ typedef struct AppSequencer {
  * joined in; below 0, the scene was left */
 #define CHARACTER_SELECT_CHALLENGE 1
 
-/* the modes of the memory card scene (func_800709B0) that load or save
+/* the modes of the memory card scene (memoryCardTaskInit) that load or save
  * without asking first, as modes 0 and 1 do */
 #define MEMORY_CARD_LOAD 2
 #define MEMORY_CARD_SAVE 3

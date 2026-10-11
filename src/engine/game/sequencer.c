@@ -17,65 +17,65 @@
 
 /* Creates the boot logo ("Boot Logo"). */
 Task *createBootLogoTask(void) {
-    return func_80066D58(operatorNew(0x34), &SYSTEM_CONTEXT);
+    return bootLogoTaskInit(operatorNew(0x34), &SYSTEM_CONTEXT);
 }
 
 /* Creates the title ("Title Logo"); a result other than 0 starts the demo. */
 Task *createTitleTask(void) {
-    return func_80067170(operatorNew(0x110C), &SYSTEM_CONTEXT);
+    return titleLogoTaskInit(operatorNew(0x110C), &SYSTEM_CONTEXT);
 }
 
 /* Creates the select scene ("Character Select"): the characters, and the
  * arena or the bonus game, as GameState.selectFlags says. */
 Task *createCharacterSelectTask(void) {
-    return func_8006AAF8(operatorNew(0x234), &SYSTEM_CONTEXT, GAME_STATE.selectFlags);
+    return characterSelectTaskInit(operatorNew(0x234), &SYSTEM_CONTEXT, GAME_STATE.selectFlags);
 }
 
 /* Creates the fight scene ("game main process"): fights and bonus games; its
  * result is a FIGHT_RESULT_*. */
 Task *createFightTask(void) {
-    return func_8006E1CC(operatorNew(0x64), &SYSTEM_CONTEXT);
+    return gameMainTaskInit(operatorNew(0x64), &SYSTEM_CONTEXT);
 }
 
 /* Creates the guide of the bonus game ("Guide Logo"). */
 Task *createBonusGuideTask(void) {
-    return func_80071F28(operatorNew(0xA90), &SYSTEM_CONTEXT, GAME_STATE.bonusGame);
+    return guideLogoTaskInit(operatorNew(0xA90), &SYSTEM_CONTEXT, GAME_STATE.bonusGame);
 }
 
 /* Creates the credits. */
 Task *createCreditsTask(void) {
-    return func_80076504(operatorNew(0x44), &SYSTEM_CONTEXT);
+    return creditsTaskInit(operatorNew(0x44), &SYSTEM_CONTEXT);
 }
 
 /* Creates the ranking; its argument is 0 after the demo. */
 Task *createRankingTask(void) {
-    return func_8007360C(operatorNew(0x474), &SYSTEM_CONTEXT, !GAME_STATE.demo);
+    return rankingTaskInit(operatorNew(0x474), &SYSTEM_CONTEXT, !GAME_STATE.demo);
 }
 
 /* Creates the movie scene, which plays /a.str. */
 Task *createMovieTask(void) {
-    return func_80064494(operatorNew(0x28));
+    return movieTaskInit(operatorNew(0x28));
 }
 
 /* Creates the main menu ("MainMenu"): its result is the choice (0 to 5), or
  * another to go back. */
 Task *createMainMenuTask(void) {
-    return func_8006A360(operatorNew(0x90), 0);
+    return mainMenuTaskInit(operatorNew(0x90), 0);
 }
 
 /* Creates the options ("Option"). */
 Task *createOptionTask(void) {
-    return func_800794E0(operatorNew(0x8C));
+    return optionTaskInit(operatorNew(0x8C));
 }
 
 /* Creates the memory card scene that loads the save. */
 Task *createLoadTask(void) {
-    return func_800709B0(operatorNew(0x58), MEMORY_CARD_LOAD);
+    return memoryCardTaskInit(operatorNew(0x58), MEMORY_CARD_LOAD);
 }
 
 /* Creates the memory card scene that saves. */
 Task *createSaveTask(void) {
-    return func_800709B0(operatorNew(0x58), MEMORY_CARD_SAVE);
+    return memoryCardTaskInit(operatorNew(0x58), MEMORY_CARD_SAVE);
 }
 
 /* Builds the sequencer. With randomFights, it only runs random fights. */

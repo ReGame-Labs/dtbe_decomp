@@ -15,23 +15,23 @@ EXTERN_C_BEGIN
  * The constructors of the tasks the overlays define: each builds its task in
  * memory from the main heap (operatorNew) and returns it.
  */
-struct Task *func_80064494(void *memory);
+struct Task *movieTaskInit(void *memory);
 struct Task *func_80065AE4(void *memory, struct SystemContext *context);
 struct Task *func_80066084(void *memory, struct SystemContext *context);
-struct Task *func_80066D58(void *memory, struct SystemContext *context);
+struct Task *bootLogoTaskInit(void *memory, struct SystemContext *context);
 struct Task *func_80066F74(void *memory, struct SystemContext *context);
-struct Task *func_80067170(void *memory, struct SystemContext *context);
+struct Task *titleLogoTaskInit(void *memory, struct SystemContext *context);
 struct Task *func_800673A4(void *memory, struct SystemContext *context);
 struct Task *func_800681A4(void *memory, struct SystemContext *context);
-struct Task *func_8006A360(void *memory, s32 arg);
+struct Task *mainMenuTaskInit(void *memory, s32 arg);
 struct Task *func_8006A43C(void *memory, struct SystemContext *context);
-struct Task *func_8006AAF8(void *memory, struct SystemContext *context, s32 arg);
-struct Task *func_8006E1CC(void *memory, struct SystemContext *context);
-struct Task *func_800709B0(void *memory, s32 arg);
-struct Task *func_80071F28(void *memory, struct SystemContext *context, u16 arg);
-struct Task *func_8007360C(void *memory, struct SystemContext *context, s32 arg);
-struct Task *func_80076504(void *memory, struct SystemContext *context);
-struct Task *func_800794E0(void *memory);
+struct Task *characterSelectTaskInit(void *memory, struct SystemContext *context, s32 arg);
+struct Task *gameMainTaskInit(void *memory, struct SystemContext *context);
+struct Task *memoryCardTaskInit(void *memory, s32 arg);
+struct Task *guideLogoTaskInit(void *memory, struct SystemContext *context, u16 arg);
+struct Task *rankingTaskInit(void *memory, struct SystemContext *context, s32 arg);
+struct Task *creditsTaskInit(void *memory, struct SystemContext *context);
+struct Task *optionTaskInit(void *memory);
 /* called on the list node of a MeshSceneLink that is in a list */
 void func_80076A5C(struct ListNode *node);
 

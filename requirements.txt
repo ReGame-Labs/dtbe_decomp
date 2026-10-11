@@ -2,6 +2,7 @@ colorama
 crunch64
 intervaltree
 Levenshtein
+rapidfuzz
 n64img
 pyelftools
 pygfxd

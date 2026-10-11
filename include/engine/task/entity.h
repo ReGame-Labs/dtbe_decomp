@@ -74,6 +74,13 @@ void entityGather(void);
 void entityUpdate(void);
 void entityGroupAdd(EntityGroup *entityGroup, Entity *entity);
 
+/* Destroys an entity and frees it, as `delete` does: nothing for NULL. */
+static inline void entityDelete(Entity *entity) {
+    if (entity != NULL) {
+        entity->vtable->destroy.func((u8 *)entity + entity->vtable->destroy.delta, DESTROY_DELETE);
+    }
+}
+
 EXTERN_C_END
 
 #endif /* DTBE_TASK_ENTITY_H */

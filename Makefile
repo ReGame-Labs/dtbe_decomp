@@ -203,11 +203,13 @@ $(BUILDDIR)/%.cpp.o: %.cpp
 	$(MASPSX) $(MASPSXFLAGS) < $(@:.o=.cc1.s) > $(@:.o=.s)
 	$(AS) $(ASFLAGS) -o $@ $(@:.o=.s)
 
-# the game was built with -G8 (its strings up to 8 bytes are in .sdata), but
-# these two read their handle tables (TASK_HANDLES in .data, ENTITY_HANDLES
-# in .bss), out of .sdata, as -G0 code does
-G0_UNITS := task/task task/entity
-G0_OBJ := $(G0_UNITS:%=$(BUILDDIR)/src/engine/%.c.o)
+# the executable was built with -G8 (its strings up to 8 bytes are in .sdata),
+# but these two read their handle tables (TASK_HANDLES in .data,
+# ENTITY_HANDLES in .bss) out of .sdata, as -G0 code does
+G0_UNITS := src/engine/task/task.c src/engine/task/entity.c
+# the overlays were built with -G0: none of them reads anything through $gp,
+# and their short strings are in .rodata
+G0_OBJ := $(G0_UNITS:%=$(BUILDDIR)/%.o) $(foreach b,$(OVERLAYS),$(filter-out %.s.o,$($(b)_OBJ)))
 $(G0_OBJ): CC1FLAGS := $(subst -G8,-G0,$(CC1FLAGS))
 $(G0_OBJ): MASPSXFLAGS := $(subst -G8,-G0,$(MASPSXFLAGS))
 

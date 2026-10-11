@@ -74,33 +74,33 @@ Task *debugCreateAgeingSequencerTask(void) {
 
 /* Creates the title scene (the "TITLE" command). */
 Task *debugCreateTitleTask(void) {
-    return func_80067170(operatorNew(0x110C), &SYSTEM_CONTEXT);
+    return titleLogoTaskInit(operatorNew(0x110C), &SYSTEM_CONTEXT);
 }
 
 /* Creates the guide of bonus game 0 (the "MINIGAME GUIDE" command). */
 Task *debugCreateBonusGuideTask(void) {
-    return func_80071F28(operatorNew(0xA90), &SYSTEM_CONTEXT, 0);
+    return guideLogoTaskInit(operatorNew(0xA90), &SYSTEM_CONTEXT, 0);
 }
 
 /* Creates the ranking scene (the "RANKING" command). */
 Task *debugCreateRankingTask(void) {
-    return func_8007360C(operatorNew(0x474), &SYSTEM_CONTEXT, 1);
+    return rankingTaskInit(operatorNew(0x474), &SYSTEM_CONTEXT, 1);
 }
 
 /* Creates the credits scene (the "CREDIT" command). */
 Task *debugCreateCreditsTask(void) {
-    return func_80076504(operatorNew(0x44), &SYSTEM_CONTEXT);
+    return creditsTaskInit(operatorNew(0x44), &SYSTEM_CONTEXT);
 }
 
 /* Creates the character select scene (the "CHARACTER SELECT" command), as for
  * a versus fight against the computer (gameStateSetUpVersus). */
 Task *debugCreateCharacterSelectTask(void) {
-    return func_8006AAF8(operatorNew(0x234), &SYSTEM_CONTEXT, SELECT_SIDE_0 | SELECT_VERSUS | SELECT_COMPUTER_1);
+    return characterSelectTaskInit(operatorNew(0x234), &SYSTEM_CONTEXT, SELECT_SIDE_0 | SELECT_VERSUS | SELECT_COMPUTER_1);
 }
 
 /* Creates the fight scene (the game debug menu's "GAME START" command, overlay "game"). */
 Task *debugCreateFightTask(void) {
-    return func_8006E1CC(operatorNew(0x64), &SYSTEM_CONTEXT);
+    return gameMainTaskInit(operatorNew(0x64), &SYSTEM_CONTEXT);
 }
 
 /* Creates a testing ground of the "test" overlay (the "Testing ground for HANAMASU" command). */
@@ -141,12 +141,12 @@ Task *reloadExecutable(void) {
 
 /* Creates the option scene (the "OPTION" command). */
 Task *debugCreateOptionTask(void) {
-    return func_800794E0(operatorNew(0x8C));
+    return optionTaskInit(operatorNew(0x8C));
 }
 
 /* Creates the main menu scene (the "MAIN MENU" command). */
 Task *debugCreateMainMenuTask(void) {
-    return func_8006A360(operatorNew(0x90), 0);
+    return mainMenuTaskInit(operatorNew(0x90), 0);
 }
 
 /* Steps an entry up: 16 at a time with L1 held, 128 with L2, else once. */

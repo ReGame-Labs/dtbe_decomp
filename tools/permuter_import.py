@@ -44,7 +44,7 @@ def main():
     unit = os.path.basename(os.path.dirname(asm))
     makefile = open(f"{ROOT}/Makefile").read()
     g0_units = re.search(r"^G0_UNITS :=(.*)", makefile, re.M).group(1).split()
-    g = "-G0" if unit in g0_units else "-G8"
+    g = "-G0" if unit in [os.path.splitext(os.path.basename(u))[0] for u in g0_units] else "-G8"
 
     out = f"{ROOT}/permuter/{func}"
     os.makedirs(out, exist_ok=True)

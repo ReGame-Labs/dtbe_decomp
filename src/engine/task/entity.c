@@ -7,13 +7,6 @@
 #include "engine/system/memory.h"
 #include "vtable.h"
 
-/* Destroys an entity and frees it, as `delete` does: nothing for NULL. */
-static inline void entityDelete(Entity *entity) {
-    if (entity != NULL) {
-        entity->vtable->destroy.func((u8 *)entity + entity->vtable->destroy.delta, DESTROY_DELETE);
-    }
-}
-
 /* Sets up the heap the entities are allocated from and the table of their handles. */
 void initEntityHeap(s32 size, void *base, HandleTable *handles) {
     heapInit(&ENTITY_HEAP, base, size);

@@ -1,1 +1,13 @@
 // title.bin's own names (config/jp/title.yaml)
+
+// the task constructors the executable calls (include/overlay.h), named after
+// the task name each passes to Task
+bootLogoTaskInit = 0x80066D58; // type:func
+titleLogoTaskInit = 0x80067170; // type:func
+mainMenuTaskInit = 0x8006A360; // type:func
+characterSelectTaskInit = 0x8006AAF8; // type:func
+memoryCardTaskInit = 0x800709B0; // type:func
+guideLogoTaskInit = 0x80071F28; // type:func
+rankingTaskInit = 0x8007360C; // type:func
+creditsTaskInit = 0x80076504; // type:func
+optionTaskInit = 0x800794E0; // type:func

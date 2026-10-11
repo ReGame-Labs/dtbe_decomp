@@ -1,0 +1,12 @@
+# The overlays' task constructors, named after the task name each gives Task
+# (the string it passes) and the scene the sequencer creates with it.
+func_80066D58 bootLogoTaskInit
+func_80067170 titleLogoTaskInit
+func_8006A360 mainMenuTaskInit
+func_8006AAF8 characterSelectTaskInit
+func_8006E1CC gameMainTaskInit
+func_800709B0 memoryCardTaskInit
+func_80071F28 guideLogoTaskInit
+func_8007360C rankingTaskInit
+func_80076504 creditsTaskInit
+func_800794E0 optionTaskInit

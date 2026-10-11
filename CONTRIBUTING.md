@@ -13,23 +13,35 @@ which includes splat's disassembly of it:
 INCLUDE_ASM("asm/jp/main/nonmatchings/lib/format", formatterPadNumber);
 ```
 
-1. **Get a first draft.** m2c turns the `.s` into C to start from:
+1. **Look for a relative first.** A function often has copies in the
+   overlays, or a sibling already in C:
+   ```
+   tools/similar.py func_8006AAA0
+   tools/similar.py --families -o families.txt
+   ```
+   The first lists the functions whose instructions look most like it, and
+   which of them are in C already; the second groups every function into
+   families, those with a member in C first. Match one member of a family,
+   then adapt it for the rest.
+2. **Get a first draft.** m2c turns the `.s` into C to start from:
    ```
    python3 external/m2c/m2c.py asm/jp/main/nonmatchings/lib/format/formatterPadNumber.s
    ```
    The draft is a starting point: give it the real types, the struct fields
    and the calls of the code around it (`include/engine/lib/format.h` has the
    formatter's).
-2. **Make it match on its own.** Put the draft in a file of its own that
+3. **Make it match on its own.** Put the draft in a file of its own that
    includes the headers it needs, and compare it with the original:
    ```
    tools/try_match.py draft.c formatterPadNumber
    ```
    It compiles the draft with the project's compiler and prints `MATCH`, or
-   both versions side by side with the differing instructions marked `**`.
-   Relocated fields are masked, so a different symbol name doesn't count as
-   a difference.
-3. **Search for a near miss.** When only register allocation or instruction
+   the number of differences (and the previous run's), the kind of
+   difference with the compiler pass that decides it, and only the differing
+   instructions, side by side and marked `**`, with two around them
+   (`--full` prints the whole function). Relocated fields are masked, so a
+   different symbol name doesn't count as a difference.
+4. **Search for a near miss.** When only register allocation or instruction
    order is left, try other source shapes first: types, the order of
    statements, a temporary, a loop written another way. Then the permuter
    can search for you:
@@ -39,7 +51,7 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/lib/format", formatterPadNumber);
    ```
    The permuter's finds are hints, not answers: keep only what reads as C
    someone would write.
-4. **Put it in place.** Replace the `INCLUDE_ASM` line with the C, add the
+5. **Put it in place.** Replace the `INCLUDE_ASM` line with the C, add the
    prototypes and types it needs to the headers, and name what you
    understood in `config/jp/symbols.txt`. Then rebuild and check:
    ```
@@ -47,7 +59,7 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/lib/format", formatterPadNumber);
    ```
    splat writes the asm under the new names, so a renamed function that is
    still asm needs its `INCLUDE_ASM` line renamed too.
-5. **Check the progress.** `make report` writes the progress that
+6. **Check the progress.** `make report` writes the progress that
    decomp.dev shows; `make objdiff` and the objdiff GUI show each function
    against the original.
 

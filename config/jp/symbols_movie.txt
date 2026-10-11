@@ -1,1 +1,40 @@
 // movie.bin's own names (config/jp/movie.yaml)
+
+// the movie scene (src/movie/movie.cpp)
+_vt.9MovieTask = 0x800643F4; // size:0x28
+_vt.11MoviePlayer = 0x8006441C; // size:0x28
+movieTaskInit = 0x80064494; // type:func
+_._9MovieTask = 0x80064534; // type:func
+createMoviePlayer = 0x800645B4; // type:func
+movieTaskUpdate = 0x80064634; // type:func
+movieParamsInit = 0x800646D4; // type:func
+movieParamsSetRgb24 = 0x8006473C; // type:func
+movieParamsSetPosition = 0x80064744; // type:func
+movieParamsSetSize = 0x80064750; // type:func
+movieParamsIsValid = 0x8006475C; // type:func
+moviePlayerInit = 0x80064780; // type:func
+_._11MoviePlayer = 0x800648F0; // type:func
+moviePlayerStop = 0x8006494C; // type:func
+moviePlayerGetDispEnv = 0x800649B0; // type:func
+moviePlayerStart = 0x800649B8; // type:func
+moviePlayerUpdate = 0x80064A50; // type:func
+moviePlayerIsFinished = 0x80064CD4; // type:func
+moviePlayerClearScreen = 0x80064CE0; // type:func
+moviePlayerOpenStream = 0x80064D78; // type:func
+movieReadStream = 0x80064DF0; // type:func
+movieSliceDecoded = 0x80064E10; // type:func
+moviePlayerLoadSlice = 0x80064E38; // type:func
+moviePlayerDecodeVlc = 0x80064FEC; // type:func
+moviePlayerGetNextFrame = 0x80065080; // type:func
+moviePlayerSync = 0x80065208; // type:func
+moviePlayerAfterDecode = 0x80065280; // type:func
+moviePlayerBeforeShow = 0x80065288; // type:func
+MOVIE_PLAYER = 0x80065D90; // size:0x4
+
+// PsyQ's libpress
+DecDCTReset = 0x80065290; // type:func
+DecDCTin = 0x800653E8; // type:func
+DecDCTout = 0x80065464; // type:func
+DecDCToutCallback = 0x8006552C; // type:func
+DecDCTvlc2 = 0x80065950; // type:func
+DecDCTvlcBuild = 0x80065CA0; // type:func

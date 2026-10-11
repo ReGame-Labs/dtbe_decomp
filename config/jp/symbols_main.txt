@@ -4,3 +4,16 @@
 
 // where movie.bin, title.bin and game.bin load (include/overlay.h)
 OVERLAY_MEMORY = 0x800643E0;
+
+// the overlays' task constructors main calls (include/overlay.h)
+movieTaskInit = 0x80064494; // type:func
+bootLogoTaskInit = 0x80066D58; // type:func
+titleLogoTaskInit = 0x80067170; // type:func
+mainMenuTaskInit = 0x8006A360; // type:func
+characterSelectTaskInit = 0x8006AAF8; // type:func
+gameMainTaskInit = 0x8006E1CC; // type:func
+memoryCardTaskInit = 0x800709B0; // type:func
+guideLogoTaskInit = 0x80071F28; // type:func
+rankingTaskInit = 0x8007360C; // type:func
+creditsTaskInit = 0x80076504; // type:func
+optionTaskInit = 0x800794E0; // type:func

@@ -100,6 +100,9 @@ void (*func_80046E00(void (*done)(void)))(void);
 /* PsyQ LoadImage, StoreImage or MoveImage (identical bodies) */
 s32 func_80055B28(RECT *rect, u_long *p);
 
+/* PsyQ StoreImage: it names itself "StoreImage" (D_8001AAE0) to the GPU queue */
+s32 func_80055B88(RECT *rect, u_long *p);
+
 /* LoadImage2 */
 s32 func_80057F98(RECT *rect, u_long *p);
 

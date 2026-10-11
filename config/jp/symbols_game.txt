@@ -1,1 +1,8 @@
 // game.bin's own names (config/jp/game.yaml)
+
+// the task constructors the executable calls (include/overlay.h), named after
+// the task name each passes to Task
+gameMainTaskInit = 0x8006E1CC; // type:func
+D_8006A43C = 0x8006A43C; // size:0x10
+D_8006A44C = 0x8006A44C; // size:0x20
+D_8006A46C = 0x8006A46C; // size:0x20
