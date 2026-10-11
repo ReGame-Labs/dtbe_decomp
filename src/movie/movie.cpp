@@ -255,7 +255,8 @@ void MoviePlayer::openStream(CdlLOC *loc) {
 
 /* Starts streaming from loc, at double speed with the XA sound. */
 void movieReadStream(CdlLOC *loc) {
-    func_80045820(loc, CdlModeStream2 | CdlModeSpeed | CdlModeRT);
+    /* the stream is libcd's, the read libds's: their positions are the same */
+    DsRead2((DslLOC *)loc, CdlModeStream2 | CdlModeSpeed | CdlModeRT);
 }
 
 /* The MDEC's callback: a slice is decoded. */
@@ -293,7 +294,7 @@ void MoviePlayer::loadSlice() {
         slice.x = rects[rectId].x;
         slice.y = rects[rectId].y;
     }
-    func_80055B28(&decodedSlice, imageBuffers[id]);
+    LoadImage(&decodedSlice, imageBuffers[id]);
 }
 
 /* Decodes the VLC of the next frame; -1 if none came in time. */

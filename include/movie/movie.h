@@ -116,9 +116,8 @@ struct MoviePlayer *createMoviePlayer(char *name, s32 x, s32 y, s32 endFrame);
 void movieReadStream(CdlLOC *loc);
 void movieSliceDecoded(void);
 
-/* DsRead2: starts reading from pos in a mode */
-s32 func_80045820(CdlLOC *pos, s32 mode);
-/* DsControlB: issues a command to the drive and waits for it */
+/* DsControl or DsControlB (libds's two have the same code): issues a command to
+ * the drive and waits for it */
 s32 func_80046D50(u8 command, u8 *param, u8 *result);
 /* StCdIntrFlag: a CD interrupt came while the MDEC was busy */
 extern s32 D_80116914;

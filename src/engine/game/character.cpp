@@ -152,7 +152,7 @@ void *charaLoadRawFile(Chara *chara, char *ext) {
 void charaLoadTims(Chara *chara, u32 *tims) {
     TIM_IMAGE tim;
 
-    func_800585B0(tims);
+    OpenTIM((u_long *)tims);
     while (ReadTIM(&tim) != NULL) {
         if (chara->lowerHalf) {
             tim.crect->y += 256;
@@ -162,10 +162,10 @@ void charaLoadTims(Chara *chara, u32 *tims) {
             tintTim(&tim, &chara->tint);
         }
         if (tim.caddr != NULL) {
-            func_80057F98(tim.crect, tim.caddr);
+            LoadImage2(tim.crect, tim.caddr);
         }
         if (tim.paddr != NULL) {
-            func_80057F98(tim.prect, tim.paddr);
+            LoadImage2(tim.prect, tim.paddr);
         }
     }
 }
@@ -196,7 +196,7 @@ void charaLoadPack(Chara *chara, char *path, s32 unused, RECT *bounds) {
         s32 bottom = -0x8000;
         TIM_IMAGE tim;
 
-        func_800585B0(pack->tims);
+        OpenTIM((u_long *)pack->tims);
         while (ReadTIM(&tim) != NULL) {
             if (tim.caddr != NULL) {
                 RECT *clut = tim.crect;

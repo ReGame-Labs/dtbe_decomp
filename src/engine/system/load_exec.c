@@ -23,7 +23,7 @@ void runExecutable(char *path) {
     printf("LoadExec(\"%s\")\n", file);
     ResetGraph(3);
     PadStopCom();
-    func_8003F874();
+    StopCallback();
     _96_init();
     LoadExec(file, EXEC_STACK_TOP, 0);
 }

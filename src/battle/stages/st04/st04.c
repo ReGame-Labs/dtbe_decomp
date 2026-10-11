@@ -183,7 +183,7 @@ void func_800D40BC(Unk800D3AC4 *this) {
     this->unk1D68.y = 0xE6;
     this->unk1D68.w = 16;
     this->unk1D68.h = 1;
-    func_80055B88(&this->unk1D68, (u_long *)this->unk1D90);
+    StoreImage(&this->unk1D68, (u_long *)this->unk1D90);
 }
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D4104);

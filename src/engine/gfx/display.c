@@ -350,7 +350,7 @@ RECT *getShownBufferRect(void) {
 /* Copies the buffer shown to dst; rect gets its area. */
 void displayCopyShownBuffer(Display *this, RECT *rect, u_long *dst) {
     *rect = (this->disp + this->buffer)->disp;
-    func_80058084(rect, dst);
+    StoreImage2(rect, dst);
 }
 
 /* The display. */

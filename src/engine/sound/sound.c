@@ -156,7 +156,7 @@ void updateSoundEffects(void) {
     s32 voice;
     LinkList *used;
 
-    func_80047FC4(keys);
+    SpuGetAllKeysStatus(keys);
     used = &SOUND_SYSTEM.effectPool.used;
     for (effect = (SndPlayingEffect *)used->head; effect != NULL; effect = next) {
         next = (SndPlayingEffect *)effect->link.next;
@@ -248,7 +248,7 @@ void sndPlayingEffectKeyOn(SndPlayingEffect *this) {
         voice = keyed;
         voiceBits = 1 << keyed;
     } else {
-        voiceBits = func_8004D4F0((this->vabId << 8) | this->prog, (this->note << 8) | this->fine,
+        voiceBits = SsVoKeyOn((this->vabId << 8) | this->prog, (this->note << 8) | this->fine,
                                   this->volumeLeft, this->volumeRight);
     }
     this->voice = voice | SND_VOICE_KEYED;
@@ -423,7 +423,7 @@ void closeVab(u16 vabIndex) {
             if (effect->vabId == vab->id) {
                 sndPlayingEffectKeyOff(effect);
                 SsUtKeyOffV(effect->voice & SND_VOICE_NUMBER);
-                func_8004F330(effect->voice & SND_VOICE_NUMBER, 0, 0);
+                SsUtSetVVol(effect->voice & SND_VOICE_NUMBER, 0, 0);
                 sndPlayingEffectFree(effect);
             }
         }

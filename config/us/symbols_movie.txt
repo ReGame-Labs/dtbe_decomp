@@ -33,6 +33,8 @@ MOVIE_PLAYER = 0x80065D70; // size:0x4
 
 // PsyQ's libpress
 DecDCTReset = 0x80065270; // type:func
+DecDCTGetEnv = 0x800652A4; // type:func
+DecDCTPutEnv = 0x80065330; // type:func
 DecDCTin = 0x800653C8; // type:func
 DecDCTout = 0x80065444; // type:func
 DecDCToutCallback = 0x8006550C; // type:func
@@ -46,8 +48,6 @@ D_80064444 = 0x80064424;
 D_80064460 = 0x80064440;
 D_80064470 = 0x80064450;
 D_80064480 = 0x80064460;
-func_800652C4 = 0x800652A4; // type:func
-func_80065350 = 0x80065330; // type:func
 func_80065484 = 0x80065464; // type:func
 func_800654C0 = 0x800654A0; // type:func
 func_80065508 = 0x800654E8; // type:func

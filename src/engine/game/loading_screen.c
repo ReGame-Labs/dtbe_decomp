@@ -37,7 +37,7 @@ void loadingScreenLoadTim(LoadingScreen *this, char *path) {
     s32 mode;
 
     uploadTims(tim);
-    func_800585B0(tim);
+    OpenTIM((u_long *)tim);
     ReadTIM(&image);
     mode = image.mode & 3;
     this->tpage = getTPage(mode, 0, 640, 256);

@@ -29,7 +29,7 @@ INCLUDE_ASM("title/nonmatchings/credits", creditsTaskInit);
 void func_800766A4(u32 *tims) {
     TIM_IMAGE image;
 
-    func_800585B0(tims);
+    OpenTIM((u_long *)tims);
     while (ReadTIM(&image) != NULL) {
         u16 *color = (u16 *)image.caddr;
 

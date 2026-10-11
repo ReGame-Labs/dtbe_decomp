@@ -9,6 +9,6 @@ DR_LOAD *allocDrLoad(RECT *rect) {
     DR_LOAD *load = (DR_LOAD *)PRIM_BUFFER_FREE;
 
     PRIM_BUFFER_FREE += sizeof(DR_LOAD);
-    func_80058540(load, rect);
+    SetDrawLoad(load, rect);
     return load;
 }

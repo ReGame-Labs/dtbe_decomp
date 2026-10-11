@@ -51,8 +51,8 @@ typedef struct {
 
 /* The track playing: where it started and when, to tell where it is. */
 typedef struct XaStream {
-    /* 0x00 */ CdlLOC position; /* where the read starts or resumes */
-    /* 0x04 */ CdlLOC start;    /* the track's first sector */
+    /* 0x00 */ DslLOC position; /* where the read starts or resumes */
+    /* 0x04 */ DslLOC start;    /* the track's first sector */
     /* 0x08 */ XaTrack *track;
     /* 0x0C */ s32 startTime;   /* the VSync count when the read started */
     /* 0x10 */ s32 startSector; /* where the read started */
@@ -117,17 +117,17 @@ extern struct XaPlayer XA_PLAYER; /* the XA player */
 extern XaTrack XA_TRACKS[];
 
 void seekXaTrack(u32 track);
-void receiveXaSector(u8 intr);
+void receiveXaSector(u8 intr, u8 *result);
 void updateXa(void);
 void initXa(void);
 void pauseXa(void);
 void playXa(void);
 void stopXa(void);
 void turnXaOff(void);
-void receiveXaSeek(u8 intr);
+void receiveXaSeek(u8 intr, u8 *result);
 void startXaRead(void);
-void receiveXaReadComplete(u8 intr);
-void receiveXaRestart(u8 intr);
+void receiveXaReadComplete(u8 intr, u8 *result);
+void receiveXaRestart(u8 intr, u8 *result);
 s32 stopXaDrive(void);
 void estimateXaPosition(void);
 s32 isXaSeeking(void);

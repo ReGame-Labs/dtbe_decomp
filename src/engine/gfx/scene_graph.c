@@ -11,7 +11,7 @@
 #include "vtable.h"
 
 /* ApplyMatrix, which nothing calls through this pointer */
-VECTOR *(*APPLY_MATRIX_FUNC)(MATRIX *m, SVECTOR *v, VECTOR *r) = func_80053DF0;
+VECTOR *(*APPLY_MATRIX_FUNC)(MATRIX *m, SVECTOR *v, VECTOR *r) = ApplyMatrix;
 
 /* Builds a transform with no parent and the identity as its matrix. */
 Transform *transformInit(Transform *this) {

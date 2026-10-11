@@ -17,7 +17,9 @@
 #include "engine/system/ram_heap.h"
 #include "engine/task/entity.h"
 #include "engine/task/task.h"
+#include "kernel.h"
 #include "libetc.h"
+#include "libmcrd.h"
 #include "psyq.h"
 #include "vtable.h"
 
@@ -96,12 +98,12 @@ void startSystem(void) {
     s32 size;
     s32 i;
 
-    func_8003F780();
+    ResetCallback();
     InitGeom();
     initCdfs(0);
     setVfsAllocator(allocForCdfs, freeForCdfs, NULL);
     displayStart(&DISPLAY);
-    func_80058740(1);
+    MemCardInit(1);
     padManagerStart(&PAD_MANAGER);
     initPrimBuffers(PRIM_BUFFER_MEMORY, sizeof(PRIM_BUFFER_MEMORY));
     initEntityHeap(sizeof(ENTITY_HEAP_MEMORY), ENTITY_HEAP_MEMORY, &ENTITY_HANDLE_TABLE);

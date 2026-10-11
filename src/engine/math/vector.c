@@ -39,7 +39,7 @@ VECTOR *vecNormalize(VECTOR *unit, VECTOR *v) {
     gte_loadIR(x, y, z);
     gte_square12();
     gte_sumMac(squareLength);
-    length = func_80053D50(squareLength);
+    length = SquareRoot12(squareLength);
     x = divide12(x, length);
     y = divide12(y, length);
     z = divide12(z, length);
@@ -56,7 +56,7 @@ s32 vecGetLength(VECTOR *v) {
 
 /* Returns the length of v, its components being in 4.12 fixed point. */
 s32 vecGetLength12(VECTOR *v) {
-    return func_80053D50((v->vx * v->vx + v->vy * v->vy + v->vz * v->vz) >> 12);
+    return SquareRoot12((v->vx * v->vx + v->vy * v->vy + v->vz * v->vz) >> 12);
 }
 
 /* Returns the square of the length of v, its components and the result in

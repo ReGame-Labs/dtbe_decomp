@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include <libcd.h>
+#include <libds.h>
 #include "engine/cd/cdfs.h"
 #include "engine/lib/list.h"
 #include "engine/lib/node_pool.h"
@@ -58,7 +59,7 @@ typedef struct CdfsRequest {
     /* 0x10 */ u32 size;   /* bytes to read; 0 reads to the end of the file */
     /* 0x14 */ CdfsDoneFunc done;
     /* 0x18 */ s32 user; /* given back to done */
-    /* 0x1C */ CdlLOC loc; /* the file's first sector, then the read's */
+    /* 0x1C */ DslLOC loc; /* the file's first sector, then the read's */
     /* 0x20 */ u32 fileSize;
     /* 0x24 */ u16 fileOffset; /* where the file starts in its first sector */
     /* 0x26 */ u8 flags;       /* CDFS_REQ_* */
@@ -68,7 +69,7 @@ typedef struct CdfsRequest {
 /* What a file lookup finds: the position, size and name of a file. */
 typedef struct {
     /* 0x00 */ union {
-        /* 0x00 */ CdlLOC loc;
+        /* 0x00 */ DslLOC loc;
         /* 0x00 */ u32 word; /* 0 for no position: nothing to read */
     } position;
     /* 0x04 */ u32 size;
@@ -95,7 +96,7 @@ typedef struct Cdfs {
     /* 0x010 */ void (*idle)(s32 arg); /* called while waiting for the queue */
     /* 0x014 */ s32 idleArg;
     /* 0x018 */ s32 result; /* the size the last request read */
-    /* 0x01C */ CdlLOC loc; /* where the last request read */
+    /* 0x01C */ DslLOC loc; /* where the last request read */
     /* 0x020 */ void (*hook)(void); /* called before the drive is used */
     /* 0x024 */ void (*unk24)(void);
     /* 0x028 */ s32 (*find)(CdfsFile *file, char *name);
@@ -125,7 +126,7 @@ typedef struct CdfsRead {
     /* 0x18 */ u8 *head;  /* the file's first byte in CDFS_HEAD_BUFFER */
     /* 0x1C */ u8 *body;
     /* 0x20 */ u8 *tail;
-    /* 0x24 */ void (*ready)(u8 intr); /* the data ready callback */
+    /* 0x24 */ DslCB ready; /* the data ready callback */
     /* 0x28 */ void (*finish)(void);   /* run once the last sector arrived */
     /* 0x2C */ s32 mode; /* CDFS_READ_*, for the log */
 } CdfsRead;
@@ -147,11 +148,6 @@ extern u8 CDFS_HEAD_BUFFER[CD_SECTOR_SIZE];
 extern u8 CDFS_TAIL_BUFFER[CD_SECTOR_SIZE];
 extern struct CdfsRead CDFS_READ; /* the data read in progress */
 
-/* DsSearchFile (see psyq.h's CD-ROM functions): looks a file up in the disc's
- * ISO directory; 0 when it is not there, -1 on a drive error. Declared here as
- * it fills a CdfsFile, which starts as the SDK's CdlFILE. */
-s32 func_80045920(CdfsFile *file, char *name);
-
 s32 findIsoFile(CdfsFile *file, char *name);
 s32 findFile(CdfsFile *file, char *name);
 s32 findMountedFile(CdfsFile *file, char *name);
@@ -162,7 +158,7 @@ s32 cdfsRequestStart(CdfsRequest *cdfsRequest);
 s32 cdfsRequestLocate(CdfsRequest *cdfsRequest);
 void cdfsRequestPlanRead(CdfsRequest *cdfsRequest, u32 offset);
 void cdfsRequestPlanHeadRead(CdfsRequest *cdfsRequest, u32 offset);
-void receiveShiftedReadSector(u8 intr);
+void receiveShiftedReadSector(u8 intr, u8 *result);
 void finishShiftedRead(void);
 void finishCdfsRequest(void);
 s32 loadFileSync(void *buffer, char *name, u32 offset, u32 size);
@@ -174,19 +170,19 @@ void updateCdfs(void);
 void setCdfsIdle(void (*idle)(s32 arg), s32 arg);
 void getFullPath(char *dst, char *path);
 s32 cdfsRequestFind(CdfsRequest *cdfsRequest);
-void loadSectors(void *buffer, CdlLOC *loc, u32 offset, u32 size);
+void loadSectors(void *buffer, DslLOC *loc, u32 offset, u32 size);
 void enableCdfs(void);
 void disableCdfs(void);
 void startNextCdfsRequest(void);
 void cdfsRequestStartRead(CdfsRequest *cdfsRequest);
 void cdfsRequestSkipRead(CdfsRequest *cdfsRequest);
-void receiveCdfsReadComplete(u8 intr);
-void receiveWholeReadSector(u8 intr);
-void receiveTailReadSector(u8 intr);
+void receiveCdfsReadComplete(u8 intr, u8 *result);
+void receiveWholeReadSector(u8 intr, u8 *result);
+void receiveTailReadSector(u8 intr, u8 *result);
 void finishTailRead(void);
-void receiveHeadReadSector(u8 intr);
+void receiveHeadReadSector(u8 intr, u8 *result);
 void finishHeadRead(void);
-void receiveSmallReadSector(u8 intr);
+void receiveSmallReadSector(u8 intr, u8 *result);
 void finishSmallRead(void);
 void receiveCdfsLastSector(void);
 void reportCdfsError(s32 line);

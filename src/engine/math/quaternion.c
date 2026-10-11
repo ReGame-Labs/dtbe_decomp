@@ -85,7 +85,7 @@ Quaternion *quaternionNormalize(Quaternion *out, Quaternion *q) {
     s32 length;
 
     gte_sumSquares4(x, y, z, w, lengthSquared);
-    length = func_80053D50(lengthSquared);
+    length = SquareRoot12(lengthSquared);
     x = divide12(x, length);
     y = divide12(y, length);
     z = divide12(z, length);
@@ -177,7 +177,7 @@ Quaternion *quaternionInitFromMatrix(Quaternion *q, MATRIX *m) {
     s32 w;
 
     if (trace != 0) {
-        root = func_80053D50(trace + ONE);
+        root = SquareRoot12(trace + ONE);
         w = root >> 1;
         scale = ONE * ONE / 2 / root;
         x = (s16)(((s16)(m->m[2][1] - m->m[1][2]) * scale) >> 12);
@@ -195,7 +195,7 @@ Quaternion *quaternionInitFromMatrix(Quaternion *q, MATRIX *m) {
         switch (i) {
         case 0:
         default:
-            root = func_80053D50(m00 - (m11 + m22) + ONE);
+            root = SquareRoot12(m00 - (m11 + m22) + ONE);
             x = root >> 1;
             if (root != 0) {
                 root = ONE * ONE / 2 / root;
@@ -205,7 +205,7 @@ Quaternion *quaternionInitFromMatrix(Quaternion *q, MATRIX *m) {
             w = (s16)(((s16)(m->m[2][1] - m->m[1][2]) * (s16)root) >> 12);
             break;
         case 1:
-            root = func_80053D50(m11 - (m22 + m00) + ONE);
+            root = SquareRoot12(m11 - (m22 + m00) + ONE);
             y = root >> 1;
             if (root != 0) {
                 root = ONE * ONE / 2 / root;
@@ -215,7 +215,7 @@ Quaternion *quaternionInitFromMatrix(Quaternion *q, MATRIX *m) {
             w = (s16)(((s16)(m->m[0][2] - m->m[2][0]) * (s16)root) >> 12);
             break;
         case 2:
-            root = func_80053D50(m22 - (m00 + m11) + ONE);
+            root = SquareRoot12(m22 - (m00 + m11) + ONE);
             z = root >> 1;
             if (root != 0) {
                 root = ONE * ONE / 2 / root;

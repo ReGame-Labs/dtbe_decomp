@@ -24,7 +24,7 @@ s32 initCdfs(s32 noInit) {
     CDFS.idle = (void (*)(s32))skipCdfsHook;
     CDFS.flags |= CDFS_READY;
     if (noInit == 0) {
-        return func_800434D4();
+        return DsInit();
     }
     return 0;
 }
@@ -71,7 +71,7 @@ s32 loadVfsInfo(VfsInfo *info, char *path) {
     CDFS.flags |= CDFS_VFS_PROBE;
     if (loadFileSync(&header, path, 0, sizeof(header)) != 0) {
         if (header.magic == VFS_MAGIC) {
-            sector = func_80046C70(&CDFS.loc);
+            sector = DsPosToInt(&CDFS.loc);
             info->tableSector = sector + 1;
             info->count = header.count;
             info->dataSector = sector + header.dataSector;
@@ -126,7 +126,7 @@ s32 decompressStream(void *dst, u8 *src) {
 /* Reads and inflates the VFS archive's table into table and makes its
  * entries point: a directory at its entries, a file at its sector. */
 void vfsLoadTable(Vfs *this, VfsEntry *table, VfsInfo *info) {
-    CdlLOC loc;
+    DslLOC loc;
     VfsEntry *entry = table;
     u32 size;
     u8 *packed;
@@ -137,7 +137,7 @@ void vfsLoadTable(Vfs *this, VfsEntry *table, VfsInfo *info) {
     this->names = (char *)(entry + info->count);
     size = (info->dataSector - info->tableSector) << CD_SECTOR_SHIFT;
     packed = CDFS.zalloc(CDFS.opaque, 1, size);
-    func_80046B60(info->tableSector, &loc);
+    DsIntToPos(info->tableSector, &loc);
     syncCdfs(0);
     loadSectors(packed, &loc, 0, size);
     syncCdfs(0);
