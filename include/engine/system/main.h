@@ -1,7 +1,7 @@
 #ifndef DTBE_SYSTEM_MAIN_H
 #define DTBE_SYSTEM_MAIN_H
 
-/* The game's entry point: starting the system, running the frames, the global objects. */
+/* The game's entry point: starting the system, running the frames; the display, the pads and the entity handles. */
 
 #include "common.h"
 #include "engine/math/random.h"
@@ -16,20 +16,15 @@ extern char BUILD_NAME[]; /* "build0110291339", the build the game was made from
 extern u8 PRIM_BUFFER_MEMORY[0x2D000];
 /* the heap the entities are allocated from (engine/task/entity.h) */
 extern u8 ENTITY_HEAP_MEMORY[0xC000];
-/* a table of 0x200 handles, built by initOrDestroyMainGlobals */
+/* the handles of the entities (engine/task/entity.h's ENTITY_HANDLES), built
+ * by initOrDestroyMainGlobals */
 extern HandleTable ENTITY_HANDLE_TABLE;
+/* how many handles ENTITY_HANDLE_TABLE holds */
+#define ENTITY_HANDLE_CAPACITY 0x200
 
 extern char VFS_PATH[]; /* "/a.vfs" */
 extern char VFS_MOUNT_POINT[]; /* "/" */
-extern u32 STACK_SIZE; /* the size of the stack (PsyQ's _stacksize) */
-extern u32 RAM_SIZE; /* the size of the RAM (PsyQ's _ramsize) */
-/* the end of the executable's .bss, where the heap starts */
-extern u8 BSS_END[];
 
-void initOrDestroyGlobals(s32 initialize, s32 priority);
-void initGlobals(void);
-void destroyGlobals(void);
-void breakForever(void);
 void main(void);
 void runFramesThread(Thread *thread);
 void runFrame(void);
@@ -41,7 +36,6 @@ void freeForCdfs(void *opaque, void *ptr);
 void initOrDestroyMainGlobals(s32 initialize, s32 priority);
 void initMainGlobals(void);
 void destroyMainGlobals(void);
-void initRamHeap(void);
 
 EXTERN_C_END
 

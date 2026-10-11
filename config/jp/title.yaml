@@ -1,0 +1,56 @@
+name: title
+sha1: dbd850914b9af7f3e62bc8ae9685cf16dd69a5be
+options:
+  basename: title
+  target_path: assets/jp/bin/title.bin
+  base_path: ../..
+  platform: psx
+  compiler: GCC
+
+  asm_path: asm/jp/title
+  src_path: src/title
+  build_path: build/jp
+
+  ld_script_path: build/jp/generated/title.ld
+
+  global_vram_start: 0x80000000
+  global_vram_end: 0x80200000
+
+  find_file_boundaries: True
+  gp_value: 0x8006414C
+
+  generate_asm_macros_files: False
+
+  section_order: [".rodata", ".text", ".data", ".bss"]
+
+  symbol_addrs_path:
+    - config/jp/symbols.txt
+    - config/jp/symbols_title.txt
+
+  undefined_funcs_auto_path: build/jp/generated/undefined_funcs_auto_title.txt
+  undefined_syms_auto_path: build/jp/generated/undefined_syms_auto_title.txt
+
+  string_encoding: SHIFT-JIS
+  data_string_encoding: SHIFT-JIS
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+  ld_bss_is_noload: True
+
+  # the whole overlay is one file until it is split into its modules, so its
+  # .rodata stays one piece in its order, not spread over the functions
+  migrate_rodata_to_functions: False
+  create_data_pads: False
+
+segments:
+  - name: title
+    type: code
+    start: 0x0
+    vram: 0x800643E0
+    align: 4
+    subalign: 4
+    subsegments:
+      - [0x0, rodata, title]
+      - [0x2978, c, title]
+      - [0x16E50, data, title]
+  - [0x16F64]

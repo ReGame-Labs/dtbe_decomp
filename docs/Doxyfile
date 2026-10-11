@@ -24,7 +24,7 @@ EXTRACT_STATIC         = YES
 # in the order they link, as in the source
 SORT_MEMBER_DOCS       = NO
 
-INPUT                  = README.md CONTRIBUTING.md TODO.md src include build/docs/dirs.dox
+INPUT                  = README.md CONTRIBUTING.md src include build/docs/dirs.dox
 FILE_PATTERNS          = *.c *.cpp *.h *.md
 RECURSIVE              = YES
 EXCLUDE                = external asm build expected disks bin permuter

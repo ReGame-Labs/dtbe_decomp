@@ -1,0 +1,1 @@
+// st09.bin's own names (config/jp/st09.yaml)

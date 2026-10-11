@@ -8,6 +8,8 @@
 
 /* the top of the stack of the executable run by runExecutable */
 #define EXEC_STACK_TOP 0x801FFFF0
+/* the length of the device name "cdrom:", which the path follows */
+#define EXEC_DEVICE_LENGTH (sizeof("cdrom:") - 1)
 
 /* Runs the executable at path on the CD-ROM ("cdrom:PATH;1", with '\\' as
  * separators and in upper case), after stopping the GPU, the pads and the
@@ -16,8 +18,8 @@ void runExecutable(char *path) {
     char file[128];
 
     sprintf(file, "cdrom:%s;1", path);
-    copyBackslashPath(file + 6, file + 6);
-    copyUpperCase(file + 6, file + 6);
+    copyBackslashPath(file + EXEC_DEVICE_LENGTH, file + EXEC_DEVICE_LENGTH);
+    copyUpperCase(file + EXEC_DEVICE_LENGTH, file + EXEC_DEVICE_LENGTH);
     printf("LoadExec(\"%s\")\n", file);
     ResetGraph(3);
     PadStopCom();

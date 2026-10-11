@@ -200,8 +200,7 @@ breaks a function or a byte of data.
   function or a macro) goes in only when the original's code shows it and
   it matches.
 - **Comments say why.** A comment on how the match depends on a form stays,
-  short and precise. Stale comments, commented-out code and TODOs go (the
-  TODO file lists what is left).
+  short and precise. Stale comments, commented-out code and TODOs go.
 - **No dead code or fake matches**: no junk temporaries, unread locals,
   `volatile`, an empty `do`/`while (0)` or one without a `break` used as a
   barrier, or branches with identical arms.

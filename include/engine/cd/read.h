@@ -32,6 +32,7 @@ EXTERN_C_BEGIN
 #define CDFS_ENABLED 0x2     /* the queue may start its head request */
 #define CDFS_RUNNING 0x4     /* the queue runs (not paused) */
 #define CDFS_READY (CDFS_ENABLED | CDFS_RUNNING)
+#define CDFS_VFS_PROBE 0x20 /* reading a VFS archive's head */
 
 #define CDFS_STARTING 0x20000000 /* a request is being started */
 #define CDFS_ERROR 0x40000000    /* the drive reported an error */
@@ -75,6 +76,8 @@ typedef struct {
     /* 0x1E */ u16 offset; /* where the file starts in its first sector */
 } CdfsFile;
 
+/* how many reads the queue holds */
+#define CDFS_REQUEST_MAX 16
 /* how many VFS archives can be mounted, and the size of the current
  * directory */
 #define CDFS_VFS_MAX 4
@@ -140,8 +143,8 @@ extern char STR_CDFS_OFFSET_SIZE_OVER[]; /* "CDFS: Offset size over \"%s\"\n" */
 
 extern struct Cdfs CDFS; /* the file reader */
 /* the sector buffers of a read's first and last partial sectors */
-extern u8 CDFS_HEAD_BUFFER[0x800];
-extern u8 CDFS_TAIL_BUFFER[0x800];
+extern u8 CDFS_HEAD_BUFFER[CD_SECTOR_SIZE];
+extern u8 CDFS_TAIL_BUFFER[CD_SECTOR_SIZE];
 extern struct CdfsRead CDFS_READ; /* the data read in progress */
 
 /* DsSearchFile (see psyq.h's CD-ROM functions): looks a file up in the disc's
@@ -193,6 +196,7 @@ s32 vfsUnmount(Vfs *vfs);
 void initVfsPool(void);
 CdfsDoneFunc setCdfsDone(CdfsDoneFunc done);
 u32 getFileSize(char *name);
+s32 setCdfsUser(s32 user);
 
 EXTERN_C_END
 

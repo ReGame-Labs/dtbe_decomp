@@ -18,9 +18,6 @@ typedef struct {
     s32 size;      /* the inflated size */
 } CompressedHeader;
 
-/* a symbol the linker puts at address 1, so its address is never NULL */
-extern u8 D_1[];
-
 extern char LAST_LOADED_PATH[]; /* the path of the file loadCompressedFileInto loaded last */
 
 void loadCompressedFileInto(void *dst, char *path);

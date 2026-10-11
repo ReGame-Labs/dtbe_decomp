@@ -1,86 +1,35 @@
 #include "common.h"
 #include "engine/system/main.h"
 #include "engine/cd/cdfs.h"
-#include "engine/cd/file_load.h"
 #include "engine/cd/read.h"
 #include "engine/cd/xa_player.h"
 #include "engine/debug/system_menu.h"
-#include "engine/game/game_state.h"
 #include "engine/game/sequencer.h"
 #include "engine/gfx/display.h"
-#include "engine/gfx/fade.h"
 #include "engine/gfx/ordering_table.h"
 #include "engine/gfx/prim_buffer.h"
-#include "engine/lib/list.h"
 #include "engine/lib/md5.h"
 #include "engine/math/random.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/handle_table.h"
 #include "engine/system/memory.h"
+#include "engine/system/ram_heap.h"
 #include "engine/task/entity.h"
 #include "engine/task/task.h"
 #include "libetc.h"
 #include "psyq.h"
 #include "vtable.h"
 
-/* what the random seed is the MD5 of */
-#define RAM ((u8 *)0x80000000)
+/* what the random seed is the MD5 of: the start of the RAM */
 #define RAM_SEED_SIZE 0x10000
 #define SCRATCHPAD ((u8 *)0x1F800000)
 #define SCRATCHPAD_SIZE 0x400
 
-/* Builds (initialize) or destroys the global objects: the scheduler, the
- * random numbers, the ordering table, the sound task, the fade task and the
- * game state. */
-void initOrDestroyGlobals(s32 initialize, s32 priority) {
-    SoundControl *sound;
-    ListNode *seps;
-    ListNode *vabs;
-
-    if (priority == 0xFFFF) {
-        if (initialize) {
-            schedulerInit(&SCHEDULER);
-            mersenneTwisterInit(&RANDOM);
-            orderingTableInit(&FRAME_OT, 8);
-            soundControlInit(&SOUND_CONTROL);
-            fadeControlInit(&FADE_CONTROL);
-            gameStateInit(&GAME_STATE);
-            return;
-        }
-        taskDestroy(&FADE_CONTROL.task, DESTROY_BASES);
-        /* the sound task's destructor, inlined: listRemove of both lists, in
-         * the access order the game's compiler used */
-        sound = &SOUND_CONTROL;
-        seps = &sound->seps;
-        sound->seps.next->prev = sound->seps.prev;
-        seps->prev->next = sound->seps.next;
-        sound->seps.next = seps;
-        sound->seps.prev = seps;
-        vabs = &sound->vabs;
-        sound->vabs.next->prev = sound->vabs.prev;
-        vabs->prev->next = sound->vabs.next;
-        sound->vabs.next = vabs;
-        sound->vabs.prev = vabs;
-        /* SoundControl starts with a Task (see engine/sound/sound_control.h) */
-        taskDestroy((Task *)sound, DESTROY_BASES);
-        schedulerDestroy(&SCHEDULER, DESTROY_BASES);
-    }
-}
-
-/* Builds the global objects. */
-void initGlobals(void) {
-    initOrDestroyGlobals(1, 0xFFFF);
-}
-
-/* Destroys the global objects. */
-void destroyGlobals(void) {
-    initOrDestroyGlobals(0, 0xFFFF);
-}
-
-/* Stops on a break instruction forever, which C cannot express. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/system/main", breakForever);
-
+/* The static constructors and destructors of the files, in link order, that
+ * __main and crt0 run: psylink's tables, ahead of the files' .rodata. They are
+ * here as the first .rodata the executable has (system/globals and
+ * system/break_stub have none). */
 INCLUDE_RODATA("asm/jp/main/nonmatchings/system/main", STATIC_CONSTRUCTORS);
 
 INCLUDE_RODATA("asm/jp/main/nonmatchings/system/main", STATIC_DESTRUCTORS);
@@ -139,13 +88,6 @@ void seedRandom(MersenneTwister *random) {
 char VFS_PATH[] = "/a.vfs";
 char VFS_MOUNT_POINT[] = "/";
 
-/* the size of the stack, which crt0 and initRamHeap leave out of the heap
- * (PsyQ's _stacksize) */
-u32 STACK_SIZE = 0x800;
-/* the size of the RAM, which crt0 puts the stack at the end of (PsyQ's
- * _ramsize) */
-u32 RAM_SIZE = 0x200000;
-
 /* Starts the system: the libraries, the CD file system and its allocator,
  * the display, the memory cards, the pads, the primitive buffers and the
  * entity heap; mounts /a.vfs and starts the sound. */
@@ -189,14 +131,20 @@ void freeForCdfs(void *opaque, void *ptr) {
     mainHeapFree(ptr);
 }
 
-/* Builds (initialize) or destroys the global objects of the display, the pads
- * and the handles. */
+/*
+ * Builds (initialize) or destroys the global objects of the display, the pads
+ * and the handles. It is g++'s __static_initialization_and_destruction_0 of
+ * this file, written in C. The objects are in .bss and only this file uses
+ * them, as g++ places file-scope static objects; main is still asm and .bss is
+ * not split, so the file stays C.
+ */
 void initOrDestroyMainGlobals(s32 initialize, s32 priority) {
-    if (priority == 0xFFFF) {
+    if (priority == INIT_PRIORITY_DEFAULT) {
         if (initialize) {
-            displayInit(&DISPLAY, 320, 240, 1);
+            /* a frame every vertical blank */
+            displayInit(&DISPLAY, SCREEN_WIDTH, SCREEN_HEIGHT, 1);
             padManagerInit(&PAD_MANAGER);
-            handleTableInit(&ENTITY_HANDLE_TABLE, 0x200);
+            handleTableInit(&ENTITY_HANDLE_TABLE, ENTITY_HANDLE_CAPACITY);
             return;
         }
         handleTableDestroy(&ENTITY_HANDLE_TABLE, DESTROY_BASES);
@@ -204,26 +152,14 @@ void initOrDestroyMainGlobals(s32 initialize, s32 priority) {
     }
 }
 
-/* Builds the global objects of the display, the pads and the handles. */
+/* Builds the global objects of the display, the pads and the handles: g++'s
+ * _GLOBAL_.I of this file, the second of STATIC_CONSTRUCTORS. */
 void initMainGlobals(void) {
-    initOrDestroyMainGlobals(1, 0xFFFF);
+    initOrDestroyMainGlobals(1, INIT_PRIORITY_DEFAULT);
 }
 
-/* Destroys the global objects of the display, the pads and the handles. */
+/* Destroys the global objects of the display, the pads and the handles: g++'s
+ * _GLOBAL_.D of this file, the second of STATIC_DESTRUCTORS. */
 void destroyMainGlobals(void) {
-    initOrDestroyMainGlobals(0, 0xFFFF);
-}
-
-/* Gives the heap the RAM from the end of the executable up to the stack. */
-void initRamHeap(void) {
-    u8 *base = BSS_END;
-    u8 *end;
-
-    /* D_1 is a symbol the linker put at 1: the test always passes */
-    if (D_1 != NULL) {
-        end = (u8 *)0x80200000 - STACK_SIZE;
-    } else {
-        end = (u8 *)(RAM_SIZE | 0x80000000) - STACK_SIZE;
-    }
-    mainHeapInit(base, end - base);
+    initOrDestroyMainGlobals(0, INIT_PRIORITY_DEFAULT);
 }

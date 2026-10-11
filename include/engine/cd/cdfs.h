@@ -9,8 +9,6 @@
 
 EXTERN_C_BEGIN
 
-#define CDFS_VFS_PROBE 0x20      /* reading a VFS archive's head */
-
 /* An entry of a VFS archive's table: a file, or a directory whose sorted
  * entries are elsewhere in the table. */
 typedef struct VfsEntry {
@@ -55,9 +53,6 @@ typedef struct {
     /* 0x10 */ char mountPoint[0x70];
 } Vfs;
 
-/* how many reads the queue holds */
-#define CDFS_REQUEST_MAX 16
-
 /* what mountVfs returns when it mounts nothing */
 #define VFS_FULL ((Vfs *)-1)  /* all the mount slots are in use */
 #define VFS_TAKEN ((Vfs *)-2) /* the path has an archive already */
@@ -71,7 +66,7 @@ void skipCdfsHook(void);
 Vfs *mountVfs(char *path, VfsEntry *table, VfsInfo *info);
 s32 loadVfsInfo(VfsInfo *info, char *path);
 void setVfsAllocator(AllocFunc zalloc, FreeFunc zfree, void *opaque);
-s32 decompressStream(VfsEntry *dst, u8 *src);
+s32 decompressStream(void *dst, u8 *src);
 void vfsLoadTable(Vfs *vfs, VfsEntry *table, VfsInfo *info);
 
 EXTERN_C_END

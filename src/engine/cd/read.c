@@ -12,34 +12,34 @@
 
 /* The first node of a list. Read through this, a list of CDFS is
  * addressed as its own symbol, as the game does. */
-static inline LinkNode *listHead(LinkList *list) {
-    return list->head;
+static inline LinkNode *linkListHead(LinkList *this) {
+    return this->head;
 }
 
 /* cdfsRequestFind's body, which the game also copied into cdfsRequestLocate.
  * cdfsRequestFind has its own copy: written as a call to this it keeps the
  * result in another register. */
-static inline s32 cdfsFind(CdfsRequest *request) {
+static inline s32 cdfsRequestFindInline(CdfsRequest *this) {
     CdfsFile file;
 
-    if (request->flags & CDFS_REQ_FOUND) {
+    if (this->flags & CDFS_REQ_FOUND) {
         return 0;
     }
-    if (CDFS.find(&file, request->name) != 0) {
-        LOG_PRINT(STR_CDFS_FILE_NOT_FOUND, request->name);
+    if (CDFS.find(&file, this->name) != 0) {
+        LOG_PRINT(STR_CDFS_FILE_NOT_FOUND, this->name);
         return -1;
     }
-    if (request->offset >= file.size) {
-        LOG_PRINT(STR_CDFS_OFFSET_SIZE_OVER, request->name);
+    if (this->offset >= file.size) {
+        LOG_PRINT(STR_CDFS_OFFSET_SIZE_OVER, this->name);
         return -1;
     }
-    request->fileSize = file.size;
-    request->fileOffset = file.offset;
-    request->loc = file.position.loc;
+    this->fileSize = file.size;
+    this->fileOffset = file.offset;
+    this->loc = file.position.loc;
     if (file.position.word == 0) {
-        request->flags |= CDFS_REQ_NO_SEEK;
+        this->flags |= CDFS_REQ_NO_SEEK;
     }
-    request->flags |= CDFS_REQ_FOUND;
+    this->flags |= CDFS_REQ_FOUND;
     return 0;
 }
 
@@ -95,15 +95,15 @@ s32 findMountedFile(CdfsFile *file, char *name) {
     path[0] = '/';
     copyLowerCase(path + 1, name);
     copySlashPath(path, path);
-    vfs = (Vfs *)listHead(&CDFS.vfs.used);
+    vfs = (Vfs *)linkListHead(&CDFS.vfs.used);
     while (vfs != NULL) {
         length = strlen(vfs->mountPoint);
         if (strncmp(vfs->mountPoint, path, length) != 0) {
             vfs = (Vfs *)vfs->link.next;
         } else {
-            if (listHead(&CDFS.vfs.used) != &vfs->link) {
+            if (linkListHead(&CDFS.vfs.used) != &vfs->link) {
                 linkListRemove(&CDFS.vfs.used, &vfs->link);
-                linkListInsertBefore(&CDFS.vfs.used, listHead(&CDFS.vfs.used), &vfs->link);
+                linkListInsertBefore(&CDFS.vfs.used, linkListHead(&CDFS.vfs.used), &vfs->link);
             }
             result = findVfsFile(file, vfs, path + length);
             break;
@@ -203,7 +203,7 @@ s32 cdfsRequestLocate(CdfsRequest *this) {
     u32 offset = this->offset;
 
     if (!(this->flags & CDFS_REQ_SECTOR)) {
-        if (cdfsFind(this) != 0) {
+        if (cdfsRequestFindInline(this) != 0) {
             return -1;
         }
         if (this->fileSize - offset < this->size || this->size == 0) {
@@ -669,7 +669,7 @@ void skipCdfsIdle(s32 arg) {
 s32 vfsUnmount(Vfs *this) {
     LinkNode *node;
 
-    for (node = listHead(&CDFS.vfs.used); node != NULL; node = node->next) {
+    for (node = linkListHead(&CDFS.vfs.used); node != NULL; node = node->next) {
         if (node == &this->link) {
             NodePool *pool = &CDFS.vfs;
 
@@ -703,4 +703,12 @@ u32 getFileSize(char *name) {
         return file.size;
     }
     return 0;
+}
+
+/* Sets the user value of the next file reads; returns the old one. */
+s32 setCdfsUser(s32 user) {
+    s32 old = CDFS.user;
+
+    CDFS.user = user;
+    return old;
 }

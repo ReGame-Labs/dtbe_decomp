@@ -10,22 +10,13 @@
 #include "psyq.h"
 #include "vtable.h"
 
-/* the texture page of the characters: 4-bit, at (960, 256), with the 8 by 16
- * font and the FontCache's cells */
-#define TEXT_TPAGE getTPage(0, 0, 960, 256)
-
 /* a glyph's cell in VRAM: 16 4-bit pixels (4 VRAM pixels) wide, a row
  * taller than the glyph */
 #define FONT_CELL_WIDTH (FONT_GLYPH_WIDTH / 4)
 #define FONT_CELL_HEIGHT 16
 
-/* the palettes of the characters: the glyphs' (FONT_PALETTE_RECT), and the 8 by 16
- * font's */
+/* the palette of the glyphs (FONT_PALETTE_RECT) */
 #define FONT_CLUT getClut(960, 511)
-#define ASCII_CLUT getClut(960, 320)
-/* the 8 by 16 font: the characters from ' ' on, 32 to a row of the page */
-#define ASCII_FIRST ' '
-#define ASCII_PER_ROW 32
 
 /* the codes the BIOS ROM font has glyphs for (Krom2RawAdd): the non-kanji
  * 0x8140-0x84BE and the level 1 kanji 0x889F-0x9872 */
@@ -240,15 +231,15 @@ void textPrinterDrawKanji(TextPrinter *this, s32 x, s32 y, u32 code) {
 
 /* Draws a one-byte character from the 8 by 16 font, and its shadow. */
 void textPrinterDrawAscii(TextPrinter *this, s32 x, s32 y, u32 code) {
-    u32 cell = code - ASCII_FIRST;
-    u8 u = (cell % ASCII_PER_ROW) * TEXT_ASCII_WIDTH;
-    u8 v = (cell / ASCII_PER_ROW) * TEXT_LINE_HEIGHT;
+    u32 cell = code - TEXT_ASCII_FIRST;
+    u8 u = (cell % TEXT_ASCII_PER_ROW) * TEXT_ASCII_WIDTH;
+    u8 v = (cell / TEXT_ASCII_PER_ROW) * TEXT_LINE_HEIGHT;
     SprtColorWords *sprt = (SprtColorWords *)allocSprt();
     u32 rgbCode = this->color | (((SPRT *)sprt)->code << 24);
     u32 uvClut;
 
     sprt->xy = (y << 16) | x;
-    uvClut = (ASCII_CLUT << 16) | (v << 8) | u;
+    uvClut = (TEXT_ASCII_CLUT << 16) | (v << 8) | u;
     sprt->uvClut = uvClut;
     sprt->wh = (TEXT_LINE_HEIGHT << 16) | TEXT_ASCII_WIDTH;
     sprt->rgbCode = rgbCode;
@@ -301,23 +292,23 @@ u_long *addNestedOt(u_long *ot, void *prim) {
 s32 findCodeIndex(u16 *codes, s32 count, u16 code) {
     s32 high = count - 1;
     s32 low = 0;
-    s32 mid = high / 2;
+    s32 middle = high / 2;
 
-    while (codes[mid] != code) {
+    while (codes[middle] != code) {
         if (low == high) {
             return -1;
         }
-        if (code < codes[mid]) {
-            high = mid - 1;
+        if (code < codes[middle]) {
+            high = middle - 1;
         } else {
-            low = mid + 1;
+            low = middle + 1;
         }
         if (high < low) {
             return -1;
         }
-        mid = (low + high) / 2;
+        middle = (low + high) / 2;
     }
-    return mid;
+    return middle;
 }
 
 /* Destroys the printer. */

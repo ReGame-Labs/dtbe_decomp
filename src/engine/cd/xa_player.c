@@ -75,14 +75,6 @@ static inline void turnXaOffInline(void) {
     }
 }
 
-/* Sets the user value of the next file reads; returns the old one. */
-s32 setCdfsUser(s32 user) {
-    s32 old = CDFS.user;
-
-    CDFS.user = user;
-    return old;
-}
-
 INCLUDE_RODATA("asm/jp/main/nonmatchings/cd/xa_player", STR_CDFSXA_SYSTEM_OFF);
 
 /* Turns the player on (taking the drive from CDFS) and seeks to a track. */

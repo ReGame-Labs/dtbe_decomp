@@ -8,8 +8,8 @@
 
 EXTERN_C_BEGIN
 
-void screenPrint(const char *fmt, ...);
-void screenVprint(const char *fmt, VaList args);
+void screenPrint(const char *format, ...);
+void screenVprint(const char *format, VaList args);
 void screenPutChar(s16 x, s16 y, s32 code);
 
 EXTERN_C_END

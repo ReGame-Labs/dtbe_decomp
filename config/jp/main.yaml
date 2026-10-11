@@ -26,6 +26,7 @@ options:
 
   symbol_addrs_path:
     - config/jp/symbols.txt
+    - config/jp/symbols_main.txt
 
   undefined_funcs_auto_path: build/jp/generated/undefined_funcs_auto_main.txt
   undefined_syms_auto_path: build/jp/generated/undefined_syms_auto_main.txt
@@ -92,7 +93,12 @@ segments:
       # the PsyQ libraries' strings and tables
       - [0xA758, rodata, psyq]
       # the game, one file per class or module (src/README.md)
-      - [0xB618, c, system/main]
+      - [0xB618, c, system/globals]
+      # a handwritten object: the only padding between two of the game's
+      # functions ends it, and main starts 8-aligned
+      - [0xB758, c, system/break_stub]
+      - [0xB768, c, system/main]
+      - [0xBC2C, c, system/ram_heap]
       - [0xBC88, c, sound/sound_control]
       - [0xCB6C, c, game/sequencer]
       - [0xD98C, cpp, game/game_state]
@@ -162,7 +168,7 @@ segments:
       - [0x239F8, c, cd/cdfs]
       - [0x23EA0, c, system/log]
       - [0x23ED4, c, cd/read]
-      - [0x258DC, c, cd/xa_player]
+      - [0x258F0, c, cd/xa_player]
       - [0x266B0, c, lib/string]
       - [0x26A04, c, lib/format]
       - [0x27464, c, system/handle_table]
@@ -188,6 +194,7 @@ segments:
       - [0x5494C, sdata, game_gp]
       # each file's small data, which only it reads through gp
       - [0x54958, .sdata, system/main]
+      - [0x54964, .sdata, system/ram_heap]
       - [0x5496C, .sdata, sound/sound_control]
       - [0x54994, .sdata, game/sequencer]
       - [0x549B0, .sdata, game/game_state]

@@ -91,13 +91,12 @@ void setVfsAllocator(AllocFunc zalloc, FreeFunc zfree, void *opaque) {
 
 /* Inflates the zlib stream at src into dst; returns 0, or 1 on an
  * error. */
-s32 decompressStream(VfsEntry *dst, u8 *src) {
+s32 decompressStream(void *dst, u8 *src) {
     ZStream stream;
     s32 result;
     s32 failed;
 
-    /* the table inflates as bytes */
-    stream.nextOut = (u8 *)dst;
+    stream.nextOut = dst;
     stream.nextIn = src;
     stream.availIn = ZSTREAM_SIZE_UNKNOWN;
     stream.availOut = ZSTREAM_SIZE_UNKNOWN;

@@ -177,23 +177,23 @@ u32 cancelOppositeDirections(u32 buttons) {
  * both in one variable (GCC then gives it the divisor's v0).
  */
 static inline s32 padAxis(u8 value, u8 deadZone) {
-    s32 distance = value - 0x80;
+    s32 distance = value - PAD_STICK_CENTER;
     s32 scaled;
     s32 axis = 0;
 
     if (distance > 0) {
         distance -= deadZone;
         if (distance > 0) {
-            scaled = distance << 12;
-            distance = 0x7F - deadZone;
+            scaled = distance << PAD_STICK_SHIFT;
+            distance = PAD_STICK_REACH - deadZone;
             axis = scaled / distance;
         }
     } else {
-        distance = value - 0x7F;
+        distance = value - (PAD_STICK_CENTER - 1);
         distance += deadZone;
         if (distance < 0) {
-            scaled = distance << 12;
-            distance = 0x7F - deadZone;
+            scaled = distance << PAD_STICK_SHIFT;
+            distance = PAD_STICK_REACH - deadZone;
             axis = scaled / distance;
         }
     }
@@ -209,37 +209,37 @@ static inline s32 padAxis(u8 value, u8 deadZone) {
  * buttons go back into buttons (the original copies the call's v0 to buttons'
  * a1).
  */
-void padRead(Pad *pad) {
+void padRead(Pad *this) {
     s32 type;
     u32 buttons;
     u32 previous;
     u32 changed;
     s32 deadZone;
 
-    if (padUpdateState(pad) && padUpdateSetup(pad) && pad->buffer[0] == 0) {
-        type = pad->buffer[1] >> 4;
-        if (pad->type != type) {
-            pad->type = type;
-            if (pad->vibration.hasActuators) {
-                pad->vibration.alignStep = ALIGN_SEND;
+    if (padUpdateState(this) && padUpdateSetup(this) && this->buffer[0] == 0) {
+        type = this->buffer[1] >> 4;
+        if (this->type != type) {
+            this->type = type;
+            if (this->vibration.hasActuators) {
+                this->vibration.alignStep = VIBRATION_ALIGN_SEND;
             }
         } else {
-            switch (pad->type) {
+            switch (this->type) {
             case PAD_ID_DIGITAL:
-                pad->sticks.rightX = 0;
-                pad->sticks.rightY = 0;
-                pad->sticks.leftX = 0;
-                pad->sticks.leftY = 0;
+                this->sticks.rightX = 0;
+                this->sticks.rightY = 0;
+                this->sticks.leftX = 0;
+                this->sticks.leftY = 0;
                 break;
             case PAD_ID_ANALOG:
-                if (pad->vibration.hasActuators && pad->vibration.alignStep == ALIGN_DONE) {
-                    PadSetAct(pad->port, pad->vibration.motor, 2);
+                if (this->vibration.hasActuators && this->vibration.alignStep == VIBRATION_ALIGN_DONE) {
+                    PadSetAct(this->port, this->vibration.motor, 2);
                 }
-                deadZone = pad->deadZone;
-                pad->sticks.rightX = padAxis(pad->buffer[4], deadZone);
-                pad->sticks.rightY = padAxis(pad->buffer[5], deadZone);
-                pad->sticks.leftX = padAxis(pad->buffer[6], deadZone);
-                pad->sticks.leftY = padAxis(pad->buffer[7], deadZone);
+                deadZone = this->deadZone;
+                this->sticks.rightX = padAxis(this->buffer[4], deadZone);
+                this->sticks.rightY = padAxis(this->buffer[5], deadZone);
+                this->sticks.leftX = padAxis(this->buffer[6], deadZone);
+                this->sticks.leftY = padAxis(this->buffer[7], deadZone);
                 break;
             case PAD_ID_NONE:
             case PAD_ID_MOUSE:
@@ -252,46 +252,47 @@ void padRead(Pad *pad) {
                 goto none;
             }
             /* the pad sends its buttons active-low, big-endian */
-            buttons = ((pad->buffer[2] << 8) | pad->buffer[3]) ^ 0xFFFF;
-            if (pad->sticks.leftX < -0x800) {
+            buttons = ((this->buffer[2] << 8) | this->buffer[3]) ^ 0xFFFF;
+            if (this->sticks.leftX < -PAD_STICK_DPAD_THRESHOLD) {
                 buttons |= PAD_LEFT;
             }
-            if (pad->sticks.leftX > 0x800) {
+            if (this->sticks.leftX > PAD_STICK_DPAD_THRESHOLD) {
                 buttons |= PAD_RIGHT;
             }
-            if (pad->sticks.leftY < -0x800) {
+            if (this->sticks.leftY < -PAD_STICK_DPAD_THRESHOLD) {
                 buttons |= PAD_UP;
             }
-            if (pad->sticks.leftY > 0x800) {
+            if (this->sticks.leftY > PAD_STICK_DPAD_THRESHOLD) {
                 buttons |= PAD_DOWN;
             }
-            pad->raw = buttons;
-            previous = pad->held;
+            this->raw = buttons;
+            previous = this->held;
             buttons = cancelOppositeDirections(buttons);
-            pad->held = buttons;
+            this->held = buttons;
             changed = buttons ^ previous;
-            pad->pressed = buttons & changed;
-            pad->released = ~buttons & changed;
-            padUpdateRepeat(pad);
+            this->pressed = buttons & changed;
+            this->released = ~buttons & changed;
+            padUpdateRepeat(this);
             return;
         }
     }
 none:
-    pad->raw = 0;
-    pad->held = 0;
-    pad->pressed = 0;
-    pad->released = 0;
-    pad->repeated = 0;
-    pad->repeatTimer = 0;
-    pad->sticks.rightX = 0;
-    pad->sticks.rightY = 0;
-    pad->sticks.leftX = 0;
-    pad->sticks.leftY = 0;
+    this->raw = 0;
+    this->held = 0;
+    this->pressed = 0;
+    this->released = 0;
+    this->repeated = 0;
+    this->repeatTimer = 0;
+    this->sticks.rightX = 0;
+    this->sticks.rightY = 0;
+    this->sticks.leftX = 0;
+    this->sticks.leftY = 0;
 }
 
-/* Works out the buttons repeating this frame from the ones pressed and held. */
+/* Works out the buttons repeating this frame: the ones pressed, or the raw
+ * ones (opposite directions included) once they have been held long enough. */
 void padUpdateRepeat(Pad *this) {
-    u32 held;
+    u32 raw;
 
     this->repeated = 0;
     if (this->pressed != 0) {
@@ -299,11 +300,11 @@ void padUpdateRepeat(Pad *this) {
         this->repeatTimer = 0;
         return;
     }
-    held = this->raw;
-    if (held != 0) {
+    raw = this->raw;
+    if (raw != 0) {
         this->repeatTimer++;
         if (this->repeatDelay < this->repeatTimer) {
-            this->repeated = held;
+            this->repeated = raw;
             this->repeatTimer = this->repeatRestart;
         }
     }
@@ -324,7 +325,7 @@ s32 padUpdateState(Pad *this) {
         stable = TRUE;
     }
     if (state == PadStateDiscon) {
-        this->vibration.setupStep = SETUP_START;
+        this->vibration.setupStep = VIBRATION_SETUP_START;
     }
     this->state = state;
     this->stable = stable;
@@ -340,11 +341,11 @@ s32 padUpdateSetup(Pad *this) {
     s32 id;
     s32 exId;
 
-    if (this->vibration.hasActuators && this->vibration.setupStep != SETUP_START) {
+    if (this->vibration.hasActuators && this->vibration.setupStep != VIBRATION_SETUP_START) {
         switch (this->vibration.alignStep) {
-        case ALIGN_NONE:
+        case VIBRATION_ALIGN_NONE:
             break;
-        case ALIGN_SEND:
+        case VIBRATION_ALIGN_SEND:
             this->vibration.align[0] = 0;
             this->vibration.align[1] = 1;
             for (i = 2; i < 6; i++) {
@@ -354,23 +355,23 @@ s32 padUpdateSetup(Pad *this) {
                 this->vibration.alignStep++;
             }
             return FALSE;
-        case ALIGN_WAIT:
+        case VIBRATION_ALIGN_WAIT:
             if (this->state != PadStateStable) {
                 return FALSE;
             }
-            this->vibration.alignStep = ALIGN_DONE;
+            this->vibration.alignStep = VIBRATION_ALIGN_DONE;
             return FALSE;
-        case ALIGN_DONE:
+        case VIBRATION_ALIGN_DONE:
             break;
         }
     }
     switch (this->vibration.setupStep) {
-    case SETUP_START:
-        this->type = 0;
+    case VIBRATION_SETUP_START:
+        this->type = PAD_ID_NONE;
         this->vibration.hasActuators = FALSE;
-        this->vibration.alignStep = ALIGN_NONE;
+        this->vibration.alignStep = VIBRATION_ALIGN_NONE;
         id = PadInfoMode(this->port, InfoModeCurID, 0);
-        if (id == 0) {
+        if (id == PAD_ID_NONE) {
             break;
         }
         exId = PadInfoMode(this->port, InfoModeCurExID, 0);
@@ -379,41 +380,41 @@ s32 padUpdateSetup(Pad *this) {
         }
         switch (id) {
         case PAD_ID_DIGITAL:
-            this->vibration.setupStep = SETUP_FIND_ANALOG;
+            this->vibration.setupStep = VIBRATION_SETUP_FIND_ANALOG;
             break;
         case PAD_ID_ANALOG:
-            this->vibration.setupStep = SETUP_ACTUATORS;
+            this->vibration.setupStep = VIBRATION_SETUP_ACTUATORS;
             break;
         default:
-            this->vibration.setupStep = SETUP_UNSUPPORTED;
+            this->vibration.setupStep = VIBRATION_SETUP_UNSUPPORTED;
             break;
         }
         break;
-    case SETUP_FIND_ANALOG:
+    case VIBRATION_SETUP_FIND_ANALOG:
         if (PadInfoMode(this->port, InfoModeIdTable, -1) == 0) {
-            this->vibration.setupStep = SETUP_FAILED;
+            this->vibration.setupStep = VIBRATION_SETUP_FAILED;
             break;
         }
         this->vibration.setupStep++;
         /* fall through */
-    case SETUP_SET_ANALOG:
+    case VIBRATION_SETUP_SET_ANALOG:
         if (PadSetMainMode(this->port, PadInfoMode(this->port, InfoModeCurExOffs, 0) + 1, 1) != 1) {
             break;
         }
         this->vibration.setupStep++;
         break;
-    case SETUP_WAIT_ANALOG:
+    case VIBRATION_SETUP_WAIT_ANALOG:
         if (this->state != PadStateStable) {
             break;
         }
-        this->vibration.setupStep = SETUP_ACTUATORS;
+        this->vibration.setupStep = VIBRATION_SETUP_ACTUATORS;
         break;
-    case SETUP_ACTUATORS:
+    case VIBRATION_SETUP_ACTUATORS:
         if (!this->stable) {
             break;
         }
         if (PadInfoAct(this->port, -1, 0) == 0) {
-            this->vibration.setupStep = SETUP_FAILED;
+            this->vibration.setupStep = VIBRATION_SETUP_FAILED;
             break;
         }
         this->vibration.hasActuators = TRUE;

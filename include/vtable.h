@@ -1,7 +1,7 @@
 #ifndef VTABLE_H
 #define VTABLE_H
 
-/* The virtual tables of g++ 2.95, as the C files see them: their entries, destructor flags. */
+/* The virtual tables of g++ 2.95, as the C files see them: their entries, destructor flags, static init priority. */
 
 #include "common.h"
 
@@ -34,6 +34,12 @@ typedef struct {
 #define DESTROY_FREE 1   /* free the object's memory afterwards */
 #define DESTROY_BASES 2  /* destroy the virtual bases too: a whole object */
 #define DESTROY_DELETE 3 /* what `delete` passes */
+
+/* the priority of the global objects without init_priority (g++'s
+ * DEFAULT_INIT_PRIORITY): a file's _GLOBAL_.I and _GLOBAL_.D pass it to its
+ * __static_initialization_and_destruction_0, which builds or destroys them
+ * only for it */
+#define INIT_PRIORITY_DEFAULT 0xFFFF
 
 EXTERN_C_END
 

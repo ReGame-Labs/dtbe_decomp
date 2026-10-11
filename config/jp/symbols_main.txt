@@ -1,0 +1,6 @@
+// The executable's own names for addresses in the overlays' memory
+// (0x800643E0-0x800DA320), which the overlays' configs must not see: every
+// overlay names its own symbols there (config/<version>/symbols_<name>.txt)
+
+// where movie.bin, title.bin and game.bin load (include/overlay.h)
+OVERLAY_MEMORY = 0x800643E0;

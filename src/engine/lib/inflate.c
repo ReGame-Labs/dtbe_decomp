@@ -1,6 +1,6 @@
 #include "common.h"
 #include "engine/lib/inflate.h"
-#include "engine/system/main.h"
+#include "engine/system/break_stub.h"
 #include "memory.h"
 
 /* adler32's sum of 16 bytes, unrolled */

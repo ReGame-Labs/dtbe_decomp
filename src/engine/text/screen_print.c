@@ -16,11 +16,11 @@
 #define SCREEN_TEXT_RIGHT 608
 
 /* Writes formatted text on the screen, as printf does. */
-void screenPrint(const char *fmt, ...) {
+void screenPrint(const char *format, ...) {
     VaList args;
 
-    VA_START(args, fmt);
-    screenVprint(fmt, args);
+    VA_START(args, format);
+    screenVprint(format, args);
 }
 
 /* where screenVprint writes the next character on the screen */
@@ -31,22 +31,22 @@ static s32 SCREEN_TEXT_Y = SCREEN_TEXT_TOP;
  * Writes formatted text on the screen, as vprintf does, in full-width
  * characters drawn straight into VRAM; a line wraps at SCREEN_TEXT_RIGHT.
  */
-void screenVprint(const char *fmt, VaList args) {
+void screenVprint(const char *format, VaList args) {
     u8 *text = SCREEN_TEXT_BUFFER;
     s32 x;
     s32 y;
-    u32 c;
+    u32 code;
 
-    vsprintf(SCREEN_FORMAT_BUFFER, (u8 *)fmt, args);
+    vsprintf(SCREEN_FORMAT_BUFFER, (u8 *)format, args);
     copyFullWidth(SCREEN_TEXT_BUFFER, SCREEN_FORMAT_BUFFER);
     x = SCREEN_TEXT_X;
     y = SCREEN_TEXT_Y;
-    while ((c = *text++) != '\0') {
-        if (c == '\n') {
+    while ((code = *text++) != '\0') {
+        if (code == '\n') {
             x = SCREEN_TEXT_LEFT;
             y += SCREEN_GLYPH_SIZE;
-        } else if (c >= ' ') {
-            screenPutChar(x, y, (c << 8) | *text++);
+        } else if (code >= ' ') {
+            screenPutChar(x, y, (code << 8) | *text++);
             x += SCREEN_GLYPH_SIZE;
             if (x >= SCREEN_TEXT_RIGHT) {
                 x = SCREEN_TEXT_LEFT;
