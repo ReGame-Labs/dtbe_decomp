@@ -58,7 +58,7 @@ FontCache *fontCacheInit(FontCache *this) {
     cacheInit(&this->cache, FONT_CACHE_AREAS, sizeof(FONT_CACHE_AREAS) / sizeof(RECT), FONT_CELL_WIDTH,
                   FONT_CELL_HEIGHT);
     this->cache.vtable = &FONT_CACHE_VTABLE;
-    func_80057F98(&FONT_PALETTE_RECT, (u_long *)FONT_PALETTE);
+    LoadImage2(&FONT_PALETTE_RECT, (u_long *)FONT_PALETTE);
     this->font = NULL;
     return this;
 }
@@ -114,7 +114,7 @@ void fontCacheLoadGlyph(FontCache *this, s16 x, s16 y, u32 code) {
         }
         out = next;
     }
-    func_80057F98(&FONT_GLYPH_RECT, (u_long *)image);
+    LoadImage2(&FONT_GLYPH_RECT, (u_long *)image);
 }
 
 /* Makes the font the one the FontCache draws. */

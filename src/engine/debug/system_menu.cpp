@@ -717,7 +717,7 @@ void loadDebugTim(void) {
     TIM_IMAGE image;
     u32 *file = (u32 *)loadFile("dbg.tim");
 
-    func_800585B0(file);
+    OpenTIM((u_long *)file);
     ReadTIM(&image);
     mainHeapFree(file);
 }

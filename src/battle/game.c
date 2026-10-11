@@ -19170,12 +19170,12 @@ Unk800D1F8C *func_800D1F8C(Unk800D1F8C *this, Unk8006ED20 *owner) {
     this->clutRects[0].y = 0xF5;
     this->clutRects[0].w = 0x10;
     this->clutRects[0].h = 1;
-    func_80055B88(&this->clutRects[0], (u_long *)this->cluts[0]);
+    StoreImage(&this->clutRects[0], (u_long *)this->cluts[0]);
     this->clutRects[1].x = 0x280;
     this->clutRects[1].y = 0xF4;
     this->clutRects[1].w = 0x10;
     this->clutRects[1].h = 1;
-    func_80055B88(&this->clutRects[1], (u_long *)this->cluts[1]);
+    StoreImage(&this->clutRects[1], (u_long *)this->cluts[1]);
     return this;
 }
 
@@ -19260,12 +19260,12 @@ void func_800D2088(Unk800D1F8C *this, Camera *camera) {
         if (paletteOwner(this)->unkF64[0] > paletteOwner(this)->unkF64[1]) {
             this->cluts[0][7] = color;
             this->cluts[0][8] = brightColor;
-            func_80055B28(&this->clutRects[0], (u_long *)this->cluts[0]);
+            LoadImage(&this->clutRects[0], (u_long *)this->cluts[0]);
         }
         if (paletteOwner(this)->unkF64[1] > paletteOwner(this)->unkF64[0]) {
             this->cluts[1][7] = color;
             this->cluts[1][8] = brightColor;
-            func_80055B28(&this->clutRects[1], (u_long *)this->cluts[1]);
+            LoadImage(&this->clutRects[1], (u_long *)this->cluts[1]);
         }
     }
 
@@ -19315,12 +19315,12 @@ Unk800D1F8C *func_800D23C4(Unk800D1F8C *this, Unk8006ED20 *owner) {
     this->clutRects[0].y = 0xFA;
     this->clutRects[0].w = 0x10;
     this->clutRects[0].h = 1;
-    func_80055B88(&this->clutRects[0], (u_long *)this->cluts[0]);
+    StoreImage(&this->clutRects[0], (u_long *)this->cluts[0]);
     this->clutRects[1].x = 0x280;
     this->clutRects[1].y = 0xF8;
     this->clutRects[1].w = 0x10;
     this->clutRects[1].h = 1;
-    func_80055B88(&this->clutRects[1], (u_long *)this->cluts[1]);
+    StoreImage(&this->clutRects[1], (u_long *)this->cluts[1]);
     return this;
 }
 
@@ -19376,12 +19376,12 @@ void func_800D24C0(Unk800D1F8C *this, Camera *camera) {
     if (paletteOwner(this)->unkF30[0] == 0) {
         this->cluts[0][7] = color;
         this->cluts[0][8] = brightColor;
-        func_80055B28(&this->clutRects[0], (u_long *)this->cluts[0]);
+        LoadImage(&this->clutRects[0], (u_long *)this->cluts[0]);
     }
     if (paletteOwner(this)->unkF30[1] == 0) {
         this->cluts[1][7] = color;
         this->cluts[1][8] = brightColor;
-        func_80055B28(&this->clutRects[1], (u_long *)this->cluts[1]);
+        LoadImage(&this->clutRects[1], (u_long *)this->cluts[1]);
     }
 
     tpage = allocDrTpage(10);

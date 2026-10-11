@@ -190,8 +190,8 @@ void func_800D4D88(Unk800D3DBC *this) {
     this->unkF18.y = 0xFE;
     this->unkF18.w = 16;
     this->unkF18.h = 1;
-    func_80055B88(&this->unkF18, (u_long *)this->unkF20);
-    func_80055B88(&this->unkF18, (u_long *)this->unkF40);
+    StoreImage(&this->unkF18, (u_long *)this->unkF20);
+    StoreImage(&this->unkF18, (u_long *)this->unkF40);
 }
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D4DEC);

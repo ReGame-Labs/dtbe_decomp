@@ -2,9 +2,12 @@
 
 | Version | Code | Data | Functions |
 |---|---|---|---|
-| 🇯🇵 Japan, the whole game | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=code&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=data&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=functions&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp) |
-| the executable (`SLPS_033.57`) | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=code&category=executable&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=executable) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=data&category=executable&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=executable) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=functions&category=executable&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=executable) |
-| the code overlays (`A.VFS`'s `/bin/`) | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=code&category=overlays&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=overlays) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=data&category=overlays&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=overlays) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp.svg?mode=shield&measure=functions&category=overlays&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp?category=overlays) |
+| 🇯🇵 Japan, the whole game | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57.svg?mode=shield&measure=code&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57.svg?mode=shield&measure=data&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57.svg?mode=shield&measure=functions&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57) |
+| the executable (`SLPS_033.57`) | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57.svg?mode=shield&measure=code&category=executable&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57?category=executable) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57.svg?mode=shield&measure=data&category=executable&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57?category=executable) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57.svg?mode=shield&measure=functions&category=executable&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57?category=executable) |
+| the code overlays (`A.VFS`'s `/bin/`) | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57.svg?mode=shield&measure=code&category=overlays&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57?category=overlays) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57.svg?mode=shield&measure=data&category=overlays&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57?category=overlays) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57.svg?mode=shield&measure=functions&category=overlays&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLPS_033.57?category=overlays) |
+| 🇺🇸 USA, the whole game | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04.svg?mode=shield&measure=code&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04.svg?mode=shield&measure=data&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04.svg?mode=shield&measure=functions&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04) |
+| the executable (`SLUS_014.04`) | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04.svg?mode=shield&measure=code&category=executable&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04?category=executable) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04.svg?mode=shield&measure=data&category=executable&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04?category=executable) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04.svg?mode=shield&measure=functions&category=executable&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04?category=executable) |
+| the code overlays (`A.VFS`'s `/bin/`) | [![Code](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04.svg?mode=shield&measure=code&category=overlays&label=Code)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04?category=overlays) | [![Data](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04.svg?mode=shield&measure=data&category=overlays&label=Data)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04?category=overlays) | [![Functions](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04.svg?mode=shield&measure=functions&category=overlays&label=Functions)](https://decomp.dev/ReGame-Labs/dtbe_decomp/SLUS_014.04?category=overlays) |
 
 [![Build](https://github.com/ReGame-Labs/dtbe_decomp/actions/workflows/build.yaml/badge.svg)](https://github.com/ReGame-Labs/dtbe_decomp/actions/workflows/build.yaml)
 [![Platform](https://img.shields.io/badge/platform-PlayStation-003791)](#the-executable)
@@ -22,10 +25,13 @@ game to build it.
 ## Status
 
 The build gives back the original executable and its 13 code overlays byte
-for byte. Most of the executable's functions are C already, the overlays'
-are mostly still splat's assembly behind `INCLUDE_ASM`, and decompiling them
-one by one, keeping the match, is the work. The progress counts the whole
-game, executable and overlays, with each part in its own category. Progress is measured by
+for byte, for both the Japanese release (`SLPS_033.57`, the default) and the
+USA one (`SLUS_014.04`, `VERSION=us`), from the same source. Most of the
+executable's functions are C already; about a third of the overlays' are,
+and the rest is still splat's assembly behind `INCLUDE_ASM`. Decompiling
+them one by one, keeping the match in both versions, is the work. The
+progress counts the whole game of each version, executable and overlays,
+with each part in its own category. Progress is measured by
 [objdiff](https://github.com/encounter/objdiff) and tracked on
 [decomp.dev](https://decomp.dev/ReGame-Labs/dtbe_decomp).
 
@@ -56,16 +62,16 @@ the disc's `A.VFS` archive; the movies are in `A.STR` and the sound in
 
 The code overlays are `A.VFS`'s `/bin/<name>.bin`, zlib-compressed in the
 archive; the build splits and checks them inflated. Each one starts with its
-`.rodata`, and has its own splat config (`config/jp/<name>.yaml`) and symbols
-(`config/jp/symbols_<name>.txt`); it links against the executable's symbols,
+`.rodata`, and has its own splat config (`config/<version>/<name>.yaml`) and
+symbols (`config/<version>/symbols_<name>.txt`); it links against the executable's symbols,
 and a stage against `game.bin`'s too.
 
 | File | Loads at | Size | What | Source |
 |---|---|---|---|---|
-| `movie.bin` | `0x800643E0` (`OVERLAY_MEMORY`) | 10 KB | the movie player (MDEC, `/a.str`) | `src/movie/` |
-| `title.bin` | `0x800643E0` | 92 KB | the boot logo, title screen and menus: main menu, character and map select, ranking, credits, options | `src/title/` |
-| `game.bin` | `0x800643E0` | 445 KB | the battle ("game main process") | `src/battle/` |
-| `st00.bin`-`st09.bin` | `0x800D3820`, after `game.bin` | 4-27 KB | the battle's stage, which `game.bin` loads (`/bin/st%02d.bin`) | `src/battle/stages/` |
+| `movie.bin` | `0x800643E0` (`OVERLAY_MEMORY`; USA `0x800643C0`) | 10 KB | the movie player (MDEC, `/a.str`) | `src/movie/` |
+| `title.bin` | `0x800643E0` (USA `0x800643C0`) | 92 KB | the boot logo, title screen and menus: main menu, character and map select, ranking, credits, options | `src/title/` |
+| `game.bin` | `0x800643E0` (USA `0x800643C0`) | 445 KB | the battle ("game main process") | `src/battle/` |
+| `st00.bin`-`st09.bin` | `0x800D3820`, after `game.bin` (USA `0x800D3B00`) | 4-27 KB | the battle's stage, which `game.bin` loads (`/bin/st%02d.bin`) | `src/battle/stages/` |
 
 ## Building
 
@@ -101,10 +107,10 @@ make compare
 The USA release (`SLUS_014.04`) builds the same way, with `VERSION=us` on
 every command: its files go in `disks/us`, and `make VERSION=us compare`
 checks it. `jp` is the default. Both builds share the source; the few
-functions whose code differs in the USA release stay in assembly there,
+functions whose code differs between the releases keep the Japanese code
 behind `#if VERSION_JP`.
 
-`make report` writes objdiff's progress report (`build/jp/report.json`), and
+`make report` writes objdiff's progress report (`build/<version>/report.json`), and
 `make objdiff` the `objdiff.json` that objdiff's GUI opens.
 
 `make docs` writes the source's documentation, `build/docs/html/index.html`,
@@ -117,19 +123,20 @@ are: the comment above a function, a type or a global is its description.
 ## Toolchain
 
 - **Compiler:** GCC 2.95.2 for the PlayStation (`cc1`, from
-  [decompals/old-gcc](https://github.com/decompals/old-gcc)) at `-O2 -G8`.
+  [decompals/old-gcc](https://github.com/decompals/old-gcc)) at `-O2`, `-G8` for the executable and `-G0` for the overlays.
   Its instruction scheduling is the one the game's code has; 2.7.2 and
   2.8.x schedule the loads differently.
 - **Assembler:** [maspsx](https://github.com/mkst/maspsx) turns GCC's output
   into what Sony's `aspsx` 2.86 would have made, then GNU `as` assembles it.
 - **Splitting:** [splat](https://github.com/ethteck/splat)
-  (`config/jp/main.yaml`).
+  (`config/<version>/main.yaml`).
 - **Decompiling:** [m2c](https://github.com/matt-kempster/m2c) and
   [decomp-permuter](https://github.com/simonlindholm/decomp-permuter) are in
   `external/`.
 
 ## Contributing
 
-Pick a function behind `INCLUDE_ASM` in `src/engine/`, write it as C, and check
-that `make compare` still passes. Only byte-identical matches go in.
+Pick a function behind `INCLUDE_ASM`, most of them in the overlays
+(`src/battle/`, `src/title/`), write it as C, and check that `make compare`
+and `make VERSION=us compare` still pass. Only byte-identical matches go in.
 [CONTRIBUTING](CONTRIBUTING.md) describes the tools and the rules.

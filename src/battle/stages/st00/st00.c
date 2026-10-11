@@ -93,7 +93,7 @@ void func_800D4074(Unk800D3B74 *this) {
     this->unkEF4 = 0;
     this->unkDA8.w = 16;
     this->unkDA8.h = 1;
-    func_80055B88(&this->unkDA8, (u_long *)this->unkE90);
+    StoreImage(&this->unkDA8, (u_long *)this->unkE90);
 }
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D40C0);

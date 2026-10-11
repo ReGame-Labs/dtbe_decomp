@@ -70,12 +70,6 @@ typedef struct Unk8007096C {
     /* 0x0 */ s32 *unk0;
 } Unk8007096C;
 
-/* PsyQ libcard calls known only by address: MemCardCallback, and two that return 0 while the card is
- * busy */
-MemCB func_80059C74(MemCB callback);
-s32 func_800588AC(s32 channel);
-s32 func_80058C30(s32 channel);
-
 /* in .rodata: the yes/no window's choices, the task's name, messages and a file name pattern */
 extern u8 D_80065304[];
 extern u8 D_8006530C[];
@@ -330,7 +324,7 @@ MemoryCardTask *memoryCardTaskInit(MemoryCardTask *this, s32 mode) {
     entityGroupInit(&this->windows);
     this->mode = mode;
     MemCardStart();
-    func_80059C74(func_80071550);
+    MemCardCallback(func_80071550);
     this->channel = 0;
     func_80075FAC(&records, (Unk800764F4 *)GAME_STATE.save.records, 8);
     this->message = func_800702F8(entityOperatorNew(sizeof(Unk800702F8)), 0x20, 0x30, 0x100, 0x50);
@@ -351,7 +345,7 @@ MemoryCardTask *memoryCardTaskInit(MemoryCardTask *this, s32 mode) {
 /* The memory card task's destructor: stops the card, then destroys the windows and the thread. */
 void func_80070AEC(MemoryCardTask *this, s32 flags) {
     this->task.vtable = &D_800656E0;
-    func_80059C74(NULL);
+    MemCardCallback(NULL);
     MemCardStop();
     D_8007B238 = NULL;
     entityGroupDestroy(&this->windows, DESTROY_BASES);
@@ -517,14 +511,14 @@ s32 func_8007163C(MemoryCardTask *this, char *name, s32 blocks, s32 tries) {
     return result;
 }
 
-/* Runs func_800588AC on the card (once it is free) and waits for its result, up to
+/* Runs MemCardExist on the card (once it is free) and waits for its result, up to
  * three times: 1 for a result of 0 or 3, 0 when all three are others. */
 s32 func_8007175C(MemoryCardTask *this) {
     s32 tries = 3;
     s32 result;
 
     do {
-        while (!func_800588AC(this->channel)) {
+        while (!MemCardExist(this->channel)) {
             threadSwitchBack(&this->thread, 0);
         }
         result = func_80071854(this);
@@ -535,14 +529,14 @@ s32 func_8007175C(MemoryCardTask *this) {
     return 0;
 }
 
-/* Runs func_80058C30 on the card (once it is free) and waits for its result, up to
+/* Runs MemCardAccept on the card (once it is free) and waits for its result, up to
  * three times while the result is neither 0 nor 3; returns the last one. */
 s32 func_800717DC(MemoryCardTask *this) {
     s32 tries = 3;
     s32 result;
 
     do {
-        while (!func_80058C30(this->channel)) {
+        while (!MemCardAccept(this->channel)) {
             threadSwitchBack(&this->thread, 0);
         }
         result = func_80071854(this);
@@ -626,7 +620,7 @@ u8 *func_80071A44(u32 *fileSize, char *title, u32 *icon, u8 *data, s32 size) {
     u_long *pixels;
     s32 offset;
 
-    func_800585B0(icon);
+    OpenTIM((u_long *)icon);
     ReadTIM(&tim);
     frames = tim.prect->h / 16;
     iconSize = frames * 0x80;

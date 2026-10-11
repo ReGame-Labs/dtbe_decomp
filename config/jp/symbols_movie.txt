@@ -33,6 +33,8 @@ MOVIE_PLAYER = 0x80065D90; // size:0x4
 
 // PsyQ's libpress
 DecDCTReset = 0x80065290; // type:func
+DecDCTGetEnv = 0x800652C4; // type:func
+DecDCTPutEnv = 0x80065350; // type:func
 DecDCTin = 0x800653E8; // type:func
 DecDCTout = 0x80065464; // type:func
 DecDCToutCallback = 0x8006552C; // type:func

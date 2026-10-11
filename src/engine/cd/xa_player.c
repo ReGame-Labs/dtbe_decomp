@@ -49,8 +49,8 @@ static inline s32 setXaMixModeInline(s32 mixMode) {
 /* Reads the track from the stream's position. */
 static inline void startXaReadInline(void) {
     XA_PLAYER.flags |= XA_STARTING;
-    XA_STREAM.startSector = func_80046C70(&XA_STREAM.position);
-    func_80043998(XA_STREAM.track->mode, &XA_STREAM.position, CdlReadS, receiveXaReadComplete, -1);
+    XA_STREAM.startSector = DsPosToInt(&XA_STREAM.position);
+    DsPacket(XA_STREAM.track->mode, &XA_STREAM.position, CdlReadS, receiveXaReadComplete, -1);
 }
 
 /* Stops the track and tells the callback. */
@@ -67,9 +67,9 @@ static inline void turnXaOffInline(void) {
     if (XA_PLAYER.flags & XA_ON) {
         setXaVolume(0);
         LOG_PRINT(STR_CDFSXA_SYSTEM_OFF);
-        func_80046DC0(NULL);
-        func_800468A0();
-        func_80043724(CdlPause, NULL, NULL, -1);
+        DsReadyCallback(NULL);
+        DsFlush();
+        DsCommand(CdlPause, NULL, NULL, -1);
         enableCdfs();
         XA_PLAYER.flags = XA_SEEKED;
     }
@@ -84,35 +84,35 @@ void seekXaTrack(u32 track) {
         if (!(XA_PLAYER.flags & XA_ON)) {
             LOG_PRINT("CDFSXA: System On.\n");
         }
-        func_80046DC0(NULL);
-        func_800468A0();
+        DsReadyCallback(NULL);
+        DsFlush();
         XA_PLAYER.flags |= XA_ON;
         XA_PLAYER.flags &= ~(XA_SEEKED | XA_PLAYING | XA_PAUSED | XA_START_PENDING);
         setXaVolume(0);
         XA_STREAM.track = &XA_PLAYER.tracks[track];
-        func_80046B60(XA_STREAM.track->start, &XA_STREAM.start);
+        DsIntToPos(XA_STREAM.track->start, &XA_STREAM.start);
         XA_STREAM.position = XA_STREAM.start;
-        func_80043724(CdlSetmode, &XA_STREAM.track->mode, NULL, -1);
-        func_80043724(CdlSetfilter, &XA_STREAM.track->filter, NULL, -1);
-        func_80043998(XA_STREAM.track->mode, &XA_STREAM.start, CdlSeekP, receiveXaSeek, -1);
+        DsCommand(CdlSetmode, &XA_STREAM.track->mode, NULL, -1);
+        DsCommand(CdlSetfilter, (u8 *)&XA_STREAM.track->filter, NULL, -1);
+        DsPacket(XA_STREAM.track->mode, &XA_STREAM.start, CdlSeekP, receiveXaSeek, -1);
     }
 }
 
 /* The data ready callback while playing: ends the track at its first data
  * sector, or restarts the read after an error. */
-void receiveXaSector(u8 intr) {
+void receiveXaSector(u8 intr, u8 *result) {
     XaSectorHeader header;
 
     if (intr != CdlDataReady) {
-        func_80046DC0(NULL);
+        DsReadyCallback(NULL);
         estimateXaPosition();
-        XA_STREAM.startSector = func_80046C70(&XA_STREAM.position);
-        func_80043998(XA_STREAM.track->mode, &XA_STREAM.position, CdlReadS, receiveXaRestart, -1);
+        XA_STREAM.startSector = DsPosToInt(&XA_STREAM.position);
+        DsPacket(XA_STREAM.track->mode, &XA_STREAM.position, CdlReadS, receiveXaRestart, -1);
         return;
     }
     func_80046930(&header, sizeof(header) / 4);
     if ((header.submode & XA_SUBMODE_DATA) && XA_STREAM.track->filter.chan == header.channel) {
-        func_80046DC0(NULL);
+        DsReadyCallback(NULL);
         if (XA_PLAYER.loopsLeft != 0) {
             if (!(XA_PLAYER.flags & (XA_LOOP | XA_STARTING)) && !(XA_PLAYER.prevFlags & XA_LOOP)) {
                 XA_PLAYER.loopsLeft--;
@@ -216,7 +216,7 @@ void turnXaOff(void) {
 }
 
 /* The seek's callback: the drive is at the track. */
-void receiveXaSeek(u8 intr) {
+void receiveXaSeek(u8 intr, u8 *result) {
     s32 discard;
 
     if (intr == CdlComplete) {
@@ -231,20 +231,20 @@ void startXaRead(void) {
 }
 
 /* The read command's callback: the track plays from now. */
-void receiveXaReadComplete(u8 intr) {
+void receiveXaReadComplete(u8 intr, u8 *result) {
     XA_STREAM.startTime = VSync(-1);
     if (intr == CdlComplete) {
         XA_PLAYER.flags &= ~(XA_STARTING | XA_PAUSED);
         XA_PLAYER.flags |= XA_PLAYING;
-        func_80046DC0(receiveXaSector);
+        DsReadyCallback(receiveXaSector);
         setXaVolume(XA_VOLUME_ON);
     }
 }
 
 /* The callback of a read restarted after an error. */
-void receiveXaRestart(u8 intr) {
+void receiveXaRestart(u8 intr, u8 *result) {
     if (intr == CdlComplete) {
-        func_80046DC0(receiveXaSector);
+        DsReadyCallback(receiveXaSector);
         XA_STREAM.startTime = VSync(-1);
     }
 }
@@ -253,12 +253,12 @@ void receiveXaRestart(u8 intr) {
  * whether it played. */
 s32 stopXaDrive(void) {
     if ((XA_PLAYER.flags & XA_ON) && (XA_PLAYER.flags & XA_PLAYING) && !(XA_PLAYER.flags & XA_PAUSED)) {
-        func_80046DC0(NULL);
+        DsReadyCallback(NULL);
         XA_PLAYER.flags &= ~XA_PLAYING;
         estimateXaPosition();
         setXaVolume(0);
-        func_800468A0();
-        func_80043724(CdlPause, NULL, NULL, -1);
+        DsFlush();
+        DsCommand(CdlPause, NULL, NULL, -1);
         return 1;
     }
     return 0;
@@ -278,7 +278,7 @@ void estimateXaPosition(void) {
     }
     /* VSyncs to sectors, times frameRate */
     elapsed *= XA_SECTORS_PER_SECOND;
-    func_80046B60(XA_STREAM.startSector + elapsed / XA_STREAM.frameRate, &XA_STREAM.position);
+    DsIntToPos(XA_STREAM.startSector + elapsed / XA_STREAM.frameRate, &XA_STREAM.position);
 }
 
 /* Returns whether a seek is under way. */
@@ -357,7 +357,7 @@ u16 loadXaTracks(XaTrack *tracks, char *name) {
 
     if (loadFileSync(&header, name, 0, sizeof(header)) != 0 && header.magic == XAP_MAGIC) {
         count = header.count;
-        base = func_80046C70(&CDFS.loc);
+        base = DsPosToInt(&CDFS.loc);
         if (loadFileSync(tracks, name, XAP_TRACKS_OFFSET, count * sizeof(XaTrack)) != 0) {
             setCdfsDone(done);
             mode = XA_MODE;

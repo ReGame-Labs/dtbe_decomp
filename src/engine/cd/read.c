@@ -55,7 +55,9 @@ s32 findIsoFile(CdfsFile *file, char *name) {
     CDFS.hook();
     disableCdfs();
     do {
-        result = func_80045920(file, path);
+        /* a CdfsFile starts as the SDK's DslFILE; the SDK returns the file,
+         * NULL when it is not there or -1 on a drive error */
+        result = (s32)DsSearchFile((DslFILE *)file, path);
         if (result == 0) {
             break; /* not there */
         }
@@ -63,7 +65,7 @@ s32 findIsoFile(CdfsFile *file, char *name) {
             break; /* found */
         }
         /* a drive error: reset it and look again */
-        func_80043618();
+        DsReset();
     } while (1);
     enableCdfs();
     return result;
@@ -215,7 +217,7 @@ s32 cdfsRequestLocate(CdfsRequest *this) {
         offset += this->fileOffset;
     }
     if (offset != 0) {
-        func_80046B60(func_80046C70(&this->loc) + (offset >> CD_SECTOR_SHIFT), &this->loc);
+        DsIntToPos(DsPosToInt(&this->loc) + (offset >> CD_SECTOR_SHIFT), &this->loc);
         offset &= CD_SECTOR_SIZE - 1;
     }
     cdfsRequestPlanRead(this, offset);
@@ -294,7 +296,7 @@ void cdfsRequestPlanHeadRead(CdfsRequest *this, u32 offset) {
 
 /* The data ready callback of a shifted read: the first sector goes to the
  * head's buffer, the first word of the second there too. */
-void receiveShiftedReadSector(u8 intr) {
+void receiveShiftedReadSector(u8 intr, u8 *result) {
     if (intr != CdlDataReady) {
         reportCdfsError(651);
         return;
@@ -318,13 +320,13 @@ void receiveShiftedReadSector(u8 intr) {
         }
         return;
     }
-    func_80046E00(receiveCdfsLastSector);
+    DsDataCallback(receiveCdfsLastSector);
     if (CDFS_READ.tailSize == 0) {
         func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
     } else {
         func_80046930(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
     }
-    func_80046304();
+    DsEndReadySystem();
 }
 
 /* The end of a shifted read: puts its pieces in place. */
@@ -477,7 +479,7 @@ s32 cdfsRequestFind(CdfsRequest *this) {
 }
 
 /* Reads size bytes from offset of the sectors at loc into buffer. */
-void loadSectors(void *buffer, CdlLOC *loc, u32 offset, u32 size) {
+void loadSectors(void *buffer, DslLOC *loc, u32 offset, u32 size) {
     /* the pool's nodes are requests, which start with their LinkNode */
     CdfsRequest *request = (CdfsRequest *)nodePoolAlloc(&CDFS.requests);
 
@@ -486,7 +488,7 @@ void loadSectors(void *buffer, CdlLOC *loc, u32 offset, u32 size) {
     request->size = size;
     request->flags = CDFS_REQ_SECTOR | CDFS_REQ_FOUND;
     request->loc = *loc;
-    sprintf(request->name, " Sector No.%08x ", func_80046C70(loc));
+    sprintf(request->name, " Sector No.%08x ", DsPosToInt(loc));
     nodePoolPushBack(&CDFS.requests, &request->link);
     cdfsRequestStart(request);
 }
@@ -518,7 +520,7 @@ void startNextCdfsRequest(void) {
 void cdfsRequestStartRead(CdfsRequest *this) {
     LOG_PRINT("CDFS: Read(%d) %p %08x \"%s\" ..", CDFS_READ.mode, this->buffer, this->size,
                this->name);
-    func_80043998(CDFS_MODE, &this->loc, CdlReadN, receiveCdfsReadComplete, -1);
+    DsPacket(CDFS_MODE, &this->loc, CdlReadN, receiveCdfsReadComplete, -1);
     CDFS_READ.sectorIndex = 0;
     CDFS.flags |= CDFS_READING;
 }
@@ -531,34 +533,35 @@ void cdfsRequestSkipRead(CdfsRequest *this) {
 }
 
 /* The read command's callback: the sectors come to the ready callback. */
-void receiveCdfsReadComplete(u8 intr) {
+void receiveCdfsReadComplete(u8 intr, u8 *result) {
     if (intr != CdlComplete) {
         reportCdfsError(529);
         return;
     }
-    func_80046E00(NULL);
-    func_80046280(CDFS_READ.ready, -1);
+    DsDataCallback(NULL);
+    /* libds passes the ready callback the interrupt and the result only */
+    DsStartReadySystem((DslRCB)CDFS_READ.ready, -1);
 }
 
 /* The data ready callback of a read of whole sectors. */
-void receiveWholeReadSector(u8 intr) {
+void receiveWholeReadSector(u8 intr, u8 *result) {
     if (intr != CdlDataReady) {
         reportCdfsError(548);
         return;
     }
     if (--CDFS_READ.sectors == 0) {
-        func_80046E00(receiveCdfsLastSector);
+        DsDataCallback(receiveCdfsLastSector);
     }
     func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
     if (CDFS_READ.sectors == 0) {
-        func_80046304();
+        DsEndReadySystem();
         return;
     }
     CDFS_READ.dst += CD_SECTOR_SIZE;
 }
 
 /* The data ready callback of a read ending in a partial sector. */
-void receiveTailReadSector(u8 intr) {
+void receiveTailReadSector(u8 intr, u8 *result) {
     if (intr != CdlDataReady) {
         reportCdfsError(573);
         return;
@@ -568,9 +571,9 @@ void receiveTailReadSector(u8 intr) {
         CDFS_READ.dst += CD_SECTOR_SIZE;
         return;
     }
-    func_80046E00(receiveCdfsLastSector);
+    DsDataCallback(receiveCdfsLastSector);
     func_80046930(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
-    func_80046304();
+    DsEndReadySystem();
 }
 
 /* The end of a read ending in a partial sector: copies that in. */
@@ -580,7 +583,7 @@ void finishTailRead(void) {
 }
 
 /* The data ready callback of a read starting in a partial sector. */
-void receiveHeadReadSector(u8 intr) {
+void receiveHeadReadSector(u8 intr, u8 *result) {
     if (intr != CdlDataReady) {
         reportCdfsError(604);
         return;
@@ -594,13 +597,13 @@ void receiveHeadReadSector(u8 intr) {
         CDFS_READ.dst += CD_SECTOR_SIZE;
         return;
     }
-    func_80046E00(receiveCdfsLastSector);
+    DsDataCallback(receiveCdfsLastSector);
     if (CDFS_READ.tailSize == 0) {
         func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
     } else {
         func_80046930(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
     }
-    func_80046304();
+    DsEndReadySystem();
 }
 
 /* The end of a read starting in a partial sector: puts its pieces in
@@ -617,14 +620,14 @@ void finishHeadRead(void) {
 }
 
 /* The data ready callback of a read inside one sector. */
-void receiveSmallReadSector(u8 intr) {
+void receiveSmallReadSector(u8 intr, u8 *result) {
     if (intr != CdlDataReady) {
         reportCdfsError(711);
         return;
     }
-    func_80046E00(receiveCdfsLastSector);
+    DsDataCallback(receiveCdfsLastSector);
     func_80046930(CDFS_HEAD_BUFFER, CD_SECTOR_WORDS);
-    func_80046304();
+    DsEndReadySystem();
 }
 
 /* The end of a read inside one sector: copies it out. */
@@ -635,7 +638,7 @@ void finishSmallRead(void) {
 
 /* The sync callback of the last sector: tells updateCdfs. */
 void receiveCdfsLastSector(void) {
-    func_80046E00(NULL);
+    DsDataCallback(NULL);
     CDFS.flags |= CDFS_SECTOR_DONE;
     CDFS.flags &= ~CDFS_READING;
 }
@@ -647,13 +650,13 @@ INCLUDE_RODATA("main/nonmatchings/cd/read", STR_CDFS_OFFSET_SIZE_OVER);
 /* Logs a drive error, at line in the game's cd/read.c, and stops. */
 void reportCdfsError(s32 line) {
     LOG_PRINT("CDFS: Error detected! cd/read.c :%d:\n", line);
-    func_80046304();
+    DsEndReadySystem();
     CDFS.flags |= CDFS_ERROR;
 }
 
 /* After an error: restarts the current request once the drive is ready. */
 void retryCdfsRequest(void) {
-    if (func_800468E0() == 1) {
+    if (DsSystemStatus() == 1) {
         LOG_PRINT("\nCDFS: DslReady detected\n");
         CDFS.flags &= ~CDFS_ERROR;
         cdfsRequestStart(CDFS.current);

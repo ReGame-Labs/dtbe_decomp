@@ -59,13 +59,13 @@ INCLUDE_ASM("title/nonmatchings/chara_select", func_8006B568);
 void func_8006B700(u32 *tims, RECT *places, s32 index) {
     TIM_IMAGE image;
 
-    func_800585B0(findTim(tims, index));
+    OpenTIM((u_long *)findTim(tims, index));
     if (ReadTIM(&image) != NULL) {
         if (image.paddr != NULL) {
-            func_80057F98(&places[0], image.paddr);
+            LoadImage2(&places[0], image.paddr);
         }
         if (image.caddr != NULL) {
-            func_80057F98(&places[1], image.caddr);
+            LoadImage2(&places[1], image.caddr);
         }
     }
 }

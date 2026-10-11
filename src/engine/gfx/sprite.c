@@ -37,10 +37,10 @@ void spriteSetTim(Sprite *this, TIM_IMAGE *tim, s32 load) {
     spriteFreePieces(this);
     if (load) {
         if (tim->caddr != NULL) {
-            func_80055B28(tim->crect, tim->caddr);
+            LoadImage(tim->crect, tim->caddr);
         }
         if (tim->paddr != NULL) {
-            func_80055B28(tim->prect, tim->paddr);
+            LoadImage(tim->prect, tim->paddr);
         }
     }
     if (tim->crect != NULL) {

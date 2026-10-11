@@ -31,13 +31,13 @@ void loadCompressedFileInto(void *dst, char *path) {
 void uploadTim(u32 *tim) {
     TIM_IMAGE image;
 
-    func_800585B0(tim);
+    OpenTIM((u_long *)tim);
     if (ReadTIM(&image) != NULL) {
         if (image.caddr != NULL) {
-            func_80055B28(image.crect, image.caddr);
+            LoadImage(image.crect, image.caddr);
         }
         if (image.paddr != NULL) {
-            func_80055B28(image.prect, image.paddr);
+            LoadImage(image.prect, image.paddr);
         }
         DrawSync(0);
     }
@@ -47,13 +47,13 @@ void uploadTim(u32 *tim) {
 void uploadTims(u32 *tims) {
     TIM_IMAGE image;
 
-    func_800585B0(tims);
+    OpenTIM((u_long *)tims);
     while (ReadTIM(&image) != NULL) {
         if (image.caddr != NULL) {
-            func_80055B28(image.crect, image.caddr);
+            LoadImage(image.crect, image.caddr);
         }
         if (image.paddr != NULL) {
-            func_80055B28(image.prect, image.paddr);
+            LoadImage(image.prect, image.paddr);
         }
         DrawSync(0);
     }

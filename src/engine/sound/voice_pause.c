@@ -28,7 +28,7 @@ void setSoundEffectsPaused(s32 paused) {
         for (i = 0; i < SND_VOICE_MAX; i++) {
             attr.voice = 1 << i;
             if (voices & attr.voice) {
-                func_80048BF0(&attr);
+                SpuGetVoiceAttr(&attr);
                 voicePitch = attr.pitch;
                 left = attr.volume.left;
                 right = attr.volume.right;
