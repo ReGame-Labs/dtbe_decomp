@@ -1,0 +1,56 @@
+name: game
+sha1: 655cdf891af2caf44ae883eb952f8a60349947ec
+options:
+  basename: game
+  target_path: assets/us/bin/game.bin
+  base_path: ../..
+  platform: psx
+  compiler: GCC
+
+  asm_path: asm/us/game
+  src_path: src/battle
+  build_path: build/us
+
+  ld_script_path: build/us/generated/game.ld
+
+  global_vram_start: 0x80000000
+  global_vram_end: 0x80200000
+
+  find_file_boundaries: True
+  gp_value: 0x80064128
+
+  generate_asm_macros_files: False
+
+  section_order: [".rodata", ".text", ".data", ".bss"]
+
+  symbol_addrs_path:
+    - config/us/symbols.txt
+    - config/us/symbols_game.txt
+
+  undefined_funcs_auto_path: build/us/generated/undefined_funcs_auto_game.txt
+  undefined_syms_auto_path: build/us/generated/undefined_syms_auto_game.txt
+
+  string_encoding: SHIFT-JIS
+  data_string_encoding: SHIFT-JIS
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+  ld_bss_is_noload: True
+
+  # the whole overlay is one file until it is split into its modules, so its
+  # .rodata stays one piece in its order, not spread over the functions
+  migrate_rodata_to_functions: False
+  create_data_pads: False
+
+segments:
+  - name: game
+    type: code
+    start: 0x0
+    vram: 0x800643C0
+    align: 4
+    subalign: 4
+    subsegments:
+      - [0x0, rodata, game]
+      - [0x9DF4, c, game]
+      - [0x6F1C4, data, game]
+  - [0x6F73C]

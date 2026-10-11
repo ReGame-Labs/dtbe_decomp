@@ -8,4 +8,4 @@
  * delay of the cfc2 of FLAG; with game macros the GTE part matches, but GCC
  * gives shape and ot, and 0xFFFFFF, 0x808080, the packet length and the color,
  * other registers than the game's, as in buildPolyF3. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_line_f2", buildLineF2);
+INCLUDE_ASM("main/nonmatchings/gfx/prim/build_line_f2", buildLineF2);

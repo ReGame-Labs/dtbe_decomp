@@ -123,6 +123,6 @@ void copyPathWithSeparator(u8 *dst, u8 *src, u8 separator) {
     *dst = '\0';
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/string", FULL_WIDTH_CHARS);
+INCLUDE_RODATA("main/nonmatchings/lib/string", FULL_WIDTH_CHARS);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/lib/string", CTYPE_TABLE);
+INCLUDE_RODATA("main/nonmatchings/lib/string", CTYPE_TABLE);

@@ -1,0 +1,87 @@
+name: title
+sha1: bab9b6b1d1ef72c07f2f31c6228715b9d69d5e55
+options:
+  basename: title
+  target_path: assets/us/bin/title.bin
+  base_path: ../..
+  platform: psx
+  compiler: GCC
+
+  asm_path: asm/us/title
+  src_path: src/title
+  build_path: build/us
+
+  ld_script_path: build/us/generated/title.ld
+
+  global_vram_start: 0x80000000
+  global_vram_end: 0x80200000
+
+  find_file_boundaries: True
+  gp_value: 0x80064128
+
+  generate_asm_macros_files: False
+
+  section_order: [".rodata", ".text", ".data", ".bss"]
+
+  symbol_addrs_path:
+    - config/us/symbols.txt
+    - config/us/symbols_title.txt
+
+  undefined_funcs_auto_path: build/us/generated/undefined_funcs_auto_title.txt
+  undefined_syms_auto_path: build/us/generated/undefined_syms_auto_title.txt
+
+  string_encoding: SHIFT-JIS
+  data_string_encoding: SHIFT-JIS
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+  ld_bss_is_noload: True
+
+  # each source unit keeps its .rodata as one piece in its own order (g++
+  # puts tables first, then the strings, then the virtual tables in reverse),
+  # not spread over its functions
+  migrate_rodata_to_functions: False
+  create_data_pads: False
+
+segments:
+  - name: title
+    type: code
+    start: 0x0
+    vram: 0x800643C0
+    align: 4
+    subalign: 4
+    subsegments:
+      - [0x0, rodata, boot_logo]
+      - [0x74, rodata, main_menu]
+      - [0x1F8, rodata, ranking]
+      - [0x3C0, rodata, name_entry]
+      - [0x490, rodata, credits]
+      - [0x4F8, rodata, option]
+      - [0xAE0, rodata, memory_card]
+      - [0x1440, rodata, guide]
+      - [0x1710, rodata, title_0a]
+      - [0x1738, rodata, title_logo]
+      - [0x18B8, rodata, chara_select]
+      - [0x2378, rodata, title_0b]
+      - [0x23A0, rodata, title_0c]
+      - [0x2570, c, boot_logo]
+      - [0x2988, c, main_menu]
+      - [0x3B3C, c, ranking]
+      - [0x48DC, c, name_entry]
+      - [0x6CB0, c, credits]
+      - [0x7474, cpp, option]
+      - [0xA250, c, memory_card]
+      - [0xBC10, c, guide]
+      - [0xD2F4, c, title_0a]
+      - [0xDB60, c, title_logo]
+      - [0xFBC8, c, chara_select]
+      - [0x153C8, c, title_0b]
+      - [0x15FA4, c, title_0c]
+      - [0x1618C, data, name_entry]
+      - [0x161F4, data, credits]
+      - [0x161F8, data, option]
+      - [0x161FC, data, memory_card]
+      - [0x16208, data, guide]
+      - [0x16214, data, title_0a]
+      - [0x16264, data, chara_select]
+  - [0x16280]

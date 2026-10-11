@@ -56,4 +56,4 @@ void shiftColors(u16 *src, u16 *dst, u32 count, HsvColor *shift) {
     }
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/color_shift", D_80019350);
+INCLUDE_RODATA("main/nonmatchings/gfx/color_shift", D_80019350);

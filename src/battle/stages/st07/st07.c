@@ -63,7 +63,7 @@ Unk800D39B4 *func_800D39B4(Unk800D39B4 *this, s32 arg) {
     return this;
 }
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D39F8);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D39F8);
 
 Unk800D02C8 *func_800D02C8(Unk800D02C8 *this);
 
@@ -130,7 +130,7 @@ void func_800D3C3C(Unk800D3B14 *this) {
     this->unkF80 = 0;
 }
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D3C58);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D3C58);
 
 /* The stage's update: func_800D02C8's, then its own three steps, and counts the update at 0xF70. */
 void func_800D3D10(Unk800D3B14 *this) {
@@ -141,7 +141,7 @@ void func_800D3D10(Unk800D3B14 *this) {
     this->unkF70++;
 }
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D3D58);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D3D58);
 
 /* Clears the four halfwords at 0xF84 and sets 0xF34 to 30; called by the stage's init. */
 void func_800D3E94(Unk800D3B14 *this) {
@@ -177,13 +177,13 @@ void func_800D3EB0(Unk8006ED20 *this) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D3F30);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D3F30);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D4044);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D4044);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D4140);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D4140);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D449C);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D449C);
 
 /* The destructor of the entity class of vtable D_800D3914, which func_800D449C installs. */
 void func_800D458C(Entity *this, s32 flags) {
@@ -194,11 +194,11 @@ void func_800D458C(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D45E0);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D45E0);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D4718);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D4718);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D49B0);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D49B0);
 
 /* The destructor of the entity class of vtable D_800D38EC, which func_800D49B0 installs. */
 void func_800D4AB8(Entity *this, s32 flags) {
@@ -209,13 +209,13 @@ void func_800D4AB8(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D4B0C);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D4B0C);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D4C64);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D4C64);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D4DE4);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D4DE4);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D4F68);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D4F68);
 
 /* Constructs an UnkStageQuad (vtable D_800D38C4) of owner: the corners of a 128 by 128 square, then
  * func_800D53AC. */
@@ -245,13 +245,13 @@ void func_800D5120(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D5174);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D5174);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D51F0);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D51F0);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D53AC);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D53AC);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D54EC);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D54EC);
 
 /* Constructs an UnkStageQuadPos (vtable D_800D389C) of owner at pos: the corners of a 512 by 512 square, index 0. */
 UnkStageQuadPos *func_800D5630(UnkStageQuadPos *this, Unk8006ED20 *owner, Vec3 *pos) {
@@ -293,9 +293,9 @@ void func_800D572C(UnkStageQuadPos *this, s32 arg) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D5794);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D5794);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D5910);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D5910);
 
 /* The destructor of the entity class of vtable D_800D3874, which func_800D5910 installs. */
 void func_800D59B4(Entity *this, s32 flags) {
@@ -306,9 +306,9 @@ void func_800D59B4(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D5A08);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D5A08);
 
-INCLUDE_ASM("asm/jp/st07/nonmatchings/st07", func_800D5AFC);
+INCLUDE_ASM("st07/nonmatchings/st07", func_800D5AFC);
 
 /* Unk800D39B4's destructor: Unk8007C084's. */
 void func_800D5E04(Unk800D39B4 *this, s32 flags) {

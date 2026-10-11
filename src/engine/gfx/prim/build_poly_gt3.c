@@ -12,4 +12,4 @@
  * other registers than the game's $a1, $v1, $v0 and $a0, and the game loads
  * four words of the triangle, stores them to the packet, then loads the fifth
  * (uv2) before AddPrim, an order no plain C form gave. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_poly_gt3", buildPolyGT3);
+INCLUDE_ASM("main/nonmatchings/gfx/prim/build_poly_gt3", buildPolyGT3);

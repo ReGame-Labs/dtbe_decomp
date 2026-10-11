@@ -1,0 +1,79 @@
+// movie.bin's own names (config/us/movie.yaml)
+
+// the movie scene (src/movie/movie.cpp)
+_vt.9MovieTask = 0x800643D4; // size:0x28
+_vt.11MoviePlayer = 0x800643FC; // size:0x28
+movieTaskInit = 0x80064474; // type:func
+_._9MovieTask = 0x80064514; // type:func
+createMoviePlayer = 0x80064594; // type:func
+movieTaskUpdate = 0x80064614; // type:func
+movieParamsInit = 0x800646B4; // type:func
+movieParamsSetRgb24 = 0x8006471C; // type:func
+movieParamsSetPosition = 0x80064724; // type:func
+movieParamsSetSize = 0x80064730; // type:func
+movieParamsIsValid = 0x8006473C; // type:func
+moviePlayerInit = 0x80064760; // type:func
+_._11MoviePlayer = 0x800648D0; // type:func
+moviePlayerStop = 0x8006492C; // type:func
+moviePlayerGetDispEnv = 0x80064990; // type:func
+moviePlayerStart = 0x80064998; // type:func
+moviePlayerUpdate = 0x80064A30; // type:func
+moviePlayerIsFinished = 0x80064CB4; // type:func
+moviePlayerClearScreen = 0x80064CC0; // type:func
+moviePlayerOpenStream = 0x80064D58; // type:func
+movieReadStream = 0x80064DD0; // type:func
+movieSliceDecoded = 0x80064DF0; // type:func
+moviePlayerLoadSlice = 0x80064E18; // type:func
+moviePlayerDecodeVlc = 0x80064FCC; // type:func
+moviePlayerGetNextFrame = 0x80065060; // type:func
+moviePlayerSync = 0x800651E8; // type:func
+moviePlayerAfterDecode = 0x80065260; // type:func
+moviePlayerBeforeShow = 0x80065268; // type:func
+MOVIE_PLAYER = 0x80065D70; // size:0x4
+
+// PsyQ's libpress
+DecDCTReset = 0x80065270; // type:func
+DecDCTin = 0x800653C8; // type:func
+DecDCTout = 0x80065444; // type:func
+DecDCToutCallback = 0x8006550C; // type:func
+DecDCTvlc2 = 0x80065930; // type:func
+DecDCTvlcBuild = 0x80065C80; // type:func
+
+// The JP build's names that splat gave after their JP address, at their
+// US address: the sources share them (generated from config/jp/)
+D_800643E0 = 0x800643C0;
+D_80064444 = 0x80064424;
+D_80064460 = 0x80064440;
+D_80064470 = 0x80064450;
+D_80064480 = 0x80064460;
+func_800652C4 = 0x800652A4; // type:func
+func_80065350 = 0x80065330; // type:func
+func_80065484 = 0x80065464; // type:func
+func_800654C0 = 0x800654A0; // type:func
+func_80065508 = 0x800654E8; // type:func
+func_80065550 = 0x80065530; // type:func
+func_80065640 = 0x80065620; // type:func
+func_800656D0 = 0x800656B0; // type:func
+func_8006575C = 0x8006573C; // type:func
+func_800657F0 = 0x800657D0; // type:func
+func_80065884 = 0x80065864; // type:func
+func_8006589C = 0x8006587C; // type:func
+func_80065920 = 0x80065900; // type:func
+D_80065D94 = 0x80065D74;
+D_80065D98 = 0x80065D78;
+D_80065DD8 = 0x80065DB8;
+D_80065E18 = 0x80065DF8;
+D_80065E1C = 0x80065DFC;
+D_80065EA4 = 0x80065E84;
+D_80065EA8 = 0x80065E88;
+D_80065EAC = 0x80065E8C;
+D_80065EB0 = 0x80065E90;
+D_80065EB4 = 0x80065E94;
+D_80065EB8 = 0x80065E98;
+D_80065ED4 = 0x80065EB4;
+D_80065ED8 = 0x80065EB8;
+D_80065EDC = 0x80065EBC;
+D_80065EE4 = 0x80065EC4;
+D_80065EE8 = 0x80065EC8;
+D_80065F0C = 0x80065EEC;
+D_80065F14 = 0x80065EF4;

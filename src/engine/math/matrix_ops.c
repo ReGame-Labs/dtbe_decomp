@@ -20,7 +20,7 @@ long *matrixGetTranslation(MATRIX *m) {
 
 /* Copies a MATRIX as a block move (four loads then four stores), which GCC
  * 2.95.2 does not emit for 32 bytes (see "Block moves" in TODO.md). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/matrix_ops", matrixCopy);
+INCLUDE_ASM("main/nonmatchings/math/matrix_ops", matrixCopy);
 
 /* Multiplies m by n (the rotation, and n's translation through m) and
  * returns m. */

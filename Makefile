@@ -11,15 +11,18 @@ SHELL := /bin/bash
 
 -include local.mk
 
-# The version of the game to build. Only the Japanese release exists.
+# The version of the game to build: jp, the Japanese release, or us, the USA
+# one. Each has its settings in mk/version/<version>.mk; the C and the
+# assembly see VERSION_JP and VERSION_US (include/version.h).
 VERSION ?= jp
-VERSIONS := jp
+VERSIONS := jp us
 ifeq ($(filter $(VERSION),$(VERSIONS)),)
 $(error unsupported VERSION $(VERSION); supported: $(VERSIONS))
 endif
 VERSION_UPPER := $(shell echo $(VERSION) | tr a-z A-Z)
+include mk/version/$(VERSION).mk
+export VERSION
 
-EXE_NAME := SLPS_033.57
 # The BIOS loads the header's t_size bytes after the header, and the file
 # keeps .bss as zeros up to there
 EXE_SIZE := 0x10D000
@@ -124,12 +127,13 @@ TARGET_OBJ := $(TARGET_ASM:%.s=$(BUILDDIR)/%.s.o)
 OBJ := $(main_OBJ)
 
 # The executable's own symbols, for the overlays to link against: all but
-# those it names in the overlays' memory, 0x800643E0-0x800DA320, where every
-# overlay has its own
+# those it names in the overlays' memory, OVERLAY_VRAM-OVERLAY_END, where
+# every overlay has its own
 NM := $(TOOLCHAIN)nm
 MAIN_SYMS := $(BUILDDIR)/main_syms.ld
+lower_hex = $(shell printf '%08x' $$(($(1))))
 $(MAIN_SYMS): $(ELF)
-	$(NM) $< | awk '$$2 ~ /^[TDRBSG]$$/ && ($$1 < "800643e0" || $$1 >= "800da320") \
+	$(NM) $< | awk '$$2 ~ /^[TDRBSG]$$/ && ($$1 < "$(call lower_hex,$(OVERLAY_VRAM))" || $$1 >= "$(call lower_hex,$(OVERLAY_END))") \
 		{ printf "%s = 0x%s;\n", $$3, $$1 }' > $@
 
 # An overlay loaded after another one, its parent (OVL_PARENT_<name>), also

@@ -5,13 +5,13 @@
  * the shape is semi-transparent, to the ordering table. Compiled C, the
  * template of buildPolyFT3 with the same early length load into a1: left asm
  * for the same reason. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_line_f3", buildLineF3);
+INCLUDE_ASM("main/nonmatchings/gfx/prim/build_line_f3", buildLineF3);
 
 /* Projects a shape's four vertices and adds its POLY_G4, and a DR_TPAGE when
  * the shape is semi-transparent, to the ordering table. Compiled C, the
  * template of buildPolyFT3 with the same early length load into a1: left asm
  * for the same reason. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_line_f3", buildPolyG4);
+INCLUDE_ASM("main/nonmatchings/gfx/prim/build_line_f3", buildPolyG4);
 
 /* Projects a shape's three vertices and adds its POLY_FT3 to the ordering
  * table. Compiled C (GCC frame and registers), the same in cc1 and cc1plus: a
@@ -23,10 +23,10 @@ INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_line_f3", buildPolyG4);
  * pseudo set twice with one set leaving no instruction. No plausible source
  * gives either: most likely the game's GCC variant (see TODO.md, Block moves)
  * counts these sets differently. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_line_f3", buildPolyFT3);
+INCLUDE_ASM("main/nonmatchings/gfx/prim/build_line_f3", buildPolyFT3);
 
 /* Projects a shape's three vertices and adds its POLY_G3, and a DR_TPAGE when
  * the shape is semi-transparent, to the ordering table. Compiled C, the
  * template of buildPolyFT3 with the same early length load into a1: left asm
  * for the same reason. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_line_f3", buildPolyG3);
+INCLUDE_ASM("main/nonmatchings/gfx/prim/build_line_f3", buildPolyG3);

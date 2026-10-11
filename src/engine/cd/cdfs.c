@@ -33,7 +33,7 @@ s32 initCdfs(s32 noInit) {
 void skipCdfsHook(void) {
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/cd/cdfs", STR_CDFS_INVALID_VFS_FILE);
+INCLUDE_RODATA("main/nonmatchings/cd/cdfs", STR_CDFS_INVALID_VFS_FILE);
 
 /* Mounts the VFS archive whose table is read into table on path. Returns
  * it, VFS_FULL when all are in use or VFS_TAKEN when path has one. */

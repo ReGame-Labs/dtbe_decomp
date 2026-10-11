@@ -17,8 +17,8 @@ OFFSET = re.compile(r"\s*0x[0-9A-Fa-f]+\s*")
 # doxygen's commands and HTML, outside `code` spans
 SPECIAL = re.compile(r"([\\@<>&#$%])")
 DOC_DIRECTIVES = ("define", "if", "ifdef", "ifndef")
-# docs/Doxyfile's PREDEFINED: the only version
-VERSIONS = {"VERSION_JP": True}
+# docs/Doxyfile's PREDEFINED: the version it documents
+VERSIONS = {"VERSION_JP": True, "VERSION_US": False}
 
 
 def escape(body):

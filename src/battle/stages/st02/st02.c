@@ -2,10 +2,12 @@
 #include "battle/game_classes.h"
 #include "battle/game.h"
 #include "battle/stage_objects.h"
+#include "engine/gfx/mesh_scene.h"
 #include "engine/math/vector.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 #include "engine/task/entity.h"
+#include "stdio.h"
 
 /* The entity class of virtual table D_800D4004. */
 typedef struct Unk800D4FC8 {
@@ -15,11 +17,36 @@ typedef struct Unk800D4FC8 {
 
 extern EntityVtable D_800D4004;
 
+/* The stage's entity of func_800D6B7C (vtable D_800D3EFC, 0x1F8 bytes), made for the stage mesh 15: a text
+ * terminal. Strings go into a ring of 0x100 characters (func_800D6F34), which func_800D6C8C moves into a
+ * grid of 12 rows of 16 characters at the cursor, scrolling the rows; func_800D6BDC blinks the cursor. */
+typedef struct Unk800D6B7C {
+    /* 0x000 */ Entity entity;
+    /* 0x018 */ Mesh *mesh;
+    /* 0x01C */ s32 unk1C; /* while set, no text is added (func_800D4DA0 sets it) */
+    /* 0x020 */ s32 unk20; /* counts the updates; bit 2 blinks the cursor */
+    /* 0x024 */ s32 readIndex;
+    /* 0x028 */ s32 writeIndex;
+    /* 0x02C */ u8 queue[0x100];
+    /* 0x12C */ s32 column; /* the cursor, 0 to 15 */
+    /* 0x130 */ s32 row;    /* the cursor, 0 to 11, counted from topRow */
+    /* 0x134 */ s32 topRow; /* the grid row shown first, which scrolling moves */
+    /* 0x138 */ u8 grid[12][16];
+} Unk800D6B7C;
+
 /* The stage's class, derived from func_8006ED20's (virtual table D_800D402C). */
 typedef struct Unk800D41E0 {
     /* 0x000 */ Unk8006ED20 base;
-    /* 0xD38 */ u8 unkD38[0xD44 - 0xD38];
+    /* 0xD38 */ s32 unkD38;
+    /* 0xD3C */ s32 unkD3C; /* an angle (func_800D4F0C) */
+    /* 0xD40 */ s32 unkD40;
     /* 0xD44 */ s32 unkD44;
+    /* 0xD48 */ s32 unkD48;
+    /* 0xD4C */ s32 unkD4C;
+    /* 0xD50 */ u32 unkD50; /* the handle of the Unk800D6B7C entity (func_800D4218) */
+    /* 0xD54 */ VECTOR unkD54[2]; /* a point per character (func_800D4F0C) */
+    /* 0xD74 */ s32 unkD74; /* frames of camera shake left (func_800D4AC8) */
+    /* 0xD78 */ s32 unkD78; /* the camera's easing weight, 0x1000 down to 0 (func_800D4CC0) */
 } Unk800D41E0;
 
 extern VtableEntry D_800D3FE4[];
@@ -29,7 +56,34 @@ extern VtableEntry D_800D402C[];
 extern EntityVtable D_800D3E84;
 extern EntityVtable D_800D3F4C;
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D4164);
+/* A row of the table that func_800D4218 hands to func_800C77C8 (D_800D4114, ended by unk0 = -1); x and y
+ * receive the same row of D_800D40A4 transformed (func_800D4164). */
+typedef struct Unk800D4114 {
+    /* 0x0 */ s16 unk0;
+    /* 0x2 */ s16 unk2;
+    /* 0x4 */ s16 x;
+    /* 0x6 */ s16 y;
+    /* 0x8 */ s16 unk8;
+} Unk800D4114;
+
+extern VECTOR D_800D40A4[7];
+extern Unk800D4114 D_800D4114[];
+
+/* Transforms the seven points of D_800D40A4 by matrix and stores their x and y in D_800D4114's rows. */
+void func_800D4164(MATRIX *matrix) {
+    Unk800D4114 *row = D_800D4114;
+    VECTOR *point = D_800D40A4;
+    VECTOR out;
+    s32 i;
+
+    for (i = 6; i >= 0; i--) {
+        matrixTransformVec(matrix, &out, point);
+        point++;
+        row->x = out.vx;
+        row->y = out.vy;
+        row++;
+    }
+}
 
 /* Constructs the stage's object: func_8006ED20's, with virtual table D_800D402C. */
 Unk800D41E0 *func_800D41E0(Unk800D41E0 *this) {
@@ -39,13 +93,13 @@ Unk800D41E0 *func_800D41E0(Unk800D41E0 *this) {
     return this;
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D4218);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D4218);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D43DC);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D43DC);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D45C0);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D45C0);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D49E8);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D49E8);
 
 /* The stage's override of func_80070824 (at 0x58 of D_800D402C): whether a
  * character's position (func_800706A4 passes it) has a y greater than 0x1200. */
@@ -53,19 +107,84 @@ s32 func_800D4AB4(Unk800D41E0 *this, Vec3 *position) {
     return position->vy > 0x1200;
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D4AC8);
+/* A word the stage uses as the camera's state (func_80070140 clears it; func_800D4AC8 switches on it): game.h
+ * leaves 0xD24-0xD34 of func_8006ED20's class as a gap (as st05's BASE_EYE does for 0x2CC-0x360). */
+#define BASE_UNKD30(stage) (*(s32 *)&(stage)->base.unkD24[0xD30 - 0xD24])
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D4CC0);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D4AC8);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D4CE0);
+/* Starts the camera's state 3 (func_800D4AC8) with its weight at 0x1000, unless it is in it already. */
+void func_800D4CC0(Unk800D41E0 *this) {
+    if (BASE_UNKD30(this) != 3) {
+        BASE_UNKD30(this) = 3;
+        this->unkD78 = 0x1000;
+    }
+}
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D4D30);
+void func_800D6F34(Unk800D6B7C *this, u8 *text);
+void func_800D6F88(Unk800D6B7C *this, u8 *text, s32 column, s32 row);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D4DA0);
+/* Adds text to the Unk800D6B7C entity's queue (func_800D6F34), or forgets its handle once it is gone. */
+void func_800D4CE0(Unk800D41E0 *this, u8 *text) {
+    Unk800D6B7C *terminal = (Unk800D6B7C *)getEntityByHandle(this->unkD50);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D4DE4);
+    if (terminal != NULL) {
+        func_800D6F34(terminal, text);
+    } else {
+        this->unkD50 = 0;
+    }
+}
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D4F0C);
+/* Writes text into the Unk800D6B7C entity's grid at column, row (func_800D6F88), or forgets its handle once
+ * it is gone. */
+void func_800D4D30(Unk800D41E0 *this, u8 *text, s32 column, s32 row) {
+    Unk800D6B7C *terminal = (Unk800D6B7C *)getEntityByHandle(this->unkD50);
+
+    if (terminal != NULL) {
+        func_800D6F88(terminal, text, column, row);
+    } else {
+        this->unkD50 = 0;
+    }
+}
+
+/* Sets the Unk800D6B7C entity's unk1C (no more text), or forgets its handle once it is gone. */
+void func_800D4DA0(Unk800D41E0 *this) {
+    Unk800D6B7C *terminal = (Unk800D6B7C *)getEntityByHandle(this->unkD50);
+
+    if (terminal != NULL) {
+        terminal->unk1C = 1;
+    } else {
+        this->unkD50 = 0;
+    }
+}
+
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D4DE4);
+
+/* game.bin functions missing from game.h */
+Unk80076F34 *func_800700C8(Unk8006ED20 *object, s32 side);
+Unk80077698 *func_80077698(Unk80076F34 *this);
+void func_800775B0(Unk80076F34 *chara, Vec3 *position);
+
+/* Puts each character at its point of 0xD54 turned by the angle at 0xD3C, raised by the halfword at 0x2 of
+ * its func_80077698 table, and clears its 0x3A4 and 0x3B0. */
+void func_800D4F0C(Unk800D41E0 *this) {
+    MATRIX rotation;
+    VECTOR position;
+    s32 side;
+
+    matrixInitRotationZ(&rotation, this->unkD3C);
+    for (side = 0; side < 2; side++) {
+        Unk80076F34 *chara = func_800700C8(&this->base, side);
+
+        matrixTransformVec(&rotation, &position, &this->unkD54[side]);
+        position.vy += ((s16 *)&func_80077698(chara)->unk0)[1];
+        func_800775B0(chara, (Vec3 *)&position);
+        chara->unk3A4.vx = 0;
+        chara->unk3A4.vy = 0;
+        chara->unk3A4.vz = 0;
+        chara->unk3B0 = 0;
+    }
+}
 
 /* Constructs an entity of the class of virtual table D_800D4004. */
 Unk800D4FC8 *func_800D4FC8(Unk800D4FC8 *this) {
@@ -80,7 +199,7 @@ void func_800D5004(Unk800D4FC8 *this) {
     this->unk18 += 0x40;
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D5018);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D5018);
 
 /* The class of virtual table D_800D3FE4 (constructor func_800D82AC), derived from Unk80076308. */
 typedef struct Unk800D82AC {
@@ -114,15 +233,15 @@ void func_800D54C0(Unk800D82AC *this, Unk80075EE4 *sum) {
     sum->unk20.vz = z;
 }
 
-/* The entity class func_800D554C constructs for a stage object (owner, position): an Unk800D82AC part at
- * 0x18, a mesh of the owner's at 0x80 and the mesh's world position at 0x84 (func_800D5C24). */
+/* The entity class func_800D554C constructs for a stage object (mesh scene, position): an Unk800D82AC part
+ * at 0x18, a mesh of node 2 of the scene at 0x80 and the mesh's world position at 0x84 (func_800D5C24). */
 typedef struct Unk800D554C {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Unk800D82AC unk18;
     /* 0x30 */ u8 unk30[0x34 - 0x30];
     /* 0x34 */ Unk800761AC unk34;
     /* 0x68 */ u8 unk68[0x7C - 0x68];
-    /* 0x7C */ Unk8006ED20 *owner;
+    /* 0x7C */ MeshScene *scene; /* meshSceneRelocateNodeTmd, meshSceneGetMesh */
     /* 0x80 */ Mesh *mesh;
     /* 0x84 */ Vec3 unk84;
     /* 0x90 */ u8 unk90[0x94 - 0x90];
@@ -140,7 +259,7 @@ typedef struct Unk800D554C {
 /* game.bin's constructor of a burst of count particles around pos */
 Entity *func_800C62EC(Entity *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 color);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D554C);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D554C);
 
 extern VtableEntry D_800D3F9C[];
 extern EntityVtable D_800D3FBC;
@@ -176,9 +295,9 @@ void func_800D56AC(Unk800D554C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D57A0);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D57A0);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D5964);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D5964);
 
 void func_800D5A64(Unk800D554C *this);
 
@@ -204,32 +323,138 @@ void func_800D5A64(Unk800D554C *this) {
     soundControlPlaySound(&SOUND_CONTROL, 0x4D, 0);
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D5AF8);
+/* Adds 0xBC to 0xB8; 0xB4 says whether it went past 0x100 (which it then takes off). */
+void func_800D5AF8(Unk800D554C *this) {
+    this->unkB8 += this->unkBC;
+    if (this->unkB8 >= 0x100) {
+        this->unkB8 -= 0x100;
+        this->unkB4 = 1;
+    } else {
+        this->unkB4 = 0;
+    }
+}
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D5B30);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D5B30);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D5BC4);
+/* Attaches its mesh's transform to the scene's mesh 15 (the one func_800D4218 gives the Unk800D6B7C). */
+void func_800D5BC4(Unk800D554C *this) {
+    Mesh *parent = meshSceneGetMesh(this->scene, 0xF);
+
+    transformAttach(&this->mesh->object.transform, &parent->object.transform);
+}
 
 /* Detaches its mesh's transform (transformDetach). */
 void func_800D5C00(Unk800D554C *this) {
     transformDetach(&this->mesh->object.transform);
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D5C24);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D5C24);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D5D04);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D5D04);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D5DF0);
+void func_800D5E58(Unk800D554C *this);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D5E58);
+/* Once 0xA8 has run out: calls func_800D5E58 while 0xB4 is clear, and hides its mesh while 0xB4 is clear. */
+void func_800D5DF0(Unk800D554C *this) {
+    if (this->unkA8 > 0) {
+        return;
+    }
+    if (this->unkB4 == 0) {
+        func_800D5E58(this);
+    }
+    this->mesh->object.hidden = (this->unkB4 == 0);
+}
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6044);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D5E58);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6100);
+/* The entity class of virtual table D_800D3F74 (0x78 bytes), made for a node of the stage's mesh scene
+ * (func_800D43DC): func_800D6100 hides the node and shows it again, telling the Unk800D6B7C entity. */
+typedef struct Unk800D6044 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ MeshScene *scene;
+    /* 0x1C */ Mesh *mesh; /* the node's */
+    /* 0x20 */ s32 node;
+    /* 0x24 */ s32 unk24; /* bit 0 of an argument */
+    /* 0x28 */ s32 state;
+    /* 0x2C */ s32 unk2C;
+    /* 0x30 */ s32 unk30;
+    /* 0x34 */ s32 unk34; /* a count of frames */
+    /* 0x38 */ char hideText[0x20]; /* "block -c%02d" with the node */
+    /* 0x58 */ char showText[0x20]; /* "block -r%02d" with the node */
+} Unk800D6044;
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6298);
+extern EntityVtable D_800D3F74;
+/* "block -c%02d" and "block -r%02d" */
+extern char D_800D3C6C[];
+extern char D_800D3C7C[];
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D63A4);
+/* Constructs an Unk800D6044 for node of scene, with bit 0 of unk24, and writes its two texts. */
+Unk800D6044 *func_800D6044(Unk800D6044 *this, MeshScene *scene, s32 node, s32 unk24) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3F74;
+    this->scene = scene;
+    this->mesh = meshSceneGetMesh(scene, node);
+    this->node = node;
+    this->unk24 = unk24 & 1;
+    this->state = 0;
+    this->unk2C = 0x80;
+    this->unk30 = 0x1000;
+    this->unk34 = 0;
+    sprintf(this->hideText, D_800D3C6C, node);
+    sprintf(this->showText, D_800D3C7C, node);
+    return this;
+}
+
+s32 func_800D6298(Unk800D6044 *this, Unk800D41E0 *stage);
+
+/* The update of Unk800D6044: once func_800D6298 has held for 61 frames it hides the node (sound 0x60), then
+ * eases unk30 to 0x2000 and unk2C to 0 until the count runs out (sound 0x5F), then raises unk2C back to 0x80
+ * and shows the node; each step sends its text to the Unk800D6B7C entity. */
+void func_800D6100(Unk800D6044 *this, Unk800D41E0 *stage) {
+    switch (this->state) {
+    case 0:
+        if (func_800D6298(this, stage)) {
+            this->unk34++;
+            if (this->unk34 >= 0x3D) {
+                meshSceneHideNode(this->scene, this->node);
+                this->unk2C = 0x400;
+                func_800D4CE0(stage, this->hideText);
+                soundControlPlaySound(&SOUND_CONTROL, 0x60, 0);
+                this->state++;
+            }
+        } else {
+            this->unk34--;
+            if (this->unk34 < 0) {
+                this->unk34 = 0;
+            }
+        }
+        break;
+    case 1:
+        this->unk30 += (0x2000 - this->unk30) >> 2;
+        this->unk2C += -this->unk2C >> 2;
+        this->unk34--;
+        if (this->unk34 <= 0) {
+            this->unk30 = 0x1000;
+            this->unk2C = 0;
+            func_800D4CE0(stage, this->showText);
+            soundControlPlaySound(&SOUND_CONTROL, 0x5F, 0);
+            this->state++;
+        }
+        break;
+    case 2:
+        this->unk2C += 4;
+        if (this->unk2C > 0x80) {
+            meshSceneShowNode(this->scene, this->node);
+            this->unk2C = 0x80;
+            this->state = 0;
+        }
+        break;
+    }
+}
+
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D6298);
+
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D63A4);
 
 /* Constructs an entity of D_800D3F4C for a mesh of the stage and where it is (func_800D4110). */
 UnkStageMeshPos *func_800D680C(UnkStageMeshPos *this, Mesh *mesh, Vec3 *pos) {
@@ -259,7 +484,16 @@ void func_800D6880(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D68D4);
+/* The gather method of D_800D3F4C's class: turns its mesh about z by the angle at 0x2C, which grows by 0xC0,
+ * and counts the turns at 0x30. */
+void func_800D68D4(UnkStageMeshPos *this) {
+    Mesh *mesh = this->mesh;
+
+    mesh->object.transform.valid = 0;
+    matrixSetRotationZ(&mesh->object.transform.local.m, this->unk2C);
+    this->unk2C += 0xC0;
+    this->unk30++;
+}
 
 /* The entity class func_800D6924 constructs (virtual table D_800D3F24). */
 typedef struct Unk800D6924 {
@@ -292,20 +526,15 @@ Unk800D6924 *func_800D6924(Unk800D6924 *this, Vec3 *position, s32 unk2C, s32 unk
     return this;
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D69A8);
+/* The gather method of Unk800D6924: steps unk28 through 0 to 3 and adds 0x10 to unk2C. */
+void func_800D69A8(Unk800D6924 *this) {
+    this->unk28 = (this->unk28 + 1) & 3;
+    this->unk2C += 0x10;
+}
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D69C8);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D69C8);
 
 extern EntityVtable D_800D3EFC;
-
-/* The stage's entity of func_800D6B7C (vtable D_800D3EFC, 0x1F8 bytes), made for the stage mesh 15: two tables
- * of bytes that func_800D6DEC (0x12B down to 0x2C) and func_800D6E10 (12 rows of 16 at 0x138) clear. */
-typedef struct Unk800D6B7C {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ Mesh *mesh;
-    /* 0x1C */ s32 unk1C;
-    /* 0x20 */ s32 unk20;
-} Unk800D6B7C;
 
 void func_800D6DEC(Unk800D6B7C *this);
 void func_800D6E10(Unk800D6B7C *this);
@@ -322,41 +551,224 @@ Unk800D6B7C *func_800D6B7C(Unk800D6B7C *this, Mesh *mesh) {
     return this;
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6BDC);
+void func_800D6C8C(Unk800D6B7C *this);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6C8C);
+/* Moves two characters of the queue into the grid, then draws the cursor, '_' or ' ' by turns. */
+void func_800D6BDC(Unk800D6B7C *this) {
+    s32 i;
+    s32 row;
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6DEC);
+    for (i = 1; i >= 0; i--) {
+        func_800D6C8C(this);
+    }
+    row = (this->topRow + this->row) % 12;
+    this->grid[row][this->column] = (this->unk20 & 4) ? ' ' : '_';
+    this->unk20++;
+}
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6E10);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D6C8C);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6E5C);
+/* Empties the queue. */
+void func_800D6DEC(Unk800D6B7C *this) {
+    s32 i = 0xFF;
+    u8 *p = &this->queue[0xFF];
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6E84);
+    /* The match depends on setting the count before the pointer. */
+    for (; i >= 0; i--) {
+        *p-- = 0;
+    }
+    this->readIndex = 0;
+    this->writeIndex = 0;
+}
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6F34);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D6E10);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D6F88);
+/* Clears a row of the grid. */
+void func_800D6E5C(Unk800D6B7C *this, s32 row) {
+    s32 i;
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D7024);
+    for (i = 15; i >= 0; i--) {
+        this->grid[row][i] = 0;
+    }
+}
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D73E8);
+/* Clamps a field to 0..count - 1 through a pointer to it: the match depends on the stores going through that
+ * pointer (its address is computed before the clamp). */
+#define CLAMP_INDEX(field, count)                                                       \
+    {                                                                                   \
+        s32 *value = &(field);                                                          \
+        *value = (*value < 0) ? 0 : ((*value >= (count)) ? (count) - 1 : *value);       \
+    }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D746C);
+/* Erases the cursor and moves it to column, row (clamped to the grid). */
+void func_800D6E84(Unk800D6B7C *this, s32 column, s32 row) {
+    s32 gridRow = (this->topRow + this->row) % 12;
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D7574);
+    this->grid[gridRow][this->column] = 0;
+    this->column = column;
+    this->row = row;
+    CLAMP_INDEX(this->column, 16);
+    CLAMP_INDEX(this->row, 12);
+}
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D7800);
+/* Adds text, with its terminating 0, to the queue (unless unk1C is set). */
+void func_800D6F34(Unk800D6B7C *this, u8 *text) {
+    if (this->unk1C == 0) {
+        s32 i = this->writeIndex;
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D7888);
+        do {
+            this->queue[i] = *text;
+            i++;
+            if (i >= 0x100) {
+                i = 0;
+            }
+        } while (*text++ != 0);
+        this->writeIndex = i;
+    }
+}
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D78B0);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D6F88);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D7918);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D7024);
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D7BAC);
+/* The entity class of virtual table D_800D3ED4 (0x34 bytes), made for the stage mesh 15 (func_800D45C0). */
+typedef struct Unk800D73E8 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Mesh *mesh;
+    /* 0x1C */ s32 unk1C; /* bits 0 and 1 of an argument */
+    /* 0x20 */ s32 unk20;
+    /* 0x24 */ s32 unk24;
+    /* 0x28 */ s32 unk28;
+    /* 0x2C */ s32 state;
+    /* 0x30 */ s32 unk30; /* frames left in state 1 */
+} Unk800D73E8;
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D7F38);
+extern EntityVtable D_800D3ED4;
+
+/* Constructs an Unk800D73E8 for mesh; bit 1 of flags makes it wait 0x7C frames instead of 0x5C. */
+Unk800D73E8 *func_800D73E8(Unk800D73E8 *this, Mesh *mesh, s32 flags) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3ED4;
+    this->mesh = mesh;
+    this->unk1C = flags & 3;
+    this->unk20 = 0x990;
+    this->unk24 = 0x990;
+    this->unk28 = 0;
+    this->state = 0;
+    this->unk30 = (flags & 2) ? 0x7C : 0x5C;
+    return this;
+}
+
+/* The gather method of Unk800D73E8: eases 0x20 and 0x24 to 0x264, raises 0x28 by 8 up to 0x80, waits,
+ * then grows 0x20 and 0x24 and lowers 0x28 by 8 until it deletes itself. */
+void func_800D746C(Unk800D73E8 *this) {
+    this->unk20 += (0x264 - this->unk20) >> 2;
+    this->unk24 += (0x264 - this->unk24) >> 2;
+    switch (this->state) {
+    case 0:
+        this->unk28 += 8;
+        if (this->unk28 >= 0x80) {
+            this->state = 1;
+        }
+        break;
+    case 1:
+        this->unk30--;
+        if (this->unk30 < 0) {
+            this->state = 2;
+        }
+        break;
+    case 2:
+        this->unk20 += 0x40;
+        this->unk24 += 0x20;
+        this->unk28 -= 8;
+        if (this->unk28 <= 0) {
+            entityDelete(&this->entity);
+        }
+        break;
+    }
+}
+
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D7574);
+
+/* The entity class of virtual table D_800D3EAC (0xA0 bytes), made for a mesh of the stage (func_800D43DC). */
+typedef struct Unk800D7800 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Mesh *mesh;
+    /* 0x1C */ s32 unk1C; /* 0x1000 down to -0x1200 by 0x10, again and again */
+    /* 0x20 */ s32 unk20[32];
+} Unk800D7800;
+
+extern EntityVtable D_800D3EAC;
+
+/* Constructs an Unk800D7800 for mesh: unk20[i] = i up to 8, the rest of unk20 -1. */
+Unk800D7800 *func_800D7800(Unk800D7800 *this, Mesh *mesh) {
+    s32 *table;
+    s32 i;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3EAC;
+    this->mesh = mesh;
+    this->unk1C = 0x1000;
+    /* The match depends on taking the table's address before the two loops. */
+    table = this->unk20;
+    for (i = 8; i >= 0; i--) {
+        table[i] = i;
+    }
+    for (i = 9; i < 32; i++) {
+        table[i] = -1;
+    }
+    return this;
+}
+
+/* The gather method of Unk800D7800: lowers unk1C by 0x10, back to 0x1000 once below -0x1200. */
+void func_800D7888(Unk800D7800 *this) {
+    this->unk1C -= 0x10;
+    if (this->unk1C < -0x1200) {
+        this->unk1C = 0x1000;
+    }
+}
+
+void func_800D7918(Unk800D7800 *this, s32 arg, s32 angle);
+void func_800D7BAC(Unk800D7800 *this, s32 arg, s32 angle);
+
+/* The update of Unk800D7800: func_800D7BAC then func_800D7918 at the angles 0, 0x400, 0x800 and 0xC00. */
+void func_800D78B0(Unk800D7800 *this, s32 arg) {
+    s32 angle;
+
+    for (angle = 0; angle < 0x1000; angle += 0x400) {
+        func_800D7BAC(this, arg, angle);
+        func_800D7918(this, arg, angle);
+    }
+}
+
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D7918);
+
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D7BAC);
+
+/* Clips a quad (corners 0 and 2 on the left, 1 and 3 on the right) to x 0..0x1000, moving the texture's left
+ * or right u to match; -1 when it is wholly outside. */
+s32 func_800D7F38(SVECTOR *corners, u8 *left, u8 *right) {
+    s32 x1 = corners[1].vx;
+    s32 x0;
+
+    if (x1 <= 0) {
+        return -1;
+    }
+    x0 = corners[0].vx;
+    if (x0 >= 0x1000) {
+        return -1;
+    }
+    if (x0 < 0) {
+        corners[2].vx = 0;
+        corners[0].vx = 0;
+        *left = *right - (x1 >> 4);
+    } else if (x1 > 0x1000) {
+        corners[3].vx = 0x1000;
+        corners[1].vx = 0x1000;
+        *right = *left + ((0x1000 - x0) >> 4);
+    }
+    return 0;
+}
 
 /* Constructs an entity of D_800D3E84 for a mesh and the Unk8006ED20 whose entity group will hold it
  * (func_800D43DC). */
@@ -368,7 +780,7 @@ UnkSt02MeshEntity *func_800D7FC0(UnkSt02MeshEntity *this, Mesh *mesh, Unk8006ED2
     return this;
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D8018);
+INCLUDE_ASM("st02/nonmatchings/st02", func_800D8018);
 
 /* The stage's destructor: func_8006ED20's class's. */
 void func_800D8210(Unk800D41E0 *this, s32 flags) {
@@ -443,7 +855,11 @@ void func_800D838C(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st02/nonmatchings/st02", func_800D83D4);
+/* Sets unk1C, as func_800D4DA0 does to the Unk800D6B7C entity (no caller or table names it; the type is
+ * assumed from that). */
+void func_800D83D4(Unk800D6B7C *this) {
+    this->unk1C = 1;
+}
 
 /* The destructor of the entity class of vtable D_800D3ED4, which func_800D73E8 installs. */
 void func_800D83E0(Entity *this, s32 flags) {

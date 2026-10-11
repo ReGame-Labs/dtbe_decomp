@@ -4,6 +4,7 @@
 /* The game's integer types, NULL, offsetof, and the macros that give C linkage in the C++ files. */
 
 #include "include_asm.h"
+#include "version.h"
 
 typedef signed char s8;
 typedef unsigned char u8;

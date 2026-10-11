@@ -87,6 +87,7 @@ void resumeVoices(s32 voices) {
 }
 
 /* the voices of every playing sound effect, as bits */
+#if VERSION_JP
 u32 getSoundEffectVoices(void) {
     SndPlayingEffect *effect;
     u32 voiceBits = 0;
@@ -97,3 +98,6 @@ u32 getSoundEffectVoices(void) {
     }
     return voiceBits;
 }
+#else
+INCLUDE_ASM("main/nonmatchings/sound/voice_pause", getSoundEffectVoices);
+#endif

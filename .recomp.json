@@ -9,6 +9,11 @@
       "region": "Japan",
       "serial": "SLPS-03357",
       "sha1": "6db2c1b5a9fbe9f1a9ac1145fb115cdc775463fb"
+    },
+    {
+      "region": "USA",
+      "serial": "SLUS-01404",
+      "sha1": "179a3f7ae84762f9f60dc1ba97994eb7e673582e"
     }
   ],
   "project": "Digimon Rumble Arena decompilation",
@@ -17,7 +22,7 @@
     "PS1"
   ],
   "toolchain": "Splat",
-  "approach": "Matching decompilation with GCC 2.95.2, splat and maspsx, byte-identical to the Japanese executable",
+  "approach": "Matching decompilation with GCC 2.95.2, splat and maspsx, byte-identical to the Japanese and USA executables",
   "maintainers": [
     {
       "name": "ReGame-Labs",

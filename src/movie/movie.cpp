@@ -350,7 +350,7 @@ u_long *MoviePlayer::getNextFrame() {
 /* Waits for the frame to be decoded; gives it up after a while. Its C
  * matches only with `decoded` volatile: the game keeps the last store out of
  * the return's delay slot. */
-INCLUDE_ASM("asm/jp/movie/nonmatchings/movie", moviePlayerSync);
+INCLUDE_ASM("movie/nonmatchings/movie", moviePlayerSync);
 
 /* Does nothing: a player that does something after a frame is decoded
  * overrides it. */

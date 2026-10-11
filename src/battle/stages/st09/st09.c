@@ -48,39 +48,44 @@ typedef struct Unk800D3D58 {
     /* 0x0000 */ Unk800D02C8 base;
     /* 0x0DA8 */ u8 unkDA8[0xF34 - 0xDA8];
     /* 0x0F34 */ s16 unkF34;
-    /* 0x0F36 */ u8 unkF36[0x15A2 - 0xF36];
+    /* 0x0F36 */ u8 unkF36[0x103C - 0xF36];
+    /* 0x103C */ s16 unk103C; /* counts the stage's updates (func_800D4270 adds 1) */
+    /* 0x103E */ u8 unk103E[0x15A2 - 0x103E];
     /* 0x15A2 */ s16 unk15A2;
     /* 0x15A4 */ s16 unk15A4;
     /* 0x15A6 */ s16 unk15A6;
     /* 0x15A8 */ s16 unk15A8;
 } Unk800D3D58;
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D3AB0);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D3AB0);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D3D58);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D3D58);
 
 /* The stage's override of func_800702E0: creates its own 0x20-byte object for arg. */
 void *func_800D4070(void *this, s32 unk, s32 arg) {
     return func_800D3A64(operatorNew(0x20), arg);
 }
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D40A4);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D40A4);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D417C);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D417C);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D41E4);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D41E4);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D4268);
+/* Clears the stage's update count (0x103C). */
+void func_800D4268(Unk800D3D58 *this) {
+    this->unk103C = 0;
+}
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D4270);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D4270);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D42EC);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D42EC);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D43CC);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D43CC);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D4458);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D4458);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D45F8);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D45F8);
 
 /* Clears the four halfwords at 0x15A2 and sets 0xF34 to 30 (st07's func_800D3E94). */
 void func_800D46D0(Unk800D3D58 *this) {
@@ -116,13 +121,13 @@ void func_800D46EC(Unk8006ED20 *this) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D476C);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D476C);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D48A4);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D48A4);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D49A0);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D49A0);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D4B78);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D4B78);
 
 /* The destructor of the entity class of vtable D_800D3974, which func_800D4B78 installs. */
 void func_800D4CDC(Entity *this, s32 flags) {
@@ -133,9 +138,9 @@ void func_800D4CDC(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D4D30);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D4D30);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D4EC8);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D4EC8);
 
 /* Constructs an UnkStageQuad (vtable D_800D394C) of owner: the corners of a 128 by 128 square, then
  * func_800D5410. */
@@ -164,13 +169,20 @@ void func_800D5104(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D5158);
+void func_800D5190(UnkStageQuad *this);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D5190);
+/* The gather of func_800D5068's UnkStageQuad: func_800D5410, func_800D5190, then counts 0x1E up. */
+void func_800D5158(UnkStageQuad *this, s32 arg) {
+    func_800D5410(this);
+    func_800D5190(this);
+    this->unk1E++;
+}
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D5410);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D5190);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D5550);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D5410);
+
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D5550);
 
 /* The entity func_800D572C constructs (virtual table D_800D39C4): 24 items that slide up from y -0x4C4
  * (even ones) or down from y -0x40 (odd ones), fading as they go. */
@@ -268,19 +280,29 @@ void func_800D5828(Unk800D572C *this, s32 arg) {
     this->frame++;
 }
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D5998);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D5998);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D5BA0);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D5BA0);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D5DDC);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D5DDC);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D5EB8);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D5EB8);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D6110);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D6110);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D6360);
+/* An object of st09 whose 0x20 is a scene object (func_800D6360, func_800D636C); its class is not known
+ * yet. */
+typedef struct Unk800D6360 {
+    /* 0x00 */ u8 unk0[0x20];
+    /* 0x20 */ SceneObject *unk20;
+} Unk800D6360;
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D636C);
+/* Returns the local matrix of the scene object at 0x20. */
+MATRIX *func_800D6360(Unk800D6360 *this) {
+    return &this->unk20->transform.local.m;
+}
+
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D636C);
 
 /* Constructs an UnkStageQuadPos (vtable D_800D3924) of owner at pos: the corners of a 512 by 512 square, index 0. */
 UnkStageQuadPos *func_800D63D4(UnkStageQuadPos *this, Unk8006ED20 *owner, Vec3 *pos) {
@@ -322,9 +344,9 @@ void func_800D64D0(UnkStageQuadPos *this, s32 arg) {
     }
 }
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D6538);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D6538);
 
-INCLUDE_ASM("asm/jp/st09/nonmatchings/st09", func_800D66C0);
+INCLUDE_ASM("st09/nonmatchings/st09", func_800D66C0);
 
 /* Takes child out of the group it is in; the object is not used. Nothing calls it (nor
  * func_800D66C0, which adds a child to one of the object's groups at 0x1480). */

@@ -5,6 +5,9 @@
 
 #include "common.h"
 #include "vtable.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/look_at.h"
+#include "engine/gfx/mesh_scene.h"
 #include "engine/lib/list.h"
 #include "engine/math/random.h"
 #include "engine/system/thread.h"
@@ -19,23 +22,45 @@ EXTERN_C_BEGIN
  * is not known; 0xD38 is the end of what is known. */
 typedef struct Unk8006ED20 {
     /* 0x000 */ Thread thread;
-    /* 0x00C */ u8 unkC[0x24 - 0xC];
+    /* 0x00C */ u8 unkC[0x10 - 0xC];
+    /* 0x010 */ MeshScene *meshScene; /* the constructor creates it */
+    /* 0x014 */ u8 unk14[0x24 - 0x14];
     /* 0x024 */ struct Unk80075000 *unk24[2]; /* by character index; func_80075000 constructs them */
     /* 0x02C */ void *unk2C[2]; /* by side: their 0x8 is a character (func_80071460) */
     /* 0x034 */ u8 unk34[0x3C - 0x34];
     /* 0x03C */ EntityGroup unk3C;
     /* 0x04C */ EntityGroup unk4C;
     /* 0x05C */ EntityGroup unk5C;
-    /* 0x06C */ u8 unk6C[0x228 - 0x6C];
+    /* 0x06C */ Group unk6C;
+    /* 0x0CC */ Group unkCC;
+    /* 0x12C */ LookAt lookAt;
+    /* 0x180 */ u8 unk180[0x1B0 - 0x180];
+    /* 0x1B0 */ Camera camera;
+    /* 0x1EC */ u8 unk1EC[0x228 - 0x1EC];
     /* 0x228 */ ListNode unk228;
     /* 0x230 */ ListNode unk230;
     /* 0x238 */ ListNode unk238;
     /* 0x240 */ s32 unk240[4]; /* the constructor clears the four */
-    /* 0x250 */ u8 unk250[0x2C8 - 0x250];
+    /* 0x250 */ u8 unk250[0x258 - 0x250];
+    /* 0x258 */ s32 unk258; /* func_8006F1C4's argument */
+    /* 0x25C */ u8 unk25C[0x2A4 - 0x25C];
+    /* 0x2A4 */ VECTOR unk2A4; /* (0, -0x1000, 0) through func_800769DC (func_8006F1C4) */
+    /* 0x2B4 */ u8 unk2B4[0x2B8 - 0x2B4];
+    /* 0x2B8 */ s32 unk2B8; /* counted from 0x20 down to -6 (func_80071E10), or from 0 up to 0x26 (func_80071E60) */
+    /* 0x2BC */ u8 unk2BC[0x2C8 - 0x2BC];
     /* 0x2C8 */ u32 unk2C8; /* flags */
-    /* 0x2CC */ u8 unk2CC[0x360 - 0x2CC];
+    /* 0x2CC */ u8 unk2CC[0x33C - 0x2CC];
+    /* 0x33C */ s32 unk33C; /* func_800700E4 sets 0x33C to 0x35C; 0x33C and 0x34C, 0x340 and 0x350 are read in pairs */
+    /* 0x340 */ s32 unk340;
+    /* 0x344 */ u8 unk344[0x34C - 0x344];
+    /* 0x34C */ s32 unk34C;
+    /* 0x350 */ s32 unk350;
+    /* 0x354 */ s32 unk354;
+    /* 0x358 */ u8 unk358[0x35C - 0x358];
+    /* 0x35C */ s32 unk35C;
     /* 0x360 */ MersenneTwister random;
-    /* 0xD24 */ u8 unkD24[0xD34 - 0xD24];
+    /* 0xD24 */ u8 unkD24[0xD30 - 0xD24];
+    /* 0xD30 */ s32 unkD30; /* a character's side (0x21C) + 1 (func_800793A4); func_800794CC clears it */
     /* 0xD34 */ VtableEntry *vtable;
 } Unk8006ED20;
 
@@ -64,7 +89,9 @@ extern VtableEntry D_800652AC[];
  * D_8006E154); the stage classes of st07, st08 and st09 derive from it. */
 typedef struct Unk800D02C8 {
     /* 0x000 */ Unk8006ED20 base;
-    /* 0xD38 */ u8 unkD38[0xDA4 - 0xD38];
+    /* 0xD38 */ u8 unkD38[0xD9C - 0xD38];
+    /* 0xD9C */ s16 unkD9C; /* func_800D0B80 sets 2 */
+    /* 0xDA0 */ u32 unkDA0; /* the handle of func_800D0B80's text entity (class 9) */
     /* 0xDA4 */ u32 unkDA4; /* a sound's handle (stopSound) */
 } Unk800D02C8;
 

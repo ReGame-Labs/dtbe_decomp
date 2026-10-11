@@ -1,0 +1,29 @@
+// The executable's own names for addresses in the overlays' memory
+// (0x800643E0-0x800DA320), which the overlays' configs must not see: every
+// overlay names its own symbols there (config/<version>/symbols_<name>.txt)
+
+// where movie.bin, title.bin and game.bin load (include/overlay.h)
+OVERLAY_MEMORY = 0x800643C0;
+
+// the overlays' task constructors main calls (include/overlay.h)
+movieTaskInit = 0x80064474; // type:func
+bootLogoTaskInit = 0x80066930; // type:func
+titleLogoTaskInit = 0x80071F20; // type:func
+mainMenuTaskInit = 0x80067764; // type:func
+characterSelectTaskInit = 0x80073F88; // type:func
+gameMainTaskInit = 0x8006E1B4; // type:func
+memoryCardTaskInit = 0x8006ECC8; // type:func
+guideLogoTaskInit = 0x80070240; // type:func
+rankingTaskInit = 0x80068178; // type:func
+creditsTaskInit = 0x8006B070; // type:func
+optionTaskInit = 0x8006D684; // type:func
+
+// The JP build's other names there, at the US address the same code calls
+func_80065AE4 = 0x80065AC4; // type:func
+func_80066084 = 0x80066064; // type:func
+func_80066F74 = 0x80066F54; // type:func
+func_800673A4 = 0x80067384; // type:func
+func_800681A4 = 0x80068184; // type:func
+func_8006A43C = 0x8006A41C; // type:func
+func_80076A00 = 0x80076AA4; // type:func
+func_80076A5C = 0x80076B00; // type:func

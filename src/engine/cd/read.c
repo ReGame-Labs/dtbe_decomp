@@ -118,7 +118,7 @@ s32 findMountedFile(CdfsFile *file, char *name) {
  * block of the vfsEntryFind call unscheduled (as if a loop note sat before
  * it), and its first vfs->entries load sets a pseudo of its own; no natural
  * source was found for either. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/cd/read", findVfsFile);
+INCLUDE_ASM("main/nonmatchings/cd/read", findVfsFile);
 
 /* Finds the entry of the directory named by the length characters at name
  * (its entries are sorted); returns NULL if there is none. */
@@ -398,11 +398,11 @@ s32 loadFileSync(void *buffer, char *name, u32 offset, u32 size) {
  * negative offsets from &CDFS.requests, the pool it just passed, and
  * makes CDFS's own address only for the last read; GCC makes it at
  * once. What in the source decides that is not known. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/cd/read", queueFileLoad);
+INCLUDE_ASM("main/nonmatchings/cd/read", queueFileLoad);
 
 /* Services the request queue, and unless noWait, until it is empty or the
  * drive stops. Same base register sharing as queueFileLoad (26 diffs). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/cd/read", syncCdfs);
+INCLUDE_ASM("main/nonmatchings/cd/read", syncCdfs);
 
 /* Runs the queue. */
 void resumeCdfs(void) {
@@ -640,9 +640,9 @@ void receiveCdfsLastSector(void) {
     CDFS.flags &= ~CDFS_READING;
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/cd/read", STR_CDFS_FILE_NOT_FOUND);
+INCLUDE_RODATA("main/nonmatchings/cd/read", STR_CDFS_FILE_NOT_FOUND);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/cd/read", STR_CDFS_OFFSET_SIZE_OVER);
+INCLUDE_RODATA("main/nonmatchings/cd/read", STR_CDFS_OFFSET_SIZE_OVER);
 
 /* Logs a drive error, at line in the game's cd/read.c, and stops. */
 void reportCdfsError(s32 line) {

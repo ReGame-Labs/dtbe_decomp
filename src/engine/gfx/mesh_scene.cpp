@@ -59,13 +59,13 @@ void meshSceneDestroy(MeshScene *meshScene, s32 flags) {
  * (meshSceneInitNodes). It calls func_80076A00, in an overlay. Left in asm:
  * the inlined transformGetWorld copies a MATRIX as a block move (see "Block
  * moves" in TODO.md). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/mesh_scene", meshSceneLoad);
+INCLUDE_ASM("main/nonmatchings/gfx/mesh_scene", meshSceneLoad);
 
 /* Sets each node's local matrix from its MeshScenePose (the rotation, then
  * the translation). It copies a MATRIX as a block move (four loads then four
  * stores), which GCC 2.95.2 does not emit for 32 bytes (see "Block moves" in
  * TODO.md). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/mesh_scene", meshSceneInitNodes);
+INCLUDE_ASM("main/nonmatchings/gfx/mesh_scene", meshSceneInitNodes);
 
 /* Makes `parent` the parent transform of the nodes that have none. */
 void meshSceneSetParent(MeshScene *meshScene, Transform *parent) {
@@ -84,7 +84,7 @@ void meshSceneSetParent(MeshScene *meshScene, Transform *parent) {
 /* Sets the local matrix of a node's mesh, if it has one: its world matrix
  * goes out of date. It copies the MATRIX as a block move, as
  * meshSceneInitNodes does. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/mesh_scene", meshSceneSetLocalMatrix);
+INCLUDE_ASM("main/nonmatchings/gfx/mesh_scene", meshSceneSetLocalMatrix);
 
 /* Prepares the TMD of a node again (tmdHeaderRelocate), and its first
  * object. */
@@ -143,7 +143,7 @@ MATRIX *meshSceneGetLocalMatrix(MeshScene *meshScene, s32 node) {
 /* The world matrix of a node's mesh, worked out again if it is out of date:
  * transformGetWorld inlined, whose matrix copy is a block move (see "Block
  * moves" in TODO.md). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/mesh_scene", meshSceneGetWorldMatrix);
+INCLUDE_ASM("main/nonmatchings/gfx/mesh_scene", meshSceneGetWorldMatrix);
 
 /* Hides a node, taking its link out of the list it is in. */
 void meshSceneHideNode(MeshScene *meshScene, s32 node) {

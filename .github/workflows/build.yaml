@@ -20,6 +20,8 @@ jobs:
         include:
           - version: jp
             exe: SLPS_033.57
+          - version: us
+            exe: SLUS_014.04
     name: build (${{ matrix.version }})
     env:
       VERSION: ${{ matrix.version }}

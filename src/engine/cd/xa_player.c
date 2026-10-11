@@ -75,7 +75,7 @@ static inline void turnXaOffInline(void) {
     }
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/cd/xa_player", STR_CDFSXA_SYSTEM_OFF);
+INCLUDE_RODATA("main/nonmatchings/cd/xa_player", STR_CDFSXA_SYSTEM_OFF);
 
 /* Turns the player on (taking the drive from CDFS) and seeks to a track. */
 void seekXaTrack(u32 track) {

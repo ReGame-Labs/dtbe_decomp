@@ -100,4 +100,4 @@ void saveDataSetButtonSlot(SaveData *this, s32 player, s32 slot, s32 index) {
     }
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/save_data", BUTTON_SLOTS);
+INCLUDE_RODATA("main/nonmatchings/game/save_data", BUTTON_SLOTS);

@@ -83,23 +83,23 @@ void lightsSetDirection0(Lights *this, VECTOR *direction) {
     this->light.m.m[0][2] = -unit.vz;
 }
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_DIRECTION0);
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_DIRECTION0);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_DIRECTION1);
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_DIRECTION1);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_DIRECTION2);
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_DIRECTION2);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_COLOR0);
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_COLOR0);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_COLOR1);
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_COLOR1);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_COLOR2);
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_COLOR2);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_BACK_COLOR);
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_BACK_COLOR);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/lights", AXIS_Y);
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", AXIS_Y);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/gfx/lights", AXIS_Z);
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", AXIS_Z);
 
 /* Points light 1 in direction (see lightsSetDirection0). */
 void lightsSetDirection1(Lights *this, VECTOR *direction) {
@@ -132,4 +132,4 @@ void lightsSetGteColors(Lights *this) {
  * frame, no instruction a compiler chose (gte_mulMatrix's fixed registers and
  * column packing, ending in ctc2s to the light matrix instead of sws), an
  * unfilled jr $ra delay slot. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/lights", setGteLightMatrix);
+INCLUDE_ASM("main/nonmatchings/gfx/lights", setGteLightMatrix);

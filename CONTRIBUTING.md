@@ -10,7 +10,7 @@ build the project; this file is about the work itself.
 Every function that isn't C yet is an `INCLUDE_ASM` line in `src/engine/`,
 which includes splat's disassembly of it:
 ```c
-INCLUDE_ASM("asm/jp/main/nonmatchings/lib/format", formatterPadNumber);
+INCLUDE_ASM("main/nonmatchings/lib/format", formatterPadNumber);
 ```
 
 1. **Look for a relative first.** A function often has copies in the
@@ -69,7 +69,10 @@ jump tables live in its own `.s` file, so its C version emits them itself.
 ## Matching
 
 - A change only counts if `make compare` still says `OK`: the executable has
-  to stay byte for byte identical.
+  to stay byte for byte identical. The USA release shares the source, so
+  `make VERSION=us compare` has to say `OK` too. Where its code differs,
+  the C is the Japanese release's, `#if VERSION_JP`, and the USA release
+  keeps its function's `INCLUDE_ASM` in the `#else`.
 - Only byte-identical matches go in. No `NON_MATCHING` code, no `#if 0`
   blocks and no inline assembly in place of C. A function that doesn't
   match yet stays behind its `INCLUDE_ASM`. `tools/hacks.py` fails the CI

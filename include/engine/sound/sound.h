@@ -158,12 +158,6 @@ typedef struct SoundSystem {
     /* 0x520 */ u8 nextGroup; /* the group of the next effect, when not 0 */
 } SoundSystem;
 
-/* how many handles SOUND_EFFECT_HANDLES holds */
-#define SND_HANDLE_CAPACITY 0x30
-
-/* the handles of the playing sound effects */
-extern HandleTable SOUND_EFFECT_HANDLES;
-
 extern struct SoundSystem SOUND_SYSTEM; /* the sound system */
 
 s32 setReverb(s32 type, s16 depthLeft, s16 depthRight);
@@ -193,23 +187,6 @@ void sndPlayingSongStop(SndPlayingSong *sndPlayingSong);
 void closeVab(u16 vabIndex);
 void setNextSoundEffectGroup(u8 group);
 s16 openVabHead(u16 vabIndex, void *header);
-s32 playSoundEffect(u16 effect);
-SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volumeLeft, u8 volumeRight);
-u32 playSoundEffectAtVolume(u16 effect, u8 volumeLeft, u8 volumeRight);
-void sndPlayingEffectFree(SndPlayingEffect *sndPlayingEffect);
-void sndPlayingEffectKeyOff(SndPlayingEffect *sndPlayingEffect);
-void sndPlayingEffectStop(SndPlayingEffect *sndPlayingEffect);
-s32 canPlaySoundEffect(u16 effect);
-void keyOffSoundEffectGroup(s32 group);
-s32 getSoundEffectVoice(u32 handle);
-void stopSoundEffect(u32 handle);
-s32 transferVabBody(u16 vab, u8 *data);
-void initOrDestroySoundEffectHandles(s32 initialize, s32 priority);
-u32 allocSoundEffectHandle(SndPlayingEffect *effect);
-SndPlayingEffect *findPlayingEffect(u32 handle);
-void freeSoundEffectHandle(u32 handle);
-void initSoundEffectHandles(void);
-void destroySoundEffectHandles(void);
 
 EXTERN_C_END
 

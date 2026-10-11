@@ -7,7 +7,7 @@
  * with gte_leadingZeros) is compiled, but has the same divide as
  * divide12: no divide-by-zero break and the div before the test of the
  * denominator, which the C does not give (see math/divide.c). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/math/trig", getTan);
+INCLUDE_ASM("main/nonmatchings/math/trig", getTan);
 
 /* Returns the arc cosine of cos (4.12 fixed point) as an angle in 4096ths of
  * a turn, clamping cos to -1..1. */

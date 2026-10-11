@@ -11,3 +11,24 @@ guideLogoTaskInit = 0x80071F28; // type:func
 rankingTaskInit = 0x8007360C; // type:func
 creditsTaskInit = 0x80076504; // type:func
 optionTaskInit = 0x800794E0; // type:func
+
+// option.cpp's classes (include/title/option.h): the virtual tables of their
+// Stepper base, and the destructors, which keep g++'s names
+_vt.11Unk80079254.7Stepper = 0x80066674; // size:0x60
+_vt.11Unk80078A4C.7Stepper = 0x800666D4; // size:0x60
+_vt.11Unk80078914.7Stepper = 0x80066734; // size:0x60
+_vt.11Unk800786E4.7Stepper = 0x80066794; // size:0x60
+_vt.11Unk800782D8.7Stepper = 0x800667F4; // size:0x60
+_vt.11Unk80077F28.7Stepper = 0x80066854; // size:0x60
+_vt.11Unk80077D20.7Stepper = 0x800668B4; // size:0x60
+_vt.11Unk80077AC8.7Stepper = 0x80066914; // size:0x60
+_vt.11Unk800797D8 = 0x80066974; // size:0x28
+_._11Unk80077F28 = 0x80078168; // type:func
+_._11Unk80079254 = 0x80079254; // type:func
+_._11Unk800797D8 = 0x800797D8; // type:func
+_._11Unk80077D20 = 0x80079B64; // type:func
+_._11Unk800782D8 = 0x80079CC8; // type:func
+_._11Unk800786E4 = 0x80079E2C; // type:func
+_._11Unk80078914 = 0x80079F9C; // type:func
+_._11Unk80078A4C = 0x8007A100; // type:func
+_._11Unk80077AC8 = 0x8007A264; // type:func

@@ -13,4 +13,4 @@
  * other registers than the game's $v1, $v0, $a1 and $a0, as in buildPolyGT3
  * (build_poly_gt3.c) and the other packet builders (buildLineF2, buildLineG2,
  * buildPolyFT4, buildPolyFT4Windowed, buildPolyGT4). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_poly_f3", buildPolyF3);
+INCLUDE_ASM("main/nonmatchings/gfx/prim/build_poly_f3", buildPolyF3);

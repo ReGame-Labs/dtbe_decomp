@@ -1,0 +1,57 @@
+name: st00
+sha1: 07a7a0ff8cc3b4171f0357cc871426dd96dd5fd3
+options:
+  basename: st00
+  target_path: assets/us/bin/st00.bin
+  base_path: ../..
+  platform: psx
+  compiler: GCC
+
+  asm_path: asm/us/st00
+  src_path: src/battle/stages/st00
+  build_path: build/us
+
+  ld_script_path: build/us/generated/st00.ld
+
+  global_vram_start: 0x80000000
+  global_vram_end: 0x80200000
+
+  find_file_boundaries: True
+  gp_value: 0x80064128
+
+  generate_asm_macros_files: False
+
+  section_order: [".rodata", ".text", ".data", ".bss"]
+
+  symbol_addrs_path:
+    - config/us/symbols.txt
+    - config/us/symbols_game.txt
+    - config/us/symbols_st00.txt
+
+  undefined_funcs_auto_path: build/us/generated/undefined_funcs_auto_st00.txt
+  undefined_syms_auto_path: build/us/generated/undefined_syms_auto_st00.txt
+
+  string_encoding: SHIFT-JIS
+  data_string_encoding: SHIFT-JIS
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+  ld_bss_is_noload: True
+
+  # the whole overlay is one file until it is split into its modules, so its
+  # .rodata stays one piece in its order, not spread over the functions
+  migrate_rodata_to_functions: False
+  create_data_pads: False
+
+segments:
+  - name: st00
+    type: code
+    start: 0x0
+    vram: 0x800D3B00
+    align: 4
+    subalign: 4
+    subsegments:
+      - [0x0, rodata, st00]
+      - [0x354, c, st00]
+      - [0x6984, data, st00]
+  - [0x6AFC]

@@ -21,6 +21,12 @@ struct Task *func_80066084(void *memory, struct SystemContext *context);
 struct Task *bootLogoTaskInit(void *memory, struct SystemContext *context);
 struct Task *func_80066F74(void *memory, struct SystemContext *context);
 struct Task *titleLogoTaskInit(void *memory, struct SystemContext *context);
+/* The title's task size: the USA release's task is 0x30 bytes bigger. */
+#if VERSION_JP
+#define TITLE_LOGO_TASK_SIZE 0x110C
+#else
+#define TITLE_LOGO_TASK_SIZE 0x113C
+#endif
 struct Task *func_800673A4(void *memory, struct SystemContext *context);
 struct Task *func_800681A4(void *memory, struct SystemContext *context);
 struct Task *mainMenuTaskInit(void *memory, s32 arg);

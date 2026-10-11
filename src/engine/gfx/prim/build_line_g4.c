@@ -5,4 +5,4 @@
  * the shape is semi-transparent, to the ordering table. Compiled C, the
  * template of buildPolyFT3 with the same early length load into a1: left asm
  * for the same reason. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/prim/build_line_g4", buildLineG4);
+INCLUDE_ASM("main/nonmatchings/gfx/prim/build_line_g4", buildLineG4);

@@ -285,6 +285,6 @@ s32 func_80031308(void) {
  * saves $fp and $sp at 0x1F8003F8 and points both there, which C cannot
  * express (the original used inline asm for it).
  */
-INCLUDE_ASM("asm/jp/main/nonmatchings/game/character", tintTim);
+INCLUDE_ASM("main/nonmatchings/game/character", tintTim);
 
-INCLUDE_RODATA("asm/jp/main/nonmatchings/game/character", CHARA_PATH_FORMAT);
+INCLUDE_RODATA("main/nonmatchings/game/character", CHARA_PATH_FORMAT);

@@ -60,7 +60,7 @@ void cameraDestroy(Camera *this, s32 flags) {
  * nearest near plane, the far plane at 0x3200, a view from the eye at
  * z = -projection and the default lights, whose light matrix it copies to
  * the scratchpad. Also zeroes D_8011A2D0 to D_8011A2F8. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraReset);
+INCLUDE_ASM("main/nonmatchings/gfx/camera", cameraReset);
 
 /* Sets the color of light 0. */
 void cameraSetLightColor0(Camera *this, VECTOR *color) {
@@ -74,7 +74,7 @@ void cameraSetLightColor1(Camera *this, VECTOR *color) {
 
 /* Sets the color of light 2, then copies the light matrix to the scratchpad
  * as the direction setters do (light 0 and 1's color setters don't). */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetLightColor2);
+INCLUDE_ASM("main/nonmatchings/gfx/camera", cameraSetLightColor2);
 
 /* Sets the back color. */
 void cameraSetBackColor(Camera *this, VECTOR *color) {
@@ -83,19 +83,19 @@ void cameraSetBackColor(Camera *this, VECTOR *color) {
 
 /* Points light 0 along direction and copies the light matrix to the
  * scratchpad. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetLightDirection0);
+INCLUDE_ASM("main/nonmatchings/gfx/camera", cameraSetLightDirection0);
 
 /* Points light 1 along direction and copies the light matrix to the
  * scratchpad. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetLightDirection1);
+INCLUDE_ASM("main/nonmatchings/gfx/camera", cameraSetLightDirection1);
 
 /* Points light 2 along direction and copies the light matrix to the
  * scratchpad. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetLightDirection2);
+INCLUDE_ASM("main/nonmatchings/gfx/camera", cameraSetLightDirection2);
 
 /* Hands the light colors to the GTE and copies the light matrix to the
  * scratchpad. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraApplyLights);
+INCLUDE_ASM("main/nonmatchings/gfx/camera", cameraApplyLights);
 
 /* The lights of the camera. */
 Lights *cameraGetLights(Camera *this) {
@@ -108,7 +108,7 @@ Lights *cameraGetLights(Camera *this) {
  * rotation, the sides through the eye, the near and the far plane through
  * the points near and far ahead of it. It copies MATRIXes with four loads
  * then four stores, as cameraReset does. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetView);
+INCLUDE_ASM("main/nonmatchings/gfx/camera", cameraSetView);
 
 /* Moves the plane to pass through point. */
 void planeSetPoint(Plane *this, VECTOR *point) {
@@ -255,7 +255,7 @@ void cameraClearOt(Camera *this) {
  * this->view, the game has it after. The two tie in both scheduling passes
  * and the one later in the insn stream wins, which the entry conversion
  * never is; const parameters and C++ change nothing. */
-INCLUDE_ASM("asm/jp/main/nonmatchings/gfx/camera", cameraSetScreen);
+INCLUDE_ASM("main/nonmatchings/gfx/camera", cameraSetScreen);
 
 /* Sets the field of view: the distance of the screen from the eye (half the
  * width over the tangent of half the angle), no nearer near plane than half of

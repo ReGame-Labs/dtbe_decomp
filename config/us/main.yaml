@@ -1,0 +1,230 @@
+name: main
+sha1: 179a3f7ae84762f9f60dc1ba97994eb7e673582e
+options:
+  basename: main
+  target_path: disks/us/SLUS_014.04
+  base_path: ../..
+  platform: psx
+  compiler: GCC
+
+  asm_path: asm/us/main
+  src_path: src/engine
+  build_path: build/us
+
+  ld_script_path: build/us/generated/main.ld
+
+  global_vram_start: 0x80000000
+  global_vram_end: 0x80200000
+
+  find_file_boundaries: True
+  # crt0 sets $gp (0x8003DDF0)
+  gp_value: 0x80064128
+
+  generate_asm_macros_files: False
+
+  section_order: [".rodata", ".text", ".data", ".sdata", ".bss"]
+
+  symbol_addrs_path:
+    - config/us/symbols.txt
+    - config/us/symbols_main.txt
+
+  undefined_funcs_auto_path: build/us/generated/undefined_funcs_auto_main.txt
+  undefined_syms_auto_path: build/us/generated/undefined_syms_auto_main.txt
+
+  string_encoding: SHIFT-JIS
+  data_string_encoding: SHIFT-JIS
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+  ld_bss_is_noload: False
+
+  migrate_rodata_to_functions: True
+  create_data_pads: False
+
+segments:
+  - name: header
+    type: header
+    start: 0x0
+
+  - name: main
+    type: code
+    start: 0x800
+    vram: 0x80010000
+    bss_size: 0xB8168
+    align: 4
+    subalign: 4
+    subsegments:
+      # psylink places .rdata ahead of .text
+      - [0x800, .rodata, system/main]
+      - [0x858, .rodata, sound/sound_control]
+      - [0x908, .rodata, game/sequencer]
+      - [0x9B8, .rodata, game/game_state]
+      - [0xB5C, .rodata, game/save_data]
+      - [0xB80, .rodata, gfx/fade]
+      - [0xBB8, .rodata, game/loading_screen]
+      - [0xBF0, .rodata, gfx/display]
+      - [0xC2C, .rodata, gfx/scene_graph]
+      - [0xD94, .rodata, gfx/camera]
+      - [0xDA4, .rodata, gfx/tmd]
+      - [0xFA4, .rodata, gfx/lights]
+      - [0x10D4, .rodata, math/print]
+      # the sine and cosine table and the arc cosine table, which several files read
+      - [0x113C, rodata, math/trig_tables]
+      - [0x9140, .rodata, pad/pad]
+      # the character names of system_menu's table D_8005FD7C that are too long for .sdata
+      - [0x9164, .rodata, debug/system_menu]
+      - [0x9958, .rodata, system/load_exec]
+      - [0x9974, .rodata, system/memory]
+      - [0x99D8, .rodata, task/task]
+      - [0x9A00, .rodata, task/entity]
+      - [0x9A28, .rodata, menu/stepper]
+      - [0x9B08, .rodata, gfx/vram_cache]
+      - [0x9B28, .rodata, gfx/color]
+      - [0x9B50, .rodata, gfx/color_shift]
+      - [0x9B5C, .rodata, game/character]
+      - [0x9B6C, .rodata, text/font]
+      - [0x9C0C, .rodata, cd/cdfs]
+      - [0x9C4C, .rodata, cd/read]
+      - [0x9D00, .rodata, cd/xa_player]
+      - [0x9D48, .rodata, lib/string]
+      - [0x9F8C, .rodata, lib/format]
+      - [0xA16C, .rodata, lib/md5]
+      - [0xA1AC, .rodata, lib/inflate]
+      # the PsyQ libraries' strings and tables
+      - [0xA758, rodata, psyq]
+      # the game, one file per class or module (src/README.md)
+      - [0xB618, c, system/globals]
+      # a handwritten object: the only padding between two of the game's
+      # functions ends it, and main starts 8-aligned
+      - [0xB758, c, system/break_stub]
+      - [0xB768, c, system/main]
+      - [0xBC2C, c, system/ram_heap]
+      - [0xBC88, c, sound/sound_control]
+      - [0xCB6C, c, game/sequencer]
+      - [0xD98C, cpp, game/game_state]
+      - [0xEE88, c, game/save_data]
+      - [0xF18C, c, pad/button_map]
+      - [0xF268, c, gfx/fade]
+      - [0xF408, c, game/loading_screen]
+      - [0xF6F4, c, system/thread]
+      - [0xF8BC, c, gfx/display]
+      - [0x101B8, c, gfx/scene_graph]
+      - [0x11310, c, gfx/camera]
+      - [0x1240C, c, gfx/tmd]
+      - [0x13834, c, gfx/lights]
+      - [0x13C68, c, math/print]
+      - [0x13D4C, c, math/divide]
+      - [0x13E6C, c, math/vector]
+      - [0x14260, c, math/matrix]
+      - [0x15D1C, c, math/quaternion]
+      - [0x168B8, c, math/trig]
+      - [0x169A8, c, math/vector_ops]
+      - [0x16D88, c, math/matrix_ops]
+      - [0x17118, c, math/quaternion_ops]
+      - [0x17210, c, math/sin_cos]
+      - [0x17250, c, gfx/ordering_table]
+      - [0x17400, c, gfx/prim_buffer]
+      - [0x17544, c, pad/pad]
+      - [0x1820C, c, cd/file_load]
+      - [0x18850, c, gfx/prim/alloc_sprt]
+      - [0x18908, c, gfx/prim/build_line_f2]
+      - [0x18A58, cpp, debug/system_menu]
+      - [0x1B010, c, system/load_exec]
+      - [0x1B0A0, c, text/console]
+      - [0x1B844, c, system/memory]
+      - [0x1BCC4, c, text/screen_print]
+      - [0x1BEC8, c, task/task]
+      - [0x1C460, c, task/entity]
+      - [0x1CB78, cpp, menu/stepper]
+      - [0x1DBE0, c, math/shuffle]
+      - [0x1DD84, c, math/lerp]
+      - [0x1DE94, c, gfx/sprite]
+      - [0x1E55C, c, gfx/prim/alloc_poly_ft4]
+      - [0x1E584, c, gfx/prim/alloc_dr_area]
+      - [0x1E5C4, c, gfx/prim/alloc_line_f2]
+      - [0x1E5EC, cpp, gfx/vram_cache]
+      - [0x1EDC0, c, gfx/prim/alloc_dr_mode]
+      - [0x1EE88, c, gfx/prim/alloc_sprt_16]
+      - [0x1EEB0, c, gfx/prim/alloc_dr_move]
+      - [0x1EF00, c, gfx/prim/build_line_g2]
+      - [0x1F570, c, gfx/prim/alloc_poly_f4]
+      - [0x1F598, c, gfx/look_at]
+      - [0x1F9AC, c, gfx/prim/build_poly_f3]
+      - [0x1FB04, c, gfx/prim/build_poly_f4]
+      - [0x1FDB4, c, gfx/color]
+      - [0x200A4, c, gfx/prim/alloc_line_f4]
+      - [0x20100, c, gfx/prim/build_line_f4]
+      - [0x20280, c, gfx/color_shift]
+      - [0x20400, c, gfx/prim/alloc_poly_f3]
+      - [0x20478, c, gfx/prim/build_line_f3]
+      - [0x20A28, c, gfx/prim/alloc_line_g2]
+      - [0x20A78, c, gfx/animator]
+      - [0x213D0, cpp, game/character]
+      - [0x21C7C, cpp, gfx/mesh_scene]
+      - [0x227A0, c, text/font]
+      - [0x22FB0, c, text/text_printer]
+      - [0x23134, c, gfx/box]
+      - [0x2353C, c, gfx/prim/alloc_line_f3]
+      - [0x23570, c, gfx/prim/build_line_g3]
+      - [0x236E8, c, gfx/prim/alloc_dr_load]
+      - [0x23728, c, gfx/prim/build_line_g4]
+      - [0x238C8, c, gfx/prim/build_poly_gt3]
+      - [0x239F8, c, cd/cdfs]
+      - [0x23EA0, c, system/log]
+      - [0x23ED4, c, cd/read]
+      - [0x258F0, c, cd/xa_player]
+      - [0x266B0, c, lib/string]
+      - [0x26A04, c, lib/format]
+      - [0x27464, c, system/handle_table]
+      - [0x27810, c, math/random]
+      - [0x27A50, c, lib/md5]
+      - [0x28E10, c, lib/list]
+      - [0x290A8, c, lib/node_pool]
+      - [0x29250, c, sound/sound]
+      - [0x2A0DC, c, sound/voice_pause]
+      - [0x2A2F4, c, sound/sound_effect]
+      - [0x2A9D4, c, lib/heap]
+      - [0x2B034, c, lib/inflate]
+      # crt0's start (the entry point), __main and its constructor loop
+      - [0x2E550, asm, crt0]
+      # SN's runtime wrappers and the PsyQ libraries, which stay splat's
+      # disassembly and out of the progress
+      - [0x2E6C4, asm, psyq]
+      # only PsyQ reads these 0x10 bytes
+      - [0x4F61C, data, psyq_head]
+      - [0x4F62C, data, game]
+      # crt0's variables, then the PsyQ libraries'
+      - [0x51774, data, psyq]
+      # the game's data around gp
+      - [0x54928, sdata, game_gp]
+      # each file's small data, which only it reads through gp
+      - [0x54934, .sdata, system/main]
+      - [0x54940, .sdata, system/ram_heap]
+      - [0x54948, .sdata, sound/sound_control]
+      - [0x54970, .sdata, game/sequencer]
+      - [0x5498C, .sdata, game/game_state]
+      - [0x549A0, .sdata, system/thread]
+      - [0x549A4, .sdata, gfx/display]
+      - [0x549AC, .sdata, gfx/scene_graph]
+      - [0x549B0, .sdata, gfx/prim_buffer]
+      - [0x549D4, .sdata, cd/file_load]
+      - [0x549D8, .sdata, debug/system_menu]
+      - [0x54B14, .sdata, text/console]
+      - [0x54B18, .sdata, text/screen_print]
+      - [0x54B28, sdata, game_gp_8006434C]
+      - [0x54B30, .sdata, game/character]
+      - [0x54B58, .sdata, gfx/mesh_scene]
+      - [0x54B60, .sdata, text/font]
+      - [0x54B80, .sdata, cd/cdfs]
+      - [0x54B8C, .sdata, system/log]
+      - [0x54B90, .sdata, cd/read]
+      - [0x54B9C, .sdata, math/random]
+      - [0x54BA4, .sdata, lib/inflate]
+      # psylink starts the bss on 16 bytes (JP's start is too, by chance)
+      - [0x54BBC, pad]
+      # the file keeps .bss as zeros: crt0 clears 0x800DA600-0x8011C528 of it
+      - { start: 0x54BC0, type: bss, vram: 0x800643C0, name: game }
+      # libgs's globals onwards (the game writes some of them directly)
+      - { start: 0x1073C8, type: bss, vram: 0x80116BC8, name: psyq }
+
+  - [0x10D000]
