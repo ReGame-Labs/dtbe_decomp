@@ -30,15 +30,6 @@ INCLUDE_ASM("st05/nonmatchings/st05", func_800D40CC);
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D4210);
 
-/* game.bin functions missing from game.h */
-void func_80070314(Unk8006ED20 *object);
-s32 func_8006F144(Unk8006ED20 *object);
-s32 func_8006F190(Unk8006ED20 *object);
-Unk80076F34 *func_800700C8(Unk8006ED20 *object, s32 side);
-Vec3 *func_800775D8(Unk80076F34 *chara, Vec3 *out);
-void func_800775B0(Unk80076F34 *chara, Vec3 *position);
-Unk80077698 *func_80077698(Unk80076F34 *this);
-
 /* the stage's steps for one character */
 void func_800D4570(Unk800D3CEC *this, Unk80076F34 *chara);
 void func_800D45E0(Unk800D3CEC *this, Unk80076F34 *chara);
@@ -90,10 +81,9 @@ void func_800D4570(Unk800D3CEC *this, Unk80076F34 *chara) {
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D45E0);
 
-/* A value by bits 8-9 of the low halfword at 0 of the character's table (func_80077698): 0xC0, 0x40,
- * 0x80 or 0x100. game_classes.h's Unk80077698 has 0x0 as one word; the game reads its low half (lhu 0). */
+/* A value by bits 8-9 of 0x0 of the character's table (func_80077698): 0xC0, 0x40, 0x80 or 0x100. */
 s32 func_800D4768(Unk80076F34 *chara) {
-    switch (*(u16 *)&func_80077698(chara)->unk0 & 0x300) {
+    switch (func_80077698(chara)->unk0 & 0x300) {
     case 0x000:
         return 0xC0;
     case 0x100:
@@ -120,14 +110,6 @@ void func_800D47E8(void *this) {
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D4814);
 
-/* the camera's update of func_8006ED20's class, and its LookAt (at 0x12C) */
-void func_80072088(Unk8006ED20 *object);
-LookAt *func_8006EF64(Unk8006ED20 *object);
-
-/* The camera's eye of func_8006ED20's class, which func_80072088 computes (game.h leaves 0x2CC-0x360
- * as a gap). */
-#define BASE_EYE(stage) (*(Vec3 *)&(stage)->base.unk2CC[0x31C - 0x2CC])
-
 /* The stage's camera step: func_80072088, then keeps the eye at y -0x300 or above it (lower y), copying
  * it into the LookAt when it moves it. The match depends on the eye read into locals before the copy
  * (the LookAt's stores could alias the stage, so a direct copy interleaves the loads). */
@@ -138,13 +120,13 @@ void func_800D4A10(Unk800D3CEC *this) {
     s32 z;
 
     func_80072088(&this->base);
-    if (BASE_EYE(this).vy > -0x300) {
-        BASE_EYE(this).vy = -0x300;
+    if (this->base.eye.vy > -0x300) {
+        this->base.eye.vy = -0x300;
         lookAt = func_8006EF64(&this->base);
         lookAt->dirty = 1;
-        x = BASE_EYE(this).vx;
-        y = BASE_EYE(this).vy;
-        z = BASE_EYE(this).vz;
+        x = this->base.eye.vx;
+        y = this->base.eye.vy;
+        z = this->base.eye.vz;
         lookAt->eye.vx = x;
         lookAt->eye.vy = y;
         lookAt->eye.vz = z;

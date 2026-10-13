@@ -66,17 +66,6 @@ typedef struct Unk800D3DBC {
     /* 0xFD4 */ s16 unkFD4; /* bit 8 of the flags at 0x2C8, copied each frame by func_800D46D0 */
 } Unk800D3DBC;
 
-/* game.bin functions missing from game.h */
-void func_80070314(Unk8006ED20 *object);
-void func_80071F6C(void);
-s32 func_8006F144(Unk8006ED20 *object);
-s32 func_8006F190(Unk8006ED20 *object);
-s32 func_8006F1A4(Unk8006ED20 *object);
-Unk80076F34 *func_800700C8(Unk8006ED20 *object, s32 side);
-Vec3 *func_800775D8(Unk80076F34 *chara, Vec3 *out);
-/* the LookAt of func_8006ED20's object (at 0x12C) */
-LookAt *func_8006EF64(Unk8006ED20 *object);
-
 /* this stage's functions that run each frame (func_800D46D0) */
 void func_800D47B0(Unk800D3DBC *this);
 void func_800D4950(Unk800D3DBC *this);
@@ -115,9 +104,41 @@ void func_800D4674(Unk800D3DBC *this) {
 }
 
 #if VERSION_US
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D49B0);
+/* Method 0x58 of the virtual table (func_80070824 in the base class): whether position is more than 0x200
+ * below unk350 (y grows downwards). */
+s32 func_800D49B0(Unk800D3DBC *this, Vec3 *position) {
+    return this->base.unk350 + 0x200 < position->vy;
+}
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D49C4);
+/* the camera's update of func_8006ED20's class, and its LookAt (at 0x12C) */
+void func_80072088(Unk8006ED20 *object);
+LookAt *func_8006EF64(Unk8006ED20 *object);
+
+/* The camera's eye of func_8006ED20's class, which func_80072088 computes (as in st05). */
+#define BASE_EYE(stage) (*(Vec3 *)&(stage)->base.unk2CC[0x31C - 0x2CC])
+
+/* The stage's camera step: func_80072088, then keeps the eye at y 0 or above it (lower y), copying it into
+ * the LookAt when it moves it. The match depends on the eye read into locals before the copy, as in st05's
+ * func_800D4A10. */
+void func_800D49C4(Unk800D3DBC *this) {
+    LookAt *lookAt;
+    s32 x;
+    s32 y;
+    s32 z;
+
+    func_80072088(&this->base);
+    if (BASE_EYE(this).vy > 0) {
+        BASE_EYE(this).vy = 0;
+        lookAt = func_8006EF64(&this->base);
+        lookAt->dirty = 1;
+        x = BASE_EYE(this).vx;
+        y = BASE_EYE(this).vy;
+        z = BASE_EYE(this).vz;
+        lookAt->eye.vx = x;
+        lookAt->eye.vy = y;
+        lookAt->eye.vz = z;
+    }
+}
 #endif
 
 /* One frame of the stage: func_80071F6C, then 0xFD4 from bit 8 of the flags at 0x2C8; while that bit is clear
@@ -151,8 +172,6 @@ void func_800D46D0(Unk800D3DBC *this) {
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D47B0);
 
-/* game.bin's: the camera of func_8006ED20's object (at 0x1B0) */
-Camera *func_8006EF5C(Unk8006ED20 *object);
 void func_800D54C8(Unk800D3DBC *this);
 
 /* The stage's override of func_80072748 (in D_800D3D24): func_800D54C8 first, then links the stage's
@@ -467,9 +486,6 @@ typedef struct Unk800D7EC4 {
     /* 0x3C */ Vec3 start;
     /* 0x48 */ s32 unk48; /* random, 6 to 13 */
 } Unk800D7EC4;
-
-/* the stage's random number generator (game.bin) */
-u32 func_8006F004(Unk8006ED20 *this);
 
 /* Constructs a particle of the stage at a random x (-0x800 to 0x7FF) and z (0 to 0x3FF), at y -0xD00. */
 Unk800D7EC4 *func_800D7EC4(Unk800D7EC4 *this, Unk8006ED20 *stage) {

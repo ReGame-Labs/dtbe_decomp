@@ -42,13 +42,6 @@ typedef struct Unk800D3B74 {
 void func_800D9B9C(void *this);
 void func_800D4BB0(Unk800D3B74 *this);
 
-/* game.bin functions missing from game.h */
-void func_80071F6C(void);
-s32 func_8006F144(Unk8006ED20 *object);
-s32 func_8006F190(Unk8006ED20 *object);
-s32 func_8006F1A4(Unk8006ED20 *object);
-u32 func_8006F004(Unk8006ED20 *object);
-
 /* the virtual tables the functions below install, and the data they read */
 extern EntityVtable D_800D3924;
 extern EntityVtable D_800D394C;

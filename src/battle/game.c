@@ -12,6 +12,7 @@
 #include "engine/gfx/color.h"
 #include "engine/gfx/display.h"
 #include "engine/gfx/fade.h"
+#include "engine/gfx/lights.h"
 #include "engine/gfx/prim/build_line_f3.h"
 #include "engine/gfx/prim/build_line_g2.h"
 #include "engine/gfx/prim_buffer.h"
@@ -50,9 +51,6 @@ typedef struct Unk800ACD74 {
     /* 0x18 */ Unk8007BD8C unk18;
 } Unk800ACD74;
 
-/* writes the vector at 0x384 of an Unk80076F34, each component shifted down by 8 bits */
-Vec3 *func_800775D8(Unk80076F34 *chara, Vec3 *out);
-
 /* functions of Unk8007F920 that constructors of its kin call */
 void func_8007FCFC(Unk8007F920 *this);
 void func_8007FED8(Unk8007F920 *this);
@@ -65,7 +63,6 @@ s32 func_8007768C(Unk80076F34 *this);
 void func_80079B24(Unk80076F34 *this, Unk80079B24Entry *table);
 
 /* virtual functions of Unk80076F34, and functions of its that they call */
-Unk80077698 *func_80077698(Unk80076F34 *this);
 s32 func_80077794(Unk80076F34 *this);
 void func_8007835C(Unk80076F34 *this, s32 arg);
 void func_80078804(Unk80076F34 *this, s32 arg);
@@ -115,17 +112,11 @@ void func_80081A54(Unk8007F920 *this, s32 arg);
  * both to matrixTransformVec */
 VECTOR *func_8007A4A4(Unk80076F34 *this, VECTOR *out, s32 node, VECTOR *offset);
 
-/* the gather of the class Unk800C3CFC constructs */
-void func_800C3E64(Unk800C3CFC *this);
-
 /* play a sound of an Unk80076F34 and return its handle (the first also keeps it at 0x25C): they call
  * soundControlPlaySound and leave $v0 alone after the call, and func_800BFF28 keeps its next constant out
  * of $v0 (a call_value) */
 s32 func_800784F4(Unk80076F34 *this, s32 sound);
 s32 func_80078540(Unk80076F34 *this, s32 sound);
-
-/* adds delta to the 16.16 level of the object at 0x238 of an Unk80076F34, kept between 0 and 1.0 */
-void func_80077448(Unk80076F34 *this, s32 delta);
 
 /* the constructor of the sprite member of Unk800C2F14, and the setup of its motion */
 Unk800C2CCC *func_800C2CCC(Unk800C2CCC *this, u16 *frame, s32 flags);
@@ -222,7 +213,6 @@ Entity *func_800C06D0(Entity *this, Unk80076F34 *arg);
 Entity *func_800C0CC0(Entity *this, Unk80076F34 *arg, Vec3 *vec);
 Unk800C2F14 *func_800C2FBC(Unk800C2F14 *this, s32 frame, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags);
 Entity *func_800C3654(Entity *this, Vec3 *unk28, Vec3 *unk40, s32 unk20, u32 color, s32 unk18);
-Unk800C3CFC *func_800C3CFC(Unk800C3CFC *this, Vec3 *pos, s32 size, s32 color);
 /* An entry of the tables func_800C5680 takes (func_800C5B18 copies up to 4 of them, all but unk10). */
 typedef struct Unk800C5B18Entry {
     /* 0x00 */ s32 unk0;
@@ -232,9 +222,6 @@ typedef struct Unk800C5B18Entry {
 } Unk800C5B18Entry;
 
 Entity *func_800C5680(Entity *this, Unk80076F34 *arg, Unk800C5B18Entry *entries, s32 count, s32 arg4, s32 arg5);
-/* the constructors of Unk800C6088's two classes: count particles around pos; arg6 is a color (0x808080) */
-Unk800C6088 *func_800C6088(Unk800C6088 *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 arg6);
-Unk800C6088 *func_800C62EC(Unk800C6088 *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 arg6);
 Entity *func_800C8778(Entity *this, s32 arg1, s32 arg2, s32 arg3, s32 arg4, Vec3 *arg5, s32 arg6);
 struct Unk800CA430 *func_800CA430(struct Unk800CA430 *this, Unk80076F34 *chara, s32 arg);
 struct Unk800CA768 *func_800CA768(struct Unk800CA768 *this, Unk80076F34 *chara, s32 arg);
@@ -972,7 +959,6 @@ typedef struct Unk80075000 {
 
 void func_80075034(Unk80075000 *this, s32 swap);
 void func_80075090(Unk80075000 *this);
-Vec3 *func_8007A650(Unk80076F34 *chara, Vec3 *out);
 /* buttons with the two of 0x214 swapped when only one of them is in it */
 u32 func_80075574(Unk80075000 *this, u32 buttons);
 /* the last entry of history, through func_80075574 */
@@ -1002,8 +988,6 @@ Entity *func_800A1E70(Entity *this, Unk80076F34 *chara, Vec3 *position, Vec3 *ve
 Unk800C7024 *func_80087690(Unk800C7024 *this, Unk80076F34 *chara, Vec3 *position, Vec3 *velocity);
 /* constructs an entity (on func_800C2F14's) for chara at position with velocity */
 Entity *func_80093274(Entity *this, Unk80076F34 *chara, Vec3 *position, Vec3 *velocity);
-/* this->unk218 */
-s32 func_80077568(Unk80076F34 *this);
 /* this->unk334 = arg */
 void func_80079B0C(Unk80076F34 *this, s32 arg);
 void func_8008E51C(Unk80076F34 *this);
@@ -1021,7 +1005,6 @@ Unk8007F184 *func_8007758C(Unk80076F34 *this);
 void func_8007F1B8(Unk8007F184 *this);
 void func_80081438(Unk8007F920 *this, s32 arg);
 Unk8007F920 *func_800819E0(Unk8007F920 *this);
-void func_80079350(Unk80076F34 *this);
 void func_800C9790(Unk80076F34 *this);
 s32 func_800798F4(Unk80076F34 *this, s32 arg);
 s32 func_800778D0(Unk80076F34 *this, s32 arg);
@@ -1432,14 +1415,9 @@ INCLUDE_ASM("game/nonmatchings/game", func_800708F4);
 
 void func_80072F2C(Unk8006ED20 *this);
 
-/* The words at 0xD24 (the steps func_80070C28 counts) and 0xD2C (flags) of Unk8006ED20. They stay in its byte
- * array unkD24: st02 and st08 index it for 0xD28 and 0xD30, so named fields would retype it. */
-#define UNK8006ED20_STEPS(object) (*(s32 *)&(object)->unkD24[0xD24 - 0xD24])
-#define UNK8006ED20_FLAGS_D2C(object) (*(u32 *)&(object)->unkD24[0xD2C - 0xD24])
-
 /* Counts the step, runs the method at 0x60 of the virtual table, then func_80072F2C. */
 void func_80070C28(Unk8006ED20 *this) {
-    UNK8006ED20_STEPS(this)++;
+    this->steps++;
     this->vtable[12].func((u8 *)this + this->vtable[12].delta);
     func_80072F2C(this);
 }
@@ -1456,7 +1434,7 @@ s32 func_80070F40(Unk8006ED20 *this, s32 side, s32 kind);
 s32 func_80071014(Unk8006ED20 *this, s32 side) {
     s32 sum;
 
-    if (!(UNK8006ED20_FLAGS_D2C(this) & 1)) {
+    if (!(this->unkD2C & 1)) {
         sum = func_80070F40(this, side, 0);
         sum += func_80070F40(this, side, 1);
         sum += func_80070F40(this, side, 2);
@@ -1725,13 +1703,9 @@ void func_8007338C(void) {
 void func_80073394(void) {
 }
 
-/* The word at 0x314 of Unk8006ED20, in its byte array unk2CC: st05 and st06 index it for 0x31C, so a named field
- * would retype it. */
-#define UNK8006ED20_314(object) (*(s32 *)&(object)->unk2CC[0x314 - 0x2CC])
-
 /* Returns the word at 0x314 (no caller). */
 s32 func_8007339C(Unk8006ED20 *this) {
-    return UNK8006ED20_314(this);
+    return this->unk314;
 }
 
 /* Returns the word at 0x258 (no caller). */
@@ -2838,7 +2812,6 @@ INCLUDE_ASM("game/nonmatchings/game", func_800776D0);
 
 /* Whether bit 0 of the first word of the character's table at 0x220 (func_80077698) is clear. */
 s32 func_80077794(Unk80076F34 *this) {
-    /* the game reads a halfword (lhu): game_classes.h types the first word as s32 */
     return !(func_80077698(this)->unk0 & 1);
 }
 
@@ -3006,8 +2979,6 @@ Vec3 *func_80078418(Unk80076F34 *this, Vec3 *out) {
     out->vx = ((s64)scaled * D_800D3790) >> 16;
     return out;
 }
-
-s32 func_80072F80(Vec3 *from, Vec3 *to);
 
 /* func_80072F80 on the vertical segment from 0x100 above to 0x4C below the character's position, moved along x by
  * distance times its facing (func_80079E10); returns what it returns. */
@@ -3245,19 +3216,15 @@ s32 func_800792DC(Unk80076F34 *this) {
     return *func_800792AC(this);
 }
 
-/* The Unk80075EE4 at 0x2DC of an Unk80076F34: game_classes.h keeps it as bytes, since Unk80075EE4 is defined
- * after Unk80076F34 there (RESULT_w3.txt). */
-#define SUM_2DC_OF(chara) (*(Unk80075EE4 *)(chara)->unk2DC)
-
 /* Clears 0x18 to 0x2C of the Unk80075EE4 at 0x2DC and returns it (func_800708F4 hands it to func_80075CEC). */
 Unk80075EE4 *func_80079300(Unk80076F34 *this) {
-    SUM_2DC_OF(this).unk18 = 0;
-    SUM_2DC_OF(this).unk1C = 0;
-    SUM_2DC_OF(this).unk20.vx = 0;
-    SUM_2DC_OF(this).unk20.vy = 0;
-    SUM_2DC_OF(this).unk20.vz = 0;
-    SUM_2DC_OF(this).unk2C = 0;
-    return &SUM_2DC_OF(this);
+    this->unk2DC.unk18 = 0;
+    this->unk2DC.unk1C = 0;
+    this->unk2DC.unk20.vx = 0;
+    this->unk2DC.unk20.vy = 0;
+    this->unk2DC.unk20.vz = 0;
+    this->unk2DC.unk2C = 0;
+    return &this->unk2DC;
 }
 
 /* Stops the model's clip (func_80079830 with -1). */
@@ -3461,8 +3428,6 @@ void func_80079B2C(Unk80076F34 *this, s32 arg) {
 
 INCLUDE_ASM("game/nonmatchings/game", func_80079B4C);
 
-void func_80079C1C(Vec3 *mid, Vec3 *position, Vec3 *step, s32 divisor);
-
 /* Moves 0x3A4 by 0x3B4 (divided by 0x3C4, func_80079C1C), then clears 0x3B4 and 0x3C0. */
 void func_80079BD8(Unk80076F34 *this) {
     Vec3 mid;
@@ -3565,11 +3530,9 @@ void func_8007A12C(Unk80076F34 *this, s32 on) {
 
 INCLUDE_ASM("game/nonmatchings/game", func_8007A158);
 
-s32 func_80072F80(Vec3 *from, Vec3 *to);
-
 /* Tests func_80072F80 toward point (raised by dy) from both sides, a third more than width away: -1 for the left
  * one only, 1 for the right one only, else 0. */
-s32 func_8007A3EC(VECTOR *point, s32 dy, s32 width) {
+s32 func_8007A3EC(Vec3 *point, s32 dy, s32 width) {
     Vec3 left;
     Vec3 center;
     Vec3 right;
@@ -3595,7 +3558,10 @@ s32 func_8007A3EC(VECTOR *point, s32 dy, s32 width) {
 }
 
 #if VERSION_US
-INCLUDE_ASM("game/nonmatchings/game", func_8007A718);
+/* Sets 0x48C to 8 (the JP build stores it in func_80080B4C itself). */
+void func_8007A718(Unk80076F34 *this) {
+    this->unk48C = 8;
+}
 #endif
 
 INCLUDE_ASM("game/nonmatchings/game", func_8007A4A4);
@@ -3664,9 +3630,7 @@ void func_8007A6FC(Unk80076F34 *this, s32 dir, s32 arg2, s32 count) {
 }
 
 Vec3 *func_8007A920(Unk80076F34 *this, Vec3 *out);
-struct Unk800C32E0 *func_800C32E0(struct Unk800C32E0 *this, Vec3 *position, u32 *dir, s32 unk3, u32 color);
-/* words read as a vector (func_80083700) and as two words (func_800C32E0); in the main executable */
-extern u32 D_80010814[];
+struct Unk800C32E0 *func_800C32E0(struct Unk800C32E0 *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color);
 
 /* Spawns func_800C32E0's entity (0x48 bytes, color 0x808080) with arg at the point func_8007A920 gives, and
  * hands it to func_8007AD4C. */
@@ -3675,7 +3639,7 @@ void func_8007A7DC(Unk80076F34 *this, s32 arg) {
     Entity *child = allocEntityMemory(0x48);
 
     if (child != NULL) {
-        func_800C32E0(entityOperatorNewAt(0x48, child), func_8007A920(this, &position), D_80010814, arg, 0x808080);
+        func_800C32E0(entityOperatorNewAt(0x48, child), func_8007A920(this, &position), &D_80010814, arg, 0x808080);
     }
     func_8007AD4C(this, child);
 }
@@ -3691,7 +3655,7 @@ void func_8007A874(Unk80076F34 *this, s32 size) {
 
     if (child != NULL) {
         entity = entityOperatorNewAt(0x58, child);
-        func_800C2FBC((Unk800C2F14 *)entity, 8, (VECTOR *)func_8007A920(this, &position), (VECTOR *)D_80010814,
+        func_800C2FBC((Unk800C2F14 *)entity, 8, (VECTOR *)func_8007A920(this, &position), &D_80010814,
                       size, 0xA0A0A0, 0);
         entity->vtable = &D_8006D4D4;
     }
@@ -3896,46 +3860,62 @@ void func_8007AFBC(Unk80076F34 *this, s32 arg) {
     func_8007835C(this, func_80077698(this)->unk8);
 }
 
-/* A virtual function of Unk80076F34 (entry 0x58 of D_8006530C): with arg 0, func_800796F0, takes
- * the table's unkC (scaled by unk3C4, in 16.16) from unk3B4.vx, then func_80078804 and
- * func_8007A6FC; always sets flag 0x80. */
+/* The flag func_8007B034 and func_8007B0E0 set: 0x80, 0x100 in the USA release. */
 #if VERSION_JP
+#define FUNC_8007B034_FLAG 0x80
+#else
+#define FUNC_8007B034_FLAG 0x100
+#endif
+
+/* Which side of the character func_8007A3EC finds blocked (-1 left, 1 right, 0 none); the JP release
+ * does not test it, so there it is always 0. */
+static inline s32 func_8007B034_blockedSide(Unk80076F34 *this) {
+#if VERSION_JP
+    return 0;
+#else
+    Vec3 position;
+
+    func_800775D8(this, &position);
+    return func_8007A3EC(&position, -0x33, func_80077698(this)->unk2);
+#endif
+}
+
+/* A virtual function of Unk80076F34 (entry 0x58 of D_8006530C): with arg 0, func_800796F0, takes
+ * the table's unkC (scaled by unk3C4, in 16.16) from unk3B4.vx unless the left side is blocked, then
+ * func_80078804 and func_8007A6FC; always sets FUNC_8007B034_FLAG. */
 void func_8007B034(Unk80076F34 *this, s32 arg) {
     if (arg == 0) {
         s32 delta;
 
         func_800796F0(this, 2, 1, 0);
-        delta = ((s64)func_80077698(this)->unkC * this->unk3C4) >> 16;
-        this->unk3B4.vx -= delta;
+        if (func_8007B034_blockedSide(this) >= 0) {
+            delta = ((s64)func_80077698(this)->unkC * this->unk3C4) >> 16;
+            this->unk3B4.vx -= delta;
+        }
         func_80078804(this, 0);
         func_8007A6FC(this, -1, 0x60, func_80077794(this) ? 3 : 4);
     }
-    this->flags |= 0x80;
+    this->flags |= FUNC_8007B034_FLAG;
 }
-#else
-INCLUDE_ASM("game/nonmatchings/game", func_8007B034);
-#endif
 
 /* A virtual function of Unk80076F34 (entry 0x60 of D_8006530C): with arg 0, func_800796F0, adds
- * the table's unkC (scaled by unk3C4, in 16.16) to unk3B4.vx, then func_8007881C and
- * func_8007A6FC; always sets flag 0x80. */
-#if VERSION_JP
+ * the table's unkC (scaled by unk3C4, in 16.16) to unk3B4.vx unless the right side is blocked, then
+ * func_8007881C and func_8007A6FC; always sets FUNC_8007B034_FLAG. */
 void func_8007B0E0(Unk80076F34 *this, s32 arg) {
     if (arg == 0) {
         s32 delta;
 
         func_800796F0(this, 2, 1, 0);
-        /* The match depends on delta: as one expression, the sum takes unk3B4's register. */
-        delta = ((s64)func_80077698(this)->unkC * this->unk3C4) >> 16;
-        this->unk3B4.vx += delta;
+        if (func_8007B034_blockedSide(this) <= 0) {
+            /* The match depends on delta: as one expression, the sum takes unk3B4's register. */
+            delta = ((s64)func_80077698(this)->unkC * this->unk3C4) >> 16;
+            this->unk3B4.vx += delta;
+        }
         func_8007881C(this, 0);
         func_8007A6FC(this, -1, 0x60, func_80077794(this) ? 3 : 4);
     }
-    this->flags |= 0x80;
+    this->flags |= FUNC_8007B034_FLAG;
 }
-#else
-INCLUDE_ASM("game/nonmatchings/game", func_8007B0E0);
-#endif
 
 /* Starts clip 3 with unk3B4.vy set to minus the table's unk10 (scaled by unk3C4, in 16.16) and unk3A4.vy
  * cleared; when func_800778BC, func_8007A6FC on both sides; then keeps unk3A4.vx within 1.5 times the
@@ -4157,9 +4137,8 @@ typedef struct Unk800708F4 {
 
 void func_80078EF8(Unk80076F34 *this, u32 unk, Vec3 *velocity, s32 unk3);
 s32 func_80078E08(Unk80076F34 *this, u32 unk);
-struct Unk800C32E0 *func_800C32E0(struct Unk800C32E0 *this, Vec3 *position, u32 *dir, s32 unk3, u32 color);
+struct Unk800C32E0 *func_800C32E0(struct Unk800C32E0 *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color);
 extern EntityVtable D_8006D4D4;
-extern u32 D_80010814[];
 
 /* g++'s new of the entity class of vtable D_8006D4D4 (0x58 bytes: func_800C2FBC with frame 8, no velocity,
  * size 0x60, color 0xA0A0A0) at hit's position: NULL when the allocation fails. */
@@ -4169,7 +4148,7 @@ static inline Entity *func_8007BC50_newFlash(Unk800708F4 *hit) {
     if (child != NULL) {
         Unk800C2F14 *flash = entityOperatorNewAt(0x58, child);
 
-        func_800C2FBC(flash, 8, (VECTOR *)&hit->position, (VECTOR *)D_80010814, 0x60, 0xA0A0A0, 0);
+        func_800C2FBC(flash, 8, (VECTOR *)&hit->position, &D_80010814, 0x60, 0xA0A0A0, 0);
         flash->entity.vtable = &D_8006D4D4;
     }
     return child;
@@ -4181,7 +4160,7 @@ static inline Entity *func_8007BC50_newC32E0(Unk800708F4 *hit, Vec3 *velocity) {
     Entity *child = allocEntityMemory(0x48);
 
     if (child != NULL) {
-        func_800C32E0(entityOperatorNewAt(0x48, child), &hit->position, (u32 *)velocity, 0xC0, 0x808080);
+        func_800C32E0(entityOperatorNewAt(0x48, child), &hit->position, (VECTOR *)velocity, 0xC0, 0x808080);
     }
     return child;
 }
@@ -4609,7 +4588,6 @@ void func_8007F22C(Unk8007F184 *this) {
 
     if (this->unk2C == 0) {
         chara = this->base.unk8;
-        /* the game reads a halfword (lhu): game_classes.h types the first word as s32 */
         bits = func_80077698(chara)->unk0;
         if (!func_8007F1C0(this)) {
             this->unk28 -= 0x44;
@@ -4636,16 +4614,12 @@ void func_8007F59C(Unk8007F184 *this) {
     this->unk2C = 1;
 }
 
-/* The tables of the characters, by func_80077568's index: the character's 0x220 (func_80077698) points to one. */
-extern Unk80077698 D_800656D4[];
-
 /* Whether 0x24 is above 0xFFFF, unless bit 0 of the first word of the character's table (by func_80077568) is
  * set, func_8007AED0 does not hold or func_800792B8 gives 11 to 16 or 19. */
 s32 func_8007F5A8(Unk8007F184 *this) {
     Unk80077698 *tables = D_800656D4;
     s32 state;
 
-    /* the game reads a halfword (lhu): game_classes.h types the first word as s32 */
     if (tables[func_80077568(this->base.unk8)].unk0 & 1) {
         return 0;
     }
@@ -4709,7 +4683,6 @@ void func_8007F7A0(Unk8007F184 *this);
 void func_8007F730(Unk8007F184 *this) {
     Unk80076F34 *chara = this->base.unk8;
 
-    /* the game reads a halfword (lhu): game_classes.h types the first word as s32 */
     if (func_800777BC(chara) && !(func_80077698(chara)->unk0 & 2)) {
         func_8007F7A0(this);
         this->unk10 = 30;
@@ -5373,9 +5346,6 @@ void func_80080ADC(Unk8007F920 *this, s32 arg) {
 }
 
 s32 func_80077848(Unk80076F34 *this);
-#if VERSION_US
-void func_8007A718(Unk80076F34 *this);
-#endif
 
 /* The method at 0x18 of D_80068074: when func_80077848 and func_8007F964 hold, becomes a func_80080EBC
  * object (1, 0) and sets the character's 0x48C to 8 (the US build calls func_8007A718 for that). */
@@ -6165,15 +6135,13 @@ typedef struct Unk80083700 {
 } Unk80083700;
 
 extern EntityVtable D_8006837C;
-/* words read as a vector (func_80083700) and as two words (func_800C32E0); in the main executable */
-extern u32 D_80010814[];
 
 /* Constructs the entity of virtual table D_8006837C for chara, at its node 2. */
 Unk80083700 *func_80083700(Unk80083700 *this, Unk80076F34 *chara) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006837C;
     this->chara = chara;
-    func_8007A4A4(chara, &this->position, 2, (VECTOR *)D_80010814);
+    func_8007A4A4(chara, &this->position, 2, &D_80010814);
     this->unk2C = 0x80;
     this->unk30 = 0x180;
     this->unk34 = 0;
@@ -7282,7 +7250,7 @@ extern EntityVtable D_8006D4D4;
 /* The constructor of the entity class of vtable D_8006D4D4, which the game inlines: func_800C2FBC with frame 8,
  * no velocity (D_80010814), size 0x40, color 0xA0A0A0 and no flags. */
 static inline void func_8006D4D4_init(Entity *this, VECTOR *pos) {
-    func_800C2FBC((Unk800C2F14 *)this, 8, pos, (VECTOR *)D_80010814, 0x40, 0xA0A0A0, 0);
+    func_800C2FBC((Unk800C2F14 *)this, 8, pos, &D_80010814, 0x40, 0xA0A0A0, 0);
     this->vtable = &D_8006D4D4;
 }
 
@@ -7811,24 +7779,24 @@ INCLUDE_ASM("game/nonmatchings/game", func_8008DD50);
 
 INCLUDE_ASM("game/nonmatchings/game", func_8008DE84);
 
-struct Unk800C32E0 *func_800C32E0(struct Unk800C32E0 *this, Vec3 *position, u32 *dir, s32 unk3, u32 color);
+struct Unk800C32E0 *func_800C32E0(struct Unk800C32E0 *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color);
 
 /* Spawns func_800C32E0's entity (0x48 bytes) at the partner's position (func_8007AEEC, func_800775D8),
  * with no velocity, 0x60 and color 0x808080. */
 void func_8008E48C(Unk80076F34 *this) {
     Unk80076F34 *partner = func_8007AEEC(this);
     Vec3 position;
-    u32 velocity[4];
+    VECTOR velocity;
     Entity *child;
 
-    velocity[0] = 0;
-    velocity[1] = 0;
-    velocity[2] = 0;
-    velocity[3] = 0;
+    velocity.vx = 0;
+    velocity.vy = 0;
+    velocity.vz = 0;
+    velocity.pad = 0;
     func_800775D8(partner, &position);
     child = allocEntityMemory(0x48);
     if (child != NULL) {
-        func_800C32E0(entityOperatorNewAt(0x48, child), &position, velocity, 0x60, 0x808080);
+        func_800C32E0(entityOperatorNewAt(0x48, child), &position, &velocity, 0x60, 0x808080);
     }
     func_8007AD4C(this, child);
 }
@@ -8271,7 +8239,7 @@ typedef struct Unk800919EC {
 extern EntityVtable D_800691C4;
 
 /* Constructs an Unk800919EC: func_800C32E0's entity at position, then unk48 and the vtable D_800691C4. */
-Unk800919EC *func_800919EC(Unk800919EC *this, u16 unk48, Vec3 *position, u32 *unk, s32 unk3, u32 color) {
+Unk800919EC *func_800919EC(Unk800919EC *this, u16 unk48, Vec3 *position, VECTOR *unk, s32 unk3, u32 color) {
     /* The match depends on func_800C32E0 being declared to return this (it does): its v0 sends the vtable to v1. */
     func_800C32E0((struct Unk800C32E0 *)this, position, unk, unk3, color); /* the base class constructor */
     this->unk48 = unk48;
@@ -9285,7 +9253,7 @@ extern VECTOR D_80069998;
 /* Constructs the sprite of D_80069B1C for a character: func_800C2F14 with frame D_80069984, no motion, size
  * 0x33, color 0x646464 and the character's 0x440 (func_8007768C) as flags. */
 Unk80096F6C *func_80096F6C(Unk80096F6C *this, Unk80076F34 *chara) {
-    func_800C2F14(&this->base, D_80069984, (VECTOR *)D_80010814, (VECTOR *)D_80010814, 0x33, 0x646464,
+    func_800C2F14(&this->base, D_80069984, &D_80010814, &D_80010814, 0x33, 0x646464,
                   func_8007768C(chara));
     this->base.entity.vtable = &D_80069B1C;
     func_8007A4A4(chara, &this->base.sprite.pos, 6, &D_80069998);
@@ -9900,9 +9868,6 @@ INCLUDE_ASM("game/nonmatchings/game", func_80099DC4);
 /* the offset from node 5 where func_80099F30 puts the other character */
 extern VECTOR D_80069D2C;
 
-/* sets the character's position (kept in 1/256ths) from whole units */
-void func_800775B0(Unk80076F34 *chara, Vec3 *position);
-
 /* Puts the character func_8007AEEC gives at node 5 of this one (offset D_80069D2C), raised by the half word
  * at 2 of its table (func_80077698), and clears its 0x3A4..0x3C0, 0x3E0 and 0x3F0. */
 void func_80099F30(Unk80076F34 *this) {
@@ -9910,7 +9875,6 @@ void func_80099F30(Unk80076F34 *this) {
     VECTOR position;
 
     func_8007A4A4(this, &position, 5, &D_80069D2C);
-    /* game_classes.h's Unk80077698 has 0x0 as one word; the game reads its high half (lh 2). */
     position.vy += func_80077698(other)->unk2;
     func_800775B0(other, (Vec3 *)&position);
     other->unk3B4.vx = 0;
@@ -11057,7 +11021,7 @@ Unk800A0830 *func_800A0830(Unk800A0830 *this, Unk80076F34 *owner, Unk8006ED20 *o
 
     entityInit(&this->parts.entity, 0x30000);
     this->parts.entity.vtable = &D_8006A48C;
-    func_8007BF20(&this->parts.unk18, owner, 0x45B07000, (Vec3 *)D_80010814, 3);
+    func_8007BF20(&this->parts.unk18, owner, 0x45B07000, (Vec3 *)&D_80010814, 3);
     func_80075EE4(&this->parts.part, pos, 0x200, &this->parts.unk18);
     v.vx = func_80079E10(owner) * 0x5550;
     v.vy = -0x5550;
@@ -12192,7 +12156,7 @@ void func_800AA41C(Unk80076F34 *this) {
 }
 
 void func_80078EF8(Unk80076F34 *this, u32 unk, Vec3 *velocity, s32 unk3);
-struct Unk800C32E0 *func_800C32E0(struct Unk800C32E0 *this, Vec3 *position, u32 *dir, s32 unk3, u32 color);
+struct Unk800C32E0 *func_800C32E0(struct Unk800C32E0 *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color);
 /* offset's initializer in func_800B64E0: GCC keeps it as an anonymous constant (.rodata stays in asm) */
 extern VECTOR D_8006C06C;
 
@@ -12249,7 +12213,7 @@ void func_800AA444(Unk80076F34 *this, s32 arg) {
             func_8007A4A4(this, (VECTOR *)&node, 9, &offset);
             child = allocEntityMemory(0x48);
             if (child != NULL) {
-                func_800C32E0(entityOperatorNewAt(0x48, child), &node, D_80010814, 0xC0, 0x808080);
+                func_800C32E0(entityOperatorNewAt(0x48, child), &node, &D_80010814, 0xC0, 0x808080);
             }
             func_8007AD4C(this, child);
         } else {
@@ -14499,7 +14463,7 @@ void func_800B64E0(Unk80076F34 *this, s32 arg) {
             func_8007A4A4(this, (VECTOR *)&node, 12, &offset);
             child = allocEntityMemory(0x48);
             if (child != NULL) {
-                func_800C32E0(entityOperatorNewAt(0x48, child), &node, D_80010814, 0xC0, 0x808080);
+                func_800C32E0(entityOperatorNewAt(0x48, child), &node, &D_80010814, 0xC0, 0x808080);
             }
             func_8007AD4C(this, child);
         } else {
@@ -14745,7 +14709,7 @@ Unk800B6DD8 *func_800B6DD8(Unk800B6DD8 *this, Unk800B631C *owner, VECTOR *pos, U
     ListNode *node;
 
     entityInit(&this->parts.entity, 0x30000);
-    func_8007BD8C(&this->parts.base, &owner->base, color, (Vec3 *)D_80010814, 1);
+    func_8007BD8C(&this->parts.base, &owner->base, color, (Vec3 *)&D_80010814, 1);
     this->parts.base.vtable = D_8006C114;
     this->parts.entity.vtable = &D_8006C134;
     func_80075EE4(&this->parts.part, (Vec3 *)pos, 0x80, &this->parts.base);
@@ -15867,10 +15831,10 @@ Unk800BDA50 *func_800BDA50(Unk800BDA50 *this, Unk80076F34 *owner, Vec3 *pos, s32
     s32 x, y, z;
 
     entityInit(&this->entity, 0x30000);
-    func_8007BD8C(&this->unk18, owner, 0x5B04000, (Vec3 *)D_80010814, 0);
+    func_8007BD8C(&this->unk18, owner, 0x5B04000, (Vec3 *)&D_80010814, 0);
     this->unk18.vtable = D_8006C9DC;
     this->entity.vtable = &D_8006C9FC;
-    func_80075EE4(&this->unk38, (Vec3 *)D_80010814, 0, &this->unk18);
+    func_80075EE4(&this->unk38, (Vec3 *)&D_80010814, 0, &this->unk18);
     this->unk38.unk14 = &this->entity;
     this->unk80 = entityGetHandle(&owner->entity);
     this->unk84 = 0;
@@ -16822,7 +16786,7 @@ typedef struct Unk800C32E0 {
 
 /* Constructs an Unk800C32E0 at position, turned the way of dir (its y and x, ratan2), with color. The match depends
  * on the frame table taken into a local first, as in func_800C2FBC. */
-Unk800C32E0 *func_800C32E0(Unk800C32E0 *this, Vec3 *position, u32 *dir, s32 unk3, u32 color) {
+Unk800C32E0 *func_800C32E0(Unk800C32E0 *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color) {
     u16 (*frames)[10];
     s32 x, y, z;
 
@@ -16836,7 +16800,7 @@ Unk800C32E0 *func_800C32E0(Unk800C32E0 *this, Vec3 *position, u32 *dir, s32 unk3
     this->sprite.pos.vx = x;
     this->sprite.pos.vy = y;
     this->sprite.pos.vz = z;
-    this->sprite.unk6 = ratan2(dir[1], dir[0]);
+    this->sprite.unk6 = ratan2(dir->vy, dir->vx);
     this->unk40 = unk3;
     this->sprite.color = color;
     this->sprite.size = 0;
@@ -17365,7 +17329,7 @@ void func_800C6B1C(Entity *this, s32 flags) {
 
 /* Constructs an entity of D_8006D4D4: func_800C2FBC with frame 8, the velocity D_80010814 and no flags. */
 Unk800C2F14 *func_800C6B70(Unk800C2F14 *this, VECTOR *pos, s32 size, u32 color) {
-    func_800C2FBC(this, 8, pos, (VECTOR *)D_80010814, size, color, 0);
+    func_800C2FBC(this, 8, pos, &D_80010814, size, color, 0);
     this->entity.vtable = &D_8006D4D4;
     return this;
 }
@@ -19017,9 +18981,9 @@ LoadingScreen *func_800D0294(LoadingScreen *this) {
 }
 
 /* Constructs an object of the class of vtable D_8006E154, which derives from func_8006ED20's. */
-Unk8006ED20 *func_800D02C8(Unk8006ED20 *this) {
-    func_8006ED20(this);
-    this->vtable = D_8006E154;
+Unk800D02C8 *func_800D02C8(Unk800D02C8 *this) {
+    func_8006ED20(&this->base);
+    this->base.vtable = D_8006E154;
     return this;
 }
 

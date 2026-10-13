@@ -8,6 +8,7 @@
 #include "engine/gfx/display.h"
 #include "engine/gfx/fade.h"
 #include "engine/gfx/sprite.h"
+#include "engine/math/sin_cos.h"
 #include "engine/math/vector.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
@@ -33,7 +34,10 @@ typedef struct Unk800674F0 {
     /* 0x0034 */ Sprite *sprites[2];
     /* 0x003C */ u8 unk3C[0x44 - 0x3C];
 #else
-    /* 0x0024 */ u8 unk24[0x50 - 0x24];
+    /* 0x0024 */ RECT unk24;     /* 16 by 1 pixels at (0x200, 0xFD): a CLUT */
+    /* 0x002C */ u16 unk2C[16];  /* that CLUT, read back from VRAM by func_80072320 */
+    /* 0x004C */ s16 unk4C;
+    /* 0x004E */ u8 unk4E[0x50 - 0x4E];
     /* 0x0050 */ EntityGroup group;
     /* 0x0060 */ Sprite *sprites[3];
 #endif
@@ -46,14 +50,26 @@ typedef struct Unk800674F0 {
     /* 0x005C */ s32 unk5C;
     /* 0x0060 */ s32 unk60;
 #if VERSION_JP
-    /* 0x0064 */ u8 unk64[0x10C0 - 0x64];
+    /* 0x0064 */ u8 unk64[0x6F8 - 0x64];
 #else
-    /* 0x0064 */ u8 unk64[0x10EC - 0x8C];
+    /* 0x0064 */ u8 unk64[0x720 - 0x8C];
+#endif
+    /* 0x06F8 */ s16 unk6F8;
+    /* 0x06FA */ s16 unk6FA; /* the US logo's phase (func_80072860) */
+    /* 0x06FC */ s16 unk6FC;
+    /* 0x06FE */ s16 unk6FE;
+#if VERSION_JP
+    /* 0x0700 */ u8 unk700[0x10C0 - 0x700];
+#else
+    /* 0x0700 */ u8 unk700[0x10EC - 0x728];
 #endif
     /* 0x10C0 */ Camera camera;
     /* 0x10FC */ s32 step;
     /* 0x1100 */ u8 unk1100[0x1108 - 0x1100];
     /* 0x1108 */ u32 sound; /* a sound's handle (stopSound) */
+#if VERSION_US
+    /* 0x110C */ s16 unk110C; /* 0x1138 in the US object, which alone has it */
+#endif
 } Unk800674F0;
 
 /* the title logo task's virtual table */
@@ -94,6 +110,10 @@ static inline void spriteDelete(Sprite *sprite) {
 
 void func_80067CF0(void *this);
 void func_8006803C(void *this);
+void func_800686D8(Unk800674F0 *this);
+#if VERSION_US
+void func_8007236C(Unk800674F0 *this);
+#endif
 
 INCLUDE_ASM("title/nonmatchings/title_logo", titleLogoTaskInit);
 
@@ -133,20 +153,104 @@ INCLUDE_ASM("title/nonmatchings/title_logo", func_80067808);
 
 INCLUDE_ASM("title/nonmatchings/title_logo", func_80067864);
 #else
-INCLUDE_ASM("title/nonmatchings/title_logo", func_80072320);
+/* Reads the 16-colour CLUT at (0x200, 0xFD) back from VRAM into 0x2C. */
+void func_80072320(Unk800674F0 *this) {
+    this->unk24.x = 0x200;
+    this->unk24.y = 0xFD;
+    this->unk4C = 0;
+    this->unk24.w = 16;
+    this->unk24.h = 1;
+    StoreImage(&this->unk24, (u_long *)this->unk2C);
+}
 
 INCLUDE_ASM("title/nonmatchings/title_logo", func_8007236C);
 
 INCLUDE_ASM("title/nonmatchings/title_logo", func_8007240C);
 
-INCLUDE_ASM("title/nonmatchings/title_logo", func_80072814);
+/* Waits 0x100 frames, then moves to the next step; Start or circle skips ahead (func_800686D8). */
+void func_80072814(Unk800674F0 *this) {
+    if (++this->stepFrame > 0x100) {
+        this->stepFrame = 0;
+        this->step++;
+    }
+    func_800686D8(this);
+}
 
-INCLUDE_ASM("title/nonmatchings/title_logo", func_80072860);
+/* The US logo's entrance over 0x78 frames: brightens 0x54 by 3 a frame; 0x58 grows to 0x1800 (phase 0),
+ * shrinks back to 0x1000 (phase 1), then 0x6FC and 0x6FE shake with sines over a growing divisor
+ * (phase 2); 0x60 follows the frame (x 80 / 60). Then clears the shake and moves to the next step.
+ * Start or circle skips ahead (func_800686D8). */
+void func_80072860(Unk800674F0 *this) {
+    s32 frame;
+
+    if (this->stepFrame == 0) {
+        entityGroupDestroyAll(&this->group);
+    }
+    this->unk54 += 3;
+    if (this->unk54 > 0xFF) {
+        this->unk54 = 0xFF;
+    }
+    switch (this->unk6FA) {
+    case 0:
+        this->unk58 = ((this->stepFrame << 15) / 60) >> 1;
+        if (this->unk58 < 0x1800) {
+            break;
+        }
+        this->unk6FA++;
+        /* fallthrough */
+    case 1:
+        /* The match depends on the doubling written apart from the * 100: as * 200, gcc builds
+         * another shift-and-add chain. */
+        this->unk58 = 0x1800 - ((this->stepFrame - 23) << 1) * 100;
+        if (this->unk58 > 0x1000) {
+            break;
+        }
+        this->unk58 = 0x1000;
+        this->unk6FA++;
+        /* fallthrough */
+    case 2: {
+        s32 t = this->stepFrame - 34;
+        s32 divisor = t * 46 + 0x80;
+
+        this->unk6FC = COS_SIN_TABLE[(t << 10) & 0xFFF].sin / divisor;
+        this->unk6FE = COS_SIN_TABLE[(t << 8) & 0xFFF].sin / divisor;
+        break;
+    }
+    }
+    frame = this->stepFrame;
+    this->unk60 = frame * 80 / 60;
+    this->stepFrame = frame + 1;
+    if (frame >= 0x78) {
+        this->stepFrame = 0;
+        this->unk6FC = 0;
+        this->unk6FE = 0;
+        this->step++;
+    }
+    func_800686D8(this);
+}
 #endif
 
 INCLUDE_ASM("title/nonmatchings/title_logo", func_8006795C);
 
-INCLUDE_ASM("title/nonmatchings/title_logo", func_80067A3C);
+/* Grows 0x58 by 5 times the step's frame (up to 0x8000), takes 0x6F8 down by 8 to 0 and brightens 0x54
+ * by 0x12 (up to 0xFF); after 0x3C frames moves to the next step. */
+void func_80067A3C(Unk800674F0 *this) {
+    this->unk58 += this->stepFrame * 5;
+    this->unk6F8 -= 8;
+    if (this->unk6F8 < 0) {
+        this->unk6F8 = 0;
+    }
+    if (this->unk58 > 0x8000) {
+        this->unk58 = 0x8000;
+    }
+    this->unk54 += 0x12;
+    if (this->unk54 > 0xFF) {
+        this->unk54 = 0xFF;
+    }
+    if (++this->stepFrame > 0x3C) {
+        this->step++;
+    }
+}
 
 /* Starts fading the songs out (step 0x44) and moves to the next step. */
 void func_80067AE0(Unk800674F0 *this) {
@@ -174,15 +278,15 @@ void func_80067B78(void) {
 
 INCLUDE_ASM("title/nonmatchings/title_logo", func_80067B80);
 
-#if VERSION_JP
-/* Draws the object's two parts: both callees write primitives at PRIM_BUFFER_FREE. */
+/* Draws the object's two parts: both callees write primitives at PRIM_BUFFER_FREE. The US build calls
+ * func_8007236C first. */
 void func_80067CC4(void *this) {
+#if VERSION_US
+    func_8007236C(this);
+#endif
     func_8006803C(this);
     func_80067CF0(this);
 }
-#else
-INCLUDE_ASM("title/nonmatchings/title_logo", func_80072DD4);
-#endif
 
 INCLUDE_ASM("title/nonmatchings/title_logo", func_80067CF0);
 
@@ -200,9 +304,8 @@ INCLUDE_ASM("title/nonmatchings/title_logo", func_80073438);
 
 INCLUDE_ASM("title/nonmatchings/title_logo", func_800685A8);
 
-#if VERSION_JP
 /* On Start or circle on either pad: destroys the group's entities and moves to step 2 (0x54 = 0xFF,
- * 0x58 = 0x1000, 0x60 = 0x50). */
+ * 0x58 = 0x1000, 0x60 = 0x50); the US build also clears 0x110C and the shake at 0x6FC and 0x6FE. */
 void func_800686D8(Unk800674F0 *this) {
     PadManager *pads = PAD_MANAGER_INSTANCE;
 
@@ -214,11 +317,13 @@ void func_800686D8(Unk800674F0 *this) {
         this->unk58 = 0x1000;
         this->unk60 = 0x50;
         this->step = 2;
+#if VERSION_US
+        this->unk110C = 0;
+        this->unk6FC = 0;
+        this->unk6FE = 0;
+#endif
     }
 }
-#else
-INCLUDE_ASM("title/nonmatchings/title_logo", func_8007374C);
-#endif
 
 /* On Start on either pad: moves to step 3 (startPressed set, 0x5C and stepFrame cleared). */
 void func_8006875C(Unk800674F0 *this) {

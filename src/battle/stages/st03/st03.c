@@ -3,6 +3,7 @@
 #include "battle/game_classes.h"
 #include "battle/stage_objects.h"
 #include "engine/gfx/camera.h"
+#include "engine/gfx/lights.h"
 #include "engine/gfx/mesh_scene.h"
 #include "engine/gfx/prim/alloc_dr_load.h"
 #include "engine/gfx/scene_graph.h"
@@ -146,9 +147,6 @@ Unk800D4D50 *func_800D4D50(Unk800D4D50 *this, Unk800D3E18 *stage) {
     return this;
 }
 
-/* game.bin's: bit 8 of the flags at 0x2C8 of func_8006ED20's object */
-s32 func_8006F1A4(Unk8006ED20 *object);
-
 /* Unk800D4D50's update: draws the stage's group (func_800D48A4) unless bit 8 of its flags is set. */
 void func_800D4D98(Unk800D4D50 *this, Camera *camera) {
     if (!func_8006F1A4(&this->stage->base)) {
@@ -178,7 +176,9 @@ typedef struct Unk800D4EE8 {
 extern Unk800D4EE8Vtable D_800D3CC4;
 
 /* The class of virtual table D_800D3CF4 (constructor func_800D885C), derived from
- * Unk80076308; game's Unk8007BD8C has the same fields. */
+ * Unk80076308. game's Unk8007BD8C has the same offsets, but not the same class:
+ * its 0x4 is a character, where func_800D5F58 stores 0x80001000, and its
+ * constructor takes the vector after the words. */
 typedef struct Unk800D885C {
     /* 0x00 */ Unk80076308 base;
     /* 0x04 */ s32 unk4;
@@ -326,14 +326,6 @@ void func_800D514C(Unk800D5060 *this, Unk800D3E18 *stage) {
         meshSceneShowNode(this->base.meshScene, this->base.node);
     }
 }
-
-/* game.bin's: whether the character stands on the given matrix */
-s32 func_8007814C(Unk80076F34 *chara, MATRIX *matrix);
-/* game.bin's: the character of a side (0 or 1) */
-Unk80076F34 *func_800700C8(Unk8006ED20 *object, s32 side);
-/* game.bin's: add a node at the end of the list at 0x228, 0x230 (func_8006F064, in game.h: 0x238) */
-void func_8006F024(Unk8006ED20 *object, ListNode *node);
-void func_8006F044(Unk8006ED20 *object, ListNode *node);
 
 /* Puts the part back in the stage's lists by which characters stand on the node's matrix: the list at 0x228
  * when only the first does, 0x230 when only the second does, 0x238 when both do; none when neither does. */
@@ -529,10 +521,6 @@ Unk800D59C8 *func_800D59C8(Unk800D59C8 *this, MeshScene *meshScene, s32 node, s3
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D5ADC);
 
-/* game.bin's character calls: its position, and its record */
-Vec3 *func_8007A650(Unk80076F34 *chara, Vec3 *out);
-Unk80077698 *func_80077698(Unk80076F34 *this);
-
 /* vecGetLength through an inline. The match depends on it: the inline's parameter is the one pseudo for &offset
  * that the loop keeps in a saved register (hypothesis: an inline length method in the original). */
 static inline s32 vecLengthInline(VECTOR *v) {
@@ -549,8 +537,7 @@ void func_800D5E48(Unk800D59C8 *this) {
 
     for (side = 0; side < 2; side++) {
         Unk80076F34 *chara = func_800700C8(stage, side);
-        /* game_classes.h's Unk80077698 has 0x0 as one word; the game reads its high half (lh 2). */
-        s32 reach = ((s16 *)&func_80077698(chara)->unk0)[1] + 0xC0;
+        s32 reach = func_80077698(chara)->unk2 + 0xC0;
 
         func_8007A650(chara, (Vec3 *)&offset);
         /* The match depends on reading the whole offset before subtracting (as vecSubInPlace). */
@@ -598,9 +585,6 @@ typedef struct Unk800D5F58 {
 } Unk800D5F58; /* size 0xD0 */
 
 extern EntityVtable D_800D3BAC;
-
-/* main's zero Vec3 */
-extern Vec3 D_80010814;
 
 /* Constructs an entity of D_800D3BAC for a node of a mesh scene, its mesh and where it is (the node's world
  * translation), in state 0. */
@@ -736,9 +720,6 @@ void func_800D6150(Unk800D5F58 *this, Unk800D3E18 *stage) {
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D62B4);
 
-/* game.bin's: whether the segment from from to to hits something, moving to to the hit */
-s32 func_80072F80(VECTOR *to, VECTOR *from);
-
 void func_800D65D4(Unk800D5F58 *this, s32 speed);
 void func_800D6874(Unk800D5F58 *this);
 
@@ -746,6 +727,7 @@ void func_800D6874(Unk800D5F58 *this);
  * 0x40000 (hides the node; returns whether it was going up), or where its point (0x40 right, 0x10 down)
  * hits something on the way (func_800D6874, sound 0x62; returns whether it was going up). */
 s32 func_800D6440(Unk800D5F58 *this, s32 speed) {
+    /* VECTORs: the frame keeps them 0x10 apart, and func_80072F80 reads the first three words of each */
     VECTOR from;
     VECTOR to;
 
@@ -770,7 +752,7 @@ s32 func_800D6440(Unk800D5F58 *this, s32 speed) {
         meshSceneHideNode(this->meshScene, this->node);
         return 1;
     }
-    if (func_80072F80(&to, &from) != 0) {
+    if (func_80072F80((Vec3 *)&to, (Vec3 *)&from) != 0) {
         this->unkBC = 0;
         this->pos.vy = to.vy << 8;
         func_800D6874(this);
@@ -783,6 +765,7 @@ s32 func_800D6440(Unk800D5F58 *this, s32 speed) {
 /* State 2's move: drops the entity by 0xF0 (in whole units) when nothing is in the way of its point, else
  * pushes it with 0x71C (func_800D65D4). */
 void func_800D6550(Unk800D5F58 *this, Unk800D3E18 *stage) {
+    /* VECTORs, as in func_800D6440 */
     VECTOR from;
     VECTOR to;
     s32 x = (this->pos.vx >> 8) + 0x40;
@@ -794,7 +777,7 @@ void func_800D6550(Unk800D5F58 *this, Unk800D3E18 *stage) {
     to.vx = x;
     to.vy = y + 0xF0;
     to.vz = 0;
-    if (func_80072F80(&to, &from) != 0) {
+    if (func_80072F80((Vec3 *)&to, (Vec3 *)&from) != 0) {
         this->unkBC = 0;
         this->pos.vy = to.vy << 8;
     } else {
@@ -802,12 +785,10 @@ void func_800D6550(Unk800D5F58 *this, Unk800D3E18 *stage) {
     }
 }
 
-/* game.bin's: integrates velocity by force over mass, setting move to the step (the mean of the speeds) */
-void func_80079C1C(VECTOR *move, VECTOR *velocity, VECTOR *force, s32 mass);
-
 /* Pushes the entity up or down by force: its mass is 0x20000 plus the riders' weights (0x4 of their record),
  * its speed kept at 0xBC. */
 void func_800D65D4(Unk800D5F58 *this, s32 force) {
+    /* VECTORs: the frame keeps them 0x10 apart, and func_80079C1C reads the first three words of each */
     VECTOR move;
     VECTOR velocity;
     VECTOR push;
@@ -825,7 +806,7 @@ void func_800D65D4(Unk800D5F58 *this, s32 force) {
     push.vx = 0;
     push.vy = force;
     push.vz = 0;
-    func_80079C1C(&move, &velocity, &push, mass);
+    func_80079C1C((Vec3 *)&move, (Vec3 *)&velocity, (Vec3 *)&push, mass);
     this->unkBC = velocity.vy;
     this->pos.vy += move.vy;
 }
@@ -1100,7 +1081,7 @@ typedef struct Unk800D80DC {
     /* 0x18 */ u32 chara;     /* the character's handle */
     /* 0x1C */ Vec3 position; /* the character's, at construction */
     /* 0x28 */ u8 unk28[0x2C - 0x28];
-    /* 0x2C */ s32 unk2C;     /* the high half of the word at 0 of func_80077698's record */
+    /* 0x2C */ s32 unk2C;     /* func_80077698's unk2 */
     /* 0x30 */ s32 unk30;
     /* 0x34 */ s32 unk34;
     /* 0x38 */ s32 unk38; /* 0xFF at construction */
@@ -1112,8 +1093,7 @@ Unk800D80DC *func_800D80DC(Unk800D80DC *this, Unk80076F34 *chara) {
     this->entity.vtable = &D_800D3AE4;
     this->chara = entityGetHandle(&chara->entity);
     func_8007A650(chara, &this->position);
-    /* game_classes.h's Unk80077698 has 0x0 as one word; the game reads its high half (lh 2). */
-    this->unk2C = ((s16 *)&func_80077698(chara)->unk0)[1];
+    this->unk2C = func_80077698(chara)->unk2;
     this->unk30 = 0;
     this->unk34 = 0;
     this->unk38 = 0xFF;

@@ -49,7 +49,11 @@ typedef struct Unk8006ED20 {
     /* 0x2B8 */ s32 unk2B8; /* counted from 0x20 down to -6 (func_80071E10), or from 0 up to 0x26 (func_80071E60) */
     /* 0x2BC */ u8 unk2BC[0x2C8 - 0x2BC];
     /* 0x2C8 */ u32 unk2C8; /* flags */
-    /* 0x2CC */ u8 unk2CC[0x33C - 0x2CC];
+    /* 0x2CC */ u8 unk2CC[0x314 - 0x2CC];
+    /* 0x314 */ s32 unk314;
+    /* 0x318 */ u8 unk318[0x31C - 0x318];
+    /* 0x31C */ Vec3 eye; /* func_80072088 copies it into lookAt.eye */
+    /* 0x328 */ u8 unk328[0x33C - 0x328];
     /* 0x33C */ s32 unk33C; /* func_800700E4 sets 0x33C to 0x35C; 0x33C and 0x34C, 0x340 and 0x350 are read in pairs */
     /* 0x340 */ s32 unk340;
     /* 0x344 */ u8 unk344[0x34C - 0x344];
@@ -59,8 +63,11 @@ typedef struct Unk8006ED20 {
     /* 0x358 */ u8 unk358[0x35C - 0x358];
     /* 0x35C */ s32 unk35C;
     /* 0x360 */ MersenneTwister random;
-    /* 0xD24 */ u8 unkD24[0xD30 - 0xD24];
-    /* 0xD30 */ s32 unkD30; /* a character's side (0x21C) + 1 (func_800793A4); func_800794CC clears it */
+    /* 0xD24 */ s32 steps; /* func_80070C28 counts one per call */
+    /* 0xD28 */ s32 unkD28; /* 1 sends st08's stage to its end (func_800D3DF8) */
+    /* 0xD2C */ u32 unkD2C; /* flags: bit 0 makes func_80071014 sum func_80070F40's values 3 and 4 */
+    /* 0xD30 */ s32 unkD30; /* a character's side (0x21C) + 1 (func_800793A4); func_800794CC clears it;
+                             * st02 keeps its camera's state in it (func_800D4AC8) */
     /* 0xD34 */ VtableEntry *vtable;
 } Unk8006ED20;
 
@@ -104,7 +111,46 @@ void func_8006F064(Unk8006ED20 *object, ListNode *node);
 /* puts an entity (when not NULL) into the entity group an Unk8006ED20 keeps at 0x4C; returns it */
 Entity *func_8006F0B4(Unk8006ED20 *object, Entity *entity);
 
+/* the camera of an Unk8006ED20 (at 0x1B0) and its LookAt (at 0x12C) */
+Camera *func_8006EF5C(Unk8006ED20 *object);
+LookAt *func_8006EF64(Unk8006ED20 *object);
+
+/* the stage's random number generator */
+u32 func_8006F004(Unk8006ED20 *object);
+
+/* add node at the end of the list at 0x228 and at 0x230 (func_8006F064: 0x238) */
+void func_8006F024(Unk8006ED20 *object, ListNode *node);
+void func_8006F044(Unk8006ED20 *object, ListNode *node);
+
+/* puts an entity (when not NULL) into the entity group at 0x3C; returns it */
+Entity *func_8006F084(Unk8006ED20 *object, Entity *entity);
+
+s32 func_8006F144(Unk8006ED20 *object);
+s32 func_8006F190(Unk8006ED20 *object);
+/* bit 8 of the flags at 0x2C8 */
+s32 func_8006F1A4(Unk8006ED20 *object);
+MeshScene *func_8006F1B8(Unk8006ED20 *object);
+
+/* the character of a side (0 or 1) */
+struct Unk80076F34 *func_800700C8(Unk8006ED20 *object, s32 side);
+void func_800700E4(Unk8006ED20 *object, s32 unk33C, s32 unk34C, s32 unk340, s32 unk350, s32 unk354);
+void func_80070314(Unk8006ED20 *object);
+void func_80071F6C(void);
+/* the camera's update */
+void func_80072088(Unk8006ED20 *object);
+
+/* whether the segment from from to to hits something, moving to to the hit */
+s32 func_80072F80(Vec3 *to, Vec3 *from);
+
+/* integrates velocity by force over mass (divide16), setting move to the mean of the old and new velocity */
+void func_80079C1C(Vec3 *move, Vec3 *velocity, Vec3 *force, s32 mass);
+
+Unk800D02C8 *func_800D02C8(Unk800D02C8 *object);
 void func_800D02FC(Unk800D02C8 *object, s32 flags);
+/* its init and update (the stages call them from theirs) */
+void func_800D0364(Unk800D02C8 *object);
+void func_800D06D0(Unk800D02C8 *object);
+void func_800D0B80(Unk800D02C8 *object);
 Unk8007C084 *func_8007C084(Unk8007C084 *object, s32 unk0);
 void func_8007C09C(Unk8007C084 *object, s32 flags);
 

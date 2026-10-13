@@ -38,7 +38,7 @@ typedef struct Unk800D3B14 {
     /* 0xF6C */ u8 unkF6C[0xF70 - 0xF6C];
     /* 0xF70 */ s16 unkF70; /* counts the stage's updates (func_800D3D10) */
     /* 0xF72 */ u8 unkF72[0xF78 - 0xF72];
-    /* 0xF78 */ s32 unkF78; /* what func_8006F1B8 returns, at the init */
+    /* 0xF78 */ MeshScene *unkF78; /* what func_8006F1B8 returns, at the init */
     /* 0xF7C */ s16 unkF7C;
     /* 0xF7E */ s16 unkF7E;
     /* 0xF80 */ s16 unkF80;
@@ -65,8 +65,6 @@ Unk800D39B4 *func_800D39B4(Unk800D39B4 *this, s32 arg) {
 
 INCLUDE_ASM("st07/nonmatchings/st07", func_800D39F8);
 
-Unk800D02C8 *func_800D02C8(Unk800D02C8 *this);
-
 /* The eight words at 0xD38 of func_800D02C8's class, which the stages' constructors fill (game.h's
  * Unk800D02C8 leaves 0xD38-0xDA4 as a gap). */
 #define BASE_TABLE(stage) ((s32 *)(stage)->base.unkD38)
@@ -92,10 +90,7 @@ void func_800D3B88(Unk800D3B14 *this, s32 flags) {
     func_800D02FC(&this->base, flags);
 }
 
-/* func_800D02C8's class's init and update, and what the stage's own call */
-void func_800D0364(Unk800D02C8 *this);
-void func_800D06D0(Unk800D02C8 *this);
-s32 func_8006F1B8(Unk8006ED20 *this);
+/* what the stage's own init and update call */
 void func_800D3C3C(Unk800D3B14 *this);
 void func_800D3E94(Unk800D3B14 *this);
 void func_800D3EB0(Unk8006ED20 *this);
