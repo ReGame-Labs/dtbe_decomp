@@ -17,10 +17,10 @@ folder of the part of the game they run:
 | `battle/` | `game.bin` | the battle |
 | `battle/stages/st<NN>/` | `st<NN>.bin` | the battle's stages |
 
-Each overlay is one file until it is split into its modules. `title/` is
-split, one file per object of the original build in the order of
-`config/<version>/title.yaml`; each file's `.rodata` and `.data` are its own
-pieces of the overlay:
+Each overlay is one file until it is split into its modules. `title/` and
+`battle/` are split, one file per object of the original build in the order
+of `config/<version>/title.yaml` and `game.yaml`; each file's `.rodata` and
+`.data` are its own pieces of the overlay:
 
 | File | What it is |
 |---|---|
@@ -39,6 +39,24 @@ pieces of the overlay:
 | `title_0c.c` | a `Printer` class and a table (boundary unproven) |
 
 `include/title/title_classes.h` has what several of them share.
+
+| File | What it is |
+|---|---|
+| `game_main.c` | the battle's main task: loads the stage and runs the battle |
+| `battle_scene.c` | the battle scene: the sides' characters and input, the continue or quit choice |
+| `side_hud.c` | a side's HUD: two gauges and a counter |
+| `game_0b.c` | a pad input history, a box class and lists of spheres (boundary unproven) |
+| `game_0c.c` | collision spheres and a node picker |
+| `fighter.c` | the fighter factory and the fighters' base class |
+| `cpu_input.c` | the computer's input for a side without a pad |
+| `game_0e.c`, `game_0f.c` | classes not identified yet |
+| `fighters/fighter_<NN>.c` | the 24 fighters, one file each |
+| `game_0g.c`, `game_0h.c`, `game_0i.c` | entity classes the fighters derive from or create |
+| `hud.c` | the battle's messages: READY?, FIGHT!, YOU WIN! |
+| `battle_loading.c` | the battle's loading screen |
+| `game_0k.c` | a class derived from the battle scene that prints figures |
+
+`include/battle/game_classes.h` has what several of them share.
 
 ## Modules
 

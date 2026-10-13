@@ -6,3 +6,9 @@ gameMainTaskInit = 0x8006E1CC; // type:func
 D_8006A43C = 0x8006A43C; // size:0x10
 D_8006A44C = 0x8006A44C; // size:0x20
 D_8006A46C = 0x8006A46C; // size:0x20
+
+// rodata that matched C reads as u8 strings or a CVECTOR: a literal or a const
+// definition would not fit the callees' types, so it stays INCLUDE_RODATA
+D_8006C964 = 0x8006C964; // force_not_migration:True
+D_8006DFCC = 0x8006DFCC; // force_not_migration:True
+D_8006DFD4 = 0x8006DFD4; // force_not_migration:True

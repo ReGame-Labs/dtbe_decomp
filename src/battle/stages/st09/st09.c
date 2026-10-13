@@ -2,6 +2,7 @@
 #include <abs.h>
 #include "engine/task/entity.h"
 #include "battle/game.h"
+#include "battle/game_classes.h"
 #include "battle/stage_objects.h"
 #include "engine/gfx/scene_graph.h"
 #include "engine/lib/list.h"
@@ -46,15 +47,15 @@ Unk800D3A64 *func_800D3A64(Unk800D3A64 *this, s32 unk0) {
 /* The stage's class, derived from func_800D02C8's; func_800D3D58 constructs it. */
 typedef struct Unk800D3D58 {
     /* 0x0000 */ Unk800D02C8 base;
-    /* 0x0DA8 */ u8 unkDA8[0xF34 - 0xDA8];
+    /* 0x0DA8 */ u8 unkDA8[0xF2C - 0xDA8];
+    /* 0x0F2C */ s16 unkF2C[2]; /* unk15A2 again, each frame (func_800D48A4) */
+    /* 0x0F30 */ u8 unkF30[0xF34 - 0xF30];
     /* 0x0F34 */ s16 unkF34;
     /* 0x0F36 */ u8 unkF36[0x103C - 0xF36];
     /* 0x103C */ s16 unk103C; /* counts the stage's updates (func_800D4270 adds 1) */
     /* 0x103E */ u8 unk103E[0x15A2 - 0x103E];
-    /* 0x15A2 */ s16 unk15A2;
-    /* 0x15A4 */ s16 unk15A4;
-    /* 0x15A6 */ s16 unk15A6;
-    /* 0x15A8 */ s16 unk15A8;
+    /* 0x15A2 */ u16 unk15A2[2]; /* by character: frames button 0x80 has been held, up to 30 (func_800D48A4) */
+    /* 0x15A6 */ s16 unk15A6[2]; /* by character: how long it was held, when let go */
 } Unk800D3D58;
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D3AB0);
@@ -87,12 +88,12 @@ INCLUDE_ASM("st09/nonmatchings/st09", func_800D4458);
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D45F8);
 
-/* Clears the four halfwords at 0x15A2 and sets 0xF34 to 30 (st07's func_800D3E94). */
+/* Clears the hold counts at 0x15A2 and 0x15A6 and sets 0xF34 to 30 (st07's func_800D3E94). */
 void func_800D46D0(Unk800D3D58 *this) {
-    this->unk15A2 = 0;
-    this->unk15A4 = 0;
-    this->unk15A8 = 0;
-    this->unk15A6 = 0;
+    this->unk15A2[0] = 0;
+    this->unk15A2[1] = 0;
+    this->unk15A6[1] = 0;
+    this->unk15A6[0] = 0;
     this->unkF34 = 30;
 }
 
@@ -123,7 +124,34 @@ void func_800D46EC(Unk8006ED20 *this) {
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D476C);
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D48A4);
+/* Sets entry index of 0xF2C: the stage base's setter, out of line in game.bin as func_800D3284. The match
+ * depends on its s16 value parameter: promoted to int, it loads the u16 count with lh before the store. */
+static inline void setUnkF2C(Unk800D3D58 *this, s32 index, s16 value) {
+    this->unkF2C[index] = value;
+}
+
+/* Each frame, for both characters: counts the frames their button 0x80 is held (up to 30), keeps the count
+ * at 0x15A6 when it is let go, and copies the count to 0xF2C (st07's func_800D4044). */
+void func_800D48A4(Unk800D3D58 *this) {
+    struct Unk80075000 *pads[2];
+    u32 buttons[2];
+    s32 i;
+
+    for (i = 0; i < 2; i++) {
+        pads[i] = func_80073260(&this->base.base, i);
+        buttons[i] = func_800750C4(pads[i]);
+        if (buttons[i] & 0x80) {
+            if (++this->unk15A2[i] > 30) {
+                this->unk15A2[i] = 30;
+            }
+            this->unk15A6[i] = 0;
+        } else {
+            this->unk15A6[i] = this->unk15A2[i];
+            this->unk15A2[i] = 0;
+        }
+        setUnkF2C(this, i, this->unk15A2[i]);
+    }
+}
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D49A0);
 

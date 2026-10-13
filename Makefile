@@ -149,6 +149,7 @@ $$(GENDIR)/$(1).ld: .EXTRA_PREREQS :=
 $$(GENDIR)/$(1).ld: $$(CONFIG_DIR)/$(1).yaml $$(CONFIG_DIR)/symbols.txt $$(CONFIG_DIR)/symbols_$(1).txt \
 		$$(if $$(OVL_PARENT_$(1)),$$(CONFIG_DIR)/symbols_$$(OVL_PARENT_$(1)).txt) $$(VFS_UNPACKED)
 	$$(SPLAT) $$< --disassemble-all --make-full-disasm-for-code
+	tools/sjis_includes.sh $$(ASM_DIR)/$(1)
 	@touch $$@
 
 $(1)_SYMS := $$(MAIN_SYMS) $$(if $$(OVL_PARENT_$(1)),$$(BUILDDIR)/$$(OVL_PARENT_$(1))_syms.ld)
@@ -216,6 +217,14 @@ G0_UNITS := src/engine/task/task.c src/engine/task/entity.c
 G0_OBJ := $(G0_UNITS:%=$(BUILDDIR)/%.o) $(foreach b,$(OVERLAYS),$(filter-out %.s.o,$($(b)_OBJ)))
 $(G0_OBJ): CC1FLAGS := $(subst -G8,-G0,$(CC1FLAGS))
 $(G0_OBJ): MASPSXFLAGS := $(subst -G8,-G0,$(MASPSXFLAGS))
+
+# two fighters of the battle overlay were built without CSE following jumps:
+# their entity updates reload a count in the else block after `if (count > N)
+# delete;`, which -O2 gives only with -fno-cse-follow-jumps; every other
+# function of these units matches either way (fighter_05 to fighter_07, between
+# them, match either way too and have nothing that tells)
+NOFOLLOW_OBJ := $(foreach n,04 08,$(BUILDDIR)/src/battle/fighters/fighter_$(n).c.o)
+$(NOFOLLOW_OBJ): CC1FLAGS += -fno-cse-follow-jumps
 
 # splat writes the game's Shift JIS text as UTF-8 (string_encoding), which
 # gas would keep: the assembly is assembled in Shift JIS. gas aligns these

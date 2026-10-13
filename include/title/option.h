@@ -62,7 +62,7 @@ public:
  * mode, and the item keeps that task while it runs. */
 class Unk80077F28 : public Unk80077AC8 {
 public:
-    /* 0x0C */ s32 mode; /* memoryCardTaskInit's */
+    /* 0x0C */ const s32 mode; /* memoryCardTaskInit's, fixed by the constructor */
     /* 0x10 */ Task *task;
     /* 0x14 */ u32 taskHandle; /* the task's handle, in TASK_HANDLES */
 
