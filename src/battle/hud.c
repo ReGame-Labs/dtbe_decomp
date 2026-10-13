@@ -4,6 +4,7 @@
 #include "battle/game_classes.h"
 #include "engine/gfx/box.h"
 #include "engine/gfx/prim/alloc_sprt.h"
+#include "engine/math/sin_cos.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 #include "engine/text/console.h"
@@ -76,7 +77,91 @@ void func_800CBB88(Unk800CB7B0 *this, u_long *ot) {
     func_800CD56C(&this->unk40, ot, (320 - width) / 2, 0x50);
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", func_800CBBD4);
+void func_800CD140(Unk800CD140 *this, u8 *text);
+void func_800CD210(Unk800CD140 *this, s32 unk0, s32 unk2);
+void func_800CD248(Unk800CD140 *this, s32 arg1, s32 arg2, s32 start, s32 count);
+void func_800CD29C(Unk800CD140 *this, s32 radius, s32 angle, s32 step);
+void func_800CD324(Unk800CD140 *this, s32 unkC);
+void func_800CD358(Unk800CD140 *this, s32 value, s32 start, s32 count);
+void func_800CD3A8(Unk800CD140 *this, s32 value);
+void func_800CD418(Unk800CD140 *this, s32 arg1, s32 arg2, s32 start, s32 count);
+void func_800CD46C(Unk800CD140 *this, s32 value);
+void func_800CD474(Unk800CD140 *this, s32 value);
+void func_800CD4B0(Unk800CD140 *this, s32 value);
+void func_800CD4E4(Unk800CD140 *this, s32 value, s32 start, s32 count);
+
+/* A state of D_800D36A4: the round's call. "READY?" turns in on a closing circle (func_800CD29C, its characters a
+ * sixth of a turn apart) while its size (func_800CD3A8) shrinks, waits 9 frames, turns out on an opening circle
+ * while it grows; then "FIGHT!" (US: "RUMBLE!") shrinks from 0x80 while its color.cd rises, its color falls from
+ * 0x100 and its color.cd from 0x80, and the entity is deleted. */
+void func_800CBBD4(Unk800CB7B0 *this) {
+    Unk800CD140 *text = &this->unk40;
+
+    switch (this->unk38) {
+    case 0:
+        func_800CD140(text, "READY?");
+        func_800CD3A8(text, 0x80);
+        func_800CD210(text, 0, -0x60);
+        this->unk38++;
+        break;
+    case 1:
+        func_800CD3A8(text, 0x80 - this->unk3C * 6);
+        func_800CD29C(text, 0xA0 - this->unk3C * 10, -this->unk3C << 8, 0x2AA);
+        if (this->unk3C >= 16) {
+            this->unk3C = 0;
+            this->unk38++;
+        }
+        break;
+    case 2:
+        if (this->unk3C >= 9) {
+            this->unk3C = 0;
+            this->unk38++;
+        }
+        break;
+    case 3:
+        func_800CD3A8(text, (this->unk3C << 3) + 0x20);
+        func_800CD29C(text, this->unk3C * 320 / 12, -this->unk3C << 8, 0x2AA);
+        if (this->unk3C >= 12) {
+            this->unk3C = 0;
+            this->unk38++;
+        }
+        break;
+    case 4:
+#if VERSION_JP
+        func_800CD140(text, "FIGHT!");
+#else
+        func_800CD140(text, "RUMBLE!");
+#endif
+        func_800CD324(text, 1);
+        func_800CD3A8(text, 0x80);
+        func_800CD4B0(text, 0);
+        this->unk38++;
+        break;
+    case 5:
+        func_800CD3A8(text, 0x80 - this->unk3C * 12);
+        func_800CD4B0(text, this->unk3C << 4);
+        if (this->unk3C >= 8) {
+            this->unk3C = 0;
+            this->unk38++;
+        }
+        break;
+    case 6:
+        func_800CD474(text, 0x100 - (this->unk3C << 3));
+        if (this->unk3C >= 16) {
+            this->unk3C = 0;
+            this->unk38++;
+        }
+        break;
+    case 7:
+        func_800CD4B0(text, 0x80 - (this->unk3C << 3));
+        if (this->unk3C >= 16) {
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->unk3C++;
+}
 
 /* A member function (its pointer is in D_800D370C): func_800CBAE0, then func_800CF2A4 in the next slot
  * of ot with 90 minus 0x3C. */
@@ -118,11 +203,6 @@ void func_800CBE90(Unk800CB7B0 *this) {
 #endif
 
 INCLUDE_ASM("game/nonmatchings/hud", func_800CBF6C);
-
-void func_800CD140(Unk800CD140 *this, u8 *text);
-void func_800CD248(Unk800CD140 *this, s32 arg1, s32 arg2, s32 start, s32 count);
-void func_800CD3A8(Unk800CD140 *this, s32 value);
-void func_800CD474(Unk800CD140 *this, s32 value);
 
 /* A state of D_800D36A4: in state 0 copies the text into 0x40 and moves its first two characters apart; in 1
  * brings them in by quarters while the color goes up to 0xFF, in 2 fades it from 0xFF down to 0x80, waits 17
@@ -188,10 +268,66 @@ void func_800CBFF0(Unk800CB7B0 *arg) {
 
 INCLUDE_ASM("game/nonmatchings/hud", func_800CC230);
 
-INCLUDE_ASM("game/nonmatchings/hud", func_800CC3E4);
+/* A state of D_800D36A4: over 12 frames the text's first 3 characters close in from the left (the 2nd and 3rd 3
+ * and 5 times faster) while their size (func_800CD418) shrinks from wide to 0x20 square and their color.cd
+ * rises; over 8 frames the 4 from the 5th (unkC 1) shrink from tall to square while theirs rises; then the color
+ * falls from 0xFF over 32 frames and color.cd from 0x80 over 16, and the entity is deleted. */
+void func_800CC3E4(Unk800CB7B0 *this) {
+    Unk800CD140 *text = &this->unk40;
+    s32 shown;
+    s32 left;
 
-void func_800CC3E4(Unk800CB7B0 *this);
-void func_800CD358(Unk800CD140 *this, s32 value, s32 start, s32 count);
+    switch (this->unk38) {
+    case 0:
+        func_800CD140(text, this->text);
+        func_800CD248(text, 8, 0, 0, 3);
+        func_800CD248(text, -8, 0, 4, 4);
+        func_800CD358(text, 1, 4, 4);
+        func_800CD418(text, 0xA0, 0x20, 0, 3);
+        func_800CD418(text, 0x20, 0xA0, 4, 4);
+        func_800CD4B0(text, 0);
+        this->unk38++;
+        break;
+    case 1:
+        shown = (this->unk3C << 7) / 12;
+        left = 0x80 - shown;
+        func_800CD248(text, 8 - left, 0, 0, 1);
+        func_800CD248(text, 8 - left * 3, 0, 1, 1);
+        func_800CD248(text, 8 - left * 5, 0, 2, 1);
+        func_800CD418(text, left + 0x20, left / 8 + 0x20, 0, 3);
+        func_800CD4E4(text, shown, 0, 3);
+        if (this->unk3C >= 12) {
+            this->unk3C = 0;
+            this->unk38++;
+        }
+        break;
+    case 2:
+        shown = this->unk3C << 4;
+        left = 0x80 - shown;
+        func_800CD418(text, left / 8 + 0x20, left + 0x20, 4, 4);
+        func_800CD4E4(text, shown, 4, 4);
+        if (this->unk3C >= 8) {
+            this->unk3C = 0;
+            this->unk38++;
+        }
+        break;
+    case 3:
+        func_800CD474(text, 0xFF - (this->unk3C << 2));
+        if (this->unk3C >= 32) {
+            this->unk3C = 0;
+            this->unk38++;
+        }
+        break;
+    case 4:
+        func_800CD4B0(text, 0x80 - (this->unk3C << 3));
+        if (this->unk3C >= 16) {
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->unk3C++;
+}
 
 /* A state of D_800D36A4: func_800CC3E4, then in state 1, on its first frame, unkC 2 for 4 characters of the text
  * from the 4th (func_800CD358); in state 3 every character's color 0x80 (func_800CD474). */
@@ -215,13 +351,119 @@ void func_800CC6DC(Unk800CB7B0 *this) {
 
 INCLUDE_ASM("game/nonmatchings/hud", func_800CC750);
 
-INCLUDE_ASM("game/nonmatchings/hud", func_800CC93C);
+/* A state of D_800D36A4: slides the text in from x 320 to its place by quarters, opens its height by 4 a frame,
+ * waits 61 frames, then closes it by 4 a frame and deletes the entity. */
+void func_800CC93C(Unk800CB7B0 *this) {
+    switch (this->unk38) {
+    case 0:
+        this->unk28.x = 320;
+        this->unk28.h = 0;
+        this->unk38++;
+        break;
+    case 1:
+        this->unk28.x += (this->unk20.x - this->unk28.x) >> 2;
+        if (this->unk28.x <= this->unk20.x) {
+            this->unk30 = 7;
+            this->unk38++;
+        }
+        break;
+    case 2:
+        this->unk28.h += 4;
+        if (this->unk28.h >= this->unk20.h) {
+            this->unk3C = 0;
+            this->unk38++;
+        }
+        break;
+    case 3:
+        if (this->unk3C >= 61) {
+            this->unk38++;
+        }
+        break;
+    case 4:
+        this->unk28.h -= 4;
+        if (this->unk28.h <= 0) {
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->unk3C++;
+}
 
 INCLUDE_ASM("game/nonmatchings/hud", func_800CCA90);
 
 INCLUDE_ASM("game/nonmatchings/hud", func_800CCC0C);
 
-INCLUDE_ASM("game/nonmatchings/hud", func_800CCE18);
+s32 func_800CF994(EntityGroup *group, s32 x, s32 y, u8 c);
+
+/* A state of D_800D36A4: copies the text into 0x40 with 0x548 at 0x8200, brings 0x548 down to 0x200 and back to
+ * 0x1000 along a cosine over 96 frames, waits 61 frames, spawns the first 9 characters of the text into the
+ * entity's group (func_800CF994, 16 or 32 apart from x 0x18, at y 0x40) with sound 0x4D, and deletes the entity
+ * 61 frames later. */
+void func_800CCE18(Unk800CB7B0 *this) {
+    Unk800CD140 *text = &this->unk40;
+    s32 angle;
+    s32 scale;
+    EntityGroup *group;
+    u8 *c;
+    u8 *end;
+    s32 x;
+
+    switch (this->unk38) {
+    case 0:
+        func_800CD140(text, this->text);
+        func_800CD248(text, 8, 0, 0, 4);
+        func_800CD248(text, -8, 0, 5, 4);
+        func_800CD324(text, 2);
+        func_800CD46C(text, 0x8200);
+        this->unk38++;
+        break;
+    case 1:
+        angle = this->unk3C << 5;
+        if (angle < 0x800) {
+            scale = (COS_SIN_TABLE[angle & 0xFFF].cos << 2) + 0x3200;
+        } else {
+            scale = (COS_SIN_TABLE[angle & 0xFFF].cos * 7) >> 3;
+        }
+        func_800CD46C(text, scale + 0x1000);
+        if (this->unk3C >= 0x60) {
+            this->unk3C = 0;
+            this->unk38++;
+        }
+        break;
+    case 2:
+        if (this->unk3C >= 61) {
+            this->unk38++;
+        }
+        break;
+    case 3:
+        group = func_8002BDF4(&this->entity);
+        /* The match depends on walking c to end with the test at the bottom: an index loop keeps the add of
+         * c + i (gcc does not reduce it), a pointer for loop adds a test before the first character. */
+        c = this->text;
+        end = c + 9;
+        x = 0x18;
+        do {
+            if (func_800CF994(group, x, 0x40, *c) == 0) {
+                x += 32;
+            } else {
+                x += 16;
+            }
+            c++;
+        } while (c != end);
+        soundControlPlaySound(&SOUND_CONTROL, 0x4D, 0);
+        this->unk3C = 0;
+        this->unk38++;
+        break;
+    case 4:
+        if (this->unk3C >= 61) {
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->unk3C++;
+}
 
 INCLUDE_ASM("game/nonmatchings/hud", func_800CD068);
 
@@ -436,8 +678,6 @@ void func_800CDB78(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", func_800CDBD4);
-
 /* The entity class of virtual table D_8006DD6C (func_800CDA20) for a player: three amounts that func_800CDFBC adds
  * into a total. */
 typedef struct Unk800CDA20 {
@@ -457,7 +697,108 @@ typedef struct Unk800CDA20 {
     /* 0x54 */ s32 unk54;
     /* 0x58 */ s32 unk58;
     /* 0x5C */ s32 unk5C;
+    /* 0x60 */ s32 unk60; /* func_800CDBD4 counts it every frame */
 } Unk800CDA20;
+
+void func_800CDF14(Unk800CDA20 *this);
+
+/* The update of D_8006DD6C's entity: fades in (0x58) while the fields from 0x38 ease to their final values, opens
+ * the box 0x4C (when unk20) and shrinks it into place, then takes up to 100 a frame from each amount into the
+ * total, and fades out and deletes the entity. Waits 0x54 frames between states, and in states 1 to 6 the
+ * player can skip (func_800CDF14) unless unk1C. */
+void func_800CDBD4(Unk800CDA20 *this) {
+    s32 step;
+    s32 *amount;
+    s32 taken;
+
+    if (this->unk5C >= 1 && this->unk5C <= 6 && this->unk1C == 0) {
+        func_800CDF14(this);
+    }
+    switch (this->unk5C) {
+    case 1:
+        this->unk58 += 8;
+        if (this->unk58 > 0x80) {
+            this->unk58 = 0x80;
+        }
+        step = (0xEA - this->unk38) >> 1;
+        if (step <= 0) {
+            step = 1;
+        }
+        this->unk38 += step;
+        this->unk3C -= this->unk3C >> 1;
+        this->unk40 -= this->unk40 >> 1;
+        this->unk44 += (0xE8 - this->unk44) >> 1;
+        this->unk48 += (0xC5 - this->unk48) >> 1;
+        if (this->unk38 >= 0xF2) {
+            if (this->unk20) {
+                this->unk4C.x = 0xA0;
+                this->unk4C.y = 0x60;
+                this->unk4C.w = 0x200;
+                this->unk4C.h = 0x80;
+                this->unk5C++;
+            } else {
+                this->unk5C = 6;
+            }
+        }
+        break;
+    case 2:
+        this->unk4C.w += (0xE0 - this->unk4C.w) >> 1;
+        this->unk4C.h += (0x38 - this->unk4C.h) >> 1;
+        if (this->unk4C.w <= 0xE0) {
+            this->unk54 = 30;
+            this->unk5C++;
+        }
+        break;
+    case 4:
+        this->unk4C.x += (0x40 - this->unk4C.x) >> 1;
+        this->unk4C.y += (0x95 - this->unk4C.y) >> 1;
+        this->unk4C.w += (0x60 - this->unk4C.w) >> 1;
+        this->unk4C.h += (0x18 - this->unk4C.h) >> 1;
+        if (this->unk4C.w <= 0x60) {
+            this->unk54 = 20;
+            this->unk5C++;
+        }
+        break;
+    case 6:
+        if (this->unk54 <= 0) {
+            amount = &this->amounts[this->unk24];
+            if (*amount > 0) {
+                taken = *amount;
+                if (taken > 100) {
+                    taken = 100;
+                }
+                *amount -= taken;
+                this->total += taken;
+            } else {
+                this->unk24++;
+                if (this->unk24 >= 3) {
+                    this->unk54 = 30;
+                    this->unk5C++;
+                }
+            }
+        }
+        break;
+    /* The match depends on the waiting states' case being here, after case 6 (the game's block order). */
+    case 0:
+    case 3:
+    case 5:
+    case 7:
+        if (this->unk54 <= 0) {
+            this->unk5C++;
+        }
+        break;
+    case 8:
+        this->unk58 -= 8;
+        if (this->unk58 <= 0) {
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->unk54--;
+    this->unk60++;
+}
+
 
 /* The buttons that make func_800CDF14 skip: the four face buttons, and START too in US. */
 #if VERSION_JP

@@ -143,7 +143,8 @@ $(BUILDDIR)/%_syms.ld: $(BUILDDIR)/bin/%.elf
 
 # An overlay links against the executable's symbols and its parent's, and
 # takes the rest of what it uses from splat's symbol files
-# (tools/link_imports.py)
+# (tools/link_imports.py) and, for the names another overlay gives its own
+# address in this version, from config/<version>/imports_<overlay>.txt
 define OVERLAY_template
 $$(GENDIR)/$(1).ld: .EXTRA_PREREQS :=
 $$(GENDIR)/$(1).ld: $$(CONFIG_DIR)/$(1).yaml $$(CONFIG_DIR)/symbols.txt $$(CONFIG_DIR)/symbols_$(1).txt \
@@ -154,9 +155,10 @@ $$(GENDIR)/$(1).ld: $$(CONFIG_DIR)/$(1).yaml $$(CONFIG_DIR)/symbols.txt $$(CONFI
 
 $(1)_SYMS := $$(MAIN_SYMS) $$(if $$(OVL_PARENT_$(1)),$$(BUILDDIR)/$$(OVL_PARENT_$(1))_syms.ld)
 $(1)_AUTO_SYMS := $$(BUILDDIR)/$(1)_auto_syms.ld
-$$($(1)_AUTO_SYMS): $$($(1)_OBJ) $$(GENDIR)/$(1).ld $$($(1)_SYMS) tools/link_imports.py
+$(1)_IMPORTS := $$(wildcard $$(CONFIG_DIR)/imports_$(1).txt)
+$$($(1)_AUTO_SYMS): $$($(1)_OBJ) $$(GENDIR)/$(1).ld $$($(1)_SYMS) $$($(1)_IMPORTS) tools/link_imports.py
 	$$(PYTHON) tools/link_imports.py $$@ $$($(1)_OBJ) \
-		--from $$(GENDIR)/undefined_syms_auto_$(1).txt $$(GENDIR)/undefined_funcs_auto_$(1).txt \
+		--from $$(GENDIR)/undefined_syms_auto_$(1).txt $$(GENDIR)/undefined_funcs_auto_$(1).txt $$($(1)_IMPORTS) \
 		--linked $$($(1)_SYMS)
 
 $$(BUILDDIR)/bin/$(1).elf: $$($(1)_OBJ) $$(GENDIR)/$(1).ld $$($(1)_SYMS) $$($(1)_AUTO_SYMS)
@@ -218,12 +220,12 @@ G0_OBJ := $(G0_UNITS:%=$(BUILDDIR)/%.o) $(foreach b,$(OVERLAYS),$(filter-out %.s
 $(G0_OBJ): CC1FLAGS := $(subst -G8,-G0,$(CC1FLAGS))
 $(G0_OBJ): MASPSXFLAGS := $(subst -G8,-G0,$(MASPSXFLAGS))
 
-# two fighters of the battle overlay were built without CSE following jumps:
+# six fighters of the battle overlay were built without CSE following jumps:
 # their entity updates reload a count in the else block after `if (count > N)
 # delete;`, which -O2 gives only with -fno-cse-follow-jumps; every other
-# function of these units matches either way (fighter_05 to fighter_07, between
+# function of these units matches either way (fighter_05 and fighter_06, between
 # them, match either way too and have nothing that tells)
-NOFOLLOW_OBJ := $(foreach n,04 08,$(BUILDDIR)/src/battle/fighters/fighter_$(n).c.o)
+NOFOLLOW_OBJ := $(foreach n,04 07 08 10 14 19,$(BUILDDIR)/src/battle/fighters/fighter_$(n).c.o)
 $(NOFOLLOW_OBJ): CC1FLAGS += -fno-cse-follow-jumps
 
 # splat writes the game's Shift JIS text as UTF-8 (string_encoding), which

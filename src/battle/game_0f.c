@@ -14,6 +14,11 @@ void func_8007FF1C(Unk8007F920 *this);
 s32 func_8007F98C(Unk8007F920 *this);
 Unk8007F920 *func_80080BF0(Unk8007F920 *this, s32 arg);
 void func_80081A54(Unk8007F920 *this, s32 arg);
+/* the steps func_80081A54 runs with the character's input (func_80081E18, 80081EEC and 80081FC4 don't read it) */
+void func_80081B84(Unk8007F920 *this, Unk80075000 *input);
+void func_80081E18(Unk8007F920 *this, Unk80075000 *input);
+void func_80081EEC(Unk8007F920 *this, Unk80075000 *input);
+void func_80081FC4(Unk8007F920 *this, Unk80075000 *input);
 Unk8007F920 *func_8007F920(Unk8007F920 *this, s32 unk0);
 
 /* the virtual tables the functions below install, and the data they read */
@@ -53,6 +58,13 @@ void func_80081438(Unk8007F920 *this, s32 arg);
  * func_80081A20's) with arg and the step function, which it then calls. */
 Unk8007F920 *func_8008209C(Unk8007F920 *this, s32 arg, MemberFunction step);
 /* the step functions of func_8008209C's states (pointers to member functions) */
+extern MemberFunction D_80067C44;
+extern MemberFunction D_80067C4C;
+extern MemberFunction D_80067C54;
+extern MemberFunction D_80067C5C;
+extern MemberFunction D_80067C64;
+extern MemberFunction D_80067C6C;
+extern MemberFunction D_80067C74;
 extern MemberFunction D_80067CCC;
 extern MemberFunction D_80067CD4;
 extern MemberFunction D_80067CDC;
@@ -66,6 +78,9 @@ extern MemberFunction D_80067D04;
 extern MemberFunction D_80067D0C;
 extern VtableEntry D_80067D14[];
 extern VtableEntry D_80067D54[];
+Unk8007F920 *func_8008230C(Unk8007F920 *this);
+Unk8007F920 *func_80080FDC(Unk8007F920 *this, s32 state);
+Unk8007F920 *func_80081200(Unk8007F920 *this, s32 arg);
 Unk8007F920 *func_80082690(Unk8007F920 *this);
 Unk8007F920 *func_800826E8(Unk8007F920 *this);
 
@@ -103,7 +118,7 @@ s32 func_8007F9AC(Unk8007F920 *this) {
     return (func_800750C4(func_800776C4(this->unk8)) & 0x4) != 0;
 }
 
-void func_8007F9DC(Unk8007F920 *this);
+s32 func_8007F9DC(Unk8007F920 *this);
 INCLUDE_ASM("game/nonmatchings/game_0f", func_8007F9DC);
 
 /* Whether the character's last input (func_800750C4) holds PAD_DOWN. */
@@ -624,7 +639,49 @@ Unk8007F920 *func_800808EC(Unk8007F920 *this, s32 state) {
 
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067AD4);
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_80080968);
+/* The tick of D_80068074's class: without func_800778BC becomes a func_80080EBC object (0, 0); else unless
+ * func_8007F9DC or (with func_8007F964) func_8007FAF0 changed the state: with func_8007F964 in state 1, 3, 4, 5
+ * or 6 a PAD_LEFT/PAD_RIGHT press (func_8008046C) makes it a func_80080FDC (5, 6) or func_80081200 (7, 8)
+ * object; otherwise, once the 0x20 of the character's object at 0x238 is down to 0, a func_800816B4 object (0xE). */
+void func_80080968(Unk8007F920 *this) {
+    if (!func_800778BC(this->unk8)) {
+        func_80080EBC(this, 0, 0);
+        return;
+    }
+    if (func_8007F9DC(this)) {
+        return;
+    }
+    if (func_8007F964(this) && func_8007FAF0(this)) {
+        return;
+    }
+    /* The match depends on the loop its first break leaves (as in func_80081B84): the game rolls that test to the
+     * loop's end and enters it with a jump; a plain if gives the test first. The jump table starts at case 0. */
+    do {
+        if (!func_8007F964(this) || !(this->unk0 == 1 || this->unk0 == 4 || this->unk0 == 3 || this->unk0 == 5 ||
+                                      this->unk0 == 6)) {
+            break;
+        }
+        switch (func_8008046C(func_800776C4(this->unk8))) {
+        case 0:
+            break;
+        case 1:
+            func_80080FDC(this, 5);
+            return;
+        case 2:
+            func_80080FDC(this, 6);
+            return;
+        case 3:
+            func_80081200(this, 7);
+            return;
+        case 4:
+            func_80081200(this, 8);
+            return;
+        }
+    } while (0);
+    if (func_8007758C(this->unk8)->unk20 <= 0) {
+        func_800816B4(this, 0xE);
+    }
+}
 
 /* The method at 0x10 of D_80068074: for a positive arg, when func_8007F964 holds and the character's
  * object at 0x22C is not in state 2, 9 or 10, becomes a func_80080BF0 object (0). */
@@ -767,7 +824,57 @@ Unk8007F920 *func_80080FDC(Unk8007F920 *this, s32 state) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_80081054);
+/* Without func_800778BC becomes a func_80080EBC object (0, 0); else unless func_8007F9DC changed the state, by
+ * the PAD_LEFT/PAD_RIGHT press (func_8008046C): none, or func_8007F964 false, becomes a func_800808EC object (1);
+ * 1 and 2 become a func_80080FDC object (5 or 6) unless already in it, then func_8007FD40 or func_8007FD84;
+ * 3 and 4 a func_80081200 object (7 or 8). */
+void func_80081054(Unk8007F920 *this) {
+    s32 press;
+    s32 state;
+
+    if (!func_800778BC(this->unk8)) {
+        func_80080EBC(this, 0, 0);
+        return;
+    }
+    if (func_8007F9DC(this)) {
+        return;
+    }
+    press = func_8008046C(func_800776C4(this->unk8));
+    if (press == 0 || !func_8007F964(this)) {
+        func_800808EC(this, 1);
+        return;
+    }
+    state = this->unk0;
+    switch (press) {
+    /* press is not 0 here, but the game's jump table starts at case 0 (it indexes it by press, not press - 1) */
+    case 0:
+        if (state == 5) {
+            func_8007FD40(this);
+        }
+        if (state == 6) {
+            func_8007FD84(this);
+        }
+        break;
+    case 1:
+        if (state != 5) {
+            func_80080FDC(this, 5);
+        }
+        func_8007FD40(this);
+        break;
+    case 2:
+        if (state != 6) {
+            func_80080FDC(this, 6);
+        }
+        func_8007FD84(this);
+        break;
+    case 3:
+        func_80081200(this, 7);
+        break;
+    case 4:
+        func_80081200(this, 8);
+        break;
+    }
+}
 
 /* The method at 0x10 of D_80067F5C and D_80067F94: func_80080BF0(0) when func_8007F964 holds and arg is
  * positive. */
@@ -999,7 +1106,56 @@ Unk8007F920 *func_80081A20(Unk8007F920 *this, s32 arg) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_80081A54);
+/* Clears the character's 0x448 to 0x460 (but 0x450), then unless the state of its 0x22C object (func_8007F93C)
+ * is 0, 9 to 16 or 19, or 2 with arg not 0, runs the step arg (0 to 3) with its input (func_800776C4). */
+void func_80081A54(Unk8007F920 *this, s32 arg) {
+    Unk80076F34 *chara;
+    Unk80075000 *input;
+
+    this->unk8->unk448 = 0;
+    this->unk8->unk44C = 0;
+    /* The match depends on these four through a local: the game reloads 8 after each store above, not here. */
+    chara = this->unk8;
+    chara->unk454 = 0;
+    chara->unk458 = 0;
+    chara->unk45C = 0;
+    chara->unk460 = 0;
+    input = func_800776C4(this->unk8);
+    switch (func_8007F93C(this)->unk0) {
+    case 0:
+    case 9:
+    case 10:
+    case 11:
+    case 12:
+    case 13:
+    case 14:
+    case 15:
+    case 16:
+    case 19:
+        break;
+    case 2:
+        if (arg != 0) {
+            break;
+        }
+        /* fallthrough */
+    default:
+        switch (arg) {
+        case 0:
+            func_80081B84(this, input);
+            break;
+        case 1:
+            func_80081E18(this, input);
+            break;
+        case 2:
+            func_80081EEC(this, input);
+            break;
+        case 3:
+            func_80081FC4(this, input);
+            break;
+        }
+        break;
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067C44);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067C4C);
@@ -1009,13 +1165,72 @@ INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067C64);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067C6C);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067C74);
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_80081B84);
+/* Step 0 of func_80081A54: by the character's clip (func_8007FB9C) and its input, picks the next state of
+ * func_8008209C (0x17 to 0x1C) with its step function and calls func_800788B4, or func_8008230C. */
+void func_80081B84(Unk8007F920 *this, Unk80075000 *input) {
+    s32 clip = func_8007FB9C(this);
+    Unk80076F34 *chara = this->unk8;
+
+    switch (clip) {
+    case 3:
+    case 4:
+        func_8007516C(input, 4);
+        if (func_800751A8(input, 0x1000, 0)) {
+            if (func_800778D0(this->unk8, 0)) {
+                func_800788B4(chara, 7, 400);
+                func_8008209C(this, 0x1B, D_80067C44);
+            }
+        } else if (func_800750C4(input) & 0xA000) {
+            if (func_800778D0(this->unk8, 1)) {
+                func_800788B4(chara, 9, 400);
+                func_8008209C(this, 0x1C, D_80067C4C);
+            }
+        } else {
+            func_800788B4(chara, 8, 400);
+            func_8008209C(this, 0x1C, D_80067C54);
+        }
+        break;
+    case 2:
+        func_800788B4(chara, 6, 300);
+        func_8008209C(this, 0x1A, D_80067C5C);
+        break;
+    case 19:
+        func_800788B4(chara, 5, 100);
+        func_8008209C(this, 0x19, D_80067C64);
+        break;
+    case 21:
+        break;
+    default:
+        /* The match depends on a loop around the 0x2000 test that its break leaves: the game rolls that test to the
+         * loop's end (entered with a jump), hoists &D_80067C6C out of it and moves the 0x17 block before it, which
+         * a plain if/else never gives. A do/while (0) and a for (;;) ending in return both match. */
+        do {
+            if (func_80079CF4(this->unk8, 0)) {
+                func_80078848(this->unk8, input);
+                func_8007516C(input, 4);
+                if (func_800751A8(input, 0x2000, 0)) {
+                    func_800788B4(chara, 3, 400);
+                    func_8008209C(this, 0x18, D_80067C6C);
+                    break;
+                }
+            }
+            func_8007516C(input, 4);
+            if (func_800751A8(input, 0x1000, 0)) {
+                func_800788B4(chara, 4, 200);
+                func_8008209C(this, 0x17, D_80067C74);
+            } else {
+                func_8008230C(this);
+            }
+        } while (0);
+        break;
+    }
+}
 
 /* With the character's clip (0x250) 3 or 4: unless func_800798F4 says so for
  * 0x17, and if func_800778D0 does for 2, turns into state 0x1E stepping with
  * D_80067CCC; with any other value, unless func_800798F4 says so for 0x16,
  * into state 0x1D with D_80067CD4. Either way then func_800788B4 with 10, 100. */
-void func_80081E18(Unk8007F920 *this) {
+void func_80081E18(Unk8007F920 *this, Unk80075000 *input) {
     s32 value = func_8007FB9C(this);
     Unk80076F34 *chara = this->unk8;
 
@@ -1040,7 +1255,7 @@ void func_80081E18(Unk8007F920 *this) {
  * 0x19, and if func_800778D0 does for 3, turns into state 0x20 stepping with
  * D_80067CDC; with any other value, unless func_800798F4 says so for 0x18,
  * into state 0x1F with D_80067CE4. Either way then func_800788B4 with 11, 1000. */
-void func_80081EEC(Unk8007F920 *this) {
+void func_80081EEC(Unk8007F920 *this, Unk80075000 *input) {
     s32 value = func_8007FB9C(this);
     Unk80076F34 *chara = this->unk8;
 
@@ -1066,7 +1281,7 @@ void func_80081EEC(Unk8007F920 *this) {
  * 0x1B, and if func_800778D0 does for 4, turns into state 0x22 stepping with
  * D_80067CEC; with any other value, unless func_800798F4 says so for 0x1A,
  * into state 0x21 with D_80067CF4. Either way then func_800788B4 with 12, 3000. */
-void func_80081FC4(Unk8007F920 *this) {
+void func_80081FC4(Unk8007F920 *this, Unk80075000 *input) {
     Unk80076F34 *chara = this->unk8;
     s32 value = func_8007FB9C(this);
 

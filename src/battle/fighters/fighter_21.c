@@ -5,7 +5,7 @@
 #include "battle/game_classes.h"
 #include "engine/sound/sound_control.h"
 
-void func_800BB2B8(Unk80076F34 *this, s32 arg1, s32 arg2, s32 arg3, s32 arg4);
+void func_800BB2B8(Unk80076F34 *this, s32 kind, s32 arg2, s32 arg3, s32 rgb);
 void func_800BE7D0(Entity *this, s32 arg);
 void func_800BEA1C(Entity *this, s32 arg);
 extern VtableEntry D_8006CAD4[];
@@ -103,7 +103,31 @@ void func_800BB260(Unk80076F34 *this, s32 arg) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_21", func_800BB2B8);
+/* func_800C5680's tables for func_800BB2B8: three pairs of entries, D_800D34AC for kind 16, D_800D353C otherwise. */
+extern Unk800C5B18Entry D_800D34AC[6];
+extern Unk800C5B18Entry D_800D353C[6];
+
+void func_800C5B84(Unk800C5680 *this, CVECTOR *colors, s32 count);
+
+/* Creates three func_800C5680 entities (0x690 bytes) for the character, one for each pair of entries of its table
+ * (D_800D34AC for kind 16, else D_800D353C) with arg2 and arg3, colors them rgb (a 0xBBGGRR word, read as its
+ * three bytes with cd 0) and hands them to func_8007AD4C. */
+void func_800BB2B8(Unk80076F34 *this, s32 kind, s32 arg2, s32 arg3, s32 rgb) {
+    Unk800C5B18Entry *entries = kind == 16 ? D_800D34AC : D_800D353C;
+    CVECTOR *bytes = (CVECTOR *)&rgb;
+    CVECTOR color = { bytes->r, bytes->g, bytes->b };
+    Unk800C5B18Entry *end = entries + 6;
+
+    do {
+        Entity *entity = NEW_ENTITY(0x690, func_800C5680, this, entries, 2, arg2, arg3);
+
+        if (entity != NULL) {
+            func_800C5B84((Unk800C5680 *)entity, &color, 1);
+            func_8007AD4C(this, entity);
+        }
+        entries += 2;
+    } while (entries != end);
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_21", D_8006C844);
 

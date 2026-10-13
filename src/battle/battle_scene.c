@@ -14,6 +14,17 @@
 #include "engine/system/memory.h"
 
 void func_80071110(Unk8006ED20 *object);
+void func_80071460(Unk8006ED20 *this);
+void func_800715EC(Unk8006ED20 *this);
+s32 func_80071738(Unk8006ED20 *this);
+void func_80071894(Unk8006ED20 *this, s32 side);
+void func_80071A8C(Unk8006ED20 *this, s32 side);
+void func_80071B74(Unk8006ED20 *this);
+void func_80071BF8(Unk8006ED20 *this);
+void func_80071C9C(Unk8006ED20 *this);
+void func_80071E60(Unk8006ED20 *this);
+void func_80071EC0(Unk8006ED20 *this);
+void func_80071EF8(Unk8006ED20 *this);
 
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064CC8);
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064CD8);
@@ -349,7 +360,86 @@ void func_800710FC(Unk8006ED20 *this) {
     this->unk2C8 |= 8;
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071110);
+/* The object's thread: plays rounds (func_800715EC, then func_80071738 gives how the round ended) until a side
+ * has the wins at 0x250 or the rounds at 0x254 run out (bit 7 of the flags at 0x2C8). A round won by a side
+ * counts in 0x240, sets GAME_STATE's winner, adds the computer's win to its rounds not won and plays the other
+ * side's sound. Then func_80071460 unless the run is over, and func_80071EC0. */
+void func_80071110(Unk8006ED20 *this) {
+    s32 side;
+    s32 result;
+    s32 over;
+    Unk80076F34 *other;
+
+    for (;;) {
+        side = -1;
+        GAME_STATE.winner = side;
+        func_800715EC(this);
+        result = func_80071738(this);
+        if (GAME_STATE.demo) {
+            func_80071EC0(this);
+        }
+        this->vtable[6].func((u8 *)this + this->vtable[6].delta);
+        if (this->unkD2C & 1) {
+            func_80071EC0(this);
+        }
+        soundControlFadeOut(&SOUND_CONTROL, 90);
+        switch (result) {
+        case 0:
+            func_80071EC0(this);
+            break;
+        case 1:
+            side = 0;
+            GAME_STATE.winner = side;
+            this->unk240[side]++;
+            break;
+        case 2:
+            side = 1;
+            GAME_STATE.winner = side;
+            this->unk240[side]++;
+            break;
+        case 3:
+            GAME_STATE.roundsNotWon++;
+            func_80071BF8(this);
+            break;
+        case 4:
+            GAME_STATE.roundsNotWon++;
+            func_80071B74(this);
+            break;
+        case 5:
+        case 6:
+            func_80071C9C(this);
+            break;
+        case 7:
+            func_80071EC0(this);
+            break;
+        }
+        over = --this->unk254 == 0 || this->unk240[0] >= this->unk250 || this->unk240[1] >= this->unk250;
+        this->unk2C8 = (this->unk2C8 & ~0x80) | (over << 7);
+        if (side >= 0) {
+            GAME_STATE.winnerCharacter = func_80077568(((Unk800700C8 *)this->unk2C[side])->chara);
+            GAME_STATE.roundsNotWon += GAME_STATE.fighters[side].computer;
+            other = ((Unk800700C8 *)this->unk2C[side ^ 1])->chara;
+            if (this->unkD28 > 0) {
+                soundControlPlayEcho(&SOUND_CONTROL, gameStateGetSound(&GAME_STATE, func_80077568(other)));
+                func_80071894(this, side);
+            } else {
+                soundControlPlaySound(&SOUND_CONTROL, gameStateGetSound(&GAME_STATE, func_80077568(other)), 0);
+                func_80071A8C(this, side);
+            }
+            func_8006EF90(this, side, func_80071014(this, side));
+        }
+        if ((this->unk2C8 >> 7) & 1) {
+            break;
+        }
+        this->vtable[7].func((u8 *)this + this->vtable[7].delta);
+        func_80071E60(this);
+        func_80071EF8(this);
+    }
+    if (!gameStateIsOutsideRun(&GAME_STATE) && !gameStateHasPlayerWon(&GAME_STATE)) {
+        func_80071460(this);
+    }
+    func_80071EC0(this);
+}
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071460);
 
@@ -384,8 +474,6 @@ void func_80071BF8(Unk8006ED20 *this) {
     func_80079268(chara1);
     func_80071D38(this, func_8006F0B4(this, func_800CB7B0(entityOperatorNew(0x59C), 9, 0)), -1);
 }
-
-void func_80071EC0(Unk8006ED20 *this);
 
 /* Stops the music and plays sound 0x8007, then func_80071BF8 with class 1, and ends with func_80071EC0. */
 void func_80071C9C(Unk8006ED20 *this) {

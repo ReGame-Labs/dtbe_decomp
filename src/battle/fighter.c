@@ -13,7 +13,111 @@ extern VtableEntry D_800652CC[];
 s32 func_8007A044(Unk80076F34 *this, s32 arg);
 s32 *func_800792AC(Unk80076F34 *this);
 
-INCLUDE_ASM("game/nonmatchings/fighter", func_80076CB4);
+/* the constructors of the 24 fighters (src/battle/fighters/fighter_NN.c) */
+Unk80076F34 *func_800827EC(Unk80076F34 *this);
+struct Unk80083F0C *func_80083F0C(struct Unk80083F0C *this);
+Unk800870F0 *func_800870F0(Unk800870F0 *this);
+Unk80076F34 *func_8008820C(Unk80076F34 *this);
+struct Unk80089FB8 *func_80089FB8(struct Unk80089FB8 *this);
+Unk8008D21C *func_80091A44(Unk8008D21C *this);
+struct Unk80092A68 *func_80092A68(struct Unk80092A68 *this);
+struct Unk80094F10 *func_80094F10(struct Unk80094F10 *this);
+struct Unk80099A7C *func_80099A7C(struct Unk80099A7C *this);
+Unk80076F34 *func_8009DBBC(Unk80076F34 *this);
+Unk800A0FF4 *func_800A0FF4(Unk800A0FF4 *this);
+struct Unk800A2F98 *func_800A2F98(struct Unk800A2F98 *this);
+struct Unk800A54C8 *func_800A54C8(struct Unk800A54C8 *this);
+struct Unk800AA390 *func_800AA390(struct Unk800AA390 *this);
+struct Unk800ADA44 *func_800ADA44(struct Unk800ADA44 *this);
+struct Unk800B0854 *func_800B0854(struct Unk800B0854 *this);
+Unk800B45C0 *func_800B45C0(Unk800B45C0 *this);
+Unk800B631C *func_800B631C(Unk800B631C *this);
+Unk80076F34 *func_800B7EDC(Unk80076F34 *this);
+Unk800B9410 *func_800B9410(Unk800B9410 *this);
+Unk80076F34 *func_800BF0B4(Unk80076F34 *this);
+struct Unk800C1924 *func_800C1924(struct Unk800C1924 *this);
+
+/* The fighter factory: constructs fighter id (0 to 23) with g++'s new and its constructor; NULL for any
+ * other id. */
+Unk80076F34 *func_80076CB4(s32 id) {
+    void *fighter = NULL; /* each constructor returns its own fighter type, all of them on Unk80076F34 */
+
+    switch (id) {
+    case 0:
+        fighter = func_800827EC(entityOperatorNew(0x4A4));
+        break;
+    case 1:
+        fighter = func_80083F0C(entityOperatorNew(0x4A8));
+        break;
+    case 2:
+        fighter = func_800870F0(entityOperatorNew(0x4A8));
+        break;
+    case 3:
+        fighter = func_8008820C(entityOperatorNew(0x4A4));
+        break;
+    case 4:
+        fighter = func_80089FB8(entityOperatorNew(0x4AC));
+        break;
+    case 5:
+        fighter = func_8008D21C(entityOperatorNew(0x4F4));
+        break;
+    case 6:
+        fighter = func_80091A44(entityOperatorNew(0x4F4));
+        break;
+    case 7:
+        fighter = func_80092A68(entityOperatorNew(0x4C0));
+        break;
+    case 8:
+        fighter = func_80094F10(entityOperatorNew(0x4B4));
+        break;
+    case 9:
+        fighter = func_80099A7C(entityOperatorNew(0x4D0));
+        break;
+    case 10:
+        fighter = func_8009DBBC(entityOperatorNew(0x4B0));
+        break;
+    case 11:
+        fighter = func_800A0FF4(entityOperatorNew(0x4EC));
+        break;
+    case 12:
+        fighter = func_800A2F98(entityOperatorNew(0x4D4));
+        break;
+    case 13:
+        fighter = func_800A54C8(entityOperatorNew(0x4C0));
+        break;
+    case 14:
+        fighter = func_800AA390(entityOperatorNew(0x4AC));
+        break;
+    case 15:
+        fighter = func_800ADA44(entityOperatorNew(0x4AC));
+        break;
+    case 16:
+        fighter = func_800B0854(entityOperatorNew(0x4A8));
+        break;
+    case 17:
+        fighter = func_800B45C0(entityOperatorNew(0x4A8));
+        break;
+    case 18:
+        fighter = func_800B631C(entityOperatorNew(0x4AC));
+        break;
+    case 19:
+        fighter = func_800B7EDC(entityOperatorNew(0x4A4));
+        break;
+    case 20:
+        fighter = func_800B9410(entityOperatorNew(0x4A8));
+        break;
+    case 21:
+        fighter = func_800BB034(entityOperatorNew(0x4C4));
+        break;
+    case 22:
+        fighter = func_800BF0B4(entityOperatorNew(0x4A4));
+        break;
+    case 23:
+        fighter = func_800C1924(entityOperatorNew(0x4C8));
+        break;
+    }
+    return fighter;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighter", func_80076F34);
 

@@ -37,7 +37,7 @@ class Function:
         rel=os.path.relpath(path,A).split(os.sep)
         self.binary=rel[0]; self.in_c=in_c
         # (a jump table splat put in the function's file is data, not code)
-        insns=[i for i in INSN.findall(open(path).read()) if not i[0].startswith('.')]
+        insns=[i for i in INSN.findall(open(path, errors='replace').read()) if not i[0].startswith('.')]
         self.size=4*len(insns)
         self.shape=tuple((op,SYMBOL.sub('S',args)) for op,args in insns)
         # the functions it calls, which the masking hides

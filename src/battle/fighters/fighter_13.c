@@ -10,7 +10,6 @@ void func_800A7290(Entity *this, s32 arg);
 void func_800A7458(Entity *this, s32 arg);
 void func_800A8C24(Entity *this, s32 arg);
 void func_800A8F80(Entity *this, s32 arg);
-struct Unk800A6220 *func_800A6220(struct Unk800A6220 *this, Unk80076F34 *chara);
 extern VtableEntry D_8006AF2C[];
 extern EntityVtable D_8006AF4C;
 extern VtableEntry D_8006AFC4[];
@@ -24,13 +23,24 @@ extern EntityVtable D_8006B03C;
 typedef struct Unk800A54C8 {
     /* 0x000 */ Unk80076F34 base;
     /* 0x4A4 */ s32 unk4A4;
-    /* 0x4A8 */ s32 unk4A8;
-    /* 0x4AC */ s32 unk4AC;
-    /* 0x4B0 */ s32 unk4B0;
-    /* 0x4B4 */ s32 unk4B4;
+    /* 0x4A8 */ s32 unk4A8[4]; /* entity handles from func_800A5B98 */
     /* 0x4B8 */ s32 unk4B8;
     /* 0x4BC */ s32 unk4BC;
 } Unk800A54C8;
+
+/* The entity class of func_800A6220 (virtual table D_8006B03C), which func_800AA0B4's derives from. */
+typedef struct Unk800A6220 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk80076F34 *chara;
+    /* 0x1C */ Unk80075000 *input; /* the character's (func_800776C4) */
+    /* 0x20 */ Vec3 position;      /* the character's, at construction */
+    /* 0x2C */ u8 unk2C[0x30 - 0x2C];
+    /* 0x30 */ s32 unk30; /* 96 the way the character faces */
+    /* 0x34 */ s32 unk34;
+    /* 0x38 */ s32 unk38;
+} Unk800A6220;
+
+Unk800A6220 *func_800A6220(Unk800A6220 *this, Unk80076F34 *chara);
 
 extern EntityVtable D_8006B06C;
 
@@ -55,7 +65,14 @@ extern EntityVtable D_8006AEAC;
 typedef struct Unk800A8858 {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Unk80076F34 *chara;
-    /* 0x1C */ s32 unk1C[11];
+    /* 0x1C */ VECTOR position; /* the character's node 19 (offset D_8006B198), while state is below 3 */
+    /* 0x2C */ s32 unk2C;
+    /* 0x30 */ s32 unk30;
+    /* 0x34 */ s32 unk34;
+    /* 0x38 */ s32 unk38;   /* + 0x20 a frame */
+    /* 0x3C */ s32 unk3C;   /* 0 to 5, a step a frame */
+    /* 0x40 */ s32 state;   /* 0 to 3 (func_800A88D8) */
+    /* 0x44 */ s32 frames;
     /* 0x48 */ s32 unk48; /* the character's 0x440 (func_8007768C) */
 } Unk800A8858;
 
@@ -75,7 +92,7 @@ Unk800A54C8 *func_800A54C8(Unk800A54C8 *this) {
     this->base.entity.vtable = &D_8006B06C;
     this->unk4B8 = 0;
     this->unk4A4 = 0;
-    this->unk4A8 = this->unk4AC = this->unk4B0 = this->unk4B4 = 0;
+    this->unk4A8[0] = this->unk4A8[1] = this->unk4A8[2] = this->unk4A8[3] = 0;
     this->unk4BC = 0;
     return this;
 }
@@ -161,16 +178,122 @@ void func_800A58C8(Unk80076F34 *this) {
     func_80079E50(this, &D_8006AB8C, 0x100000, 0x2AA);
 }
 
+/* func_800A58F4's four corners (+-0x200, +-0x200), passed in pairs to func_800A5B98. One array: the game
+ * derives the second address from the first (a1 + 0x10, a1 - 0x30). */
+extern VECTOR D_8006AB9C[4];
+
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_13", D_8006AB9C);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_13", D_8006ABAC);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_13", D_8006ABBC);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_13", D_8006ABCC);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_13", func_800A58F4);
+void func_800A5AD0(Unk800A54C8 *this);
+s32 func_800A5B98(Unk800A54C8 *this, VECTOR *from, VECTOR *to);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_13", func_800A5AD0);
+/* Overrides func_8007B9C8 (entry 0xDC) in D_8006B06C: step 0 plays sound 0xD8 and clip 22, step 15 runs
+ * func_800A5AD0, steps 16, 21, 26 and 31 keep func_800A5B98's handle for a pair of corners at 0x4A8-0x4B4;
+ * 0x3B4.vx brakes by half of 0x3A4.vx. From step 34 it clears the handles of dead entities and ends with
+ * func_80079320, unless button 0x40 is up, func_800778BC holds, one entity lives, func_8006F190 does not hold and
+ * either func_800777BC holds or func_8007758C's 0x24 is positive. */
+void func_800A58F4(Unk800A54C8 *this, s32 step) {
+    switch (step) {
+    case 0:
+        func_800784F4(&this->base, 0xD8);
+        func_80079830(&this->base, 22, 0, 0, 32);
+        break;
+    case 15:
+        func_800A5AD0(this);
+        break;
+    case 16:
+        this->unk4A8[0] = func_800A5B98(this, &D_8006AB9C[0], &D_8006AB9C[1]);
+        break;
+    case 21:
+        this->unk4A8[1] = func_800A5B98(this, &D_8006AB9C[1], &D_8006AB9C[0]);
+        break;
+    case 26:
+        this->unk4A8[2] = func_800A5B98(this, &D_8006AB9C[2], &D_8006AB9C[1]);
+        break;
+    case 31:
+        this->unk4A8[3] = func_800A5B98(this, &D_8006AB9C[3], &D_8006AB9C[0]);
+        break;
+    }
+    this->base.unk3B4.vx -= this->base.unk3A4.vx >> 1;
+    if (step >= 34) {
+        if (!(func_80075100(func_800776C4(&this->base)) & 0x40) && func_800778BC(&this->base)) {
+            s32 alive = 0;
+            s32 i;
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_13", func_800A5B98);
+            for (i = 0; i < 4; i++) {
+                if (getEntityByHandle(this->unk4A8[i]) != NULL) {
+                    alive++;
+                } else {
+                    this->unk4A8[i] = 0;
+                }
+            }
+            if (alive != 0 && !func_8006F190(func_80077580(&this->base))
+                && (func_800777BC(&this->base) || func_8007758C(&this->base)->unk24 > 0)) {
+                return;
+            }
+        }
+        func_80079320(&this->base);
+    }
+}
+
+/* func_800AA0B4's body: the constructor of the class of vtable D_8006B00C, derived from func_800A6220's, which
+ * g++ inlined into func_800A5AD0. */
+static inline Unk800A6220 *constructUnk800AA0B4(Unk800A6220 *this, Unk80076F34 *chara) {
+    func_800A6220(this, chara);
+    this->entity.vtable = &D_8006B00C;
+    return this;
+}
+
+/* Creates the entity of func_800A6220's class, or of its derived class (D_8006B00C) when func_80077598, hands it
+ * to func_8007AD4C and keeps its handle at 0x4A4, when it was allocated. */
+void func_800A5AD0(Unk800A54C8 *this) {
+    Entity *entity;
+
+    if (func_80077598(&this->base) == 0) {
+        entity = NEW_ENTITY(0x40, func_800A6220, &this->base);
+    } else {
+        entity = NEW_ENTITY(0x40, constructUnk800AA0B4, &this->base);
+    }
+    if (entity != NULL) {
+        func_8007AD4C(&this->base, entity);
+        this->unk4A4 = entityGetHandle(entity);
+    }
+}
+
+UnkPartsEntity38 *func_800A65F8(UnkPartsEntity38 *this, Unk80076F34 *chara, s32 handle, VECTOR *from, VECTOR to);
+Entity *func_800A6EB8(Entity *this, s32 handle);
+Entity *func_800A7694(Entity *this, s32 handle, s32 unk);
+
+/* Builds the entities for a pair of corners while the entity at 0x4A4 is alive: func_800A65F8's (0xD8 bytes),
+ * then func_800A6EB8's (0xC8) on its handle and func_800A7694's two (0x78, 0 and 1) on that one's handle, each
+ * handed to func_8007AD4C; plays sound 0xD1. Returns the first one's handle, or 0. */
+s32 func_800A5B98(Unk800A54C8 *this, VECTOR *from, VECTOR *to) {
+    Entity *parts;
+    s32 handle;
+
+    if (getEntityByHandle(this->unk4A4) == NULL) {
+        return 0;
+    }
+    handle = this->unk4A4;
+    parts = NEW_ENTITY(0xD8, func_800A65F8, &this->base, handle, from, *to);
+    if (parts != NULL) {
+        Entity *entity;
+
+        func_8007AD4C(&this->base, parts);
+        entity = NEW_ENTITY(0xC8, func_800A6EB8, entityGetHandle(parts));
+        if (entity != NULL) {
+            func_8007AD4C(&this->base, entity);
+            func_8007AD4C(&this->base, NEW_ENTITY(0x78, func_800A7694, entityGetHandle(entity), 0));
+            func_8007AD4C(&this->base, NEW_ENTITY(0x78, func_800A7694, entityGetHandle(entity), 1));
+        }
+        func_80078540(&this->base, 0xD1);
+        return entityGetHandle(parts);
+    }
+    return 0;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_13", func_800A5D44);
 
@@ -207,7 +330,24 @@ void func_800A5EA0(Unk800A54C8 *this, s32 arg) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_13", func_800A5F94);
+Entity *func_800A7C90(void *this, Unk80076F34 *chara, VECTOR *point, Vec3 *position);
+
+/* Creates func_800A7C90's entity (0xB8 bytes) at node 2 and at the character's position moved 384 the way it
+ * faces, hands it to func_8007AD4C and keeps its handle at 0x4B8, when it was allocated. */
+void func_800A5F94(Unk800A54C8 *this) {
+    VECTOR point;
+    Vec3 position;
+    Entity *entity;
+
+    func_8007A4A4(&this->base, &point, 2, &D_80010814);
+    func_800775D8(&this->base, &position);
+    position.vx += func_80079E10(&this->base) * 384;
+    entity = NEW_ENTITY(0xB8, func_800A7C90, &this->base, &point, &position);
+    if (entity != NULL) {
+        func_8007AD4C(&this->base, entity);
+        this->unk4B8 = entityGetHandle(entity);
+    }
+}
 
 void func_800A80B4(Unk800A7F88 *this, VECTOR *vec, s32 unk8);
 
@@ -244,18 +384,6 @@ void func_800A6194(Unk80076F34 *this) {
     func_80077448(this, -0x10000);
     func_80078540(this, 0xD3);
 }
-
-/* The entity class of func_800A6220 (virtual table D_8006B03C), which func_800AA0B4's derives from. */
-typedef struct Unk800A6220 {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk80076F34 *chara;
-    /* 0x1C */ Unk80075000 *input; /* the character's (func_800776C4) */
-    /* 0x20 */ Vec3 position;      /* the character's, at construction */
-    /* 0x2C */ u8 unk2C[0x30 - 0x2C];
-    /* 0x30 */ s32 unk30; /* 96 the way the character faces */
-    /* 0x34 */ s32 unk34;
-    /* 0x38 */ s32 unk38;
-} Unk800A6220;
 
 /* Constructs an entity that follows the character: its input, its position, and 96 the way it faces. */
 Unk800A6220 *func_800A6220(Unk800A6220 *this, Unk80076F34 *chara) {
@@ -363,17 +491,17 @@ Unk800A8858 *func_800A8858(Unk800A8858 *this, Unk80076F34 *chara, VECTOR *positi
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006AEDC;
     this->chara = chara;
-    this->unk1C[0] = 0;
-    this->unk1C[1] = 0;
-    this->unk1C[2] = 0;
-    this->unk1C[3] = 0;
-    this->unk1C[4] = 0;
-    this->unk1C[5] = 0;
-    this->unk1C[6] = 0;
-    this->unk1C[7] = 0;
-    this->unk1C[8] = 0;
-    this->unk1C[9] = 0;
-    this->unk1C[10] = 0;
+    this->position.vx = 0;
+    this->position.vy = 0;
+    this->position.vz = 0;
+    this->position.pad = 0;
+    this->unk2C = 0;
+    this->unk30 = 0;
+    this->unk34 = 0;
+    this->unk38 = 0;
+    this->unk3C = 0;
+    this->state = 0;
+    this->frames = 0;
     this->unk48 = func_8007768C(chara);
     return this;
 }
@@ -505,9 +633,7 @@ void func_800AA06C(Entity *this, s32 flags) {
 
 /* Constructs an object of the entity class of vtable D_8006B00C, which derives from func_800A6220's. */
 Unk800A6220 *func_800AA0B4(Unk800A6220 *this, Unk80076F34 *chara) {
-    func_800A6220(this, chara);
-    this->entity.vtable = &D_8006B00C;
-    return this;
+    return constructUnk800AA0B4(this, chara);
 }
 
 /* The destructor of the UnkPartsEntity38 class of vtables D_8006AFE4 and D_8006AFC4, which

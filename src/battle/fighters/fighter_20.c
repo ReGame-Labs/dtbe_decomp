@@ -87,7 +87,63 @@ INCLUDE_RODATA("game/nonmatchings/fighters/fighter_20", D_8006C4DC);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_20", D_8006C4EC);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_20", D_8006C4FC);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_20", func_800B979C);
+void func_800B9E58(Unk80076F34 *this);
+
+/* Entry 0xE4 of D_8006C71C: func_80079AE4; at step 0 clip 24, func_8007A0E4 with 0x202, the words at 0x44C with
+ * the speed of func_8007AEEC's character (unk3C4 * 0x4718, 16.16) toward func_80079E10's side, and sound 0x106;
+ * at step 10 the same with 0x87AC1400 and 0x2AA8; at step 6 func_800B9E58; at step 7 unk3B4.vy falls by
+ * unk3C4 * 0x31C4; at 29 unk448 is cleared; from 8 to 28 func_8007835C; a rising unk3A4 slows unk3B4.
+ * The match depends on a block-scoped speed in each case: one s64 for both cases is set in two blocks, becomes a
+ * global pseudo and moves the product out of $s0/$s1. */
+void func_800B979C(Unk80076F34 *this, s32 step) {
+    Unk80076F34 *other;
+
+    func_80079AE4(this);
+    other = func_8007AEEC(this);
+    switch (step) {
+    case 0: {
+        s64 speed;
+
+        func_80079830(this, 24, 0, 0, -1);
+        func_8007A0E4(this, 0x202);
+        this->unk44C = 0x7AC1400;
+        this->unk450 = 1;
+        speed = ((s64)other->unk3C4 * 0x4718) >> 16;
+        this->unk454 = (s32)speed * func_80079E10(this);
+        this->unk458 = 0;
+        this->unk45C = 0;
+        func_800784F4(this, 0x106);
+        break;
+    }
+    case 6:
+        func_800B9E58(this);
+        break;
+    case 7:
+        this->unk3B4.vy -= ((s64)this->unk3C4 * 0x31C4) >> 16;
+        break;
+    case 10: {
+        s64 speed;
+
+        func_8007A0E4(this, 0x202);
+        this->unk44C = 0x87AC1400;
+        this->unk450 = 1;
+        speed = ((s64)other->unk3C4 * 0x2AA8) >> 16;
+        this->unk454 = (s32)speed * func_80079E10(this);
+        this->unk458 = 0;
+        this->unk45C = 0;
+        break;
+    }
+    case 29:
+        this->unk448 = 0;
+        break;
+    }
+    if (step >= 8 && step <= 28) {
+        func_8007835C(this, func_80079E10(this) * 10920);
+    }
+    if (this->unk3A4.vy > 0) {
+        this->unk3B4.vy -= this->unk3A4.vy;
+    }
+}
 
 /* A step method: func_8007BAFC; at step 0 clip 10 and unk3A4.vy cleared; at step 5 unk3B4.vy falls by
  * unk3C4 * 0x4718 (16.16); a rising unk3A4 slows unk3B4. */
@@ -126,9 +182,60 @@ void func_800B9A64(Unk80076F34 *this, s32 arg) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_20", func_800B9B18);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_20", func_800B9C48);
+/* Entry 0x11C of D_8006C71C, func_800B979C with clip 25 (unk3A4.vy cleared first) and 0x47AC1400 at step 10.
+ * The match depends on the same block-scoped speeds. */
+void func_800B9C48(Unk80076F34 *this, s32 step) {
+    Unk80076F34 *other;
 
-/* func_800B9E58's local table of three entries (see Unk800685DC). */
+    func_80079AE4(this);
+    other = func_8007AEEC(this);
+    switch (step) {
+    case 0: {
+        s64 speed;
+
+        this->unk3A4.vy = 0;
+        func_80079830(this, 25, 0, 0, -1);
+        func_8007A0E4(this, 0x202);
+        this->unk44C = 0x7AC1400;
+        this->unk450 = 1;
+        speed = ((s64)other->unk3C4 * 0x4718) >> 16;
+        this->unk454 = (s32)speed * func_80079E10(this);
+        this->unk458 = 0;
+        this->unk45C = 0;
+        func_800784F4(this, 0x106);
+        break;
+    }
+    case 6:
+        func_800B9E58(this);
+        break;
+    case 7:
+        this->unk3B4.vy -= ((s64)this->unk3C4 * 0x31C4) >> 16;
+        break;
+    case 10: {
+        s64 speed;
+
+        func_8007A0E4(this, 0x202);
+        this->unk44C = 0x47AC1400;
+        this->unk450 = 1;
+        speed = ((s64)other->unk3C4 * 0x2AA8) >> 16;
+        this->unk454 = (s32)speed * func_80079E10(this);
+        this->unk458 = 0;
+        this->unk45C = 0;
+        break;
+    }
+    case 29:
+        this->unk448 = 0;
+        break;
+    }
+    if (step >= 8 && step <= 28) {
+        func_8007835C(this, func_80079E10(this) * 10920);
+    }
+    if (this->unk3A4.vy > 0) {
+        this->unk3B4.vy -= this->unk3A4.vy;
+    }
+}
+
+/* func_800B9E58's local table of three entries, copied whole from its constant (.rodata stays in asm). */
 typedef struct Unk8006C5FC {
     Unk800C5B18Entry entries[3];
 } Unk8006C5FC;
