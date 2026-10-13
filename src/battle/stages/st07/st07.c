@@ -1,6 +1,7 @@
 #include "common.h"
 #include "engine/task/entity.h"
 #include "battle/game.h"
+#include "battle/game_classes.h"
 #include "battle/stage_objects.h"
 #include "engine/math/vector.h"
 #include "engine/system/memory.h"
@@ -43,7 +44,7 @@ typedef struct Unk800D3B14 {
     /* 0xF7E */ s16 unkF7E;
     /* 0xF80 */ s16 unkF80;
     /* 0xF82 */ s16 unkF82;
-    /* 0xF84 */ s16 unkF84[2]; /* by character: frames button 0x80 has been held, up to 30 (func_800D4044) */
+    /* 0xF84 */ u16 unkF84[2]; /* by character: frames button 0x80 has been held, up to 30 (func_800D4044) */
     /* 0xF88 */ s16 unkF88[2]; /* by character: how long it was held, when let go */
 } Unk800D3B14;
 
@@ -174,7 +175,35 @@ void func_800D3EB0(Unk8006ED20 *this) {
 
 INCLUDE_ASM("st07/nonmatchings/st07", func_800D3F30);
 
-INCLUDE_ASM("st07/nonmatchings/st07", func_800D4044);
+
+/* Sets entry index of 0xF2C: the stage base's setter, out of line in game.bin as func_800D3284. The match
+ * depends on its s16 value parameter: promoted to int, it loads the u16 count with lh before the store. */
+static inline void setUnkF2C(Unk800D3B14 *this, s32 index, s16 value) {
+    this->unkF2C[index] = value;
+}
+
+/* Each frame, for both characters: counts the frames their button 0x80 is held (up to 30), keeps the count
+ * at 0xF88 when it is let go, and copies the count to 0xF2C. */
+void func_800D4044(Unk800D3B14 *this) {
+    struct Unk80075000 *pads[2];
+    u32 buttons[2];
+    s32 i;
+
+    for (i = 0; i < 2; i++) {
+        pads[i] = func_80073260(&this->base.base, i);
+        buttons[i] = func_800750C4(pads[i]);
+        if (buttons[i] & 0x80) {
+            if (++this->unkF84[i] > 30) {
+                this->unkF84[i] = 30;
+            }
+            this->unkF88[i] = 0;
+        } else {
+            this->unkF88[i] = this->unkF84[i];
+            this->unkF84[i] = 0;
+        }
+        setUnkF2C(this, i, this->unkF84[i]);
+    }
+}
 
 INCLUDE_ASM("st07/nonmatchings/st07", func_800D4140);
 

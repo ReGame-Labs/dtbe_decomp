@@ -2,7 +2,7 @@
 #define DTBE_BATTLE_GAME_CLASSES_H
 
 /* Classes of game.bin known only by their layout so far, named after their
- * constructors. */
+ * constructors, and the functions several of its source files share. */
 
 #include "common.h"
 #include "vtable.h"
@@ -12,6 +12,7 @@
 #include "engine/lib/list.h"
 #include "engine/math/vector.h"
 #include "engine/task/entity.h"
+#include "engine/game/loading_screen.h"
 
 EXTERN_C_BEGIN
 
@@ -587,6 +588,519 @@ typedef struct Unk800C0CC0 {
     /* 0x284 */ u8 unk284[0x2A8 - 0x284];
     /* 0x2A8 */ u32 sound;
 } Unk800C0CC0;
+
+/* the destructor of an entity class that others derive from */
+void func_800776D0(Entity *this, s32 flags);
+
+/* clears the timed thing at 0x464 */
+void func_800774A8(Unk80076F34 *this);
+
+/* returns the object at 0x228 of `this`: the one whose entity group func_8007AD4C uses */
+Unk8006ED20 *func_80077580(Unk80076F34 *this);
+
+/* returns the word at 0x440 of an Unk80076F34 */
+s32 func_8007768C(Unk80076F34 *this);
+
+/* gives an Unk80076F34 a table (at 0x224) */
+void func_80079B24(Unk80076F34 *this, Unk80079B24Entry *table);
+
+/* virtual functions of Unk80076F34, and functions of its that they call */
+s32 func_80077794(Unk80076F34 *this);
+void func_8007835C(Unk80076F34 *this, s32 arg);
+void func_80078804(Unk80076F34 *this, s32 arg);
+void func_8007881C(Unk80076F34 *this, s32 arg);
+/* Starts a clip of the model at 0x3FC (modelStartClip; a negative clip stops it):
+ * plays < 0 takes the count from the character's .loop file (charaGetClipPlays). */
+void func_80079830(Unk80076F34 *this, s32 clip, s32 blendFrames, s32 frame, s32 plays);
+/* The same, with the play count of the .loop file; it keeps clip and
+ * blendFrames at 0x250/0x24C, and starts the clip only when func_80079A0C allows it. */
+void func_800796F0(Unk80076F34 *this, s32 clip, s32 blendFrames, s32 frame);
+void func_80079AE4(Unk80076F34 *this);
+void func_8007A6FC(Unk80076F34 *this, s32 arg1, s32 arg2, s32 arg3);
+void func_8007B034(Unk80076F34 *this, s32 arg);
+void func_8007B0E0(Unk80076F34 *this, s32 arg);
+void func_8007B470(Unk80076F34 *this, s32 arg, Unk8007B470Entry *entry, s32 arg3);
+void func_8007B6A0(Unk80076F34 *this, s32 arg);
+void func_8007B70C(Unk80076F34 *this, s32 arg); /* the method at 0xA8 */
+void func_8007B784(Unk80076F34 *this, s32 arg); /* the method at 0xB0 */
+void func_8007B80C(Unk80076F34 *this, s32 arg); /* the method at 0xB8 */
+void func_8007B884(Unk80076F34 *this, s32 arg);
+void func_8007BAFC(Unk80076F34 *this, s32 arg);
+void func_8007BB64(Unk80076F34 *this, s32 arg);
+void func_8007BA98(Unk80076F34 *this, s32 arg);
+s32 func_80079E10(Unk80076F34 *this); /* the way the character faces: 1 or -1 */
+void func_8007B978(Unk80076F34 *this, s32 arg);
+void func_8007B9FC(Unk80076F34 *this, s32 step);
+
+/* returns the Unk80076F34 that func_80073218 gives for the object at 0x228 of `this` */
+Unk80076F34 *func_8007AEEC(Unk80076F34 *this);
+
+/* gives the world position (in out) of node `node` of the character's model, moved by offset: it hands
+ * both to matrixTransformVec */
+VECTOR *func_8007A4A4(Unk80076F34 *this, VECTOR *out, s32 node, VECTOR *offset);
+
+/* play a sound of an Unk80076F34 and return its handle (the first also keeps it at 0x25C): they call
+ * soundControlPlaySound and leave $v0 alone after the call, and func_800BFF28 keeps its next constant out
+ * of $v0 (a call_value) */
+s32 func_800784F4(Unk80076F34 *this, s32 sound);
+s32 func_80078540(Unk80076F34 *this, s32 sound);
+
+/* the constructor of the sprite member of Unk800C2F14, and the setup of its motion */
+Unk800C2CCC *func_800C2CCC(Unk800C2CCC *this, u16 *frame, s32 flags);
+void func_800C3078(Unk800C2F14 *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color);
+void func_800C3100(Unk800C2F14 *this, PolyFT4Shape *shape, SVECTOR *corners);
+
+/* the parts classes: their constructors, and the vector setter of Unk8007BD8C */
+Unk8007BD8C *func_8007BD8C(Unk8007BD8C *this, Unk80076F34 *chara, s32 unk8, Vec3 *unk10, s32 unkC);
+void func_8007BDD4(Unk8007BD8C *this, VECTOR *vec);
+
+/* the side of the character (0x21C): func_800BF37C picks GAME_STATE's fighter with it */
+s32 func_80077574(Unk80076F34 *this);
+void func_800A9998(Entity *this, s32 arg);
+
+/* the constructors the functions below call */
+Unk80076F34 *func_80076F34(Unk80076F34 *this);
+Unk8007F920 *func_800808EC(Unk8007F920 *this, s32 arg);
+Entity *func_80082EE8(Entity *this, Unk80076F34 *arg, Vec3 *vel, s32 arg3, s32 side);
+void func_800C72D8(Unk800C7024 *this, Unk80075EE4 *sum);
+struct Unk8008D21C *func_8008D21C(struct Unk8008D21C *this);
+Entity *func_800BD490(Entity *this, Unk80076F34 *arg);
+struct Unk800BDA50 *func_800BDA50(struct Unk800BDA50 *this, Unk80076F34 *owner, Vec3 *pos, s32 arg3, s32 arg4);
+Unk800C2F14 *func_800C2FBC(Unk800C2F14 *this, s32 frame, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags);
+Entity *func_800C3654(Entity *this, Vec3 *unk28, Vec3 *unk40, s32 unk20, u32 color, s32 unk18);
+/* An entry of the tables func_800C5680 takes (func_800C5B18 copies up to 4 of them, all but unk10). */
+typedef struct Unk800C5B18Entry {
+    /* 0x00 */ s32 unk0;
+    /* 0x04 */ Vec3 unk4;
+    /* 0x10 */ s32 unk10;
+    /* 0x14 */ CVECTOR color;
+} Unk800C5B18Entry;
+
+Entity *func_800C5680(Entity *this, Unk80076F34 *arg, Unk800C5B18Entry *entries, s32 count, s32 arg4, s32 arg5);
+extern VtableEntry D_8006C9DC[];
+extern EntityVtable D_8006C9FC;
+extern EntityVtable D_8006D4FC;
+extern EntityVtable D_8006D59C;
+extern VtableEntry D_8006D740[];
+extern EntityVtable D_8006D760;
+extern LoadingScreenVtable D_8006DF3C;
+
+/* A class derived from Unk8007F920 (func_8007F6FC), not identified yet. */
+typedef struct Unk8007F6FC {
+    /* 0x00 */ Unk8007F920 base;
+    /* 0x10 */ u8 unk10[0x30 - 0x10];
+    /* 0x30 */ s32 unk30;
+} Unk8007F6FC;
+
+void func_8007F6FC(Unk8007F6FC *this);
+
+/* The virtual table of Unk80076F34 (D_8006530C): Entity's four entries, then
+ * the class's own methods, which its derived classes override. */
+typedef struct Unk80076F34Vtable {
+    /* 0x000 */ EntityVtable entity;
+    /* 0x020 */ VtableEntry unk20;
+    /* 0x028 */ VtableEntry unk28;
+    /* 0x030 */ VtableEntry unk30;
+    /* 0x038 */ VtableEntry unk38;
+    /* 0x040 */ VtableEntry unk40;
+    /* 0x048 */ VtableEntry unk48;
+    /* 0x050 */ VtableEntry unk50;
+    /* 0x058 */ VtableEntry unk58;
+    /* 0x060 */ VtableEntry unk60;
+    /* 0x068 */ VtableEntry unk68;
+    /* 0x070 */ VtableEntry unk70;
+    /* 0x078 */ VtableEntry unk78;
+    /* 0x080 */ VtableEntry unk80;
+    /* 0x088 */ VtableEntry unk88;
+    /* 0x090 */ VtableEntry unk90;
+    /* 0x098 */ VtableEntry unk98;
+    /* 0x0A0 */ VtableEntry unkA0;
+    /* 0x0A8 */ VtableEntry unkA8;
+    /* 0x0B0 */ VtableEntry unkB0;
+    /* 0x0B8 */ VtableEntry unkB8;
+    /* 0x0C0 */ VtableEntry unkC0;
+    /* 0x0C8 */ VtableEntry unkC8;
+    /* 0x0D0 */ VtableEntry unkD0;
+    /* 0x0D8 */ VtableEntry unkD8;
+    /* 0x0E0 */ VtableEntry unkE0;
+    /* 0x0E8 */ VtableEntry unkE8;
+    /* 0x0F0 */ VtableEntry unkF0;
+    /* 0x0F8 */ VtableEntry unkF8;
+    /* 0x100 */ VtableEntry unk100;
+    /* 0x108 */ VtableEntry unk108;
+    /* 0x110 */ VtableEntry unk110;
+    /* 0x118 */ VtableEntry unk118;
+    /* 0x120 */ VtableEntry unk120;
+    /* 0x128 */ VtableEntry unk128;
+    /* 0x130 */ VtableEntry unk130;
+    /* 0x138 */ VtableEntry unk138;
+} Unk80076F34Vtable;
+
+/* An Unk80076F34's virtual table as its own class sees it. */
+#define UNK80076F34_VTABLE(object) ((Unk80076F34Vtable *)(object)->entity.vtable)
+
+/* derived from func_80076F34's class, and the base of func_800C1924's */
+typedef struct Unk800BB034 {
+    /* 0x000 */ Unk80076F34 base;
+    /* 0x4A4 */ s32 unk4A4;
+    /* 0x4A8 */ s32 unk4A8;
+    /* 0x4AC */ s32 unk4AC;
+    /* 0x4B0 */ s32 unk4B0;
+    /* 0x4B4 */ s32 unk4B4;
+    /* 0x4B8 */ s32 unk4B8;
+    /* 0x4BC */ s32 unk4BC;
+    /* 0x4C0 */ s32 unk4C0;
+} Unk800BB034;
+
+Unk800BB034 *func_800BB034(Unk800BB034 *this);
+
+/* The entity func_800C49E4 constructs (virtual table D_8006D394) for a
+ * character's state object, at the character's position. */
+typedef struct Unk800C49E4 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk8007F920 *unk18;
+    /* 0x1C */ Vec3 position; /* the character's (func_800775D8) */
+} Unk800C49E4;
+
+/* The classes func_800AD5BC and func_800893BC construct (virtual tables
+ * D_8006B314 and D_80068BAC for their base at 0x18); the methods of
+ * D_8006BC34 and D_8006BAE4 (func_800B1FD4, func_800B427C) see the same part. */
+typedef struct Unk800AD5BC {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk8007BD8C unk18;
+    /* 0x34 */ u8 unk34[0x44 - 0x34];
+    /* 0x44 */ u32 unk44;
+} Unk800AD5BC;
+
+typedef struct Unk800A9944 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk8007BD8C unk18;
+    /* 0x34 */ u8 unk34[0x38 - 0x34];
+    /* 0x38 */ Unk80075EE4 unk38;
+    /* 0x80 */ u8 unk80[0xB4 - 0x80];
+    /* 0xB4 */ s32 unkB4;
+    /* 0xB8 */ u8 unkB8[0xD4 - 0xB8];
+    /* 0xD4 */ u32 unkD4; /* a sound's handle (stopSound) */
+} Unk800A9944;
+
+/* func_800C7024 constructs an entity for chara at position, moving by
+ * velocity; the other four arguments are set by the derived classes. */
+Unk800C7024 *func_800C7024(Unk800C7024 *this, Unk80076F34 *chara, Vec3 *position, Vec3 *velocity, s32 unkA8, u32 unk14,
+                                s32 unkB4, s32 unk1C);
+
+/* Returns the entity at 0x14 of arg when func_8002BD68 gives 0x10000 for it, else NULL. */
+Entity *func_80078878(Unk80075EE4 *sum);
+
+/* The entity class func_800BDA50 constructs for a character (virtual table D_8006C9FC; func_800C2264's
+ * class, D_8006CFEC, derives from it): Unk8007BD8C at 0x18, a member of func_80075EE4's class at 0x38. */
+typedef struct Unk800BDA50 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk8007BD8C unk18;
+    /* 0x34 */ u8 unk34[0x38 - 0x34];
+    /* 0x38 */ Unk80075EE4 unk38;
+    /* 0x80 */ s32 unk80; /* the character's entityGetHandle */
+    /* 0x84 */ s32 unk84;
+    /* 0x88 */ s32 unk88;
+    /* 0x8C */ s32 unk8C;
+    /* 0x90 */ s32 unk90;
+    /* 0x94 */ Vec3 unk94; /* func_800BDA50's third argument */
+    /* 0xA0 */ u8 unkA0[0xA4 - 0xA0];
+    /* 0xA4 */ Vec3 unkA4; /* 0 from func_800BDA50 */
+    /* 0xB0 */ s32 unkB0;
+    /* 0xB4 */ s32 unkB4;
+    /* 0xB8 */ s32 unkB8; /* func_800BDA50's fifth argument */
+    /* 0xBC */ s32 unkBC;
+    /* 0xC0 */ s32 unkC0;
+    /* 0xC4 */ s32 unkC4;
+    /* 0xC8 */ s32 unkC8; /* func_800BDA50's fourth argument */
+    /* 0xCC */ s32 unkCC;
+    /* 0xD0 */ s32 vramY; /* func_8007768C of the character */
+} Unk800BDA50;
+Entity *func_800BE39C(Entity *this, s32 arg1, Vec3 *position, u32 arg3, s32 arg4, CVECTOR *arg5);
+
+Unk80076444 *func_80076444(Unk80076444 *this);
+s32 func_80076474(Unk80076444 *this, Vec3 *a, Vec3 *b);
+
+/* What func_80075000 constructs, one per character (Unk8006ED20.unk24): the
+ * character's pad input, kept by func_8007504C every frame. */
+typedef struct Unk80075000 {
+    /* 0x000 */ u16 history[256]; /* the buttons held, frame by frame */
+    /* 0x200 */ u16 held;
+    /* 0x202 */ u16 pressed;  /* held now and not the frame before */
+    /* 0x204 */ u16 released; /* held the frame before and not now */
+    /* 0x206 */ u8 unk206[2];
+    /* 0x208 */ s32 count;    /* the next entry of history, 0 to 255 */
+    /* 0x20C */ s32 unk20C;
+    /* 0x210 */ s32 unk210;
+    /* 0x214 */ u32 unk214;   /* PAD_LEFT | PAD_RIGHT or 0: the buttons func_80075574 swaps */
+} Unk80075000;
+
+void func_80075034(Unk80075000 *this, s32 swap);
+/* the input of a character of the battle */
+Unk80075000 *func_80073260(Unk8006ED20 *this, s32 index);
+/* the last entry of history, through func_80075574 */
+u32 func_800750C4(Unk80075000 *this);
+void func_8007BDF0(Unk8007BD8C *this, Unk80075EE4 *sum);
+struct Unk8007C17C *func_8007C17C(struct Unk8007C17C *this, s32 arg);
+void func_80078910(void *this, void *arg);
+void func_8006EF90(Unk8006ED20 *object, s32 index, s32 add);
+void func_80079B2C(Unk80076F34 *this, s32 arg);
+/* this->unk334 = arg */
+void func_80079B0C(Unk80076F34 *this, s32 arg);
+void func_80079320(Unk80076F34 *this);
+void func_8007AE34(Unk80076F34 *this);
+s32 func_8007F5A8(Unk8007F184 *this);
+Unk8007F184 *func_8007758C(Unk80076F34 *this);
+void func_8007F1B8(Unk8007F184 *this);
+Unk8007F920 *func_800819E0(Unk8007F920 *this);
+void func_800C9790(Unk80076F34 *this);
+s32 func_800798F4(Unk80076F34 *this, s32 arg);
+s32 func_800778D0(Unk80076F34 *this, s32 arg);
+void func_800788B4(Unk80076F34 *this, s32 arg1, s32 arg2);
+void func_800C99B0(Unk80076F34 *this);
+/* this->unk22C and this->unk230 */
+Unk8007F920 *func_800792A0(Unk80076F34 *this);
+Unk80075000 *func_800776C4(Unk80076F34 *this); /* returns 0x234 */
+void func_8007B2C0(Unk80076F34 *this, s32 arg);
+void func_8007B2EC(Unk80076F34 *this, s32 arg);
+void func_8007F0F4(Unk8007F184 *this, s32 amount);
+void func_8007F1FC(Unk8007F184 *this, s32 amount);
+s32 func_8007FB9C(Unk8007F920 *this);
+void *func_800807F4(Unk8007F920 *this, s32 arg);
+ListNode *func_80075C64(ListNode *head, ListNode *node);
+
+u32 func_8006F004(Unk8006ED20 *this);
+
+void func_8006F024(Unk8006ED20 *this, ListNode *node);
+
+void func_8006F044(Unk8006ED20 *this, ListNode *node);
+
+Entity *func_8006F084(Unk8006ED20 *this, Entity *entity);
+
+Entity *func_8006F0B4(Unk8006ED20 *this, Entity *entity);
+
+EntityGroup *func_8006F0E4(Unk8006ED20 *this, Entity *entity);
+
+s32 func_8006F104(Unk8006ED20 *this);
+
+s32 func_8006F190(Unk8006ED20 *this);
+
+Unk80076F34 *func_800700C8(Unk8006ED20 *this, s32 side);
+
+void func_8007504C(Unk80075000 *this, u32 buttons);
+void func_8007F22C(Unk8007F184 *this);
+
+void func_8007A158(Unk80076F34 *chara, Unk80076F34 *other);
+
+void func_80079268(Unk80076F34 *chara);
+/* the constructor of the 0x59C-byte entity class Unk800CB7B0 (declared below) */
+Entity *func_800CB7B0(void *this, s32 arg1, s32 arg2);
+
+Vec3 *func_800765B4(Unk80076444 *this, Vec3 *out);
+
+s32 func_80072F80(Vec3 *a, Vec3 *b);
+
+void func_80073288(Unk8006ED20 *this);
+
+void func_800732B0(Unk8006ED20 *this);
+
+MATRIX *func_80076598(Unk80076444 *this);
+
+void func_800773F4(Unk80076F34 *this, s32 arg);
+
+void func_80077448(Unk80076F34 *this, s32 arg);
+
+void func_80077508(Unk80076F34 *this);
+
+s32 func_80077598(Unk80076F34 *this);
+
+void func_800775B0(Unk80076F34 *chara, Vec3 *in);
+
+s32 func_800777BC(Unk80076F34 *this);
+
+/* Bits of the flags at 0x37C, named after the functions that set them. The USA release has one more flag
+ * below them, so each is one bit higher there. */
+#if VERSION_JP
+#define UNK80076F34_FLAG_A78_BIT 4
+#define UNK80076F34_FLAG_AF8_BIT 5
+#define UNK80076F34_FLAG_AE4_BIT 6
+#else
+#define UNK80076F34_FLAG_A78_BIT 5
+#define UNK80076F34_FLAG_AF8_BIT 6
+#define UNK80076F34_FLAG_AE4_BIT 7
+#endif
+
+s32 func_800778BC(Unk80076F34 *this);
+
+s32 func_8007AED0(Unk80076F34 *this);
+
+s32 func_80078DE0(Unk80076F34 *this);
+
+void *func_80079274(Unk80076F34 *this, s32 arg);
+
+s32 func_800792B8(Unk80076F34 *this);
+
+s32 func_800792DC(Unk80076F34 *this);
+
+s32 func_80079A0C(Unk80076F34 *this);
+
+s32 func_800799A0(Unk80076F34 *this);
+
+Unk80076F34 *func_80073218(Unk8006ED20 *this, Unk80076F34 *chara);
+s32 func_80079D94(Unk80076F34 *this);
+s32 func_80079DD8(Unk80076F34 *this);
+Unk80076F34 *func_80079E50(Unk80076F34 *this, VECTOR *arg1, s32 arg2, s32 arg3);
+
+s32 func_80079E2C(Unk80076F34 *this);
+
+void func_8007A0E4(Unk80076F34 *this, s32 arg);
+
+void func_8007A718(Unk80076F34 *this);
+
+Vec3 *func_8007A650(Unk80076F34 *this, Vec3 *out);
+
+Vec3 *func_8007A69C(Unk80076F34 *this, Vec3 *out);
+
+Vec3 *func_8007A6CC(Unk80076F34 *this, Vec3 *out);
+
+void func_8007AD4C(Unk80076F34 *this, Entity *entity);
+struct Unk800C5DF4;
+struct Unk800C5DF4 *func_800C5DF4(struct Unk800C5DF4 *this, s32 arg1, Vec3 *vec1, Vec3 *vec2, s32 arg4, s32 arg5,
+                                  s32 arg6);
+struct Unk800C32E0 *func_800C32E0(struct Unk800C32E0 *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color);
+
+extern EntityVtable D_8006D4D4;
+
+void func_8007B9C8(Unk80076F34 *this, s32 arg);
+
+void func_8007BA30(Unk80076F34 *this, s32 arg);
+
+void func_8007BA64(Unk80076F34 *this, s32 arg);
+
+void func_8007BBE8(Unk80076F34 *this, s32 arg);
+
+void func_8007BC1C(Unk80076F34 *this, s32 arg);
+
+void func_80078EF8(Unk80076F34 *this, u32 unk, Vec3 *velocity, s32 unk3);
+
+void func_8007BDC8(Unk8007BD8C *this, s32 unk8, s32 unkC);
+
+Unk8007BF20 *func_8007BF20(Unk8007BF20 *this, Unk80076F34 *chara, s32 unk8, Vec3 *unk10, s32 unkC);
+
+Unk8007C084 *func_8007C084(Unk8007C084 *object, s32 unk0);
+
+void func_8007C09C(Unk8007C084 *this, s32 flags);
+
+Unk80075EE4 *func_80075D44(ListNode *list, Vec3 *point, Vec3 *nearest);
+
+Unk800C49E4 *func_800C49E4(Unk800C49E4 *this, Unk8007F920 *owner);
+
+/* The entity class func_800C4F74 constructs for an object of a character (0x4A8 bytes, virtual table
+ * D_8006D36C). */
+typedef struct Unk800C4F74 {
+    /* 0x000 */ Entity entity;
+    /* 0x018 */ u8 unk18[0x488 - 0x18];
+    /* 0x488 */ s32 unk488;
+    /* 0x48C */ u8 unk48C[0x4A8 - 0x48C];
+} Unk800C4F74;
+
+Unk800C4F74 *func_800C4F74(Unk800C4F74 *this, Unk8007F920 *owner);
+void func_80079B14(Unk80076F34 *this, s32 arg);
+void func_80079B1C(Unk80076F34 *this, s32 arg);
+
+void func_80079534(Unk80076F34 *this, Unk80076F34 *previous);
+
+void func_8007516C(Unk80075000 *this, s32 frames);
+s32 func_80075454(Unk80075000 *this, u32 buttons, s32 count, s32 any);
+void func_800797B8(Unk80076F34 *this, s32 clip);
+s32 func_8007F1C0(Unk8007F184 *this);
+
+s32 func_80077848(Unk80076F34 *this);
+void func_8007A12C(Unk80076F34 *this, s32 arg);
+
+/* Creates an entity of func_80082EE8's class (0x34 bytes) with g++'s new, and hands it to func_8007AD4C: it
+ * launches the Unk80076F34 of func_8007AEEC with vel. The match depends on this helper: its vel parameter keeps
+ * &vel in a saved register across allocEntityMemory. */
+static inline void newLaunch(Unk80076F34 *this, Vec3 *vel, s32 side) {
+    Entity *child = allocEntityMemory(0x34);
+
+    if (child != NULL) {
+        func_80082EE8(entityOperatorNewAt(0x34, child), this, vel, 0x808C2000, side);
+    }
+    func_8007AD4C(this, child);
+}
+
+void func_800C71DC(Unk800C7024 *this, s32 arg);
+
+Entity *func_800C75FC(Entity *target, Vec3 *arg1, s32 arg2);
+
+/* The constructor of the entity class of vtable D_8006D4D4, which the game inlines: func_800C2FBC with frame 8,
+ * no velocity (D_80010814), size 0x40, color 0xA0A0A0 and no flags. */
+static inline void func_8006D4D4_init(Entity *this, VECTOR *pos) {
+    func_800C2FBC((Unk800C2F14 *)this, 8, pos, &D_80010814, 0x40, 0xA0A0A0, 0);
+    this->vtable = &D_8006D4D4;
+}
+
+/* The character class func_8008D21C constructs (virtual table D_8006938C); func_80091A44's derives
+ * from it. */
+typedef struct Unk8008D21C {
+    /* 0x000 */ Unk80076F34 base;
+    /* 0x4A4 */ u16 unk4A4;
+    /* 0x4A6 */ s16 unk4A6;
+    /* 0x4A8 */ s16 unk4A8;
+    /* 0x4AA */ s16 unk4AA;
+    /* 0x4AC */ u16 unk4AC; /* halfword stores in func_8008D2D0 and func_8008DE84 */
+    /* 0x4AE */ s16 unk4AE;
+    /* 0x4B0 */ s32 unk4B0;
+    /* 0x4B4 */ s32 unk4B4;
+    /* 0x4B8 */ s32 unk4B8;
+    /* 0x4BC */ s32 unk4BC;
+    /* 0x4C0 */ s32 unk4C0;
+    /* 0x4C4 */ s32 unk4C4;
+    /* 0x4C8 */ s32 unk4C8;
+    /* 0x4CC */ s32 unk4CC;
+} Unk8008D21C;
+
+void func_8008D27C(Entity *this, s32 flags);
+Unk800C2F14 *func_800C2F14(Unk800C2F14 *this, u16 *frame, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags);
+
+void func_800C3134(Unk800C2F14 *this, s32 arg);
+
+void func_800C73A8(Unk800C7024 *this, s32 arg);
+
+extern VECTOR AXIS_Z;
+
+void func_800C7474(Unk800C7024 *this, Entity *target);
+
+void func_800A9428(Unk800A9944 *this, s32 flags);
+
+/* The entity func_800C5680 constructs for a character (virtual table D_8006D33C, 0x690 bytes): up to 4 entries of
+ * a table copied at 0x30 (func_800C5B18). */
+typedef struct Unk800C5680 {
+    /* 0x000 */ Entity entity;
+    /* 0x018 */ Unk80076F34 *chara;
+    /* 0x01C */ s32 unk1C; /* -1 from func_800C5680 */
+    /* 0x020 */ s32 unk20; /* func_800C5680's fifth argument, at most 32; counted down once unk24 runs out */
+    /* 0x024 */ s32 unk24; /* func_800C5680's sixth argument, a timer counted down every frame (func_800C5778) */
+    /* 0x028 */ s32 unk28;
+    /* 0x02C */ s32 count; /* the entries in use */
+    /* 0x030 */ Unk800C5B18Entry entries[4];
+    /* 0x090 */ u8 unk90[0x690 - 0x90];
+} Unk800C5680; /* size 0x690 */
+void func_800C5778(Unk800C5680 *this, Unk80075EE4 *sum);
+
+/* The entity func_800C32E0 constructs (virtual table D_8006D4FC): a sprite with frame 7 of D_8006D5C4, turned the
+ * way of its direction. */
+typedef struct Unk800C32E0 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk800C2CCC sprite;
+    /* 0x40 */ s32 unk40;
+    /* 0x44 */ s32 unk44;
+} Unk800C32E0; /* size 0x48 */
+
+Entity *func_800C391C(Entity *this, Vec3 *arg1, Vec3 *arg2, s32 arg3, s32 arg4);
+
+s32 func_800C7358(Unk800C7024 *this);
 
 EXTERN_C_END
 

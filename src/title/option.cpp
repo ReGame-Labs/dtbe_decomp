@@ -20,6 +20,10 @@ EXTERN_C_BEGIN
 void func_80074318(Unk80074220 *entry);
 void func_800744BC(Unk80074220 *entry);
 void func_8007460C(Unk80074220 *entry);
+Unk80074220 *func_80074130(Unk80074220 *entry, s32 grid, s32 maxLength);
+/* name_entry.c defines these two without a parameter, but the options pass them the entry */
+void func_8007434C(Unk80074220 *entry);
+void func_80074388(Unk80074220 *entry);
 
 /* the image Unk80079254's draw puts right of the menu's title row */
 extern Unk80073390Image D_80066AA4;
@@ -172,7 +176,13 @@ void Unk80077D20::draw(s32 arg, s32 isCurrent, s32 active) {
     setRGB0(sprt, brightness, brightness, brightness);
 }
 
-INCLUDE_ASM("title/nonmatchings/option", func_80077F28);
+/* Constructs an item drawing image that starts a memory card task in mode, with no task yet.
+ * The match depends on mode being a const member set by the initializer: g++ marks that store unchanging,
+ * so it may alias the epilogue's register reloads and stays above them. */
+Unk80077F28::Unk80077F28(Unk80073390Image *image, s32 mode) : Unk80077AC8(image), mode(mode) {
+    this->task = NULL;
+    this->taskHandle = 0;
+}
 
 /* Starts the memory card task in mode, unless the one it started still runs. */
 s32 Unk80077F28::confirm(s32 arg, s32 held, s32 own) {
@@ -213,7 +223,11 @@ Unk80077F28::~Unk80077F28() {
     killTaskByHandle(this->taskHandle);
 }
 
-INCLUDE_ASM("title/nonmatchings/option", func_800782D8);
+/* Constructs an item drawing image, reading the screen position of the save data (refresh, which the
+ * constructor calls directly and passes the item itself: a1 is this). */
+Unk800782D8::Unk800782D8(Unk80073390Image *image) : Unk80077AC8(image) {
+    refresh((s32)this);
+}
 
 /* Reads the screen position of the save data, as shown and as kept. The match depends on the assignment
  * chains, which store their right-hand field first. */
@@ -248,7 +262,14 @@ INCLUDE_ASM("title/nonmatchings/option", func_8007850C);
 
 INCLUDE_ASM("title/nonmatchings/option", func_80078628);
 
-INCLUDE_ASM("title/nonmatchings/option", func_800786E4);
+/* Constructs an item drawing image, with a name entry on the second character grid whose maxLength goes
+ * from 5 to 6, and loads the entry's images ("/zascii.tim", "/title/input.tim"). */
+Unk800786E4::Unk800786E4(Unk80073390Image *image) : Unk80077AC8(image) {
+    func_80074130(&this->entry, 1, 5);
+    this->entry.maxLength = 6;
+    func_8007434C(&this->entry);
+    func_80074388(&this->entry);
+}
 
 /* Plays sound 0x10 and opens the name entry, which the group then draws alone. */
 s32 Unk800786E4::confirm(s32 arg, s32 held, s32 own) {
