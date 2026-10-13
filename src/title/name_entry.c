@@ -17,9 +17,6 @@
 #include "psyq.h"
 #include "strings.h"
 
-extern char D_800663D0[];
-extern char D_800663DC[];
-
 extern u8 D_8007B250[];
 extern u8 D_8007B280[];
 extern u8 D_800663F8[];
@@ -133,17 +130,17 @@ void func_80074344(Unk80074220 *this) {
     this->active = 0;
 }
 
-/* Loads "/zascii.tim" (D_800663D0), uploads its TIMs to VRAM and frees it. */
+/* Loads "/zascii.tim", uploads its TIMs to VRAM and frees it. */
 void func_8007434C(void) {
-    u32 *file = loadFile(D_800663D0);
+    u32 *file = loadFile("/zascii.tim");
 
     uploadTims(file);
     mainHeapFree(file);
 }
 
-/* Loads "/title/input.tim" (D_800663DC), uploads its TIMs to VRAM and frees it. */
+/* Loads "/title/input.tim", uploads its TIMs to VRAM and frees it. */
 void func_80074388(void) {
-    u32 *file = loadFile(D_800663DC);
+    u32 *file = loadFile("/title/input.tim");
 
     uploadTims(file);
     mainHeapFree(file);
@@ -295,6 +292,8 @@ void func_80074938(Unk80074220 *this) {
     this->repeated = padManagerGetRepeated(padManager, this->port);
 }
 
+INCLUDE_RODATA("title/nonmatchings/name_entry", D_800663F0);
+
 INCLUDE_ASM("title/nonmatchings/name_entry", func_80074988);
 
 /* Sets unk48 and the countdown unk4C. */
@@ -407,6 +406,9 @@ void func_80074D90(Unk80074220 *this) {
 INCLUDE_ASM("title/nonmatchings/name_entry", func_80074E28);
 
 INCLUDE_ASM("title/nonmatchings/name_entry", func_80074F68);
+
+INCLUDE_RODATA("title/nonmatchings/name_entry", D_800663F8);
+INCLUDE_RODATA("title/nonmatchings/name_entry", D_800663FC);
 
 /* Prints the name in grey, centred on x 0xA0 at y 0x2F, and every other 8 frames D_800663F8 (the cursor)
  * under the position. */

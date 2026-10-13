@@ -15,7 +15,6 @@
 #include "engine/text/font.h"
 #include "title/title_classes.h"
 
-extern char D_80065FB0[];
 extern Unk80073390Image D_80066024[];
 
 /* Draws image at (x, y): a SPRT, then the DR_TPAGE of its texture page, added to ot. Returns the SPRT. */
@@ -96,7 +95,6 @@ typedef struct Unk80073818 {
 #endif
 
 extern Unk8006713CVtable D_80065FE8;
-extern char D_80065FC4[]; /* "%0*d" */
 
 /* name_entry.c's, as C sees them */
 void func_800744BC(Unk80074220 *entry);
@@ -159,9 +157,9 @@ s32 func_80073918(Unk80073818 *this) {
     return (padManagerGetPressed(pads, 0) | padManagerGetPressed(pads, 1)) & (PADstart | PAD_CONFIRM);
 }
 
-/* Loads "title/ranking.tim" (D_80065FB0), uploads its TIMs to VRAM and frees it. */
+/* Loads "title/ranking.tim", uploads its TIMs to VRAM and frees it. */
 void func_80073960(void) {
-    u32 *file = loadFile(D_80065FB0);
+    u32 *file = loadFile("title/ranking.tim");
 
     uploadTims(file);
     mainHeapFree(file);
@@ -174,7 +172,7 @@ void func_8007399C(u8 *text, s32 value, s32 digits) {
     u8 *digit = buffer;
     u8 c;
 
-    sprintf(buffer, D_80065FC4, digits, value);
+    sprintf(buffer, "%0*d", digits, value);
     while ((c = *digit++) != 0) {
         text[0] = 0x82;
         text[1] = c + 0x1F;
@@ -230,3 +228,6 @@ void func_800740FC(Unk8006713C *this, s32 arg) {
     this->unk20 = arg;
     this->vtable->unk20.func((u8 *)this + this->vtable->unk20.delta, arg);
 }
+
+INCLUDE_RODATA("title/nonmatchings/ranking", D_80065FE8);
+INCLUDE_RODATA("title/nonmatchings/ranking", D_80066024);

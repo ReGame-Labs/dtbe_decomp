@@ -39,7 +39,9 @@ typedef struct Unk800D3DBC {
     /* 0xD48 */ u32 unkD48;
     /* 0xD4C */ Camera unkD4C; /* its table linked after the battle camera's (func_800D48E8) */
     /* 0xD88 */ Group unkD88;
-    /* 0xDE8 */ u8 unkDE8[0xE24 - 0xDE8];
+    /* 0xDE8 */ u8 unkDE8[0xE12 - 0xDE8];
+    /* 0xE12 */ s16 unkE12; /* set to 1 while func_800D5650's entities fall */
+    /* 0xE14 */ u8 unkE14[0xE24 - 0xE14];
     /* 0xE24 */ s16 unkE24;
     /* 0xE26 */ s16 unkE26;
     /* 0xE28 */ u8 unkE28[0xF18 - 0xE28];
@@ -47,8 +49,8 @@ typedef struct Unk800D3DBC {
     /* 0xF20 */ u16 unkF20[16]; /* that CLUT read back from VRAM (func_800D4D88) */
     /* 0xF40 */ u16 unkF40[16]; /* and a second copy */
     /* 0xF60 */ u8 unkF60[0xF7C - 0xF60];
-    /* 0xF7C */ u16 unkF7C; /* the Unk800D5BA0 entities alive */
-    /* 0xF7E */ u16 unkF7E;
+    /* 0xF7C */ s16 unkF7C; /* the Unk800D5BA0 entities alive */
+    /* 0xF7E */ s16 unkF7E; /* func_800D5650's state */
     /* 0xF80 */ s32 unkF80;
     /* 0xF84 */ s16 unkF84;
     /* 0xF86 */ s16 unkF86;
@@ -197,7 +199,36 @@ void func_800D4934(Unk800D3DBC *this) {
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D4950);
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D4B14);
+Entity *func_800D9744(Entity *this, Unk8006ED20 *stage, Vec3 *vec);
+
+/* Adds 16 entities of func_800D9744's class to the stage: eight with a random positive x and y -0x7D0, eight
+ * with a random negative x and y -0x800. The match depends on each side's vy being a local set before the random
+ * call: its constant then lives across the call and loop hoists it into a saved register, as in the game (a
+ * plain `vec.vy = -0x7D0` after vx sets it next to its store and keeps it in the loop). */
+void func_800D4B14(Unk800D3DBC *this) {
+    Vec3 vec;
+    Entity *entity;
+    s32 i;
+
+    for (i = 0; i < 16; i++) {
+        if (i < 8) {
+            s32 vy = -0x7D0;
+
+            vec.vx = ((func_8006F004(&this->base) & 0x1F) << 4) + 0x800;
+            vec.vy = vy;
+        } else {
+            s32 vy = -0x800;
+
+            vec.vx = -(((func_8006F004(&this->base) & 0x1F) << 4) + 0x800);
+            vec.vy = vy;
+        }
+        vec.vz = 0;
+        entity = NEW_ENTITY(0x3C, func_800D9744, &this->base, &vec);
+        if (entity != NULL) {
+            func_8006F084(&this->base, entity);
+        }
+    }
+}
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D4BFC);
 
@@ -284,9 +315,107 @@ void func_800D5614(Unk800D3DBC *this) {
     }
 }
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D5650);
+struct Unk800D5BA0 *func_800D5BA0(struct Unk800D5BA0 *this, Unk800D3DBC *stage, MeshScene *scene, Vec3 *vec);
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D58BC);
+/* A new Unk800D5BA0 entity for the stage, in its scene (func_800D5650 and func_800D58BC). The match depends on vec
+ * going through this helper's parameter: its address is taken into a register before the allocation. */
+static inline Entity *newUnk800D5BA0(Unk800D3DBC *stage, Vec3 *vec) {
+    return NEW_ENTITY(0xF4, func_800D5BA0, stage, stage->scene, vec);
+}
+
+struct Unk800D7EC4 *func_800D7EC4(struct Unk800D7EC4 *this, Unk8006ED20 *stage);
+
+/* A sequence by states (0xF7E), with 0xF80 as its timer: after 0x400 frames, 20 falling Unk800D7EC4 entities and
+ * sound 0x58; once no Unk800D5BA0 entity is alive, one more falling entity every 8 frames and an Unk800D5BA0 every
+ * 0x40 frames from frame 0x5B, while 0x32C sways; it ends at frame 0x11B or when func_8006F190 says so. */
+void func_800D5650(Unk800D3DBC *this) {
+    s32 i;
+    s32 frame;
+
+    switch (this->unkF7E) {
+    case 0:
+        if (++this->unkF80 < 0x400) {
+            break;
+        }
+        for (i = 0; i < 20; i++) {
+            Entity *entity = NEW_ENTITY(0x4C, func_800D7EC4, &this->base);
+            if (entity != NULL) {
+                func_8006F084(&this->base, entity);
+            }
+        }
+        this->unkF80 = 0;
+        this->unkF7E++;
+        if (this->unkE12 == 0) {
+            this->unkE12 = 1;
+        }
+        if (this->unkD48 == 0) {
+            this->unkD48 = soundControlPlaySound(&SOUND_CONTROL, 0x58, 0);
+        }
+        /* fall through */
+    case 1:
+        if (this->unkF7C != 0) {
+            break;
+        }
+        this->unkF7E++;
+        /* fall through */
+    case 2:
+        if ((this->unkF80 & 7) == 0) {
+            Entity *entity = NEW_ENTITY(0x4C, func_800D7EC4, &this->base);
+            if (entity != NULL) {
+                func_8006F084(&this->base, entity);
+            }
+        }
+        if ((this->unkF80 & 0x3F) == 0 && this->unkF80 >= 0x5B) {
+            Vec3 vec;
+            Entity *entity;
+
+            vec.vx = 0;
+            vec.vy = 0;
+            vec.vz = 0x2000;
+            entity = newUnk800D5BA0(this, &vec);
+            if (entity != NULL) {
+                func_8006F084(&this->base, entity);
+            }
+        }
+        frame = ++this->unkF80;
+        this->base.unk32C += COS_SIN_TABLE[(frame << 10) & 0xFFF].sin >> 9;
+        if (frame >= 0x11B || func_8006F190(&this->base) != 0) {
+            u32 sound;
+
+            if (this->unkE12 != 0) {
+                this->unkE12 = 0;
+            }
+            sound = this->unkD48;
+
+            this->unkF80 = 0;
+            this->unkF7E = 0;
+            if (sound != 0) {
+                stopSound(sound);
+                this->unkD48 = 0;
+            }
+        }
+        break;
+    }
+}
+
+/* Every 0x200 frames, when no Unk800D5BA0 entity is alive and 0xF7E is clear, adds a new one to the stage.
+ * The two halfword tests are one word load: gcc merges tests of adjacent fields. */
+void func_800D58BC(Unk800D3DBC *this) {
+    Entity *entity;
+
+    if (((this->unkD3C + 0x80) & 0x1FF) == 0 && this->unkF7C == 0 && this->unkF7E == 0
+        && func_8006F190(&this->base) == 0) {
+        Vec3 vec;
+
+        vec.vx = 0;
+        vec.vy = 0;
+        vec.vz = 0x2000;
+        entity = newUnk800D5BA0(this, &vec);
+        if (entity != NULL) {
+            func_8006F084(&this->base, entity);
+        }
+    }
+}
 
 /* Takes the mesh of node 9 out of the stage's scene's group and hides that node. */
 void func_800D5974(Unk800D3DBC *this) {

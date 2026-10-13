@@ -22,7 +22,8 @@ typedef struct Unk800D3B74 {
     /* 0xDA8 */ RECT unkDA8;     /* 16 by 1 pixels at (0x300, 0xFE): a CLUT */
     /* 0xDB0 */ u8 unkDB0[0xE90 - 0xDB0];
     /* 0xE90 */ u16 unkE90[16]; /* that CLUT, read back from VRAM by func_800D4074 */
-    /* 0xEB0 */ u8 unkEB0[0xEC8 - 0xEB0];
+    /* 0xEB0 */ u8 unkEB0[0xEC4 - 0xEB0];
+    /* 0xEC4 */ MeshScene *unkEC4; /* the stage's meshes */
     /* 0xEC8 */ u32 unkEC8; /* an angle (0..0xFFF), stepped by func_800D704C */
     /* 0xECC */ u8 unkECC[0xEF4 - 0xECC];
     /* 0xEF4 */ s16 unkEF4;
@@ -40,6 +41,7 @@ typedef struct Unk800D3B74 {
 } Unk800D3B74;
 
 void func_800D9B9C(void *this);
+UnkSt00Entity *func_800D7978(UnkSt00Entity *this, Unk8006ED20 *owner, MeshScene *meshScene, s32 arg3);
 void func_800D4BB0(Unk800D3B74 *this);
 
 /* the virtual tables the functions below install, and the data they read */
@@ -118,7 +120,19 @@ void func_800D4AE8(Unk800D3B74 *this) {
     stopSound(this->unkD4C);
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D4B0C);
+/* Moves the mesh of node 28 out of the stage's meshes into the group at 0x1060, and creates the entity of
+ * func_800D7978's class that draws that group, put into the entity group of this. */
+void func_800D4B0C(Unk800D3B74 *this) {
+    Mesh *mesh = this->unkEC4->meshes[28];
+    Entity *entity;
+
+    listRemove(&mesh->object.link);
+    groupAddChild(&this->unk1060, &mesh->object);
+    entity = NEW_ENTITY(sizeof(UnkSt00Entity), func_800D7978, &this->base, this->unkEC4, 0x1C);
+    if (entity != NULL) {
+        func_8006F0B4(&this->base, entity);
+    }
+}
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D4BB0);
 
@@ -177,12 +191,12 @@ INCLUDE_ASM("st00/nonmatchings/st00", func_800D70E4);
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D76FC);
 
 /* Constructs an entity of D_800D3AB4 for the Unk8006ED20 whose entity group will hold it, and the
- * word that object keeps at 0xEC4 (func_800D4B0C, which also passes 0x1C, unused). */
-UnkSt00Entity *func_800D7978(UnkSt00Entity *this, Unk8006ED20 *owner, s32 arg2, s32 arg3) {
+ * MeshScene that object keeps at 0xEC4 (func_800D4B0C, which also passes 0x1C, unused). */
+UnkSt00Entity *func_800D7978(UnkSt00Entity *this, Unk8006ED20 *owner, MeshScene *meshScene, s32 arg3) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_800D3AB4;
     this->owner = owner;
-    this->unk1C = arg2;
+    this->unk1C = meshScene;
     return this;
 }
 

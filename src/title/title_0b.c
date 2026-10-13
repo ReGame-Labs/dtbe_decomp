@@ -33,6 +33,8 @@ void func_8007A534(Unk8007A46C *this, s32 flags) {
     cacheDestroy(&this->cache, flags);
 }
 
+INCLUDE_RODATA("title/nonmatchings/title_0b", D_80066B60);
+
 INCLUDE_ASM("title/nonmatchings/title_0b", func_8007A580);
 
 /* Picks the glyph of character code (0x28), from its index in codes. */
@@ -97,3 +99,5 @@ void func_8007B038(Unk8007A46C *this, u8 a) {
 void func_8007B040(Unk8007A46C *this, s32 value) {
     this->unk3C = value;
 }
+
+INCLUDE_RODATA("title/nonmatchings/title_0b", D_80066B68);

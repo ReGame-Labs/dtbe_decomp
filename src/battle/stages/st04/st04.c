@@ -3,7 +3,9 @@
 #include "battle/game_classes.h"
 #include "battle/stage_objects.h"
 #include "psyq.h"
+#include "engine/gfx/lights.h"
 #include "engine/math/sin_cos.h"
+#include "engine/sound/sound_control.h"
 #include "engine/task/entity.h"
 #include "engine/system/memory.h"
 
@@ -26,29 +28,23 @@ typedef struct Unk800D3AC4 {
     /* 0x1D68 */ RECT unk1D68;     /* 16 by 1 pixels at (0x330, 0xE6): a CLUT */
     /* 0x1D70 */ u8 unk1D70[0x1D90 - 0x1D70];
     /* 0x1D90 */ u16 unk1D90[16]; /* that CLUT, read back from VRAM by func_800D40BC */
-    /* 0x1DB0 */ u8 unk1DB0[0x1DCC - 0x1DB0];
+    /* 0x1DB0 */ u8 unk1DB0[0x1DC8 - 0x1DB0];
+    /* 0x1DC8 */ MeshScene *unk1DC8; /* func_8006F1B8's, at init (func_800D3B24) */
     /* 0x1DCC */ VECTOR unk1DCC[2]; /* by side: the character's position, each update (func_800D3CB8) */
     /* 0x1DEC */ s32 unk1DEC[2]; /* by side, as the next two (func_800D49D0) */
     /* 0x1DF4 */ s32 unk1DF4[2];
     /* 0x1DFC */ VECTOR unk1DFC[2];
-    /* 0x1E1C */ s32 unk1E1C;
-    /* 0x1E20 */ s32 unk1E20;
-    /* 0x1E24 */ u8 unk1E24[0x1E3C - 0x1E24];
-    /* the per-side state func_800D4DEC resets */
-    /* 0x1E3C */ s32 unk1E3C[2];
-    /* 0x1E44 */ u8 unk1E44[0x1E54 - 0x1E44];
-    /* 0x1E54 */ s16 unk1E54[2];
-    /* 0x1E58 */ u8 unk1E58[0x1E60 - 0x1E58];
-    /* 0x1E60 */ s16 unk1E60[2];
-    /* 0x1E64 */ u8 unk1E64[0x1E6C - 0x1E64];
-    /* 0x1E6C */ VECTOR unk1E6C[2]; /* reset to the next one */
-    /* 0x1E8C */ u8 unk1E8C[0x1ECC - 0x1E8C];
-    /* 0x1ECC */ VECTOR unk1ECC[2];
-    /* 0x1EEC */ u8 unk1EEC[0x1F2C - 0x1EEC];
-    /* 0x1F2C */ VECTOR unk1F2C[2];
-    /* 0x1F4C */ u8 unk1F4C[0x1F8C - 0x1F4C];
-    /* 0x1F8C */ VECTOR unk1F8C[2];
-    /* 0x1FAC */ u8 unk1FAC[0x1FF4 - 0x1FAC];
+    /* 0x1E1C */ s32 unk1E1C[2]; /* by side: set once func_800D41A4 has made the side's func_800D72D8 entity */
+    /* the state of the six parts func_800D4BE0 sets up (func_800D4DEC resets one) */
+    /* 0x1E24 */ s32 unk1E24[6];
+    /* 0x1E3C */ s32 unk1E3C[6];
+    /* 0x1E54 */ s16 unk1E54[6];
+    /* 0x1E60 */ u16 unk1E60[6]; /* a random scale, 0 to 0xFFF (func_8006F004) */
+    /* 0x1E6C */ VECTOR unk1E6C[6]; /* the part's position; starts at the next one */
+    /* 0x1ECC */ VECTOR unk1ECC[6]; /* D_800D3824's row at set-up */
+    /* 0x1F2C */ VECTOR unk1F2C[6];
+    /* 0x1F8C */ VECTOR unk1F8C[6];
+    /* 0x1FEC */ u8 unk1FEC[0x1FF4 - 0x1FEC];
     /* the per-side state func_800D56E4 resets */
     /* 0x1FF4 */ s32 unk1FF4[2];
     /* 0x1FFC */ s16 unk1FFC[2];
@@ -60,6 +56,16 @@ typedef struct Unk800D3AC4 {
     /* 0x2068 */ VECTOR unk2068[2];
     /* 0x2088 */ u16 unk2088; /* set while func_8006F1A4 holds the stage's update */
 } Unk800D3AC4;
+
+/* The stage's entity of func_800D6F9C (virtual table D_800D39AC): a square around a side's character. */
+typedef struct Unk800D6F9C {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk800D3AC4 *stage;
+    /* 0x1C */ u16 side;
+    /* 0x20 */ u32 unk20; /* 0xF08080 at construction */
+    /* 0x24 */ u8 unk24[0x34 - 0x24];
+    /* 0x34 */ SVECTOR unk34[4]; /* the square's corners, in the z = 0 plane */
+} Unk800D6F9C;
 
 extern VtableEntry D_800D3A4C[];
 
@@ -77,7 +83,67 @@ void func_800D3AFC(Unk800D3AC4 *this, s32 flags) {
     func_8006F254(&this->base, flags);
 }
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D3B24);
+/* the table of func_800C77C8's entity, in the stage's .data */
+extern u8 D_800D89A8[];
+
+/* what the stage's init calls */
+void func_800D3DA0(Unk800D3AC4 *this);
+void func_800D3E20(Unk800D3AC4 *this);
+void func_800D3F04(Unk800D3AC4 *this);
+void func_800D40BC(Unk800D3AC4 *this);
+void func_800D4198(Unk800D3AC4 *this);
+void func_800D4280(Unk800D3AC4 *this);
+void func_800D42B4(Unk800D3AC4 *this);
+void func_800D43D4(Unk800D3AC4 *this);
+void func_800D4BE0(Unk800D3AC4 *this);
+void func_800D5598(Unk800D3AC4 *this);
+Entity *func_800D6520(Entity *this, Unk800D3AC4 *stage, s32 side);
+Entity *func_800D7F70(Entity *this, Unk800D3AC4 *stage);
+
+/* The stage's init: func_80070140, func_800700E4's bounds, its own state and VRAM copies (func_800D5598 only
+ * the first time, counted at 0xD3C), the two func_800D6520 entities (0 through func_8006F084, 1 through
+ * func_8006F0B4), the pulsing func_800D7F70 entity and func_800C77C8's entity for D_800D89A8.
+ * The match depends on the first two sharing `entity` and the third having a block variable of its own: a
+ * variable set again later keeps the copy of the new value and the test after the constructor (a plain move to
+ * v0 the first time, s0 the last time), a block-local one lets the allocation test jump past that test. */
+void func_800D3B24(Unk800D3AC4 *this) {
+    Entity *entity;
+
+    func_80070140(&this->base);
+    func_800700E4(&this->base, -0x1000, 0x1000, -0x2000, 0x320, 0);
+    this->unkD38 = 0;
+    this->unk2088 = 0;
+    this->unk1DC8 = func_8006F1B8(&this->base);
+    func_800D4BE0(this);
+    func_800D3E20(this);
+    if (this->unkD3C == 0) {
+        func_800D5598(this);
+    }
+    func_800D3F04(this);
+    func_800D40BC(this);
+    func_800D4280(this);
+    func_800D42B4(this);
+    func_800D43D4(this);
+    func_800D4198(this);
+    func_800D3DA0(this);
+    entity = NEW_ENTITY(0x320, func_800D6520, this, 0);
+    if (entity != NULL) {
+        func_8006F084(&this->base, entity);
+    }
+    entity = NEW_ENTITY(0x320, func_800D6520, this, 1);
+    if (entity != NULL) {
+        func_8006F0B4(&this->base, entity);
+    }
+    {
+        Entity *pulse = NEW_ENTITY(0x3C8, func_800D7F70, this);
+
+        if (pulse != NULL) {
+            func_8006F084(&this->base, pulse);
+        }
+    }
+    func_800C77C8(&this->base, D_800D89A8, 2);
+    this->unkD3C++;
+}
 
 /* the stage's own update steps */
 void func_800D3EA4(Unk800D3AC4 *this);
@@ -180,13 +246,31 @@ void func_800D40BC(Unk800D3AC4 *this) {
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D4104);
 
-/* Clears the stage's words at 0x1E20 and 0x1E1C. */
+/* Clears the stage's per-side flags at 0x1E1C. */
 void func_800D4198(Unk800D3AC4 *this) {
-    this->unk1E20 = 0;
-    this->unk1E1C = 0;
+    this->unk1E1C[1] = 0;
+    this->unk1E1C[0] = 0;
 }
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D41A4);
+Entity *func_800D72D8(Entity *this, Unk800D3AC4 *stage, u16 side);
+
+/* A stage step: once per side, when the character's height (0x1DCC's vy) is not negative, adds a
+ * func_800D72D8 entity for that side to the stage and plays sound 0x64. */
+void func_800D41A4(Unk800D3AC4 *this) {
+    s32 side;
+
+    for (side = 0; side < 2; side++) {
+        if (this->unk1E1C[side] == 0 && this->unk1DCC[side].vy >= 0) {
+            Entity *entity = NEW_ENTITY(0xE4, func_800D72D8, this, side);
+
+            if (entity != NULL) {
+                func_8006F084(&this->base, entity);
+            }
+            soundControlPlaySound(&SOUND_CONTROL, 0x64, 0);
+            this->unk1E1C[side] = 1;
+        }
+    }
+}
 
 /* Clears the stage's per-side words at 0x1DEC and 0x1DF4 and its two vectors at 0x1DFC. */
 void func_800D4280(Unk800D3AC4 *this) {
@@ -211,7 +295,76 @@ INCLUDE_ASM("st04/nonmatchings/st04", func_800D44D4);
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D4700);
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D49D0);
+Unk800D6F9C *func_800D6F9C(Unk800D6F9C *this, Unk800D3AC4 *stage, u16 side);
+
+/* Sets the three coordinates of a VECTOR. The match depends on this helper being a function: its arguments
+ * (the address, then the values) are all evaluated before the stores, the address as base + index + offset. */
+static inline void setVectorXYZ(VECTOR *v, s32 x, s32 y, s32 z) {
+    v->vx = x;
+    v->vy = y;
+    v->vz = z;
+}
+
+/* A stage step, per side: state 0 waits for the character's height (0x1DCC's vy) not to be negative, then runs
+ * func_80078EF8 on it, adds func_800D6F9C's square for the side and keeps its position at 0x1DFC; state 1 moves
+ * that position by twice the frame count (0x1DF4) each frame and puts the character there, and ends after 60
+ * frames. JP puts it there with func_800775B0, func_80079274 and func_80079AE4; US with func_8007329C and
+ * func_800775B0, unless func_8006F190 holds, which ends state 1 at once. */
+void func_800D49D0(Unk800D3AC4 *this) {
+    s32 side;
+
+    for (side = 0; side < 2; side++) {
+#if VERSION_US
+        Unk80076F34 *chara = func_800700C8(&this->base, side);
+
+#endif
+        switch (this->unk1DEC[side]) {
+        case 0:
+            if (this->unk1DCC[side].vy < 0) {
+                break;
+            }
+            func_80078EF8(func_800700C8(&this->base, side), 0x2000001, (Vec3 *)&D_80010814, 0);
+            {
+                Entity *entity = NEW_ENTITY(0x54, func_800D6F9C, this, side);
+
+                if (entity != NULL) {
+                    func_8006F0B4(&this->base, entity);
+                }
+            }
+            this->unk1DF4[side] = 0;
+            setVectorXYZ(&this->unk1DFC[side], this->unk1DCC[side].vx, 0, this->unk1DCC[side].vz);
+            this->unk1DEC[side]++;
+            /* fallthrough */
+        case 1: {
+#if VERSION_US
+            this->unk1DFC[side].vy += this->unk1DF4[side] * 2;
+            if (!func_8006F190(&this->base)) {
+                func_8007329C(&this->base);
+                func_800775B0(chara, (Vec3 *)&this->unk1DFC[side]);
+            } else {
+                this->unk1DEC[side]++;
+            }
+#else
+            Unk80076F34 *chara;
+            Vec3 position;
+
+            this->unk1DFC[side].vy += this->unk1DF4[side] * 2;
+            chara = func_800700C8(&this->base, side);
+            position.vx = this->unk1DFC[side].vx;
+            position.vy = this->unk1DFC[side].vy;
+            position.vz = this->unk1DFC[side].vz;
+            func_800775B0(chara, &position);
+            func_80079274(func_800700C8(&this->base, side), 1);
+            func_80079AE4(func_800700C8(&this->base, side));
+#endif
+            if (++this->unk1DF4[side] >= 60) {
+                this->unk1DEC[side]++;
+            }
+            break;
+        }
+        }
+    }
+}
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D4BE0);
 
@@ -224,16 +377,16 @@ static inline void clearVector(VECTOR *v) {
     v->pad = 0;
 }
 
-/* Resets one side's state: two vectors and three counters cleared, 0x1E6C set back to 0x1ECC. */
-void func_800D4DEC(Unk800D3AC4 *this, s32 side) {
-    clearVector(&this->unk1F2C[side]);
-    clearVector(&this->unk1F8C[side]);
-    this->unk1E60[side] = 0;
-    this->unk1E54[side] = 0;
-    this->unk1E3C[side] = 0;
-    this->unk1E6C[side].vx = this->unk1ECC[side].vx;
-    this->unk1E6C[side].vy = this->unk1ECC[side].vy;
-    this->unk1E6C[side].vz = this->unk1ECC[side].vz;
+/* Resets one part's state: two vectors and three counters cleared, 0x1E6C set back to 0x1ECC. */
+void func_800D4DEC(Unk800D3AC4 *this, s32 part) {
+    clearVector(&this->unk1F2C[part]);
+    clearVector(&this->unk1F8C[part]);
+    this->unk1E60[part] = 0;
+    this->unk1E54[part] = 0;
+    this->unk1E3C[part] = 0;
+    this->unk1E6C[part].vx = this->unk1ECC[part].vx;
+    this->unk1E6C[part].vy = this->unk1ECC[part].vy;
+    this->unk1E6C[part].vz = this->unk1ECC[part].vz;
 }
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D4E6C);
@@ -308,16 +461,6 @@ void func_800D6B64(Entity *this, s32 flags) {
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D6BB8);
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D6DC0);
-
-/* The stage's entity of func_800D6F9C (virtual table D_800D39AC): a square around a side's character. */
-typedef struct Unk800D6F9C {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk800D3AC4 *stage;
-    /* 0x1C */ u16 side;
-    /* 0x20 */ u32 unk20; /* 0xF08080 at construction */
-    /* 0x24 */ u8 unk24[0x34 - 0x24];
-    /* 0x34 */ SVECTOR unk34[4]; /* the square's corners, in the z = 0 plane */
-} Unk800D6F9C;
 
 /* Constructs the stage's entity for a side: its corners are +-2 * 0x2 of the character's record.
  * The match depends on the record taken as "table + index" (an index or a record pointer local swaps
@@ -444,13 +587,18 @@ void func_800D84C8(UnkStageObject *this, Unk80075EE4 *part) {
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D850C);
 
-/* The entity class func_800D850C constructs (virtual table D_800D38EC): an
- * Unk80076308 base at 0x18 and an Unk800761AC member at 0x30. */
+/* The entity class func_800D850C constructs (virtual table D_800D38EC) for one of the stage's six parts: an
+ * Unk80076308 base at 0x18 and func_80075EE4's object at 0x30. */
 typedef struct Unk800D850C {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Unk80076308 unk18;
     /* 0x1C */ u8 unk1C[0x30 - 0x1C];
-    /* 0x30 */ Unk800761AC unk30;
+    /* 0x30 */ Unk80075EE4 unk30;
+    /* 0x78 */ Unk800D3AC4 *stage;
+    /* 0x7C */ u16 index; /* the part, 0 to 5 */
+    /* 0x7E */ s16 unk7E; /* set while unk30 is out of the stage's list (func_800D86AC) */
+    /* 0x80 */ Vec3 unk80; /* the part's position (0x1E6C), 0x100 lower */
+    /* 0x8C */ u8 unk8C[0xA0 - 0x8C];
 } Unk800D850C;
 
 extern EntityVtable D_800D38EC;
@@ -463,11 +611,11 @@ void func_800D8618(Unk800D850C *this, s32 flags) {
     this->unk30.vtable = D_80065184;
     /* listRemove(&this->unk30.link) written out: the match depends on this
      * access order (soundControlDestroy's); the inline gives 12 diffs */
-    link = &this->unk30.link;
-    this->unk30.link.next->prev = this->unk30.link.prev;
-    link->prev->next = this->unk30.link.next;
-    this->unk30.link.next = link;
-    this->unk30.link.prev = link;
+    link = &this->unk30.node;
+    this->unk30.node.next->prev = this->unk30.node.prev;
+    link->prev->next = this->unk30.node.next;
+    this->unk30.node.next = link;
+    this->unk30.node.prev = link;
     this->unk18.vtable = D_80065164;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {

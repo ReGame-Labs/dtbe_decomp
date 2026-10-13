@@ -30,11 +30,11 @@ typedef struct UnkSt02MeshEntity {
 } UnkSt02MeshEntity;
 
 /* An entity of st00 (func_800D7978) with the same layout: the Unk8006ED20 whose entity group holds
- * it, and the word that object keeps at 0xEC4. */
+ * it, and the MeshScene that object keeps at 0xEC4. */
 typedef struct UnkSt00Entity {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Unk8006ED20 *owner;
-    /* 0x1C */ s32 unk1C;
+    /* 0x1C */ MeshScene *unk1C;
 } UnkSt00Entity;
 
 /* An entity of st02 (func_800D680C) and st03 (func_800D5358): a mesh of the stage and where it is (the
@@ -53,11 +53,12 @@ typedef struct UnkStageMeshPos {
 typedef struct UnkStageQuad {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Unk8006ED20 *owner;
-    /* 0x1C */ s16 index;
+    /* 0x1C */ u16 index; /* unsigned: st09's func_800D5190 indexes with lhu */
     /* 0x1E */ s16 unk1E;
     /* 0x20 */ s32 unk20;
     /* 0x24 */ SVECTOR corners[4];
-    /* 0x44 */ u8 unk44[0x54 - 0x44];
+    /* 0x44 */ Vec3 unk44; /* where st09's func_800D5190 throws from */
+    /* 0x50 */ u8 unk50[0x54 - 0x50];
 } UnkStageQuad; /* size 0x54 */
 
 /* A 256 by 256 square of the stage at pos: index (0x1C) picks its entry in the owner's tables. Its gather
