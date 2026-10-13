@@ -134,18 +134,23 @@ void sndPlayingEffectKeyOff(SndPlayingEffect *this) {
     sndPlayingEffectKeyOffInline(this);
 }
 
-/* Stops a sound effect and frees it. */
-#if VERSION_JP
+/* Stops a sound effect and frees it. The JP build inlines the key off and the
+ * free; the US build calls their out-of-line copies. */
 void sndPlayingEffectStop(SndPlayingEffect *this) {
     resumeVoices(this->voiceBits);
     if (this->voice & SND_VOICE_KEYED) {
+#if VERSION_JP
         sndPlayingEffectKeyOffInline(this);
-    }
-    sndPlayingEffectFreeInline(this);
-}
 #else
-INCLUDE_ASM("main/nonmatchings/sound/sound_effect", sndPlayingEffectStop);
+        sndPlayingEffectKeyOff(this);
 #endif
+    }
+#if VERSION_JP
+    sndPlayingEffectFreeInline(this);
+#else
+    sndPlayingEffectFree(this);
+#endif
+}
 
 /* Stops the effects of the group of a new sound effect, and tells whether it
  * may play: one that does not loop may not while the same effect still

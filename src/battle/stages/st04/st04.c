@@ -79,14 +79,6 @@ void func_800D3AFC(Unk800D3AC4 *this, s32 flags) {
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D3B24);
 
-/* game.bin functions missing from game.h */
-void func_80071F6C(void);
-Unk80076F34 *func_800700C8(Unk8006ED20 *this, s32 side);
-Vec3 *func_800775D8(Unk80076F34 *chara, Vec3 *out);
-s32 func_8006F144(Unk8006ED20 *object);
-s32 func_8006F190(Unk8006ED20 *object);
-s32 func_8006F1A4(Unk8006ED20 *object);
-
 /* the stage's own update steps */
 void func_800D3EA4(Unk800D3AC4 *this);
 void func_800D3FC8(Unk800D3AC4 *this);
@@ -316,19 +308,6 @@ void func_800D6B64(Entity *this, s32 flags) {
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D6BB8);
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D6DC0);
-
-/* The 0x180-byte records of a table in game.bin, indexed by func_80077568's value (st08 reads 0x0's bit 0). */
-typedef struct Unk800656D4 {
-    /* 0x000 */ u16 unk0;
-    /* 0x002 */ s16 unk2; /* half the size of the square of func_800D6F9C */
-    /* 0x004 */ u8 unk4[0x180 - 0x4];
-} Unk800656D4;
-
-extern Unk800656D4 D_800656D4[];
-
-/* the character calls of game.c the entity below makes */
-Vec3 *func_8007A650(Unk80076F34 *chara, Vec3 *out);
-s32 func_80077568(Unk80076F34 *this);
 
 /* The stage's entity of func_800D6F9C (virtual table D_800D39AC): a square around a side's character. */
 typedef struct Unk800D6F9C {

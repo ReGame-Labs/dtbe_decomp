@@ -61,6 +61,9 @@ typedef struct Unk80077698 {
     /* 0x3C */ Unk8007B470Entry entries[9];
 } Unk80077698;
 
+/* The tables of the characters, by func_80077568's index: the character's 0x220 (func_80077698) points to one. */
+extern Unk80077698 D_800656D4[];
+
 /* The objects of func_8007F184 and func_8007F6FC: classes derived from
  * Unk8007F920, not identified yet. The character keeps an Unk8007F184 at
  * 0x238: unless 0x2C is set, func_8007F068 takes an amount off 0x20 (down
@@ -111,6 +114,28 @@ typedef struct Unk80076444 {
     /* 0x78 */ Unk80076A0C *unk78; /* the node of D_8006437C func_80076474 last picked */
 } Unk80076444;
 
+/* A class that func_80075EE4 constructs: a node of a circular list, the
+ * object it belongs to, flags and a virtual table after them, which make the
+ * class of D_80065184 (Unk800761AC) it derives from, then a vector and two
+ * words of its own. func_8007BDF0 (and st02's func_800D54C0, st00's
+ * func_800D99AC) add their owner's count, word and vector into the one
+ * linked to theirs (func_80075B48); func_80078878 finds an entity at 0x14. */
+typedef struct Unk80075EE4 {
+    /* 0x00 */ ListNode node;
+    /* 0x08 */ void *owner; /* its second base: an Unk8007BD8C in game.bin, an UnkStageObject in st00 */
+    /* 0x0C */ u32 flags;
+    /* 0x10 */ s32 unk10;
+    /* 0x14 */ Entity *unk14; /* func_800ACA60 puts its entity here */
+    /* 0x18 */ u32 unk18; /* flags above bit 18, a count saturating at 0x3FFFF below */
+    /* 0x1C */ s32 unk1C;
+    /* 0x20 */ Vec3 unk20;
+    /* 0x2C */ s32 unk2C;
+    /* 0x30 */ VtableEntry *vtable;
+    /* 0x34 */ Vec3 unk34;
+    /* 0x40 */ s32 unk40;
+    /* 0x44 */ s32 unk44;
+} Unk80075EE4;
+
 /* The entity class that func_80076F34 constructs (virtual table D_8006530C),
  * which many classes derive from: 0x4A4 bytes, as the derived constructors'
  * first fields show; they put their own fields from 0x4A4 on. The fields are
@@ -137,7 +162,7 @@ typedef struct Unk80076F34 {
     /* 0x258 */ s32 unk258;                /* 0x11 or 0x12 (func_80079268, func_8007925C) */
     /* 0x25C */ s32 unk25C;                /* the handle of the sound func_800784F4 played */
     /* 0x260 */ Unk80076444 unk260;
-    /* 0x2DC */ u8 unk2DC[0x48];           /* an Unk80075EE4 (defined below; func_80079300 returns it) */
+    /* 0x2DC */ Unk80075EE4 unk2DC;        /* func_80079300 returns it */
     /* 0x324 */ s32 unk324;
     /* 0x328 */ s32 unk328;
     /* 0x32C */ s32 unk32C;
@@ -188,6 +213,21 @@ typedef struct Unk80076F34 {
     /* 0x49C */ u8 unk49C[0x4A0 - 0x49C];
     /* 0x4A0 */ s32 unk4A0;                /* func_8009A35C sets it to 1 */
 } Unk80076F34;
+
+/* adds delta to the 16.16 level of the object at 0x238, kept between 0 and 1.0 */
+void func_80077448(Unk80076F34 *this, s32 delta);
+/* the index at 0x218 */
+s32 func_80077568(Unk80076F34 *this);
+/* sets the position (kept in 1/256ths) from whole units */
+void func_800775B0(Unk80076F34 *chara, Vec3 *position);
+/* writes the vector at 0x384, each component shifted down by 8 bits */
+Vec3 *func_800775D8(Unk80076F34 *chara, Vec3 *out);
+/* the character's table (at 0x220) */
+Unk80077698 *func_80077698(Unk80076F34 *this);
+/* whether the character stands on the given matrix */
+s32 func_8007814C(Unk80076F34 *chara, MATRIX *matrix);
+void func_80079350(Unk80076F34 *this);
+Vec3 *func_8007A650(Unk80076F34 *chara, Vec3 *out);
 
 /* Entity classes that keep the Unk80076F34 they were created for, named
  * after their constructors (the ones with the same layout share a struct). */
@@ -252,6 +292,10 @@ typedef struct Unk800C3CFC {
     /* 0x50 */ s32 unk50;
 } Unk800C3CFC;
 
+Unk800C3CFC *func_800C3CFC(Unk800C3CFC *this, Vec3 *pos, s32 size, s32 color);
+/* its gather */
+void func_800C3E64(Unk800C3CFC *this);
+
 typedef struct Unk8008E9B4 {
     /* 0x00 */ Unk800C3CFC base;
     /* 0x54 */ Unk80076F34 *unk54;
@@ -300,6 +344,10 @@ typedef struct Unk800C6088 {
     /* 0x34 */ s32 count;
     /* 0x38 */ s32 unk38;
 } Unk800C6088; /* size 0x3C */
+
+/* the constructors of Unk800C6088's two classes: count particles around pos; arg6 is a color (0x808080) */
+Unk800C6088 *func_800C6088(Unk800C6088 *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 arg6);
+Unk800C6088 *func_800C62EC(Unk800C6088 *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 arg6);
 
 /* The member at 0x18 of Unk800C2F14: func_800C2CCC keeps the frame table (its first 4 halfwords are x, y, w, h)
  * and the 0x100 bit of the flags, then func_800C2D04 its corners; func_800C2E84 makes a PolyFT4Shape of it */
@@ -427,28 +475,6 @@ typedef struct Unk800761AC {
  * destructor install last; the one of Unk8007BD8C's base is D_80065164
  * (battle/game.h) */
 extern VtableEntry D_80065184[];
-
-/* A class that func_80075EE4 constructs: a node of a circular list, the
- * object it belongs to, flags and a virtual table after them, which make the
- * class of D_80065184 (Unk800761AC) it derives from, then a vector and two
- * words of its own. func_8007BDF0 (and st02's func_800D54C0, st00's
- * func_800D99AC) add their owner's count, word and vector into the one
- * linked to theirs (func_80075B48); func_80078878 finds an entity at 0x14. */
-typedef struct Unk80075EE4 {
-    /* 0x00 */ ListNode node;
-    /* 0x08 */ void *owner; /* its second base: an Unk8007BD8C in game.bin, an UnkStageObject in st00 */
-    /* 0x0C */ u32 flags;
-    /* 0x10 */ s32 unk10;
-    /* 0x14 */ Entity *unk14; /* func_800ACA60 puts its entity here */
-    /* 0x18 */ u32 unk18; /* flags above bit 18, a count saturating at 0x3FFFF below */
-    /* 0x1C */ s32 unk1C;
-    /* 0x20 */ Vec3 unk20;
-    /* 0x2C */ s32 unk2C;
-    /* 0x30 */ VtableEntry *vtable;
-    /* 0x34 */ Vec3 unk34;
-    /* 0x40 */ s32 unk40;
-    /* 0x44 */ s32 unk44;
-} Unk80075EE4;
 
 /* Constructs an Unk80075EE4 at position (three words) in the list of owner, an object's second base. */
 Unk80075EE4 *func_80075EE4(Unk80075EE4 *this, Vec3 *position, s32 unk44, void *owner);

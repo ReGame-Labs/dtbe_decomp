@@ -86,18 +86,21 @@ void resumeVoices(s32 voices) {
     }
 }
 
-/* the voices of every playing sound effect, as bits */
-#if VERSION_JP
+/* the voices of every playing sound effect, as bits; the US build skips the
+ * effects that wait for a voice */
 u32 getSoundEffectVoices(void) {
     SndPlayingEffect *effect;
+    SndPlayingEffect *next;
     u32 voiceBits = 0;
 
-    for (effect = (SndPlayingEffect *)SOUND_SYSTEM.effectPool.used.head; effect != NULL;
-         effect = (SndPlayingEffect *)effect->link.next) {
+    for (effect = (SndPlayingEffect *)SOUND_SYSTEM.effectPool.used.head; effect != NULL; effect = next) {
+        next = (SndPlayingEffect *)effect->link.next;
+#if VERSION_US
+        if (effect->voice == 0) {
+            continue;
+        }
+#endif
         voiceBits |= effect->voiceBits;
     }
     return voiceBits;
 }
-#else
-INCLUDE_ASM("main/nonmatchings/sound/voice_pause", getSoundEffectVoices);
-#endif

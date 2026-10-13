@@ -38,7 +38,7 @@ typedef struct Unk800D3AA8 {
     /* 0xFCE */ u8 unkFCE[0xFD0 - 0xFCE];
     /* 0xFD0 */ s32 unkFD0;
     /* 0xFD4 */ s32 unkFD4;
-    /* 0xFD8 */ s32 unkFD8; /* what func_8006F1B8 returns, at the init */
+    /* 0xFD8 */ MeshScene *unkFD8; /* what func_8006F1B8 returns, at the init */
     /* 0xFDC */ s16 unkFDC;
     /* 0xFDE */ s16 unkFDE;
     /* 0xFE0 */ s16 unkFE0[2]; /* by side: 120 at the init (func_800D47A4) */
@@ -101,8 +101,6 @@ s32 func_800D394C(Unk800D390C *this) {
     return 0x80;
 }
 
-Unk800D02C8 *func_800D02C8(Unk800D02C8 *this);
-
 /* The eight words at 0xD38 of func_800D02C8's class, which the stages' constructors fill (game.h's
  * Unk800D02C8 leaves 0xD38-0xDA4 as a gap). */
 #define BASE_TABLE(stage) ((s32 *)(stage)->base.unkD38)
@@ -129,10 +127,7 @@ void func_800D3B24(Unk800D3AA8 *this, s32 flags) {
     func_800D02FC(&this->base, flags);
 }
 
-/* func_800D02C8's class's init, and what the stage's own init calls */
-void func_800D0364(Unk800D02C8 *this);
-void func_800700E4(Unk8006ED20 *this, s32 unk1, s32 unk2, s32 unk3, s32 unk4, s32 unk5);
-s32 func_8006F1B8(Unk8006ED20 *this);
+/* what the stage's own init calls */
 void func_800D3C0C(Unk800D3AA8 *this);
 void func_800D3FB4(Unk800D3AA8 *this);
 void func_800D40BC(Unk800D3AA8 *this);
@@ -169,8 +164,7 @@ void func_800D3C0C(Unk800D3AA8 *this) {
 
 INCLUDE_ASM("st08/nonmatchings/st08", func_800D3C1C);
 
-/* func_800D02C8's class's update, and the stage's own steps */
-void func_800D06D0(Unk800D02C8 *this);
+/* the stage's own steps */
 void func_800D3DF8(Unk800D3AA8 *this);
 void func_800D4018(Unk800D3AA8 *this);
 void func_800D40DC(Unk800D3AA8 *this);
@@ -187,25 +181,6 @@ void func_800D3DA0(Unk800D3AA8 *this) {
     func_800D3DF8(this);
     this->unkFB8++;
 }
-
-/* The words at 0xD28 of func_8006ED20's class (game.h leaves 0xD24-0xD34 as a gap): 1 sends the
- * stage to its end in func_800D3DF8. */
-#define BASE_D28(stage) (*(s32 *)&(stage)->base.base.unkD24[0xD28 - 0xD24])
-
-/* The 0x180-byte records of a table in game.bin, indexed by func_80077568's value (st04 reads 0x2). */
-typedef struct Unk800656D4 {
-    /* 0x000 */ u16 unk0; /* bit 0 spares the side func_80079350 in func_800D3DF8 */
-    /* 0x002 */ u8 unk2[0x180 - 0x2];
-} Unk800656D4;
-
-extern Unk800656D4 D_800656D4[];
-
-/* the side's character, its 0x218, and what func_800D3DF8 calls on it */
-Unk80076F34 *func_800700C8(Unk8006ED20 *this, s32 side);
-s32 func_80077568(Unk80076F34 *this);
-void func_80079350(Unk80076F34 *this);
-void func_80077448(Unk80076F34 *this, s32 arg);
-void func_800D0B80(Unk800D02C8 *this);
 
 /* The stage's last update step, until 0xF6A is set: a side whose 0xFE0 reached 0 gets func_80079350
  * (when bit 0 of its record is clear, counted at 0xFBE) and func_80077448(0x10000), and 0xFBC names it;
@@ -246,7 +221,7 @@ void func_800D3DF8(Unk800D3AA8 *this) {
         this->unkFBC = -1;
         this->unkFBA = -1;
     }
-    if (BASE_D28(this) == 1) {
+    if (this->base.base.unkD28 == 1) {
         func_800D0B80(&this->base);
         this->unkF6A = 1;
         this->unkFBC = -1;

@@ -4,6 +4,7 @@
 #include "psyq.h"
 #include "engine/gfx/camera.h"
 #include "engine/gfx/display.h"
+#include "engine/gfx/lights.h"
 #include "engine/gfx/mesh_scene.h"
 #include "engine/gfx/prim/alloc_dr_move.h"
 #include "engine/math/matrix.h"
@@ -29,8 +30,6 @@ typedef struct Unk800D3C10 {
     /* 0xD80 */ s32 unkD80;
 } Unk800D3C10;
 
-/* game.bin's: the camera of func_8006ED20's object (at 0x1B0) */
-Camera *func_8006EF5C(Unk8006ED20 *object);
 void func_800D43A4(Unk800D43A4 *entry);
 
 /* The entity class of virtual table D_800D3A4C (0x28 bytes). */
@@ -224,9 +223,6 @@ extern s32 D_800D397C[4];
 
 Unk800D4EC0 *func_800D4EC0(Unk800D4EC0 *this, Mesh *mesh);
 
-/* game.bin's: puts entity (when not NULL) into the entity group at 0x3C of object; returns it */
-Entity *func_8006F084(Unk8006ED20 *object, Entity *entity);
-
 /* Constructs the entity of virtual table D_800D3ACC: an Unk800D4EC0 for each of the four meshes of
  * D_800D397C in scene, each put into the stage's entity group. */
 Unk800D4D8C *func_800D4D8C(Unk800D4D8C *this, Unk8006ED20 *stage, MeshScene *scene) {
@@ -369,19 +365,10 @@ INCLUDE_ASM("st06/nonmatchings/st06", func_800D5690);
 
 extern EntityVtable D_800D39FC;
 
-/* the zero vector of the main executable */
-extern Vec3 D_80010814;
-
-/* game.bin's: constructs an Unk800C3CFC at pos (0x38 from unk38, color at 0x48) */
-Unk800C3CFC *func_800C3CFC(Unk800C3CFC *this, Vec3 *pos, s32 unk38, s32 color);
-
-/* game.bin's: the gather of the class func_800C3CFC constructs */
-void func_800C3E64(Unk800C3CFC *this);
-
 /* Constructs the entity of virtual table D_800D39FC, derived from func_800C3CFC's at the zero vector, with
  * 0x50 a random 0x60 to 0x7F. */
 Unk800C3CFC *func_800D57C4(Unk800C3CFC *this, s32 unk38, s32 color) {
-    func_800C3CFC(this, &D_80010814, unk38, color);
+    func_800C3CFC(this, (Vec3 *)&D_80010814, unk38, color);
     this->entity.vtable = &D_800D39FC;
     this->unk50 = (mersenneTwisterGenerate(&RANDOM) & 0x1F) + 0x60;
     return this;
@@ -396,13 +383,9 @@ void func_800D5824(Unk800C3CFC *this, Unk800D3C10 *stage) {
     this->unk28.vz = 0x4000;
 }
 
-/* The camera's eye of func_8006ED20's class, which func_80072088 computes (game.h leaves 0x2CC-0x360
- * as a gap); st05 has the same macro. */
-#define BASE_EYE(stage) (*(Vec3 *)&(stage)->base.unk2CC[0x31C - 0x2CC])
-
 /* Returns the stage's camera eye. */
 Vec3 *func_800D586C(Unk800D3C10 *this) {
-    return &BASE_EYE(this);
+    return &this->base.eye;
 }
 
 /* Returns the stage's 0xD74 (the x its meshes are put at). */

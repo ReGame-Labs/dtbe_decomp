@@ -107,16 +107,12 @@ s32 func_800D4AB4(Unk800D41E0 *this, Vec3 *position) {
     return position->vy > 0x1200;
 }
 
-/* A word the stage uses as the camera's state (func_80070140 clears it; func_800D4AC8 switches on it): game.h
- * leaves 0xD24-0xD34 of func_8006ED20's class as a gap (as st05's BASE_EYE does for 0x2CC-0x360). */
-#define BASE_UNKD30(stage) (*(s32 *)&(stage)->base.unkD24[0xD30 - 0xD24])
-
 INCLUDE_ASM("st02/nonmatchings/st02", func_800D4AC8);
 
 /* Starts the camera's state 3 (func_800D4AC8) with its weight at 0x1000, unless it is in it already. */
 void func_800D4CC0(Unk800D41E0 *this) {
-    if (BASE_UNKD30(this) != 3) {
-        BASE_UNKD30(this) = 3;
+    if (this->base.unkD30 != 3) {
+        this->base.unkD30 = 3;
         this->unkD78 = 0x1000;
     }
 }
@@ -160,11 +156,6 @@ void func_800D4DA0(Unk800D41E0 *this) {
 
 INCLUDE_ASM("st02/nonmatchings/st02", func_800D4DE4);
 
-/* game.bin functions missing from game.h */
-Unk80076F34 *func_800700C8(Unk8006ED20 *object, s32 side);
-Unk80077698 *func_80077698(Unk80076F34 *this);
-void func_800775B0(Unk80076F34 *chara, Vec3 *position);
-
 /* Puts each character at its point of 0xD54 turned by the angle at 0xD3C, raised by the halfword at 0x2 of
  * its func_80077698 table, and clears its 0x3A4 and 0x3B0. */
 void func_800D4F0C(Unk800D41E0 *this) {
@@ -177,7 +168,7 @@ void func_800D4F0C(Unk800D41E0 *this) {
         Unk80076F34 *chara = func_800700C8(&this->base, side);
 
         matrixTransformVec(&rotation, &position, &this->unkD54[side]);
-        position.vy += ((s16 *)&func_80077698(chara)->unk0)[1];
+        position.vy += func_80077698(chara)->unk2;
         func_800775B0(chara, (Vec3 *)&position);
         chara->unk3A4.vx = 0;
         chara->unk3A4.vy = 0;
@@ -255,9 +246,6 @@ typedef struct Unk800D554C {
     /* 0xB8 */ s32 unkB8;
     /* 0xBC */ s32 unkBC;
 } Unk800D554C;
-
-/* game.bin's constructor of a burst of count particles around pos */
-Entity *func_800C62EC(Entity *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 color);
 
 INCLUDE_ASM("st02/nonmatchings/st02", func_800D554C);
 

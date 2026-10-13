@@ -25,6 +25,10 @@ extern VECTOR LIGHTS_DEFAULT_COLOR0;
 extern VECTOR LIGHTS_DEFAULT_COLOR1;
 extern VECTOR LIGHTS_DEFAULT_COLOR2;
 extern VECTOR LIGHTS_DEFAULT_BACK_COLOR;
+/* a zero vector, 0x10 bytes into LIGHTS_DEFAULT_BACK_COLOR's block; the
+ * battle code reads it as a VECTOR (func_800C2FBC, func_8007A4A4), and the
+ * calls that take a Vec3 read its first three words through a cast */
+extern VECTOR D_80010814;
 /* the unit y and z axes, in 4.12 fixed point */
 extern VECTOR AXIS_Y; /* the y axis */
 extern VECTOR AXIS_Z; /* the z axis */
