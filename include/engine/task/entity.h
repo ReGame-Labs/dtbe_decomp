@@ -81,6 +81,16 @@ static inline void entityDelete(Entity *entity) {
     }
 }
 
+/* g++'s `new T(args)` for an entity class of `size` bytes: allocEntityMemory's memory, once the constructor call
+ * `ctor(entityOperatorNewAt(size, memory), args)` has run on it when it is not NULL. The match depends on the value
+ * going through the statement expression's temporary, as g++'s does through the new-expression's: a caller that
+ * tests the value tests the memory again after the constructor (with an assignment to the caller's variable or two
+ * ifs on memory, jump threading or cse drop that second test). */
+#define NEW_ENTITY(size, ctor, ...) ({ \
+    Entity *newMemory = allocEntityMemory(size); \
+    newMemory != NULL ? (ctor(entityOperatorNewAt(size, newMemory), __VA_ARGS__), newMemory) : newMemory; \
+})
+
 EXTERN_C_END
 
 #endif /* DTBE_TASK_ENTITY_H */

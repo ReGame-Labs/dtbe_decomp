@@ -117,9 +117,9 @@ typedef struct Unk800B8BBC {
     /* 0x20 */ s16 unk20; /* the pad of the position (func_800B8AA8's arg) */
     /* 0x22 */ s16 unk22; /* func_8007768C of the character */
     /* 0x24 */ s16 unk24; /* minus the character's facing */
-    /* 0x26 */ s16 unk26;
+    /* 0x26 */ u16 frames;
     /* 0x28 */ SVECTOR corners[4];
-    /* 0x48 */ u8 unk48[0x58 - 0x48];
+    /* 0x48 */ VECTOR position; /* the character's point 2 (func_8007A4A4) */
 } Unk800B8BBC;
 
 /* Constructs func_800B8AA8's entity for chara: a square from (-0x80, -0x80) to (0x80, 0x80) at z -0x80. */
@@ -128,7 +128,7 @@ Unk800B8BBC *func_800B8BBC(Unk800B8BBC *this, Unk80076F34 *chara, VECTOR *pos, U
     this->entity.vtable = &D_8006C35C;
     this->chara = chara;
     this->obj = obj;
-    this->unk26 = 0;
+    this->frames = 0;
     this->unk22 = func_8007768C(this->chara);
     this->unk24 = -func_80079E10(this->chara);
     this->unk20 = pos->pad;
@@ -150,7 +150,19 @@ void func_800B8C80(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_19", func_800B8CD4);
+extern VECTOR D_800D349C;
+
+/* The update of func_800B8BBC's entity: puts it at the character's point 2 moved by D_800D349C, and deletes it
+ * after 11 frames.
+ * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads 0x26. */
+void func_800B8CD4(Unk800B8BBC *this) {
+    func_8007A4A4(this->chara, &this->position, 2, &D_800D349C);
+    if (this->frames > 10) {
+        entityDelete(&this->entity);
+    } else {
+        this->frames++;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_19", func_800B8D5C);
 

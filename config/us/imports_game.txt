@@ -1,0 +1,15 @@
+// game.bin's calls into the stage overlays (game_main's func_8006E660): the
+// JP names, which splat gives after the JP address, at their US address
+// (config/us/symbols_stNN.txt). The stages reuse these names for other
+// functions, so they cannot go in symbols_game.txt, which the stages read
+D_800D3820 = 0x800D3B00;
+func_800D3AA8 = 0x800D3D88;
+func_800D3AC4 = 0x800D3DA4;
+func_800D3B14 = 0x800D3DF4;
+func_800D3B74 = 0x800D3E54;
+func_800D3C10 = 0x800D3EF0;
+func_800D3CEC = 0x800D3FCC;
+func_800D3D58 = 0x800D4038;
+func_800D3DBC = 0x800D409C;
+func_800D3E18 = 0x800D40F8;
+func_800D41E0 = 0x800D44C0;

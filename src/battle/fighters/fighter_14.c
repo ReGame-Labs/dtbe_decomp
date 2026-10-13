@@ -882,7 +882,35 @@ void func_800AD798(Unk800AD5BC *this, void *arg) {
     this->unk44 |= 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_14", func_800AD7CC);
+/* func_800AD5BC's class with its own fields (Unk800AD5BC is the part it shares with func_800893BC's). */
+typedef struct Unk800AD7CC {
+    /* 0x00 */ UnkPartsEntity38 parts;
+    /* 0x80 */ Unk80076F34 *owner;
+    /* 0x84 */ Vec3 position;
+    /* 0x90 */ u8 unk90[0xA4 - 0x90];
+    /* 0xA4 */ s32 frames;
+    /* 0xA8 */ s32 unkA8;
+    /* 0xAC */ s16 vramY; /* the owner's 0x440 (func_8007768C) */
+    /* 0xAE */ s16 unkAE;
+} Unk800AD7CC;
+
+/* The update of func_800AD5BC's entity: puts its part at the position, and deletes itself after 8 frames.
+ * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads 0xA4. */
+void func_800AD7CC(Unk800AD7CC *this) {
+    s32 x, y, z;
+
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    this->parts.part.unk34.vx = x;
+    this->parts.part.unk34.vy = y;
+    this->parts.part.unk34.vz = z;
+    if (this->frames >= 8) {
+        entityDelete(&this->parts.entity);
+    } else {
+        this->frames++;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_14", func_800AD848);
 

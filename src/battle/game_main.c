@@ -2,10 +2,16 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/cd/file_load.h"
 #include "engine/cd/read.h"
+#include "engine/debug/system_menu.h"
+#include "engine/game/game_state.h"
+#include "engine/gfx/display.h"
+#include "engine/system/memory.h"
 #include "engine/sound/sound_control.h"
 #include "engine/task/task.h"
 #include <libetc.h>
+#include <stdio.h>
 
 /* The task of virtual table D_80064434: its update stores the argument at
  * 0x20 and calls the task's own first virtual method (at 0x20). title.bin has
@@ -28,6 +34,12 @@ typedef struct Unk8006E2EC {
     /* 0x00 */ Unk8006ECEC base;
     /* 0x24 */ Unk8006ED20 *unk24; /* deleted by the destructor (func_8006E23C) */
     /* 0x28 */ Thread thread;
+    /* 0x34 */ s32 stageSound; /* func_8006E948: by arena (D_80064464) */
+    /* 0x38 */ struct {
+        s32 unk0; /* func_8006E948: by character (D_80064478) */
+        s32 unk4; /* func_8006E948: gameStateGetSound */
+    } characterSounds[4]; /* by character of GAME_STATE (0x324, 0x33C and their evolutions) */
+    /* 0x58 */ s32 fighterSounds[2]; /* func_8006E948: gameStateGetFighterSound, by side */
 } Unk8006E2EC;
 
 struct SystemContext; /* overlay.h: the context every overlay's main task gets (unused here) */
@@ -35,8 +47,6 @@ struct SystemContext; /* overlay.h: the context every overlay's main task gets (
 extern Unk8006ECECVtable D_80064434;
 void func_8006E310(s32 unused, void *object);
 void func_8006ECA4(s32 arg);
-
-INCLUDE_RODATA("game/nonmatchings/game_main", D_800643E0);
 
 /* Builds the battle's main task: a task with a thread of its own, and
  * func_8006ECA4 as the CD's idle callback. */
@@ -92,7 +102,90 @@ void func_8006E600(Unk8006E2EC *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_main", func_8006E660);
+/* where the stage overlay is loaded (the vram of the st*.bin overlays) */
+extern u8 D_800D3820[];
+
+/* the stage overlays' constructors, by arena */
+Unk8006ED20 *func_800D3B74(void *memory);
+Unk8006ED20 *func_800D3DBC(void *memory);
+Unk8006ED20 *func_800D41E0(void *memory);
+Unk8006ED20 *func_800D3E18(void *memory);
+Unk8006ED20 *func_800D3AC4(void *memory);
+Unk8006ED20 *func_800D3CEC(void *memory);
+Unk8006ED20 *func_800D3C10(void *memory);
+Unk8006ED20 *func_800D3B14(void *memory);
+Unk8006ED20 *func_800D3AA8(void *memory);
+Unk8006ED20 *func_800D3D58(void *memory);
+void func_8006E948(Unk8006E2EC *this);
+
+/* Starts a fight: clears the screen, loads the arena's overlay (/bin/st%02d.bin) and constructs its stage object
+ * (kept at 0x24 and returned), then swaps the sounds of the last fight for the ones it picks for this one. */
+Unk8006ED20 *func_8006E660(Unk8006E2EC *this) {
+    char path[64];
+    Unk8006ED20 *stage = NULL;
+    s32 i;
+    s32 j;
+
+    displaySetClearColor(SYSTEM_CONTEXT.display, 0, 0, 0);
+    displaySetVsyncMode(SYSTEM_CONTEXT.display, 2);
+    displayEnable(SYSTEM_CONTEXT.display, 0);
+    displayDisable(SYSTEM_CONTEXT.display, 4);
+    sprintf(path, "/bin/st%02d.bin", GAME_STATE.arena);
+    loadCompressedFileInto(D_800D3820, path);
+    switch (GAME_STATE.arena) {
+    case 0:
+        stage = func_800D3B74(operatorNew(0x10C4));
+        break;
+    case 1:
+        stage = func_800D3DBC(operatorNew(0xFD8));
+        break;
+    case 2:
+        stage = func_800D41E0(operatorNew(0xD7C));
+        break;
+    case 3:
+        stage = func_800D3E18(operatorNew(0xDD8));
+        break;
+    case 4:
+        stage = func_800D3AC4(operatorNew(0x208C));
+        break;
+    case 5:
+        stage = func_800D3CEC(operatorNew(0xF58));
+        break;
+    case 6:
+        stage = func_800D3C10(operatorNew(0xD84));
+        break;
+    case 7:
+        stage = func_800D3B14(operatorNew(0xFC4));
+        break;
+    case 8:
+        stage = func_800D3AA8(operatorNew(0x1004));
+        break;
+    case 9:
+        stage = func_800D3D58(operatorNew(0x15D8));
+        break;
+    }
+    this->unk24 = stage;
+
+    soundControlUnloadSound(&SOUND_CONTROL, this->stageSound);
+    for (i = 0; i < 4; i++) {
+        soundControlUnloadSound(&SOUND_CONTROL, this->characterSounds[i].unk0);
+        soundControlUnloadSound(&SOUND_CONTROL, this->characterSounds[i].unk4);
+    }
+    soundControlUnloadSound(&SOUND_CONTROL, this->fighterSounds[0]);
+    soundControlUnloadSound(&SOUND_CONTROL, this->fighterSounds[1]);
+    gameStatePickSounds(&GAME_STATE);
+    gameStatePickFighterSounds(&GAME_STATE);
+    func_8006E948(this);
+    soundControlLoadSound(&SOUND_CONTROL, this->stageSound, 1);
+    /* The match depends on this loop having a counter of its own (with i the two counters share a register). */
+    for (j = 0; j < 4; j++) {
+        soundControlLoadSound(&SOUND_CONTROL, this->characterSounds[j].unk0, 1);
+        soundControlLoadSound(&SOUND_CONTROL, this->characterSounds[j].unk4, 1);
+    }
+    soundControlLoadSound(&SOUND_CONTROL, this->fighterSounds[0], 1);
+    soundControlLoadSound(&SOUND_CONTROL, this->fighterSounds[1], 1);
+    return stage;
+}
 
 INCLUDE_ASM("game/nonmatchings/game_main", func_8006E948);
 

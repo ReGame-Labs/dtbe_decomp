@@ -41,7 +41,8 @@ typedef struct Unk8006ED20 {
     /* 0x230 */ ListNode unk230;
     /* 0x238 */ ListNode unk238;
     /* 0x240 */ s32 unk240[4]; /* the constructor clears the four */
-    /* 0x250 */ u8 unk250[0x258 - 0x250];
+    /* 0x250 */ s32 unk250; /* the wins (0x240 by side) that end the fight (func_80071110) */
+    /* 0x254 */ s32 unk254; /* the rounds left, counted down by func_80071110 */
     /* 0x258 */ s32 unk258; /* func_8006F1C4's argument */
     /* 0x25C */ u8 unk25C[0x2A4 - 0x25C];
     /* 0x2A4 */ VECTOR unk2A4; /* (0, -0x1000, 0) through func_800769DC (func_8006F1C4) */

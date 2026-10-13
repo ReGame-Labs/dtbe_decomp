@@ -61,7 +61,7 @@ void func_800B08E0(Unk800B0854 *this) {
     this->unk4A4 = 0;
 }
 
-/* func_800B08E8's local table of four entries (see Unk800685DC). */
+/* func_800B08E8's local table of four entries, copied whole from its constant (.rodata stays in asm). */
 typedef struct Unk8006B87C {
     Unk800C5B18Entry entries[4];
 } Unk8006B87C;
@@ -112,7 +112,46 @@ void func_800B0B08(Unk80076F34 *this, s32 arg) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_16", func_800B0B78);
+void func_800B1618(Unk80076F34 *this, s32 arg);
+void func_800B16F0(Unk80076F34 *this, s32 arg);
+struct Unk800B25CC *func_800B25CC(struct Unk800B25CC *this, Unk80076F34 *chara, Vec3 *position);
+
+/* A step method of D_8006BCA4: step 0 plays clip 0x18 and sound 0xF0, stops 0x3A4.vx and calls func_800B1618;
+ * step 4 makes func_800B25CC's entity (0x3C bytes) at the character's position; even steps 6-14 call
+ * func_800B16F0, steps 5-17 func_8007835C(0x71C0 the way it faces); stops 0x3A4.vx and 0x3B4.vx when
+ * func_80079A0C allows. */
+void func_800B0B78(Unk80076F34 *this, s32 step) {
+    Vec3 position;
+
+    func_80079AE4(this);
+    switch (step) {
+    case 0:
+        func_80079830(this, 0x18, 0, 0, -1);
+        this->unk3A4.vx = 0;
+        func_800784F4(this, 0xF0);
+        func_800B1618(this, 0);
+        break;
+    case 4:
+        func_800775D8(this, &position);
+        func_8007AD4C(this, NEW_ENTITY(0x3C, func_800B25CC, this, &position));
+        break;
+    }
+    if (step >= 6 && step < 16) {
+        /* The match depends on even being a value (do_store_flag's xori/andi), not a test in the if. */
+        s32 even = (step & 1) == 0;
+
+        if (even) {
+            func_800B16F0(this, 0);
+        }
+    }
+    if (step >= 5 && step < 18) {
+        func_8007835C(this, func_80079E10(this) * 0x71C0);
+    }
+    if (func_80079A0C(this)) {
+        this->unk3B4.vx = 0;
+        this->unk3A4.vx = 0;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_16", func_800B0CBC);
 
@@ -122,7 +161,65 @@ INCLUDE_ASM("game/nonmatchings/fighters/fighter_16", func_800B0F48);
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_16", func_800B1084);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_16", func_800B1220);
+/* Overrides func_8007B80C (entry 0xBC) in D_8006BCA4: step 0 clip 31 and unk3A4 cleared; step 4 moves unk3B4.vx
+ * by unk3C4 * 0xE38 (16.16) toward func_80079E10's side and sets the words at 0x44C (0x439012E6, and 0x458 the
+ * negated speed of func_8007AEEC's character, unk3C4 * 0x6388); step 12 the same words with 0x4B9012E6 and the
+ * speed not negated; step 10 creates func_800C5680's entity (0x690 bytes) with a copy of D_8006B87C, 4, 6 and 6;
+ * step 19 clears unk448; from step 17 unk3B4.vx brakes by a quarter of unk3A4.vx.
+ * The match depends on 0x458 being set before 0x450-0x45C: the game loads other->unk3C4 before those stores,
+ * which a store through this (it may alias other) would keep it after. */
+void func_800B1220(Unk80076F34 *this, s32 step) {
+    Unk8006B87C table;
+    Unk80076F34 *other;
+    Entity *child;
+
+    table = D_8006B87C;
+    other = func_8007AEEC(this);
+    switch (step) {
+    case 0:
+        func_80079830(this, 31, 0, 0, -1);
+        this->unk3A4.vx = 0;
+        this->unk3A4.vy = 0;
+        this->unk3A4.vz = 0;
+        this->unk3B0 = 0;
+        break;
+    case 4: {
+        s64 speed;
+
+        this->unk3A4.vx = 0;
+        speed = ((s64)this->unk3C4 * 0xE38) >> 16;
+        this->unk3B4.vx += (s32)speed * func_80079E10(this);
+        this->unk44C = 0x439012E6;
+        func_8007A0E4(this, 0x20);
+        this->unk458 = -(s32)(((s64)other->unk3C4 * 0x6388) >> 16);
+        this->unk454 = 0;
+        this->unk45C = 0;
+        this->unk450 = 1;
+        break;
+    }
+    case 10:
+        child = allocEntityMemory(0x690);
+        if (child != NULL) {
+            func_800C5680(entityOperatorNewAt(0x690, child), this, table.entries, 4, 6, 6);
+        }
+        func_8007AD4C(this, child);
+        break;
+    case 12:
+        this->unk44C = 0x4B9012E6;
+        func_8007A0E4(this, 0x20);
+        this->unk458 = ((s64)other->unk3C4 * 0x6388) >> 16;
+        this->unk454 = 0;
+        this->unk45C = 0;
+        this->unk450 = 1;
+        break;
+    case 19:
+        this->unk448 = 0;
+        break;
+    }
+    if (step >= 17) {
+        this->unk3B4.vx += -this->unk3A4.vx >> 2;
+    }
+}
 
 extern EntityVtable D_8006BC7C;
 
@@ -233,7 +330,89 @@ void func_800B1C84(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_16", func_800B1D24);
+/* The UnkPartsEntity38 class func_800B1AC0 constructs (virtual tables D_8006BC54 and D_8006BC34). */
+typedef struct Unk800B1AC0 {
+    /* 0x00 */ UnkPartsEntity38 parts;
+    /* 0x80 */ Unk80076F34 *chara;
+    /* 0x84 */ u16 frame;
+    /* 0x86 */ s16 facing; /* the character's (func_80079E10) */
+    /* 0x88 */ u8 unk88;   /* 10, or 3: the frames state 2 waits */
+    /* 0x89 */ u8 unk89;   /* rises to 0x80 in state 1, falls to 0 in state 3 */
+    /* 0x8A */ u16 state;
+    /* 0x8C */ u16 unk8C;  /* state 2's frame count */
+    /* 0x8E */ s16 vramY;  /* the character's 0x440 (func_8007768C) */
+    /* 0x90 */ VECTOR position; /* the character's point 20 (func_8007A4A4) */
+} Unk800B1AC0;
+
+extern VECTOR D_800D344C;
+
+/* The gather of func_800B1AC0's entity: states 0-3 fade unk89 in, hold it unk88 frames and fade it out, then it
+ * deletes itself; with unk88 10, frame 7 launches it (func_8007BDC8 and a velocity from the character's unk3C4
+ * and side). Its part follows the character's point 20; flag 1 of the part is set from frame 16 (23 with 10).
+ * The match depends on: the two flag clears as two statements (the game ands with -3 and -2, one store); vx and
+ * vy computed before the stores (the game reads the character again before storing vx); the flag 1 test as one
+ * branch per threshold (cross-jumping shares their tail; one ternary condition lays the branches out otherwise). */
+void func_800B1D24(Unk800B1AC0 *this) {
+    switch (this->state) {
+    case 0:
+        if (this->unk88 == 10 && this->frame < 3) {
+            break;
+        }
+        this->parts.part.flags &= ~2;
+        this->parts.part.flags &= ~1;
+        this->state++;
+    case 1:
+        this->unk89 += (0x84 - this->unk89) >> 2;
+        if ((s8)this->unk89 >= 0) {
+            break;
+        }
+        this->unk89 = 0x80;
+        this->unk8C = 0;
+        this->state++;
+    case 2:
+        if (++this->unk8C < this->unk88) {
+            break;
+        }
+        this->state++;
+    case 3:
+        this->unk89 -= (this->unk89 + 4) >> 2;
+        if (this->unk89 != 0) {
+            break;
+        }
+        this->state++;
+    case 4:
+        entityDelete(&this->parts.entity);
+        return;
+    }
+    if (this->frame == 7 && this->unk88 == 10) {
+        VECTOR velocity;
+        s64 speed;
+        s32 vx, vy;
+
+        this->parts.part.flags &= ~2;
+        func_8007BDC8(&this->parts.base, 0x47AC1FD9, 2);
+        speed = ((s64)this->chara->unk3C4 * 0x1554) >> 16;
+        vx = (s32)speed * func_80079E10(this->chara);
+        vy = -(s32)(((s64)this->chara->unk3C4 * 0x4718) >> 16);
+        velocity.vx = vx;
+        velocity.vy = vy;
+        velocity.vz = 0;
+        func_8007BDD4(&this->parts.base, &velocity);
+        this->parts.part.flags &= ~1;
+    }
+    if (this->unk88 == 10) {
+        if (this->frame >= 23) {
+            this->parts.part.flags |= 1;
+        }
+    } else if (this->frame >= 16) {
+        this->parts.part.flags |= 1;
+    }
+    func_8007A4A4(this->chara, &this->position, 20, &D_800D344C);
+    this->parts.part.unk34.vx = this->position.vx;
+    this->parts.part.unk34.vy = this->position.vy;
+    this->parts.part.unk34.vz = this->position.vz;
+    this->frame++;
+}
 
 /* The second base's func_8007BDF0 with arg, then sets bit 0 of 0x44 when func_80078878 finds an entity in arg. */
 void func_800B1FD4(Unk800AD5BC *this, void *arg) {

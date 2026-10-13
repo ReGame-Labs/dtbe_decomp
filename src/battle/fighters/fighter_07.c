@@ -18,12 +18,14 @@ extern EntityVtable D_8006983C;
 typedef struct Unk80093AD8 {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Unk80076F34 *chara;
-    /* 0x1C */ s32 unk1C[9];
-    /* 0x40 */ s32 unk40;
-    /* 0x44 */ u8 unk44[4];
-    /* 0x48 */ s32 unk48;
-    /* 0x4C */ s32 unk4C;
-    /* 0x50 */ s32 unk50;
+    /* 0x1C */ VECTOR position; /* the character's point 3 moved by D_80069700 (func_8007A4A4) */
+    /* 0x2C */ VECTOR velocity;
+    /* 0x3C */ s32 state;
+    /* 0x40 */ s32 distance; /* the sum of |velocity.vx| */
+    /* 0x44 */ s32 counter;  /* frames in the state */
+    /* 0x48 */ s32 unk48;    /* cycles 0-2, then 6-11, then counts from 3 to 6 */
+    /* 0x4C */ s32 unk4C;    /* grows by 15 up to 60, then by 30 */
+    /* 0x50 */ s32 unk50;    /* counts the updates */
     /* 0x54 */ s16 unk54; /* the character's 0x440 (func_8007768C) */
 } Unk80093AD8;
 void func_80092F58(Unk80076F34 *this);
@@ -334,7 +336,31 @@ Entity *func_800938A4(Entity *this, s32 arg1, VECTOR *pos, VECTOR *vel) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_07", func_800938F4);
+/* The update of D_800697A4's entity: nine times moves it by its velocity and fades its red (128 - 16 a step, green
+ * and blue a quarter of it), then deletes it.
+ * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads unk54. */
+void func_800938F4(Unk800C2F14 *this, s32 arg) {
+    if (this->unk54 >= 9) {
+        entityDelete(&this->entity);
+    } else {
+        /* The match depends on reading the three words before storing any, as vecAddInPlace does, and on counting
+         * the step last. */
+        s32 x = this->sprite.pos.vx;
+        s32 y = this->sprite.pos.vy;
+        s32 z = this->sprite.pos.vz;
+        s32 red;
+
+        x += this->unk44.vx;
+        y += this->unk44.vy;
+        z += this->unk44.vz;
+        this->sprite.pos.vx = x;
+        this->sprite.pos.vy = y;
+        this->sprite.pos.vz = z;
+        red = 0x80 - this->unk54 * 16;
+        this->sprite.color = red | ((red >> 2) << 8) | ((red >> 2) << 16);
+        this->unk54++;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_07", func_800939B0);
 
@@ -343,19 +369,19 @@ Unk80093AD8 *func_80093AD8(Unk80093AD8 *this, Unk80076F34 *chara, Unk8006ED20 *o
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006977C;
     this->chara = chara;
-    this->unk1C[0] = 0;
-    this->unk1C[1] = 0;
-    this->unk1C[2] = 0;
-    this->unk1C[3] = 0;
-    this->unk1C[4] = 0;
-    this->unk1C[5] = 0;
-    this->unk1C[6] = 0;
-    this->unk1C[7] = 0;
-    this->unk1C[8] = 0;
+    this->position.vx = 0;
+    this->position.vy = 0;
+    this->position.vz = 0;
+    this->position.pad = 0;
+    this->velocity.vx = 0;
+    this->velocity.vy = 0;
+    this->velocity.vz = 0;
+    this->velocity.pad = 0;
+    this->state = 0;
     /* the game clears 0x40 after 0x48 and 0x4C */
     this->unk48 = 0;
     this->unk4C = 0;
-    this->unk40 = 0;
+    this->distance = 0;
     this->unk50 = 0;
     this->unk54 = func_8007768C(chara);
     return this;
@@ -380,9 +406,93 @@ INCLUDE_RODATA("game/nonmatchings/fighters/fighter_07", D_800696BC);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_07", D_800696CC);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_07", D_800696DC);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_07", D_800696EC);
+extern VECTOR D_80069700;
+
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_07", D_80069700);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_07", func_80093BB4);
+/* The update of Unk80093AD8: grows at the character's point 3 for 19 frames, flies forward at 48 until it has
+ * gone three quarters of the way to the partner (func_8007A69C), slows down for 3 frames, then fades and deletes
+ * itself; every frame but the last moves it by its velocity. */
+void func_80093BB4(Unk80093AD8 *this) {
+    Vec3 partner;
+    s32 dx;
+    s32 x, y, z;
+
+    switch (this->state) {
+    case 0:
+        this->counter = 0;
+        this->state++;
+        /* fallthrough */
+    case 1:
+        this->unk48++;
+        if (this->unk48 >= 3) {
+            this->unk48 = 0;
+        }
+        if (this->unk4C < 60) {
+            this->unk4C += 15;
+        }
+        func_8007A4A4(this->chara, &this->position, 3, &D_80069700);
+        this->position.vy -= 0x33;
+        this->counter++;
+        if (this->counter < 19) {
+            break;
+        }
+        this->velocity.vx = func_80079E10(this->chara) * 48;
+        this->unk48 = 6;
+        this->state++;
+        /* fallthrough */
+    case 2:
+        this->unk48++;
+        if (this->unk48 >= 12) {
+            this->unk48 = 6;
+        }
+        func_8007A69C(this->chara, &partner);
+        dx = partner.vx - this->position.vx;
+        /* The match depends on the absolute value as a conditional expression (an if negates it in a copy). */
+        dx = dx < 0 ? -dx : dx;
+        if (this->distance < dx - (dx >> 2)) {
+            break;
+        }
+        this->counter = 0;
+        this->state++;
+        /* fallthrough */
+    case 3:
+        this->unk48++;
+        if (this->unk48 >= 12) {
+            this->unk48 = 6;
+        }
+        this->velocity.vx >>= 2;
+        this->counter++;
+        if (this->counter < 3) {
+            break;
+        }
+        this->counter = 0;
+        this->unk48 = 3;
+        this->state++;
+        break;
+    case 4:
+        this->velocity.vx >>= 2;
+        this->unk4C += 30;
+        this->unk48++;
+        if (this->unk48 < 6) {
+            break;
+        }
+        entityDelete(&this->entity);
+        return;
+    }
+    /* The match depends on the three words read before any store and on adding to distance before storing them. */
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->distance += this->velocity.vx < 0 ? -this->velocity.vx : this->velocity.vx;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->unk50++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_07", func_80093E30);
 
@@ -469,7 +579,7 @@ void func_80094EBC(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_RODATA("game/nonmatchings/fighters/fighter_07", D_8006972C);
+INCLUDE_RODATA_ALIGN8("game/nonmatchings/fighters/fighter_07", D_8006972C);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_07", D_80069754);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_07", D_8006977C);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_07", D_800697A4);

@@ -33,7 +33,7 @@ extern u16 D_8006A700[];
  * 0x4A8 and 0x4AC before they launch their shots. */
 typedef struct Unk8009DBBC {
     /* 0x000 */ Unk80076F34 base;
-    /* 0x4A4 */ u8 unk4A4[4];
+    /* 0x4A4 */ Unk80076F34 *partner; /* the character func_8007AEEC gives, held from step 7 */
     /* 0x4A8 */ s32 unk4A8;
     /* 0x4AC */ s32 unk4AC;
 } Unk8009DBBC;
@@ -65,7 +65,78 @@ INCLUDE_RODATA("game/nonmatchings/fighters/fighter_10", D_8006A3D4);
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_10", func_8009DE10);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_10", func_8009E050);
+Unk80076F34 *func_80079CF4(Unk80076F34 *this, s32 index);
+void func_8007AD70(Unk80076F34 *this, Unk80076F34 *chara, s32 index);
+
+/* A step method of Unk8009DBBC (func_8007B978's slot): at step 0 the partner (func_8007AEEC) takes clip 8; at step 7,
+ * unless func_80079CF4 fails (then func_80079320), it takes clip 14 and a clip by its kind (func_80077568), is held
+ * at 0x4A4 and its model moved by its size; at step 20, unless it is alone in no list, it is launched forward. */
+void func_8009E050(Unk8009DBBC *this, s32 step) {
+    Unk80076F34 *other;
+    Model *model;
+    s32 clip;
+    s16 side;
+    s32 alone;
+    Vec3 vel;
+
+    func_8007B978(&this->base, step);
+    other = func_8007AEEC(&this->base);
+    if (step == 0) {
+        func_80079274(other, 8);
+    }
+    if (step == 7) {
+        if (func_80079CF4(&this->base, 0) != NULL) {
+            switch (func_80077568(other)) {
+            case 9:
+            case 18:
+                clip = 3;
+                break;
+            case 20:
+                clip = 32;
+                break;
+            case 16:
+            case 22:
+                clip = 13;
+                break;
+            default:
+                clip = 4;
+                break;
+            }
+            func_80079274(other, 14);
+            func_800796F0(other, clip, 2, 0);
+            func_8007AD70(other, &this->base, 13);
+            this->partner = other;
+            model = other->model;
+            model->group.object.transform.valid = 0;
+            if (func_80077698(other)->unk2 < 0x80) {
+                model->group.object.transform.local.m.t[0] = 0x20;
+                model->group.object.transform.local.m.t[1] = 0xC0;
+                model->group.object.transform.local.m.t[2] = -0x80;
+            } else {
+                model->group.object.transform.local.m.t[0] = 0x20;
+                model->group.object.transform.local.m.t[1] = 0xC0;
+                model->group.object.transform.local.m.t[2] = -0xE0;
+            }
+        } else {
+            func_80079320(&this->base);
+            return;
+        }
+    }
+    if (step == 20) {
+        /* The match depends on listIsAlone(&this->partner->entity.link) computed as a value (xor, sltiu). */
+        alone = this->partner->entity.link.next == &this->partner->entity.link
+                && &this->partner->entity.link == this->partner->entity.link.prev;
+        if (!alone) {
+            /* side is a halfword: the game sign-extends the result (sll, sra) before the multiply */
+            side = func_80079E10(&this->base);
+            vel.vx = side * 21840;
+            vel.vy = -0x38E0;
+            vel.vz = 0;
+            func_80078EF8(other, 0x5A8C3500, &vel, 0);
+            func_8007AE34(other);
+        }
+    }
+}
 
 void func_8009E364(Unk80076F34 *this);
 void func_8009E424(Unk80076F34 *this);
@@ -328,7 +399,31 @@ Entity *func_8009F014(Entity *this, s32 arg1, VECTOR *pos, VECTOR *vel) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_10", func_8009F064);
+/* The update of D_8006A554's entity: eleven times moves it by its velocity and fades its blue (200 - 16 a step, red
+ * and green a quarter of it), then deletes it.
+ * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads unk54. */
+void func_8009F064(Unk800C2F14 *this, s32 arg) {
+    if (this->unk54 >= 11) {
+        entityDelete(&this->entity);
+    } else {
+        /* The match depends on reading the three words before storing any, as vecAddInPlace does, and on counting
+         * the step last. */
+        s32 x = this->sprite.pos.vx;
+        s32 y = this->sprite.pos.vy;
+        s32 z = this->sprite.pos.vz;
+        s32 blue;
+
+        x += this->unk44.vx;
+        y += this->unk44.vy;
+        z += this->unk44.vz;
+        this->sprite.pos.vx = x;
+        this->sprite.pos.vy = y;
+        this->sprite.pos.vz = z;
+        blue = 200 - this->unk54 * 16;
+        this->sprite.color = (blue >> 2) | ((blue >> 2) << 8) | (blue << 16);
+        this->unk54++;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_10", func_8009F120);
 
@@ -352,7 +447,18 @@ Unk8009F248 *func_8009F248(Unk8009F248 *this, Unk80076F34 *owner) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_10", func_8009F30C);
+/* The update of D_8006A52C's entity: five times fades its grey by 32 from 150, then deletes it.
+ * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads unk54. */
+void func_8009F30C(Unk8009F248 *this, s32 arg) {
+    if (this->base.unk54 >= 5) {
+        entityDelete(&this->base.entity);
+    } else {
+        s32 grey = 150 - this->base.unk54 * 32;
+
+        this->base.sprite.color = grey | (grey << 8) | (grey << 16);
+        this->base.unk54++;
+    }
+}
 
 /* Entry 0x14 of vtable D_8006A52C: draws the sprite in the camera as a square of side 2 * size around pos, mirrored by
  * the owner's side (func_80079E10), one OT slot further, with buildPolyFT4. */
@@ -400,7 +506,21 @@ Unk8009F248 *func_8009F4D4(Unk8009F248 *this, Unk80076F34 *owner) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_10", func_8009F598);
+/* The update of D_8006A504's entity: five times fades its grey by 32 from 180 and grows it by 25, then deletes
+ * it.
+ * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads unk54.
+ * It also depends on growing the size before counting the step. */
+void func_8009F598(Unk8009F248 *this, s32 arg) {
+    if (this->base.unk54 >= 5) {
+        entityDelete(&this->base.entity);
+    } else {
+        s32 grey = 180 - this->base.unk54 * 32;
+
+        this->base.sprite.color = grey | (grey << 8) | (grey << 16);
+        this->base.sprite.size += 25;
+        this->base.unk54++;
+    }
+}
 
 /* Entry 0x14 of vtable D_8006A504: draws the sprite in the camera as a square of side 2 * size around pos, mirrored by
  * the owner's side (func_80079E10), one OT slot further, with buildPolyFT4. */

@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/math/sin_cos.h"
 
 Entity *func_8008514C(Entity *this, Unk80076F34 *arg, Unk8006ED20 *arg2);
 Entity *func_80085B7C(Entity *this, Unk80076F34 *arg, Vec3 *vec);
@@ -20,7 +21,7 @@ extern EntityVtable D_80068784;
 typedef struct Unk80083F0C {
     /* 0x000 */ Unk80076F34 base;
     /* 0x4A4 */ s16 unk4A4;
-    /* 0x4A6 */ s16 unk4A6;
+    /* 0x4A6 */ u16 unk4A6;
 } Unk80083F0C;
 extern VECTOR D_80068654;
 
@@ -73,7 +74,57 @@ INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_80084068);
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_80084200);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_8008439C);
+void func_80084B4C(Unk80076F34 *this, s32 arg);
+void func_80084C04(Unk80076F34 *this);
+
+/* A step method of D_80068784: func_80079AE4; at step 0 clip 22, sound 0x7F; at 5 the entity of func_80084B4C;
+ * at 7 and 17 func_8007A0E4 and the words at 0x44C; at 29 clears unk448. Steps 5-16 push the character forward
+ * (func_8007835C); even steps 6-12 call func_8007A6FC, and steps 6-13 make func_80084C04's entity. */
+void func_8008439C(Unk80076F34 *this, s32 step) {
+    s32 even;
+
+    func_80079AE4(this);
+    switch (step) {
+    case 0:
+        func_80079830(this, 22, 0, 0, -1);
+        this->unk3A4.vx = 0;
+        func_800784F4(this, 0x7F);
+        break;
+    case 5:
+        func_80084B4C(this, 15);
+        break;
+    case 7:
+        func_8007A0E4(this, 8);
+        this->unk44C = 0x5A82190;
+        this->unk450 = 2;
+        break;
+    case 17:
+        this->unk448 = 0;
+        func_8007A0E4(this, 4);
+        this->unk44C = 0x45A82190;
+        func_8007A6FC(this, -1, 160, 4);
+        this->unk454 = func_80079E10(this) * 14560;
+        this->unk458 = -0x38E0;
+        this->unk45C = 0;
+        this->unk450 = 2;
+        this->unk3A4.vx = 0;
+        break;
+    case 29:
+        this->unk448 = 0;
+        break;
+    }
+    if (step >= 5 && step <= 16) {
+        func_8007835C(this, func_80079E10(this) * 25480);
+    }
+    /* The match depends on the parity test computed as a value in a local (xori/andi, do_store_flag). */
+    even = (step & 1) == 0;
+    if (even && step >= 6 && step < 14) {
+        func_8007A6FC(this, -1, 160, 4);
+    }
+    if (step >= 6 && step <= 13) {
+        func_80084C04(this);
+    }
+}
 
 void func_80084C74(Unk80076F34 *this);
 void func_80084D00(Unk80076F34 *this);
@@ -138,26 +189,21 @@ void func_80084838(Unk80076F34 *this, s32 step) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_8008499C);
 
-/* func_80084B4C's local table of two entries; GCC keeps a local array's initializer as an anonymous constant
- * and copies it whole (.rodata stays in asm). */
-typedef struct Unk800685DC {
-    Unk800C5B18Entry entries[2];
-} Unk800685DC;
+/* The two entries of a table that func_80084B4C, func_80084D00 and func_80084FE8 each initialise. cc1 gives
+ * identical array initializers one constant per unit, so the three share its data (D_800685DC in the asm). */
+#define D_800685DC_ENTRIES \
+    { 0x14, { 0, 0x180, 0 }, 0, { 0xFF, 0x80, 0x80, 0 } }, \
+    { 0x14, { 0, 0, 0 }, 0, { 0, 0, 0, 0 } }
 
-extern Unk800685DC D_800685DC;
-
-INCLUDE_RODATA("game/nonmatchings/fighters/fighter_01", D_800685DC);
-
-/* Creates func_800C5680's entity (0x690 bytes) for the character with a copy of D_800685DC, 2, 8 and arg, and
+/* Creates func_800C5680's entity (0x690 bytes) for the character with a table of two entries, 2, 8 and arg, and
  * hands it to func_8007AD4C. */
 void func_80084B4C(Unk80076F34 *this, s32 arg) {
-    Unk800685DC table;
+    Unk800C5B18Entry table[2] = { D_800685DC_ENTRIES };
     Entity *child;
 
-    table = D_800685DC;
     child = allocEntityMemory(0x690);
     if (child != NULL) {
-        func_800C5680(entityOperatorNewAt(0x690, child), this, table.entries, 2, 8, arg);
+        func_800C5680(entityOperatorNewAt(0x690, child), this, table, 2, 8, arg);
     }
     func_8007AD4C(this, child);
 }
@@ -187,9 +233,28 @@ void func_80084C74(Unk80076F34 *this) {
     func_8007AD4C(this, child);
 }
 
-INCLUDE_RODATA("game/nonmatchings/fighters/fighter_01", D_8006860C);
+/* Creates two of func_800C5680's entities (0x690 bytes) for the character, one with a table of three entries,
+ * 3, 8 and 20, one with the table of two entries, 2, 8 and 15, and hands each to func_8007AD4C. */
+void func_80084D00(Unk80076F34 *this) {
+    Unk800C5B18Entry first[3] = {
+        { 0, { 0, -0x40, 0 }, 0, { 0xFF, 0x80, 0x20, 0 } },
+        { 3, { 0, 0, 0 }, 0, { 0x80, 0x40, 0xFF, 0 } },
+        { 1, { 0, 0, 0 }, 0, { 0x08, 0x08, 0xFF, 0 } },
+    };
+    Unk800C5B18Entry second[2] = { D_800685DC_ENTRIES };
+    Entity *child;
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_80084D00);
+    child = allocEntityMemory(0x690);
+    if (child != NULL) {
+        func_800C5680(entityOperatorNewAt(0x690, child), this, first, 3, 8, 20);
+    }
+    func_8007AD4C(this, child);
+    child = allocEntityMemory(0x690);
+    if (child != NULL) {
+        func_800C5680(entityOperatorNewAt(0x690, child), this, second, 2, 8, 15);
+    }
+    func_8007AD4C(this, child);
+}
 
 /* Creates an entity of func_80085B7C's class (0xDC bytes) with g++'s new and the
  * vector func_800775D8 gives, and hands it to func_8007AD4C. */
@@ -243,7 +308,28 @@ void func_80084F28(Unk80076F34 *this, s16 arg) {
     func_8007AD4C(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_80084FE8);
+/* func_80084D00 followed by the sound 0x7C (func_80078540). */
+void func_80084FE8(Unk80076F34 *this) {
+    Unk800C5B18Entry first[3] = {
+        { 0, { 0, -0x40, 0 }, 0, { 0xFF, 0x80, 0x20, 0 } },
+        { 3, { 0, 0, 0 }, 0, { 0x80, 0x40, 0xFF, 0 } },
+        { 1, { 0, 0, 0 }, 0, { 0x08, 0x08, 0xFF, 0 } },
+    };
+    Unk800C5B18Entry second[2] = { D_800685DC_ENTRIES };
+    Entity *child;
+
+    child = allocEntityMemory(0x690);
+    if (child != NULL) {
+        func_800C5680(entityOperatorNewAt(0x690, child), this, first, 3, 8, 20);
+    }
+    func_8007AD4C(this, child);
+    child = allocEntityMemory(0x690);
+    if (child != NULL) {
+        func_800C5680(entityOperatorNewAt(0x690, child), this, second, 2, 8, 15);
+    }
+    func_8007AD4C(this, child);
+    func_80078540(this, 0x7C);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_8008514C);
 
@@ -313,9 +399,79 @@ void func_80085C90(Entity *this, s32 flags) {
     }
 }
 
+/* The entity class of vtable D_8006870C (0xDC bytes, func_80085B7C constructs it for the character): a point of
+ * the owner that rises and fades out in steps. */
+typedef struct Unk80085B7C {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk80083F0C *owner;
+    /* 0x1C */ u8 unk1C;    /* 0x80 from func_80085B7C, eased to 0 */
+    /* 0x1D */ u8 unk1D;    /* 0 from func_80085B7C, eased to 0x84 */
+    /* 0x1E */ s16 side;    /* func_80079E10 of the owner */
+    /* 0x20 */ u16 timer;   /* counts the frames */
+    /* 0x22 */ u16 state;
+    /* 0x24 */ u16 counter; /* frames in state 2 */
+    /* 0x26 */ s16 flags;   /* func_8007768C of the owner */
+    /* 0x28 */ s16 unk28;
+    /* 0x2A */ u8 unk2A[0x34 - 0x2A];
+    /* 0x34 */ VECTOR position; /* the owner's point 18, by func_8007A4A4 */
+    /* 0x44 */ VECTOR unk44;    /* position, 128 toward side */
+    /* 0x54 */ s32 unk54;       /* 0x1000 from func_80085B7C, eased to 0x3400 */
+    /* 0x58 */ s32 unk58;       /* 0x1800 from func_80085B7C, a quarter less every frame of state 3 */
+    /* 0x5C */ s16 unk5C[16][4];
+} Unk80085B7C; /* size 0xDC */
+
+extern VECTOR D_80068674;
+
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_01", D_80068674);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_80085CE4);
+/* The update of Unk80085B7C: follows the owner's point 18 moved by D_80068674 and eases unk1C and unk1D; then by
+ * state: grows unk54 toward 0x3400 while bobbing up and down, waits 20 frames, shrinks unk58 below 5 and deletes
+ * itself. It goes to state 3 early when the owner's unk4A6 is 0. */
+void func_80085CE4(Unk80085B7C *this) {
+    VECTOR offset = D_80068674;
+
+    func_8007A4A4(&this->owner->base, &this->position, 18, &offset);
+    this->unk44.vy = this->position.vy;
+    this->unk44.vz = this->position.vz;
+    this->unk44.vx = this->position.vx + (this->side << 7);
+    this->unk1C += (0 - this->unk1C) >> 2;
+    this->unk1D += (0x84 - this->unk1D) >> 2;
+    if (this->state < 3 && this->owner->unk4A6 == 0) {
+        this->state = 3;
+    }
+    switch (this->state) {
+    case 0:
+        this->state++;
+        /* fallthrough */
+    case 1:
+        this->unk44.vy = (COS_SIN_TABLE[(this->timer << 10) & 0xC00].sin >> 7) + this->position.vy;
+        this->unk54 += (0x3400 - this->unk54) >> 3;
+        if (this->unk54 < 0x3300) {
+            break;
+        }
+        this->counter = 0;
+        this->state++;
+        /* fallthrough */
+    case 2:
+        this->counter++;
+        if (this->counter < 20) {
+            break;
+        }
+        this->state++;
+        /* fallthrough */
+    case 3:
+        this->unk58 -= this->unk58 >> 2;
+        if (this->unk58 >= 5) {
+            break;
+        }
+        this->state++;
+        /* fallthrough */
+    case 4:
+        entityDelete(&this->entity);
+        return;
+    }
+    this->timer++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_80085EF4);
 
@@ -394,7 +550,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_80086CB0);
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_01", func_80086E48);
 
-INCLUDE_RODATA("game/nonmatchings/fighters/fighter_01", D_8006869C);
+INCLUDE_RODATA_ALIGN8("game/nonmatchings/fighters/fighter_01", D_8006869C);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_01", D_800686BC);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_01", D_800686E4);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_01", D_8006870C);

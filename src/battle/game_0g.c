@@ -9,7 +9,8 @@
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/gfx/prim/alloc_line_g2.h"
 
-extern EntityVtable D_8006D574;
+extern EntityVtable D_8006D54C;
+extern EntityVtable D_8006D524;
 extern EntityVtable D_8006D29C;
 extern EntityVtable D_8006D2C4;
 extern EntityVtable D_8006D2EC;
@@ -28,7 +29,133 @@ void func_800C2E84(Unk800C2CCC *sprite, PolyFT4Shape *shape, SVECTOR *corners);
 void func_800C5834(Unk800C5680 *this);
 void func_800C59D4(Unk800C5680 *this);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C28B8);
+Entity *func_800C38D8(Entity *this, Vec3 *arg1, Vec3 *arg2, s32 arg3, s32 arg4);
+
+/* The constructors of the particle classes of vtables D_8006D54C, D_8006D524 and D_8006D4D4, which
+ * func_800C28B8 gets inlined like func_8006D574_init (out-of-line copies: func_800C69C4, func_800C6A74; the
+ * D_8006D4D4 one with size and color, unlike func_8006D4D4_init). */
+static inline void func_8006D54C_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
+    func_800C2FBC((Unk800C2F14 *)this, frame + 3, pos, vel, size, 0x808080, 0);
+    this->vtable = &D_8006D54C;
+}
+
+static inline void func_8006D524_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
+    func_800C2FBC((Unk800C2F14 *)this, 6, pos, vel, size, color, 0);
+    this->vtable = &D_8006D524;
+}
+
+static inline void func_8006D4D4_initSized(Entity *this, VECTOR *pos, s32 size, u32 color) {
+    func_800C2FBC((Unk800C2F14 *)this, 8, pos, &D_80010814, size, color, 0);
+    this->vtable = &D_8006D4D4;
+}
+
+/* Creates a particle entity of a kind (0 to 11) at pos moving by vel, with size and color: 0 to 6 and 8 are
+ * func_800C2FBC's sprites on that frame (0 to 5 grey, 8 still) with the inlined constructors of D_8006D574,
+ * D_8006D54C, D_8006D524 and D_8006D4D4, 7 func_800C32E0's, 9 to 11 func_800C3654's. NULL for any other kind.
+ * pos and vel are VECTORs as func_800C2FBC takes them; the constructors that take a Vec3 get them cast.
+ * The match depends on a child per case (a new-expression each): the inlined-constructor cases keep it in s1
+ * and the others in s0, so they are not one variable. */
+Entity *func_800C28B8(s32 kind, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
+    switch (kind) {
+    case 0: {
+        Entity *child = allocEntityMemory(0x58);
+
+        if (child != NULL) {
+            func_8006D574_init(entityOperatorNewAt(0x58, child), pos, vel, size, 0);
+        }
+        return child;
+    }
+    case 1: {
+        Entity *child = allocEntityMemory(0x58);
+
+        if (child != NULL) {
+            func_8006D574_init(entityOperatorNewAt(0x58, child), pos, vel, size, 1);
+        }
+        return child;
+    }
+    case 2: {
+        Entity *child = allocEntityMemory(0x58);
+
+        if (child != NULL) {
+            func_8006D574_init(entityOperatorNewAt(0x58, child), pos, vel, size, 2);
+        }
+        return child;
+    }
+    case 3: {
+        Entity *child = allocEntityMemory(0x58);
+
+        if (child != NULL) {
+            func_8006D54C_init(entityOperatorNewAt(0x58, child), pos, vel, size, 0);
+        }
+        return child;
+    }
+    case 4: {
+        Entity *child = allocEntityMemory(0x58);
+
+        if (child != NULL) {
+            func_8006D54C_init(entityOperatorNewAt(0x58, child), pos, vel, size, 1);
+        }
+        return child;
+    }
+    case 5: {
+        Entity *child = allocEntityMemory(0x58);
+
+        if (child != NULL) {
+            func_8006D54C_init(entityOperatorNewAt(0x58, child), pos, vel, size, 2);
+        }
+        return child;
+    }
+    case 6: {
+        Entity *child = allocEntityMemory(0x58);
+
+        if (child != NULL) {
+            func_8006D524_init(entityOperatorNewAt(0x58, child), pos, vel, size, color);
+        }
+        return child;
+    }
+    case 7: {
+        Entity *child = allocEntityMemory(0x48);
+
+        if (child != NULL) {
+            func_800C32E0(entityOperatorNewAt(0x48, child), (Vec3 *)pos, vel, size, color);
+        }
+        return child;
+    }
+    case 8: {
+        Entity *child = allocEntityMemory(0x58);
+
+        if (child != NULL) {
+            func_8006D4D4_initSized(entityOperatorNewAt(0x58, child), pos, size, color);
+        }
+        return child;
+    }
+    case 9: {
+        Entity *child = allocEntityMemory(0x5C);
+
+        if (child != NULL) {
+            func_800C3654(entityOperatorNewAt(0x5C, child), (Vec3 *)pos, (Vec3 *)vel, size, color, 9);
+        }
+        return child;
+    }
+    case 10: {
+        Entity *child = allocEntityMemory(0x5C);
+
+        if (child != NULL) {
+            func_800C38D8(entityOperatorNewAt(0x5C, child), (Vec3 *)pos, (Vec3 *)vel, size, color);
+        }
+        return child;
+    }
+    case 11: {
+        Entity *child = allocEntityMemory(0x5C);
+
+        if (child != NULL) {
+            func_800C391C(entityOperatorNewAt(0x5C, child), (Vec3 *)pos, (Vec3 *)vel, size, color);
+        }
+        return child;
+    }
+    }
+    return NULL;
+}
 
 void func_800C2D04(Unk800C2CCC *this);
 
@@ -671,8 +798,6 @@ void func_800C6970(Entity *this, s32 flags) {
     }
 }
 
-extern EntityVtable D_8006D54C;
-
 /* Constructs an entity of D_8006D54C: func_800C2FBC with frame + 3, color 0x808080 and no flags. */
 Entity *func_800C69C4(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
     func_800C2FBC((Unk800C2F14 *)this, frame + 3, pos, vel, size, 0x808080, 0);
@@ -689,8 +814,6 @@ void func_800C6A20(Entity *this, s32 flags) {
         entityOperatorDelete(this);
     }
 }
-
-extern EntityVtable D_8006D524;
 
 /* Constructs an entity of D_8006D524: func_800C2FBC with frame 6 and no flags. */
 Unk800C2F14 *func_800C6A74(Unk800C2F14 *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {

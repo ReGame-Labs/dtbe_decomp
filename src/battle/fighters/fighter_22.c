@@ -6,8 +6,8 @@
 #include "engine/game/game_state.h"
 #include "engine/sound/sound_control.h"
 
-void func_800BF0E8(Unk80076F34 *this, s32 arg1, s32 arg2, s32 arg3, s32 arg4);
-void func_800BF238(Unk80076F34 *this, s32 arg1, s32 arg2, s32 arg3);
+void func_800BF0E8(Unk80076F34 *this, s32 arg1, s32 arg2, s32 rgb, s32 alt);
+void func_800BF238(Unk80076F34 *this, s32 arg1, s32 arg2, s32 rgb);
 s32 func_800BF3B8(Unk80076F34 *this);
 
 /* whether the character's fighter (by func_80077574) has the other colors (altColor) */
@@ -33,9 +33,47 @@ Unk80076F34 *func_800BF0B4(Unk80076F34 *this) {
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_22", D_8006CC7C);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_22", D_8006CCC4);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_22", func_800BF0E8);
+/* func_800C5680's tables for func_800BF0E8: three entries each, D_8006CCC4 when alt, else D_8006CC7C. */
+extern Unk800C5B18Entry D_8006CC7C[3];
+extern Unk800C5B18Entry D_8006CCC4[3];
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_22", func_800BF238);
+void func_800C5B84(Unk800C5680 *this, CVECTOR *colors, s32 count);
+
+/* Creates func_800C5680's entity (0x690 bytes) for the character with three entries of its table (D_8006CCC4 when
+ * alt, else D_8006CC7C), arg1 and arg2, colors it rgb (a 0xBBGGRR word, read as its three bytes) and half rgb,
+ * and hands it to func_8007AD4C. */
+void func_800BF0E8(Unk80076F34 *this, s32 arg1, s32 arg2, s32 rgb, s32 alt) {
+    Unk800C5B18Entry *entries = alt ? D_8006CCC4 : D_8006CC7C;
+    CVECTOR *bytes = (CVECTOR *)&rgb;
+    CVECTOR colors[2] = { { bytes->r, bytes->g, bytes->b }, { bytes->r >> 1, bytes->g >> 1, bytes->b >> 1 } };
+    Entity *entity = NEW_ENTITY(0x690, func_800C5680, this, entries, 3, arg1, arg2);
+
+    if (entity != NULL) {
+        func_800C5B84((Unk800C5680 *)entity, colors, 2);
+        func_8007AD4C(this, entity);
+    }
+}
+
+/* func_800C5680's table for func_800BF238: three groups of three entries. */
+extern Unk800C5B18Entry D_800D35CC[9];
+
+/* As func_800BF0E8 (alt 0), once for each of the three groups of three entries of D_800D35CC. */
+void func_800BF238(Unk80076F34 *this, s32 arg1, s32 arg2, s32 rgb) {
+    Unk800C5B18Entry *entries = D_800D35CC;
+    CVECTOR *bytes = (CVECTOR *)&rgb;
+    CVECTOR colors[2] = { { bytes->r, bytes->g, bytes->b }, { bytes->r >> 1, bytes->g >> 1, bytes->b >> 1 } };
+    Unk800C5B18Entry *end = entries + 9;
+
+    do {
+        Entity *entity = NEW_ENTITY(0x690, func_800C5680, this, entries, 3, arg1, arg2);
+
+        if (entity != NULL) {
+            func_800C5B84((Unk800C5680 *)entity, colors, 2);
+            func_8007AD4C(this, entity);
+        }
+        entries += 3;
+    } while (entries != end);
+}
 
 /* Whether the character's fighter wears the other colors (both sides look alike). */
 s32 func_800BF37C(Unk80076F34 *this) {

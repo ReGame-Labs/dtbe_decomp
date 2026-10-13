@@ -18,6 +18,8 @@ typedef struct Unk80083108 {
 extern EntityVtable D_800683EC;
 extern VtableEntry D_800683CC[];
 void func_80082AF8(Unk80076F34 *this);
+void func_80082DBC(Unk80076F34 *this, s32 arg);
+void func_80082E8C(Unk80076F34 *this);
 
 /* Constructs an entity of the class of vtable D_8006843C, which derives from Unk80076F34 and
  * gives it the table D_800681DC. */
@@ -130,7 +132,64 @@ INCLUDE_RODATA("game/nonmatchings/fighters/fighter_00", D_800681BC);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_00", D_800681CC);
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_00", D_800681DC);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_00", func_80082C10);
+/* A virtual function of Unk80076F34 for virtual table D_8006843C: func_8007B9FC, sets bit 6 of 0x37C, then by the
+ * model's frame calls func_80082DBC (0, 1, 2), sets unk498 or unk49C and plays sounds; unk448 is 4 on frames 3-10,
+ * 16-25 and 36-47; while unk49C runs, func_800778BC clears it, or at 1 func_80079320 runs. */
+void func_80082C10(Unk80076F34 *this, s32 step) {
+    s32 frame;
+
+    func_8007B9FC(this, step);
+    func_80079AE4(this);
+    frame = modelGetFrame(this->model);
+    switch (frame) {
+    case 3:
+        func_80082DBC(this, 0);
+        break;
+    case 16:
+        func_80082DBC(this, 1);
+        break;
+    case 28:
+        this->unk498 = 10;
+        break;
+    case 15:
+    case 32:
+        func_8007835C(this, 0);
+        if (this->unk49C <= 0) {
+            this->unk49C = 12;
+        }
+        break;
+    case 35:
+        func_80082DBC(this, 2);
+        break;
+    }
+    switch (frame) {
+    case 0:
+        func_800784F4(this, 0x78);
+        break;
+    case 1:
+    case 16:
+    case 39:
+        func_80082E8C(this);
+        break;
+    case 9:
+    case 24:
+    case 47:
+        func_80078540(this, 0x74);
+        break;
+    }
+    if ((frame >= 3 && frame <= 10) || (frame >= 16 && frame <= 25) || (frame >= 36 && frame <= 47)) {
+        this->unk448 = 4;
+    } else {
+        this->unk448 = 0;
+    }
+    if (this->unk49C > 0) {
+        if (func_800778BC(this)) {
+            this->unk49C = 0;
+        } else if (this->unk49C == 1) {
+            func_80079320(this);
+        }
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_00", D_80068334);
 

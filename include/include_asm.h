@@ -30,6 +30,18 @@
     )
 #endif
 
+/* The first virtual table of a unit when the rodata before it is C's: g++ 2.95 emits virtual tables with
+ * .align 3, and splat gave the padding before them to the previous symbol (a jump table now emitted by C). */
+#ifndef INCLUDE_RODATA_ALIGN8
+#define INCLUDE_RODATA_ALIGN8(FOLDER, NAME) \
+    __asm__( \
+        ".section .rodata\n" \
+        "    .align 3\n" \
+        "    .include \"" ASM_DIR "/" FOLDER "/" #NAME ".s\"\n" \
+        ".section .text" \
+    )
+#endif
+
 #if defined(INCLUDE_ASM_USE_MACRO_INC) && INCLUDE_ASM_USE_MACRO_INC
 __asm__(".include \"include/macro.inc\"\n");
 #else
@@ -43,6 +55,9 @@ __asm__(".include \"include/labels.inc\"\n");
 #endif
 #ifndef INCLUDE_RODATA
 #define INCLUDE_RODATA(FOLDER, NAME)
+#endif
+#ifndef INCLUDE_RODATA_ALIGN8
+#define INCLUDE_RODATA_ALIGN8(FOLDER, NAME)
 #endif
 
 #endif /* !defined(M2CTX) && !defined(PERMUTER) */

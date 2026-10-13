@@ -52,7 +52,10 @@ segments:
     align: 4
     subalign: 4
     subsegments:
-      - [0x0, .rodata, game_main]
+      # the overlay's own first word (5; see movie.yaml): game_main's jump table
+      # is 8-aligned in its object only from 0x4 on
+      - [0x0, rodata, header]
+      - [0x4, .rodata, game_main]
       - [0x8E8, .rodata, battle_scene]
       - [0xC64, .rodata, side_hud]
       - [0xD14, .rodata, game_0c]

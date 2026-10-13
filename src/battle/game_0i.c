@@ -3,11 +3,13 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 
 struct Unk800C82CC *func_800C82CC(struct Unk800C82CC *this, Unk8006ED20 *owner, void *list, s32 arg3);
 Unk800C3CFC *func_800CAEF0(Unk800C3CFC *this, Vec3 *pos, s32 arg2, s32 arg3);
-Entity *func_800C8778(Entity *this, s32 arg1, s32 arg2, s32 arg3, s32 arg4, Vec3 *arg5, s32 arg6);
+Entity *func_800C8778(Entity *this, struct Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+                      s32 arg6);
 struct Unk800CA430 *func_800CA430(struct Unk800CA430 *this, Unk80076F34 *chara, s32 arg);
 struct Unk800CA768 *func_800CA768(struct Unk800CA768 *this, Unk80076F34 *chara, s32 arg);
 struct Unk800CAACC *func_800CAACC(struct Unk800CAACC *this, Unk80076F34 *chara, s32 arg2, s32 arg3, s32 arg4,
@@ -90,6 +92,27 @@ typedef struct Unk800C82CCTable {
 
 extern Unk800C82CCTable D_800D3798;
 
+/* An entry of func_800C82CC's list: the list ends at an entry whose first halfword is -1. */
+typedef struct Unk800C82CCEntry {
+    /* 0x0 */ s16 unk0;
+    /* 0x2 */ s16 unk2[4];
+} Unk800C82CCEntry;
+
+/* The entity func_800C82CC constructs for the game (virtual table D_8006DBA0): a list of entries counted at 0x28
+ * and the shared table D_800D3798. */
+typedef struct Unk800C82CC {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk8006ED20 *owner;
+    /* 0x1C */ Unk800C82CCEntry *list;
+    /* 0x20 */ s32 unk20;
+    /* 0x24 */ Unk800C82CCTable *table;
+    /* 0x28 */ s32 count; /* the entries of the list (func_800C84C8) */
+    /* 0x2C */ s32 unk2C;
+    /* 0x30 */ s32 unk30; /* 90 from func_800C82CC and func_800C86E4 */
+    /* 0x34 */ s32 unk34;
+    /* 0x38 */ s32 unk38;
+} Unk800C82CC; /* size 0x3C */
+
 /* Returns the table func_800C82CC's entities share. */
 Unk800C82CCTable *func_800C77BC(void) {
     return &D_800D3798;
@@ -117,9 +140,123 @@ INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D7B8);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D7C0);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D7C8);
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C7844);
+/* A list of kinds to draw one from at random (D_8006D7C8). */
+typedef struct Unk800C7844Pool {
+    /* 0x0 */ s8 *kinds;
+    /* 0x4 */ s32 count;
+} Unk800C7844Pool;
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C7924);
+extern Unk800C7844Pool D_8006D7C8[];
+
+/* Resolves a kind: -10 to -2 draw one at random from the pools of D_8006D7C8, any other is returned as it is. */
+s32 func_800C7844(s32 kind) {
+    s32 pool;
+    s8 *kinds;
+    s32 count;
+
+    switch (kind) {
+    case -10:
+        pool = 0;
+        break;
+    case -9:
+        pool = 1;
+        break;
+    case -8:
+        pool = 2;
+        break;
+    case -7:
+        pool = 3;
+        break;
+    case -6:
+        pool = 4;
+        break;
+    case -5:
+        pool = 5;
+        break;
+    case -4:
+        pool = 6;
+        break;
+    case -3:
+        pool = 7;
+        break;
+    case -2:
+        pool = 8;
+        break;
+    default:
+        return kind;
+    }
+    kinds = D_8006D7C8[pool].kinds;
+    count = D_8006D7C8[pool].count;
+    /* the game scales the draw with a signed shift (sra): the u32 draw is taken as an s32 */
+    return kinds[((s32)(mersenneTwisterGenerate(&RANDOM) & 0xFF) * count) >> 8];
+}
+
+Entity *func_800C9A88(Entity *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+                      s32 arg6);
+struct Unk800C9AF4 *func_800C9AF4(struct Unk800C9AF4 *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3,
+                                  s32 arg4, Vec3 *arg5, s32 arg6);
+Entity *func_800C9CA0(Entity *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+                      s32 arg6);
+struct Unk800C9D0C *func_800C9D0C(struct Unk800C9D0C *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3,
+                                  s32 arg4, Vec3 *arg5, s32 arg6);
+
+/* Creates the entity of a kind (resolved by func_800C7844) from this's list: kinds 0 to 10 one of two classes,
+ * 11 to 13 func_800C9CA0's (with no list when this is NULL; with one, only while 0x34 is 0, which then holds it
+ * for 600 frames, else as kind 14), 14 func_800C9D0C's. Returns NULL for any other kind. */
+Entity *func_800C7924(Unk800C82CC *this, s32 arg1, Unk8006ED20 *arg2, s32 kind, Vec3 *arg4, s32 arg5) {
+    Entity *child;
+
+    kind = func_800C7844(kind);
+    switch (kind) {
+    case 0:
+    case 1:
+    case 3:
+    case 8:
+    case 9:
+    case 10:
+        child = allocEntityMemory(0xC4);
+        if (child != NULL) {
+            func_800C9A88(entityOperatorNewAt(0xC4, child), this, arg1, arg2, kind, arg4, arg5);
+        }
+        return child;
+    case 2:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+        child = allocEntityMemory(0xC8);
+        if (child != NULL) {
+            func_800C9AF4(entityOperatorNewAt(0xC8, child), this, arg1, arg2, kind, arg4, arg5);
+        }
+        return child;
+    case 11:
+    case 12:
+    case 13:
+        if (this == NULL) {
+            child = allocEntityMemory(0xC4);
+            if (child != NULL) {
+                func_800C9CA0(entityOperatorNewAt(0xC4, child), NULL, arg1, arg2, kind, arg4, arg5);
+            }
+            return child;
+        }
+        if (this->unk34 == 0) {
+            this->unk34 = 600;
+            child = allocEntityMemory(0xC4);
+            if (child != NULL) {
+                func_800C9CA0(entityOperatorNewAt(0xC4, child), this, arg1, arg2, kind, arg4, arg5);
+            }
+            return child;
+        }
+        /* fallthrough */
+    case 14:
+        child = allocEntityMemory(0x158);
+        if (child != NULL) {
+            func_800C9D0C(entityOperatorNewAt(0x158, child), this, arg1, arg2, 14, arg4, arg5);
+        }
+        return child;
+    }
+    return NULL;
+}
 
 /* Creates an entity of func_800CA430's class (0x24 bytes) with g++'s new, and hands it to
  * func_8007AD4C. */
@@ -233,28 +370,35 @@ INCLUDE_ASM("game/nonmatchings/game_0i", func_800C7F48);
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8008);
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C811C);
+/* Puffs a grey particle of D_8006D574 (0x80 big) from the character's point (func_8007A650), moved by -32 to 31
+ * in x and y, at a random velocity (x and y -32 to 31): its frame is 0, 1 or 2 for the kind 1, 2 or 3 of 0x478,
+ * none for any other kind. */
+void func_800C811C(Unk80076F34 *this) {
+    VECTOR position;
+    VECTOR velocity;
+    Entity *entity;
 
-/* An entry of func_800C82CC's list: the list ends at an entry whose first halfword is -1. */
-typedef struct Unk800C82CCEntry {
-    /* 0x0 */ s16 unk0;
-    /* 0x2 */ s16 unk2[4];
-} Unk800C82CCEntry;
-
-/* The entity func_800C82CC constructs for the game (virtual table D_8006DBA0): a list of entries counted at 0x28
- * and the shared table D_800D3798. */
-typedef struct Unk800C82CC {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8006ED20 *owner;
-    /* 0x1C */ Unk800C82CCEntry *list;
-    /* 0x20 */ s32 unk20;
-    /* 0x24 */ Unk800C82CCTable *table;
-    /* 0x28 */ s32 count; /* the entries of the list (func_800C84C8) */
-    /* 0x2C */ s32 unk2C;
-    /* 0x30 */ s32 unk30; /* 90 from func_800C82CC and func_800C86E4 */
-    /* 0x34 */ s32 unk34;
-    /* 0x38 */ s32 unk38;
-} Unk800C82CC; /* size 0x3C */
+    func_8007A650(this, (Vec3 *)&position);
+    position.vx += (mersenneTwisterGenerate(&RANDOM) & 0x3F) - 0x20;
+    position.vy += (mersenneTwisterGenerate(&RANDOM) & 0x3F) - 0x20;
+    velocity.vx = (mersenneTwisterGenerate(&RANDOM) & 0x3F) - 0x20;
+    velocity.vy = (mersenneTwisterGenerate(&RANDOM) & 0x3F) - 0x20;
+    velocity.vz = 0;
+    switch (this->unk478.unk0) {
+    case 1:
+        entity = NEW_ENTITY(0x58, func_8006D574_init, &position, &velocity, 0x80, 0);
+        break;
+    case 2:
+        entity = NEW_ENTITY(0x58, func_8006D574_init, &position, &velocity, 0x80, 1);
+        break;
+    case 3:
+        entity = NEW_ENTITY(0x58, func_8006D574_init, &position, &velocity, 0x80, 2);
+        break;
+    default:
+        return;
+    }
+    func_8007AD4C(this, entity);
+}
 
 void func_800C84C8(Unk800C82CC *this);
 
@@ -447,7 +591,82 @@ INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D8C4);
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C9288);
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C94C4);
+/* Gives the character what this entity's kind holds (0x68), unless func_8006F190 says so for its 0x228 object:
+ * first func_800773F4 with 500, then per kind 0 to 13 a change through its 0x238 object, a timed effect at 0x464
+ * or func_800C7B9C, with a sound; kinds 0 to 10 then get func_800C7B30's entity. */
+void func_800C94C4(Unk800C90FC *this, Unk80076F34 *chara) {
+    if (func_8006F190(func_80077580(chara)) != 0) {
+        return;
+    }
+    func_800773F4(chara, 500);
+    switch (this->unk68) {
+    case 0:
+        func_80077448(chara, 0x2000);
+        func_800C7D14(chara, 0, 10, 0xC8C8C8);
+        soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
+        break;
+    case 1:
+        func_80077448(chara, -0x2000);
+        func_800C7D14(chara, 0, 15, 0xC82020);
+        soundControlPlaySound(&SOUND_CONTROL, 0x4A, 0);
+        break;
+    case 2:
+        func_80077448(chara, 0x10000);
+        func_800C7D14(chara, 0, 15, 0xFFFFFF);
+        soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
+        break;
+    case 3:
+        soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
+        func_8007746C(chara);
+        break;
+    case 4:
+        func_800774C0(chara, 1, 300, 0x200);
+        func_800C7B9C(chara, 4);
+        soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
+        break;
+    case 5:
+        func_800774C0(chara, 2, 300, 0x80);
+        func_800C7B9C(chara, 5);
+        soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
+        break;
+    case 6:
+        func_800774C0(chara, 3, 150, 0);
+        func_800C7B9C(chara, 6);
+        soundControlPlaySound(&SOUND_CONTROL, 0x4B, 0);
+        break;
+    case 7:
+        func_800774C0(chara, 3, 240, 0);
+        func_800C7B9C(chara, 7);
+        soundControlPlaySound(&SOUND_CONTROL, 0x4B, 0);
+        break;
+    case 8:
+        func_800774C0(chara, 4, 300, 0);
+        func_800C7B9C(chara, 8);
+        soundControlPlaySound(&SOUND_CONTROL, 0x4E, 0);
+        break;
+    case 9:
+        func_800774C0(chara, 5, 300, 0);
+        func_800C7B9C(chara, 9);
+        soundControlPlaySound(&SOUND_CONTROL, 0x4E, 0);
+        break;
+    case 10:
+        func_800774C0(chara, 6, 300, 0);
+        func_800C7B9C(chara, 10);
+        soundControlPlaySound(&SOUND_CONTROL, 0x4E, 0);
+        break;
+    case 11:
+    case 12:
+    case 13:
+        func_80077424(chara, 0x2000);
+        func_800C7D14(chara, 0, 10, 0x20C820);
+        soundControlPlaySound(&SOUND_CONTROL, 0x4C, 0);
+        return;
+    case 14:
+    default:
+        return;
+    }
+    func_800C7B30(chara, this->unk68);
+}
 
 /* Runs the character's timed effect at 0x464: counts it down and clears it at 0; otherwise, unless
  * func_8006F190 says so for its 0x228 object, emits the effect of its kind (1 to 6) every 16, 4 or 2 frames. */
@@ -535,7 +754,8 @@ void func_800C99B0(Unk80076F34 *this) {
 }
 
 /* Constructs an entity of D_8006DB20: func_800C8778 with the same arguments. */
-Entity *func_800C9A88(Entity *this, s32 arg1, s32 arg2, s32 arg3, s32 arg4, Vec3 *arg5, s32 arg6) {
+Entity *func_800C9A88(Entity *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+                      s32 arg6) {
     func_800C8778(this, arg1, arg2, arg3, arg4, arg5, arg6);
     this->vtable = &D_8006DB20;
     return this;
@@ -554,7 +774,8 @@ typedef struct Unk800C9AF4 {
 
 /* Constructs an entity of D_8006DAF0: func_800C8778 with the same arguments, 0xB8 moved by 0x800, then
  * func_800C9080 with bit 1. */
-Unk800C9AF4 *func_800C9AF4(Unk800C9AF4 *this, s32 arg1, s32 arg2, s32 arg3, s32 arg4, Vec3 *arg5, s32 arg6) {
+Unk800C9AF4 *func_800C9AF4(Unk800C9AF4 *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+                           s32 arg6) {
     func_800C8778(&this->base.entity, arg1, arg2, arg3, arg4, arg5, arg6);
     this->base.entity.vtable = &D_8006DAF0;
     this->unkC4 = 0;
@@ -611,7 +832,8 @@ void func_800C9C58(Unk800C9AF4 *this) {
 }
 
 /* Constructs an entity of D_8006DAC0: func_800C8778 with the same arguments. */
-Entity *func_800C9CA0(Entity *this, s32 arg1, s32 arg2, s32 arg3, s32 arg4, Vec3 *arg5, s32 arg6) {
+Entity *func_800C9CA0(Entity *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+                      s32 arg6) {
     func_800C8778(this, arg1, arg2, arg3, arg4, arg5, arg6);
     this->vtable = &D_8006DAC0;
     return this;
@@ -638,7 +860,8 @@ typedef struct Unk800C9D0C {
 
 /* Constructs an entity of D_8006DA90: func_800C8778 with the same arguments, then clears the first halfword of
  * its four records, the last first. */
-Unk800C9D0C *func_800C9D0C(Unk800C9D0C *this, s32 arg1, s32 arg2, s32 arg3, s32 arg4, Vec3 *arg5, s32 arg6) {
+Unk800C9D0C *func_800C9D0C(Unk800C9D0C *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+                           s32 arg6) {
     s32 i;
 
     func_800C8778(&this->entity, arg1, arg2, arg3, arg4, arg5, arg6);

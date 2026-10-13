@@ -211,7 +211,7 @@ typedef struct Unk80076F34 {
     /* 0x490 */ u8 unk490[0x494 - 0x490];
     /* 0x494 */ s32 unk494;                /* func_8007A12C sets it to 5 or clears it */
     /* 0x498 */ s32 unk498;
-    /* 0x49C */ u8 unk49C[0x4A0 - 0x49C];
+    /* 0x49C */ s32 unk49C;
     /* 0x4A0 */ s32 unk4A0;                /* func_8009A35C sets it to 1 */
 } Unk80076F34;
 
@@ -840,6 +840,8 @@ void func_80075034(Unk80075000 *this, s32 swap);
 Unk80075000 *func_80073260(Unk8006ED20 *this, s32 index);
 /* the last entry of history, through func_80075574 */
 u32 func_800750C4(Unk80075000 *this);
+/* the buttons pressed (0x202), through func_80075574 */
+u32 func_80075100(Unk80075000 *this);
 void func_8007BDF0(Unk8007BD8C *this, Unk80075EE4 *sum);
 struct Unk8007C17C *func_8007C17C(struct Unk8007C17C *this, s32 arg);
 void func_80078910(void *this, void *arg);
@@ -857,6 +859,8 @@ void func_800C9790(Unk80076F34 *this);
 s32 func_800798F4(Unk80076F34 *this, s32 arg);
 s32 func_800778D0(Unk80076F34 *this, s32 arg);
 void func_800788B4(Unk80076F34 *this, s32 arg1, s32 arg2);
+void func_80078848(Unk80076F34 *this, void *arg);
+Unk80076F34 *func_80079CF4(Unk80076F34 *this, s32 index);
 void func_800C99B0(Unk80076F34 *this);
 /* this->unk22C and this->unk230 */
 Unk8007F920 *func_800792A0(Unk80076F34 *this);
@@ -908,7 +912,13 @@ MATRIX *func_80076598(Unk80076444 *this);
 
 void func_800773F4(Unk80076F34 *this, s32 arg);
 
+void func_80077424(Unk80076F34 *this, s32 arg);
+
 void func_80077448(Unk80076F34 *this, s32 arg);
+
+void func_8007746C(Unk80076F34 *this);
+
+void func_800774C0(Unk80076F34 *this, s32 unk0, s32 unk4, s32 unk8);
 
 void func_80077508(Unk80076F34 *this);
 
@@ -1011,6 +1021,7 @@ void func_80079B1C(Unk80076F34 *this, s32 arg);
 void func_80079534(Unk80076F34 *this, Unk80076F34 *previous);
 
 void func_8007516C(Unk80075000 *this, s32 frames);
+s32 func_800751A8(Unk80075000 *this, u32 buttons, s32 any);
 s32 func_80075454(Unk80075000 *this, u32 buttons, s32 count, s32 any);
 void func_800797B8(Unk80076F34 *this, s32 clip);
 s32 func_8007F1C0(Unk8007F184 *this);
@@ -1034,6 +1045,15 @@ void func_800C71DC(Unk800C7024 *this, s32 arg);
 
 Entity *func_800C75FC(Entity *target, Vec3 *arg1, s32 arg2);
 
+extern EntityVtable D_8006D574;
+
+/* The constructor of the grey particle class of vtable D_8006D574, which the game inlines (func_800C28B8,
+ * func_800C811C; out-of-line copy func_800C691C): func_800C2FBC on frame, color 0x808080 and no flags. */
+static inline void func_8006D574_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
+    func_800C2FBC((Unk800C2F14 *)this, frame, pos, vel, size, 0x808080, 0);
+    this->vtable = &D_8006D574;
+}
+
 /* The constructor of the entity class of vtable D_8006D4D4, which the game inlines: func_800C2FBC with frame 8,
  * no velocity (D_80010814), size 0x40, color 0xA0A0A0 and no flags. */
 static inline void func_8006D4D4_init(Entity *this, VECTOR *pos) {
@@ -1046,9 +1066,9 @@ static inline void func_8006D4D4_init(Entity *this, VECTOR *pos) {
 typedef struct Unk8008D21C {
     /* 0x000 */ Unk80076F34 base;
     /* 0x4A4 */ u16 unk4A4;
-    /* 0x4A6 */ s16 unk4A6;
-    /* 0x4A8 */ s16 unk4A8;
-    /* 0x4AA */ s16 unk4AA;
+    /* 0x4A6 */ u16 unk4A6;
+    /* 0x4A8 */ u16 unk4A8;
+    /* 0x4AA */ u16 unk4AA;
     /* 0x4AC */ u16 unk4AC; /* halfword stores in func_8008D2D0 and func_8008DE84 */
     /* 0x4AE */ s16 unk4AE;
     /* 0x4B0 */ s32 unk4B0;
@@ -1059,6 +1079,11 @@ typedef struct Unk8008D21C {
     /* 0x4C4 */ s32 unk4C4;
     /* 0x4C8 */ s32 unk4C8;
     /* 0x4CC */ s32 unk4CC;
+    /* 0x4D0 */ Vec3 unk4D0; /* func_8008DD50 hands it to func_80079C1C as the force */
+    /* 0x4DC */ s32 unk4DC;
+    /* 0x4E0 */ Vec3 unk4E0; /* and this as the velocity */
+    /* 0x4EC */ s32 unk4EC;
+    /* 0x4F0 */ s32 unk4F0; /* the partner's x when func_8008DE84's step 0 runs */
 } Unk8008D21C;
 
 void func_8008D27C(Entity *this, s32 flags);

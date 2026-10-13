@@ -91,7 +91,9 @@ void func_800D0B80(Unk800D02C8 *this) {
  * types more of the same object. */
 typedef struct Unk800D0C50 {
     /* 0x000 */ Unk800D02C8 base;
-    /* 0xDA8 */ u8 unkDA8[0xF38 - 0xDA8];
+    /* 0xDA8 */ u8 unkDA8[0xF2C - 0xDA8];
+    /* 0xF2C */ s16 unkF2C[2];     /* by side: cleared with the counts (func_800D0CF8) */
+    /* 0xF30 */ u8 unkF30[0xF38 - 0xF30];
     /* 0xF38 */ s16 unkF38[2];     /* by side: how many entries of unkF3C are set */
     /* 0xF3C */ s16 unkF3C[2][10]; /* by side: func_800D0C50 sets the next one to 1 */
     /* 0xF64 */ u16 unkF64[2];     /* by func_80077574's index: func_800D0C9C adds it to its argument */
@@ -108,9 +110,74 @@ void func_800D0C9C(Unk800D0C50 *this, Unk80076F34 *chara, u16 arg) {
     func_800773F4(chara, this->unkF64[(u16)func_80077574(chara)] + arg);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0k", func_800D0CF8);
+Unk800D1328 *func_800D1328(Unk800D1328 *this, Unk8006ED20 *arg);
+Unk800D1328 *func_800D17E4(Unk800D1328 *this, Unk8006ED20 *arg);
+Unk800D1C50 *func_800D1C50(Unk800D1C50 *this, Unk8006ED20 *arg);
+Unk800D1F8C *func_800D1F8C(Unk800D1F8C *this, Unk8006ED20 *owner);
+Unk800D1F8C *func_800D23C4(Unk800D1F8C *this, Unk8006ED20 *owner);
 
-INCLUDE_ASM("game/nonmatchings/game_0k", func_800D0F1C);
+/* Clears both sides' 0xF2C, counts (0xF38), 0xF64 and entries (0xF3C), then adds this mode's two entities:
+ * 0 those of D_8006E12C and D_8006E0B4, 1 those of D_8006E104 and func_800D23C4, 2 those of D_8006E12C and
+ * func_800D1F8C. */
+void func_800D0CF8(Unk800D0C50 *this, s32 mode) {
+    Entity *entity;
+    s32 side;
+    s32 i;
+
+    for (side = 0; side < 2; side++) {
+        this->unkF2C[side] = 0;
+        this->unkF38[side] = 0;
+        this->unkF64[side] = 0;
+    }
+    for (side = 0; side < 2; side++) {
+        for (i = 0; i < 10; i++) {
+            this->unkF3C[side][i] = 0;
+        }
+    }
+    switch (mode) {
+    case 0:
+        entity = NEW_ENTITY(0x1C, func_800D1328, &this->base.base);
+        if (entity != NULL) {
+            func_8006F0B4(&this->base.base, entity);
+        }
+        entity = NEW_ENTITY(0x20, func_800D1C50, &this->base.base);
+        if (entity != NULL) {
+            func_8006F0B4(&this->base.base, entity);
+        }
+        break;
+    case 1:
+        entity = NEW_ENTITY(0x1C, func_800D17E4, &this->base.base);
+        if (entity != NULL) {
+            func_8006F0B4(&this->base.base, entity);
+        }
+        entity = NEW_ENTITY(0x70, func_800D23C4, &this->base.base);
+        if (entity != NULL) {
+            func_8006F0B4(&this->base.base, entity);
+        }
+        break;
+    case 2:
+        entity = NEW_ENTITY(0x1C, func_800D1328, &this->base.base);
+        if (entity != NULL) {
+            func_8006F0B4(&this->base.base, entity);
+        }
+        entity = NEW_ENTITY(0x70, func_800D1F8C, &this->base.base);
+        if (entity != NULL) {
+            func_8006F0B4(&this->base.base, entity);
+        }
+        break;
+    }
+}
+
+Unk800D1328 *func_800D27E0(Unk800D1328 *this, Unk8006ED20 *arg);
+
+/* Makes func_800D27E0's entity for this and, when it was allocated, adds it to this (func_8006F0B4). */
+void func_800D0F1C(Unk8006ED20 *this) {
+    Entity *entity = NEW_ENTITY(0x1C, func_800D27E0, this);
+
+    if (entity != NULL) {
+        func_8006F0B4(this, entity);
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0k", func_800D0F7C);
 

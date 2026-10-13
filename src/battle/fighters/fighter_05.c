@@ -2,7 +2,10 @@
  * classes. */
 
 #include "common.h"
+#include <abs.h>
 #include "battle/game_classes.h"
+#include "engine/math/sin_cos.h"
+#include "engine/math/vector.h"
 
 Entity *func_8008F474(Entity *this, Unk80076F34 *arg, VECTOR *pos, Unk8006ED20 *arg3);
 extern VECTOR D_800690E0;
@@ -36,6 +39,7 @@ void func_8008E900(Unk80076F34 *this);
 /* the constructors of the entities spawned below */
 Entity *func_8008EAB4(void *this, Unk80076F34 *chara, Vec3 *position, Vec3 *velocity, Unk8006ED20 *unk228);
 Entity *func_800902E0(void *this, Unk80076F34 *chara, Vec3 *position, Vec3 *velocity, Unk8006ED20 *unk228);
+struct Unk80091498 *func_80091498(struct Unk80091498 *this, Unk80076F34 *chara, Vec3 *position, Unk8006ED20 *obj);
 extern VECTOR D_800690D0;
 
 /* Constructs an object of the entity class of vtable D_8006938C, which derives from func_80076F34's,
@@ -203,7 +207,244 @@ void func_8008DCCC(Unk80076F34 *this, s32 step) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_05", func_8008DD50);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_05", func_8008DE84);
+s32 func_80078D64(Unk80076F34 *this);
+Unk80076F34 *func_80079CF4(Unk80076F34 *this, s32 index);
+VECTOR *func_8008DD50(VECTOR *out, Unk8008D21C *this);
+Unk8008E9B4 *func_8008E9B4(Unk8008E9B4 *this, Unk80076F34 *owner, Unk8006ED20 *unk228, Vec3 *pos, s32 size);
+Unk8008E9B4 *func_8008EA58(Unk8008E9B4 *this, Unk80076F34 *owner, Unk8006ED20 *unk228, Vec3 *pos, s32 size);
+
+/* The entity class of vtable D_800691C4: func_800C32E0's (0x48 bytes) with a halfword more; its draw is
+ * func_80091328 and its destructor func_80091998. */
+typedef struct Unk800919EC {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ u8 unk18[0x48 - 0x18];
+    /* 0x48 */ u16 unk48;
+} Unk800919EC;
+
+extern EntityVtable D_800691C4;
+
+/* func_800919EC's body, which func_8008DE84 has inline. */
+static inline void unk800919ECConstruct(Unk800919EC *this, u16 unk48, Vec3 *position, VECTOR *unk, s32 unk3,
+                                        u32 color) {
+    func_800C32E0((struct Unk800C32E0 *)this, position, unk, unk3, color);
+    this->entity.vtable = &D_800691C4;
+    this->unk48 = unk48;
+}
+
+/* Ends the hold: clears the flags func_8008DE84 keeps from 0x4A6 to 0x4AC and 0x448. */
+static inline void func_8008DE84_release(Unk8008D21C *this) {
+    this->unk4A6 = 0;
+    this->base.unk448 = 0;
+    this->unk4A8 = 0;
+    this->unk4AC = 0;
+    this->unk4AA = 0;
+}
+
+/* A step of the hold func_8008D97C runs (fighter_05 and fighter_06): in the first 20 steps it grabs the partner
+ * (func_8007AEEC) when the partner can be held, then carries it along func_8008DD50's path; given steps spawn
+ * effects and set the hit (0x4A6, 0x44C), and the end of the hit spawns a burst at the partner. The JP version
+ * lets go when func_8006F190 says so; the US version also calls func_80078EF8 on the partner when it grabs it
+ * and sets the partner's 0x48C to 2 after step 20. */
+void func_8008DE84(Unk8008D21C *this, s32 step) {
+    Vec3 above;
+    Vec3 vec;
+    Vec3 ownPosition;
+    Unk80076F34 *partner = func_8007AEEC(&this->base);
+    Vec3 *p;
+    Entity *child;
+    s32 i;
+    s32 dx;
+    s32 x, y, z;
+
+#if VERSION_JP
+    if (func_8006F190(func_80077580(&this->base))) {
+        if (this->unk4A8 != 0) {
+            func_800775D8(partner, &vec);
+            vec.vx = this->unk4F0;
+            func_800775B0(partner, &vec);
+        }
+        func_80079320(&this->base);
+        func_8008DE84_release(this);
+        return;
+    }
+#endif
+    this->unk4AC = 1;
+    /* The match depends on the range test: the game compares the step unsigned. */
+    if (step >= 0 && step < 20 && this->unk4A8 == 0) {
+        if (!func_80078DE0(partner) && !func_80078D64(partner) && func_80079CF4(&this->base, 0) != NULL) {
+#if !VERSION_JP
+            func_80078EF8(partner, 0x40000001, (Vec3 *)&D_80010814, 0);
+#endif
+            func_80079274(partner, 60 - step);
+            this->unk4A8 = 1;
+            partner->unk3A4.vx = 0;
+            partner->unk3A4.vy = 0;
+            partner->unk3A4.vz = 0;
+            partner->unk3B0 = 0;
+            this->unk4D0.vx = 0;
+            this->unk4D0.vy = 0;
+            this->unk4D0.vz = 0;
+            this->unk4DC = 0;
+            this->unk4E0.vx = 0;
+            this->unk4E0.vy = 0;
+            this->unk4E0.vz = 0;
+            this->unk4EC = 0;
+            /* The match depends on reading the position's three words before any store, as vecCopy does. */
+            p = func_800775D8(partner, &vec);
+            x = p->vx;
+            y = p->vy;
+            z = p->vz;
+            this->base.unk3A4.vx = 0;
+            this->base.unk3A4.vy = 0;
+            this->base.unk3A4.vz = 0;
+            this->base.unk3B0 = 0;
+            this->unk4C0 = x;
+            this->unk4C4 = y;
+            this->unk4C8 = z;
+            this->unk4B0 = x;
+            this->unk4B4 = y;
+            this->unk4B8 = z;
+            func_800775D8(&this->base, &ownPosition);
+            dx = ownPosition.vx - vec.vx;
+            if (ABS(dx) < 0x140) {
+                this->base.unk3B4.vx = dx >= 0 ? 0x1C70 : -0x1C70;
+            }
+        }
+    }
+    if (this->unk4A8 != 0 && this->unk4A4 == 0) {
+#if !VERSION_JP
+        if (step > 20) {
+            partner->unk48C = 2;
+        }
+#endif
+        func_8008DD50((VECTOR *)&vec, this);
+        func_800775B0(partner, &vec);
+    }
+    switch (step) {
+    case 0: {
+        /* The match depends on unk228 and spark being set once in their block: sched1 then sinks the copy
+         * of the result next to the call that follows. */
+        Unk8006ED20 *unk228;
+
+        func_800775D8(partner, &vec);
+        this->unk4A4 = 0;
+        this->unk4F0 = vec.vx;
+        func_80079830(&this->base, 0x1A, 0, 0, -1);
+        func_80077448(&this->base, -0x10000);
+        unk228 = func_80077580(&this->base);
+        func_800775D8(&this->base, &vec);
+        for (i = 0; i < 16; i++) {
+            Entity *spark = allocEntityMemory(0x58);
+
+            if (spark != NULL) {
+                func_8008E9B4(entityOperatorNewAt(0x58, spark), &this->base, unk228, &vec, 0x400 + i * 0x180);
+            }
+            func_8007AD4C(&this->base, spark);
+        }
+        this->base.unk3A4.vx = 0;
+        this->base.unk3A4.vy = 0;
+        this->base.unk3A4.vz = 0;
+        this->base.unk3B0 = 0;
+        this->base.unk498 = 10;
+        break;
+    }
+    case 3: {
+        /* The match depends on push being an s64 local: the game keeps both halves of it across the call. */
+        s64 push = ((s64)this->base.unk3C4 * 0x38E0) >> 16;
+
+        this->base.unk3B4.vx += (s32)push * func_80079E10(&this->base);
+        break;
+    }
+    case 6:
+        this->unk4A6 = 4;
+        this->base.unk44C = 0x5B01500;
+        this->unk4AA = 1;
+        break;
+    case 12:
+        this->unk4A6 = 8;
+        this->base.unk44C = 0x5B01500;
+        this->unk4AA = 1;
+        break;
+    case 19: {
+        s64 push = ((s64)this->base.unk3C4 * 0x1C70) >> 16;
+
+        this->base.unk3B4.vx += (s32)push * func_80079E10(&this->base);
+        this->base.unk3B4.vy -= ((s64)this->base.unk3C4 * 0x71C0) >> 16;
+        break;
+    }
+    case 20:
+        if (this->unk4A8 != 0) {
+            vec.vx = 0;
+            vec.vy = -0x78DC;
+            vec.vz = 0;
+            this->unk4D0 = vec;
+            this->unk4E0.vx = 0;
+            this->unk4E0.vy = 0;
+        }
+        this->unk4A6 = 0x10;
+        this->base.unk44C = 0x5B01500;
+        this->unk4AA = 1;
+        break;
+    case 10:
+    case 27:
+        this->base.unk3A4.vx = 0;
+        break;
+    case 28:
+        this->unk4A6 = 0x20;
+        this->unk4E0.vx = 0;
+        this->base.unk44C = 0x5B01500;
+        this->unk4AA = 1;
+        break;
+    case 42:
+        this->base.unk3B4.vy = 0;
+        break;
+    case 50:
+        if (this->unk4A8 != 0) {
+            vec.vx = 0;
+            vec.vy = 0x1C70;
+            vec.vz = 0;
+            func_80078EF8(partner, 0x45B01500, (Vec3 *)&D_80010814, 0);
+            this->base.unk3A4.vx = 0;
+            this->unk4AA = 1;
+            this->unk4D0 = vec;
+        }
+        this->unk4A6 = 0;
+        break;
+    }
+    if (this->unk4A6 != 0) {
+        func_8007A0E4(&this->base, this->unk4A6);
+    } else {
+        this->base.unk448 = 0;
+    }
+    if (!func_80079A0C(&this->base)) {
+#if VERSION_JP
+        if (this->base.unk44C == 0 && this->unk4AA != 0) {
+#else
+        if (!func_80078DE0(partner) && this->unk4AA != 0 && this->unk4A8 != 0) {
+#endif
+            Unk8006ED20 *unk228 = func_80077580(&this->base);
+
+            func_8007A650(partner, &above);
+            child = allocEntityMemory(0x4C);
+            if (child != NULL) {
+                unk800919ECConstruct(entityOperatorNewAt(0x4C, child), func_8007768C(&this->base), &above,
+                                     &D_80010814, 0x180, 0xFFFFFF);
+            }
+            func_8007AD4C(&this->base, child);
+            for (i = 0; i < 8; i++) {
+                Entity *spark = allocEntityMemory(0x58);
+
+                if (spark != NULL) {
+                    func_8008EA58(entityOperatorNewAt(0x58, spark), partner, unk228, &above, 0x100 + i * 0x40);
+                }
+                func_8007AD4C(&this->base, spark);
+            }
+            this->unk4AA = 0;
+        }
+    } else {
+        func_8008DE84_release(this);
+    }
+}
 
 /* Spawns func_800C32E0's entity (0x48 bytes) at the partner's position (func_8007AEEC, func_800775D8),
  * with no velocity, 0x60 and color 0x808080. */
@@ -367,8 +608,8 @@ void func_8008E900(Unk80076F34 *this) {
 
 /* Constructs an Unk8008E9B4 (vtable D_80069364) for owner: func_800C3CFC with pos, arg4 and 0xFFC080,
  * then 6 in unk50. */
-Unk8008E9B4 *func_8008E9B4(Unk8008E9B4 *this, Unk80076F34 *owner, s32 arg2, Vec3 *pos, s32 arg4) {
-    func_800C3CFC(&this->base, pos, arg4, 0xFFC080);
+Unk8008E9B4 *func_8008E9B4(Unk8008E9B4 *this, Unk80076F34 *owner, Unk8006ED20 *unk228, Vec3 *pos, s32 size) {
+    func_800C3CFC(&this->base, pos, size, 0xFFC080);
     /* The match depends on this order: vtable, unk54, unk50. */
     this->base.entity.vtable = &D_80069364;
     this->unk54 = owner;
@@ -391,8 +632,8 @@ void func_8008EA10(Unk8008E9B4 *this, s32 arg) {
 }
 
 /* Constructs an Unk8008E9B4 with vtable D_8006933C (see func_8008E9B4). */
-Unk8008E9B4 *func_8008EA58(Unk8008E9B4 *this, Unk80076F34 *owner, s32 arg2, Vec3 *pos, s32 arg4) {
-    func_800C3CFC(&this->base, pos, arg4, 0xFFC080);
+Unk8008E9B4 *func_8008EA58(Unk8008E9B4 *this, Unk80076F34 *owner, Unk8006ED20 *unk228, Vec3 *pos, s32 size) {
+    func_800C3CFC(&this->base, pos, size, 0xFFC080);
     /* The match depends on this order, as in func_8008E9B4. */
     this->base.entity.vtable = &D_8006933C;
     this->unk54 = owner;
@@ -509,9 +750,137 @@ void func_8009050C(Entity *this, s32 flags) {
     }
 }
 
+/* The entity class of vtable D_8006925C (0x920 bytes, func_800902E0 constructs it for a character): 64 particles
+ * drawn to a point of the character, with a square of four corners. */
+typedef struct Unk800902E0 {
+    /* 0x000 */ Entity entity;
+    /* 0x018 */ Unk80076F34 *chara;
+    /* 0x01C */ Unk8006ED20 *obj;    /* func_800902E0's fifth argument; func_8006F004 draws numbers from it */
+    /* 0x020 */ s16 unk20;           /* frames in state 2 */
+    /* 0x022 */ u8 unk22;            /* 0x80 from func_800902E0, eased to 0 */
+    /* 0x023 */ u8 unk23;            /* 0 from func_800902E0, eased to 0x84 */
+    /* 0x024 */ s16 side;            /* the sign of the velocity's x */
+    /* 0x026 */ u16 timer;           /* counts the frames */
+    /* 0x028 */ u16 state;
+    /* 0x02A */ s16 flags;           /* func_8007768C of the character */
+    /* 0x02C */ u16 count;           /* particles in use: 16 more every frame, up to 64 */
+    /* 0x02E */ u8 unk2E[0x34 - 0x2E];
+    /* 0x034 */ s32 unk34;
+    /* 0x038 */ u8 unk38[0x48 - 0x38];
+    /* 0x048 */ VECTOR position;     /* the character's point 1 moved by D_80069188 (func_8007A4A4) */
+    /* 0x058 */ VECTOR unk58;        /* position, 128 toward side */
+    /* 0x068 */ u8 unk68[0x78 - 0x68];
+    /* 0x078 */ SVECTOR corners[4];  /* (+-0x80, +-0x40, 0) */
+    /* 0x098 */ s32 unk98;           /* 0x1000 from func_800902E0, eased to 0x3200 */
+    /* 0x09C */ s32 unk9C;           /* 0x1000 from func_800902E0, halved every frame of state 3 */
+    /* 0x0A0 */ s16 unkA0[16][4];
+    /* 0x120 */ VECTOR particles[64]; /* positions */
+    /* 0x520 */ VECTOR velocities[64];
+} Unk800902E0; /* size 0x920 */
+
+extern VECTOR D_80069188;
+
+/* vecAddInPlace (engine/math/vector_ops.c), inlined */
+static inline VECTOR *vecAddInPlaceInline(VECTOR *a, VECTOR *b) {
+    s32 x = a->vx;
+    s32 y = a->vy;
+    s32 z = a->vz;
+
+    x += b->vx;
+    y += b->vy;
+    z += b->vz;
+    a->vx = x;
+    a->vy = y;
+    a->vz = z;
+    return a;
+}
+
 INCLUDE_RODATA("game/nonmatchings/fighters/fighter_05", D_80069188);
 
-INCLUDE_ASM("game/nonmatchings/fighters/fighter_05", func_80090560);
+/* The update of Unk800902E0: follows the character's point 1 moved by D_80069188; moves the particles, and puts
+ * one that came within 32 of the point back at random, a quarter of its offset as velocity; eases unk22 and unk23.
+ * Then by state: after 6 frames makes func_80091498's entity, grows unk98 toward 0x3200 while unk58 bobs, waits
+ * 12 frames, halves unk9C below 5 and deletes itself. */
+void func_80090560(Unk800902E0 *this) {
+    VECTOR offset = D_80069188;
+    VECTOR distance;
+    VECTOR *particle;
+    VECTOR *velocity;
+    Entity *child;
+    s32 i;
+
+    func_8007A4A4(this->chara, &this->position, 1, &offset);
+    this->unk58.vy = this->position.vy;
+    this->unk58.vz = this->position.vz;
+    this->unk58.vx = this->position.vx + (this->side << 7);
+    this->count += 16;
+    if (this->count > 64) {
+        this->count = 64;
+    }
+    for (i = 0; i < this->count; i++) {
+        /* The match depends on velocity's address taken before particle's (loop makes the later one the base
+         * register) and on vecAddInPlace inlined; the reset below indexes the arrays again. */
+        velocity = &this->velocities[i];
+        particle = &this->particles[i];
+        vecAddInPlaceInline(particle, velocity);
+        distance.vx = particle->vx - this->position.vx;
+        distance.vy = particle->vy - this->position.vy;
+        distance.vz = particle->vz - this->position.vz;
+        if (vecGetLength(&distance) < 32) {
+            this->particles[i].vx = (func_8006F004(this->obj) & 0xFFF) - 0x800;
+            this->particles[i].vy = (func_8006F004(this->obj) & 0xFFF) - 0x800;
+            this->velocities[i].vx = -this->particles[i].vx >> 2;
+            this->velocities[i].vy = -this->particles[i].vy >> 2;
+        }
+    }
+    if (this->unk23 != 0x80) {
+        this->unk22 += (0 - this->unk22) >> 2;
+        this->unk23 += (0x84 - this->unk23) >> 2;
+    } else {
+        this->unk22 = 0;
+    }
+    switch (this->state) {
+    case 0:
+        if (this->timer < 6) {
+            break;
+        }
+        child = allocEntityMemory(0x38);
+        if (child != NULL) {
+            /* position is a VECTOR here, a Vec3 to func_80091498 (it reads the three words) */
+            func_80091498(entityOperatorNewAt(0x38, child), this->chara, (Vec3 *)&this->position, this->obj);
+        }
+        func_8007AD4C(this->chara, child);
+        this->state++;
+        /* fallthrough */
+    case 1:
+        /* The match depends on the sine as the first operand (unk58.vy += ... swaps the registers). */
+        this->unk58.vy = (COS_SIN_TABLE[(this->timer << 10) & 0xC00].sin >> 7) + this->unk58.vy;
+        this->unk98 += (0x3200 - this->unk98) >> 1;
+        if (this->unk98 < 0x3100) {
+            break;
+        }
+        this->state++;
+        /* fallthrough */
+    case 2:
+        this->unk20++;
+        if (this->unk20 < 12) {
+            break;
+        }
+        this->state++;
+        /* fallthrough */
+    case 3:
+        this->unk9C -= this->unk9C >> 1;
+        if (this->unk9C >= 5) {
+            break;
+        }
+        this->state++;
+        /* fallthrough */
+    case 4:
+        entityDelete(&this->entity);
+        return;
+    }
+    this->timer++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/fighter_05", func_800908E8);
 
@@ -595,8 +964,9 @@ typedef struct Unk80091498 {
     /* 0x28 */ Vec3 position;
 } Unk80091498;
 
-/* Constructs the entity of vtable D_800691EC for a character, 0x40 below position. */
-Unk80091498 *func_80091498(Unk80091498 *this, Unk80076F34 *chara, Vec3 *position) {
+/* Constructs the entity of vtable D_800691EC for a character, 0x40 below position. obj is not read
+ * (func_80090560 passes it). */
+Unk80091498 *func_80091498(Unk80091498 *this, Unk80076F34 *chara, Vec3 *position, Unk8006ED20 *obj) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
@@ -669,16 +1039,6 @@ void func_80091998(Entity *this, s32 flags) {
         entityOperatorDelete(this);
     }
 }
-
-/* The entity class of vtable D_800691C4: func_800C32E0's (0x48 bytes) with a halfword more; its draw is
- * func_80091328 and its destructor func_80091998. */
-typedef struct Unk800919EC {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ u8 unk18[0x48 - 0x18];
-    /* 0x48 */ u16 unk48;
-} Unk800919EC;
-
-extern EntityVtable D_800691C4;
 
 /* Constructs an Unk800919EC: func_800C32E0's entity at position, then unk48 and the vtable D_800691C4. */
 Unk800919EC *func_800919EC(Unk800919EC *this, u16 unk48, Vec3 *position, VECTOR *unk, s32 unk3, u32 color) {
