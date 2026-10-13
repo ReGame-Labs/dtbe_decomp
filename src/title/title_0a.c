@@ -10,26 +10,6 @@
 #include "engine/system/memory.h"
 #include "title/title_classes.h"
 
-/* The entity class of vtable D_8006659C (func_80076E24): a character model of the title, seen by camera.
- * func_800774D4 and func_800775AC draw through the camera's ordering table. */
-typedef struct Unk80076E24 {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ Camera *camera;
-    /* 0x1C */ Chara *chara;
-    /* 0x20 */ Model *model;
-    /* 0x24 */ s16 unk24;
-    /* 0x26 */ s16 unk26; /* func_800773C8 sets it */
-    /* 0x28 */ s16 unk28; /* func_800773F0 returns it */
-    /* 0x2A */ u8 unk2A[0x2C - 0x2A];
-    /* 0x2C */ s32 unk2C;
-    /* 0x30 */ s16 unk30;
-    /* 0x32 */ s16 unk32;
-    /* 0x34 */ s16 unk34;
-    /* 0x36 */ s16 unk36;
-    /* 0x38 */ s32 unk38; /* func_80077684 sets it to 1 */
-    /* 0x3C */ s32 unk3C; /* func_800773E8 sets it */
-} Unk80076E24; /* size 0x40 */
-
 extern RECT *D_8007B2DC[][2];
 extern RECT *D_8007B2FC[][2];
 
@@ -193,3 +173,5 @@ s32 func_80077684(Unk80076E24 *this) {
     this->unk38 = 1;
     return 1;
 }
+
+INCLUDE_RODATA("title/nonmatchings/title_0a", D_8006659C);

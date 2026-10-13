@@ -8,6 +8,7 @@
 
 /* the constructor func_800D3EB0 calls, and what that constructor calls last */
 UnkStageQuad *func_800D5080(UnkStageQuad *this, Unk8006ED20 *owner, s32 index);
+UnkStageQuadPos *func_800D5630(UnkStageQuadPos *this, Unk8006ED20 *owner, Vec3 *pos);
 void func_800D53AC(UnkStageQuad *this);
 
 /* the virtual tables the functions below install, and the data they read */
@@ -233,7 +234,60 @@ void func_800D4AB8(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st07/nonmatchings/st07", func_800D4B0C);
+/* The entity of vtable D_800D38EC that func_800D51F0 creates (0x80 bytes, constructor func_800D49B0). */
+typedef struct Unk800D49B0 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Unk8006ED20 *owner;
+    /* 0x1C */ s16 unk1C;
+    /* 0x1E */ s16 unk1E;
+    /* 0x20 */ u16 unk20; /* counts the updates spent above the ground (func_800D4B0C) */
+    /* 0x22 */ u8 unk22[0x24 - 0x22];
+    /* 0x24 */ SVECTOR corners[4]; /* a 128 by 128 square */
+    /* 0x44 */ Vec3 force;         /* func_80079C1C's force, cleared after each update */
+    /* 0x50 */ s32 unk50;
+    /* 0x54 */ Vec3 velocity;
+    /* 0x60 */ s32 unk60;
+    /* 0x64 */ Vec3 pos;
+    /* 0x70 */ u8 unk70[0x78 - 0x70];
+    /* 0x78 */ s32 unk78;
+    /* 0x7C */ s32 unk7C; /* added to 0x78 each update */
+} Unk800D49B0;
+
+s32 func_800D4C64(Unk800D49B0 *this, s32 arg);
+
+/* Each update: falls (0x71C added to the force) and moves by func_80079C1C's step (in 1/256ths); it deletes
+ * itself once func_800D4C64 says so, or once it is below the ground (y > 0), leaving an UnkStageQuadPos at
+ * its position in the latter case. */
+void func_800D4B0C(Unk800D49B0 *this, s32 arg) {
+    Vec3 *pos;
+    Vec3 move;
+
+    this->unk78 += this->unk7C;
+    this->force.vy += 0x71C;
+    func_80079C1C(&move, &this->velocity, &this->force, 0x10000);
+    /* The match depends on taking &this->pos here, after the step: the game keeps it in a saved register from
+     * this point for the constructor, while the updates below still address the fields from this. */
+    pos = &this->pos;
+    this->force.vx = 0;
+    this->force.vy = 0;
+    this->force.vz = 0;
+    this->unk50 = 0;
+    this->pos.vx += move.vx >> 8;
+    this->pos.vy += move.vy >> 8;
+    this->pos.vz += move.vz >> 8;
+    if (func_800D4C64(this, arg)) {
+        entityDelete(&this->entity);
+    } else if (this->pos.vy > 0) {
+        entityAddSibling(&this->entity, NEW_ENTITY(sizeof(UnkStageQuadPos), func_800D5630, this->owner, pos));
+        entityDelete(&this->entity);
+    } else {
+        this->force.vx = 0;
+        this->force.vy = 0;
+        this->force.vz = 0;
+        this->unk50 = 0;
+        this->unk20++;
+    }
+}
 
 INCLUDE_ASM("st07/nonmatchings/st07", func_800D4C64);
 

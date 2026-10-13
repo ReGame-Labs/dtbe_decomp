@@ -4,7 +4,10 @@
 /* Classes of title.bin, known only by their layout and named after a function that uses them. */
 
 #include "common.h"
+#include "engine/game/character.h"
+#include "engine/gfx/camera.h"
 #include "engine/gfx/scene_graph.h"
+#include "engine/task/entity.h"
 #include "engine/task/task.h"
 #include "engine/text/text_printer.h"
 
@@ -23,10 +26,34 @@ typedef struct Unk80073390Image {
 /* The destructor of StepperGroup (engine/menu/stepper.h), a C++ class, as the C of title.bin calls it. */
 void stepperGroupDestroy(void *group, s32 flags) __asm__("_._12StepperGroup");
 
+/* The entity class of vtable D_8006659C (func_80076E24): a character model of the title, seen by camera.
+ * func_800774D4 and func_800775AC draw through the camera's ordering table. */
+typedef struct Unk80076E24 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Camera *camera;
+    /* 0x1C */ Chara *chara;
+    /* 0x20 */ Model *model;
+    /* 0x24 */ s16 unk24;
+    /* 0x26 */ s16 unk26; /* func_800773C8 sets it */
+    /* 0x28 */ s16 unk28; /* func_800773F0 returns it */
+    /* 0x2A */ u8 unk2A[0x2C - 0x2A];
+    /* 0x2C */ s32 unk2C;
+    /* 0x30 */ s16 unk30;
+    /* 0x32 */ s16 unk32;
+    /* 0x34 */ s16 unk34;
+    /* 0x36 */ s16 unk36;
+    /* 0x38 */ s32 unk38; /* func_80077684 sets it to 1 */
+    /* 0x3C */ s32 unk3C; /* func_800773E8 sets it */
+} Unk80076E24; /* size 0x40 */
+
+Unk80076E24 *func_80076E24(Unk80076E24 *model, Camera *camera, Vec3 *position, Vec3 *rotation);
+void func_800773C8(Unk80076E24 *model, s32 value);
+void func_800773E8(Unk80076E24 *model, s32 value);
+s32 func_800773F0(Unk80076E24 *model);
+
 /* sets the matrix of the model of a title character model entity (title_0a.c) from a position and the angles
  * about x, y and z */
-struct Unk80076E24;
-void func_80077420(struct Unk80076E24 *object, Vec3 *position, Vec3 *rotation);
+void func_80077420(Unk80076E24 *object, Vec3 *position, Vec3 *rotation);
 
 /* Calls the invalidate method of a scene object (its world moved). */
 #define SCENE_OBJECT_INVALIDATE(object) \

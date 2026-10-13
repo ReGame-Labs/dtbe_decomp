@@ -44,6 +44,8 @@ extern BootLogoKey D_80064444[];
 
 void func_80067018(u_long *ot, s32 arg1, u8 level);
 
+INCLUDE_RODATA("title/nonmatchings/boot_logo", D_800643E0);
+
 INCLUDE_ASM("title/nonmatchings/boot_logo", bootLogoTaskInit);
 
 /* The boot logo's frame: fades the logo through the keys (a skip button starts the fade out from where it
@@ -123,3 +125,7 @@ void func_8006713C(Unk8006713C *this, s32 arg) {
     this->unk20 = arg;
     this->vtable->unk20.func((u8 *)this + this->vtable->unk20.delta, arg);
 }
+
+INCLUDE_RODATA("title/nonmatchings/boot_logo", D_80064404);
+INCLUDE_RODATA("title/nonmatchings/boot_logo", D_80064434);
+INCLUDE_RODATA("title/nonmatchings/boot_logo", D_80064444);

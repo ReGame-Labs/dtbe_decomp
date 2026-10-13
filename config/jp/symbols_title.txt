@@ -32,3 +32,12 @@ _._11Unk800786E4 = 0x80079E2C; // type:func
 _._11Unk80078914 = 0x80079F9C; // type:func
 _._11Unk80078A4C = 0x8007A100; // type:func
 _._11Unk80077AC8 = 0x8007A264; // type:func
+
+// strings matched C reads as u8 data (Shift JIS text, or a "*" pattern that
+// shares its piece with a ""): kept out of their functions' assembly
+D_80065304 = 0x80065304; // force_not_migration:True
+D_8006530C = 0x8006530C; // force_not_migration:True
+D_8006564C = 0x8006564C; // force_not_migration:True
+D_80065688 = 0x80065688; // force_not_migration:True
+D_800663F8 = 0x800663F8; // force_not_migration:True
+D_800663FC = 0x800663FC; // force_not_migration:True

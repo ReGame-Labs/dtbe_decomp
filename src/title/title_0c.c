@@ -46,3 +46,6 @@ void func_8007B184(Unk8007B0A0 *this, s32 x, s32 y, u32 code) {
 void func_8007B210(Printer *this, s32 flags) {
     printerDestroy(this, flags);
 }
+
+INCLUDE_RODATA("title/nonmatchings/title_0c", D_80066B88);
+INCLUDE_RODATA("title/nonmatchings/title_0c", D_80066BB8);

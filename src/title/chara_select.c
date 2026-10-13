@@ -3,7 +3,12 @@
 #include "common.h"
 #include "engine/cd/file_load.h"
 #include "engine/game/game_state.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/display.h"
+#include "engine/gfx/prim/alloc_dr_area.h"
+#include "engine/gfx/prim/alloc_poly_ft4.h"
 #include "engine/gfx/prim/alloc_sprt.h"
+#include "engine/math/matrix.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound.h"
 #include "engine/sound/sound_control.h"
@@ -11,44 +16,97 @@
 #include "title/title_classes.h"
 #include "psyq.h"
 
-/* A side's part of Unk8006CC64 (0x38 bytes, sides at 0xC0 and 0xF8). The start is inferred: the init's loop
- * reaches down to 0xC8, and 0x130 follows side 2. */
+/* An entry of D_80064C40 (20 bytes): unk10 picks a picture (its texture page, u, v and palette). The asm splits the
+ * table at D_80064C44, inside entry 0. */
+typedef struct Unk80064C40 {
+    /* 0x00 */ s16 unk0;
+    /* 0x02 */ s16 unk2;
+    /* 0x04 */ s32 unk4;
+    /* 0x08 */ s32 unk8;
+    /* 0x0C */ s32 unkC;
+    /* 0x10 */ u16 picture;
+    /* 0x12 */ s16 unk12;
+} Unk80064C40;
+
+extern Unk80064C40 D_80064C40[];
+
+/* A side's part of Unk8006CC64 (0x38 bytes, sides at 0xC0 and 0xF8). */
 typedef struct Unk8006CC64Side {
-    /* 0x00 */ u8 unk0[0x10];
+    /* 0x00 */ s32 unk0; /* set when the side has nothing to pick (SELECT_SIDE_* and 0x10 << side clear) */
+    /* 0x04 */ s32 unk4;
+    /* 0x08 */ s32 unk8;
+    /* 0x0C */ s32 computer; /* its pick is the computer's (selectFlags 0x10 << side, SELECT_COMPUTER_1) */
     /* 0x10 */ s32 unk10;
-    /* 0x14 */ u8 unk14[0x28 - 0x14];
+    /* 0x14 */ s32 index; /* of the side */
+    /* 0x18 */ s32 cell; /* of its character, D_80064E20[character] */
+    /* 0x1C */ u8 unk1C[4];
+    /* 0x20 */ s32 unk20;
+    /* 0x24 */ Unk80064C40 *entry; /* &D_80064C40[cell] */
     /* 0x28 */ s32 unk28;
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30; /* copied to GameState.fighters[side].unk14 after a versus pick */
-    /* 0x34 */ u8 unk34[4];
+    /* 0x34 */ s32 unk34;
 } Unk8006CC64Side;
 
 /* the object of func_8006CC64: 0x88 is the step it is at */
 typedef struct Unk8006CC64 {
-    /* 0x000 */ u8 unk0[0x88];
+    /* 0x000 */ Task task;
+    /* 0x020 */ u8 unk20[4];
+    /* 0x024 */ Camera camera;
+    /* 0x060 */ MATRIX view;
+    /* 0x080 */ u8 unk80[0x88 - 0x80];
     /* 0x088 */ s32 unk88;
-    /* 0x08C */ u8 unk8C[0x94 - 0x8C];
+    /* 0x08C */ s32 unk8C;
+    /* 0x090 */ s32 unk90;
     /* 0x094 */ s32 unk94;
     /* 0x098 */ s32 unk98; /* frames waited in step 0, then the fade-out's level */
     /* 0x09C */ s32 unk9C; /* the fade-out, 0 to 0xFF */
-    /* 0x0A0 */ u8 unkA0[0xC0 - 0xA0];
+    /* 0x0A0 */ u8 unkA0[4];
+    /* 0x0A4 */ s32 frame; /* counted by the update */
+    /* 0x0A8 */ s32 unkA8; /* 3 while func_8006FAD8 picks the arena, 4 once confirmed */
+    /* 0x0AC */ s32 unkAC; /* the arena pick's slide-in, 0 to 0xA0 (func_8006F3C4) */
+    /* 0x0B0 */ s32 unkB0; /* the arena pick's y, 0x72 to 0x100 */
+    /* 0x0B4 */ int unkB4; /* half the height of the arena's picture, 0 to 0x20 (a plain int: see func_8006F3C4) */
+    /* 0x0B8 */ s32 unkB8;
+    /* 0x0BC */ s32 unkBC; /* counted every frame of steps 3 and 4 of func_8006F3C4 */
     /* 0x0C0 */ Unk8006CC64Side sides[FIGHTER_COUNT];
     /* 0x130 */ s32 selectFlags; /* what is being picked: SELECT_* */
-    /* 0x134 */ u8 unk134[0x158 - 0x134];
-    /* 0x158 */ s32 unk158;
-    /* 0x15C */ u8 unk15C[0x18C - 0x15C];
+    /* 0x134 */ u8 unk134[0x13C - 0x134];
+    /* 0x13C */ s32 unk13C;
+    /* 0x140 */ u8 unk140[0x154 - 0x140];
+    /* 0x154 */ u32 sound; /* the handle of the sound func_8006BF94 plays */
+    /* 0x158 */ s32 unk158; /* func_8006BF94's step */
+    /* 0x15C */ s32 unk15C; /* frames left to wait, counted down by func_8006BF94 */
+    /* 0x160 */ u8 unk160[0x170 - 0x160];
+    /* 0x170 */ s32 unk170; /* the scale (4.12) of the picture func_8006F3C4 zooms in */
+    /* 0x174 */ s32 unk174; /* its angle about z */
+    /* 0x178 */ s32 unk178;
+    /* 0x17C */ s32 unk17C; /* the level of the black over the screen */
+    /* 0x180 */ s32 unk180; /* the picture's brightness above 0x80 */
+    /* 0x184 */ u8 unk184[0x18C - 0x184];
     /* 0x18C */ Vec3 position; /* of the object at 0x220 (func_80077420) */
     /* 0x198 */ u8 unk198[4];
     /* 0x19C */ Vec3 rotation; /* of the object at 0x220: angles about x, y, z */
     /* 0x1A8 */ u8 unk1A8[4];
     /* 0x1AC */ s32 arena; /* picked */
-    /* 0x1B0 */ u8 unk1B0[0x220 - 0x1B0];
-    /* 0x220 */ void *unk220;
-} Unk8006CC64;
+    /* 0x1B0 */ s32 characters[FIGHTER_COUNT]; /* by side */
+    /* 0x1B8 */ s32 unk1B8[FIGHTER_COUNT]; /* by side: GameState.fighters[side].unk8 */
+    /* 0x1C0 */ s32 pickable[CHARACTER_COUNT]; /* by cell of the grid */
+    /* 0x220 */ struct Unk80076E24 *unk220; /* a title character model entity (title_0a.c) */
+    /* 0x224 */ EntityGroup entities;
+} Unk8006CC64; /* size 0x234 */
 
 INCLUDE_ASM("title/nonmatchings/chara_select", characterSelectTaskInit);
 
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_8006480C);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_8006481C);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_8006482C);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_8006483C);
+
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006B104);
+
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80064850);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_800649D0);
 
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006B1DC);
 
@@ -78,13 +136,74 @@ INCLUDE_ASM("title/nonmatchings/chara_select", func_8006BAE8);
 
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006BB74);
 
-INCLUDE_ASM("title/nonmatchings/chara_select", func_8006BD18);
-
+void func_8006BE7C(Unk8006CC64 *this);
+void func_8006BEA8(Unk8006CC64 *this);
 void func_8006BF94(Unk8006CC64 *this);
 s32 func_8006C144(Unk8006CC64 *this);
 void func_8006C408(Unk8006CC64 *this);
 void func_8006C544(Unk8006CC64 *this);
-void func_8006FAD8(void);
+void func_8006C8D0(Unk8006CC64 *this);
+void func_8006C940(Unk8006CC64 *this);
+void func_8006CA54(Unk8006CC64 *this);
+void func_8006CA94(Unk8006CC64 *this);
+void func_8006CAFC(Unk8006CC64 *this);
+void func_8006CC2C(Unk8006CC64 *this);
+void func_8006CC64(Unk8006CC64 *this);
+void func_8006CC94(Unk8006CC64 *this);
+void func_8006CCD4(Unk8006CC64 *this);
+void func_8006CD6C(Unk8006CC64 *this, s32 arg);
+void func_8006FAD8(Unk8006CC64 *this);
+
+/* The character select's frame: runs the step at 0x88, then draws and counts the frame; step 10 stores the picks
+ * and kills the task. The cases are in the order of their blocks in the asm. */
+void func_8006BD18(Unk8006CC64 *this, s32 arg) {
+    switch (this->unk88) {
+    case 0:
+        func_8006BE7C(this);
+        break;
+    case 1:
+        func_8006BEA8(this);
+        break;
+    case 3:
+        func_8006C8D0(this);
+        break;
+    case 4:
+        func_8006C940(this);
+        /* fall through */
+    case 5:
+        this->position.vy -= 8;
+        if (this->position.vy < 0x104) {
+            this->position.vy = 0x104;
+        }
+        this->position.vx = 200;
+        this->rotation.vy = 0x880;
+        func_80077420(this->unk220, &this->position, &this->rotation);
+        func_8006CA54(this);
+        break;
+    case 2:
+        func_8006CA94(this);
+        break;
+    case 6:
+        func_8006CAFC(this);
+        break;
+    case 7:
+        func_8006CC2C(this);
+        break;
+    case 8:
+        func_8006CC64(this);
+        break;
+    case 9:
+        func_8006CC94(this);
+        break;
+    case 10:
+    default:
+        func_8006CCD4(this);
+        taskKill(&this->task);
+        return;
+    }
+    func_8006CD6C(this, arg);
+    this->frame++;
+}
 
 /* Step 0: waits 32 frames, then goes to step 1 with 0x158 cleared. */
 void func_8006BE7C(Unk8006CC64 *this) {
@@ -125,7 +244,55 @@ void func_8006BEA8(Unk8006CC64 *this) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/chara_select", func_8006BF94);
+/* Plays sounds 0x23, 0x24 and 0x25 in turn, each handed to the model at 0x220 (0x24 once 0x23 ended and 90 frames
+ * passed, 0x25 likewise after 300); step 7 stops the sound if it still plays. */
+void func_8006BF94(Unk8006CC64 *this) {
+    if (--this->unk15C < 0) {
+        this->unk15C = 0;
+    }
+    switch (this->unk158) {
+    case 0:
+        func_800773C8(this->unk220, 11);
+        this->sound = soundControlPlaySound(&SOUND_CONTROL, 0x23, 0);
+        func_800773E8(this->unk220, this->sound);
+        this->unk158++;
+        break;
+    case 1:
+        if (!isSoundPlaying(this->sound)) {
+            this->unk15C = 90;
+            this->unk158++;
+        }
+        break;
+    case 2:
+        if (!isSoundPlaying(this->sound) && this->unk15C == 0) {
+            func_800773C8(this->unk220, 11);
+            this->sound = soundControlPlaySound(&SOUND_CONTROL, 0x24, 0);
+            func_800773E8(this->unk220, this->sound);
+            this->unk158++;
+        }
+        break;
+    case 3:
+        if (!isSoundPlaying(this->sound)) {
+            this->unk15C = 300;
+            this->unk158++;
+        }
+        break;
+    case 4:
+        if (!isSoundPlaying(this->sound) && this->unk15C == 0) {
+            func_800773C8(this->unk220, 11);
+            this->sound = soundControlPlaySound(&SOUND_CONTROL, 0x25, 0);
+            func_800773E8(this->unk220, this->sound);
+            this->unk158 = 7;
+        }
+        break;
+    case 7:
+        if (isSoundPlaying(this->sound) == 1) {
+            stopSound(this->sound);
+        }
+        this->unk158++;
+        break;
+    }
+}
 
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006C144);
 
@@ -136,6 +303,8 @@ INCLUDE_ASM("title/nonmatchings/chara_select", func_8006C350);
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006C408);
 
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006C544);
+
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80064AE0);
 
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006C6E4);
 
@@ -152,6 +321,9 @@ void func_8006C8D0(Unk8006CC64 *this) {
     }
 }
 
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80064AE8);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80064AFC);
+
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006C940);
 
 /* The button that confirms: circle in Japan, cross in the US. */
@@ -161,7 +333,7 @@ INCLUDE_ASM("title/nonmatchings/chara_select", func_8006C940);
 #define PAD_CONFIRM 0x40
 #endif
 
-/* Step 7: the confirm button on any pad goes to step 8. */
+/* The end of steps 4 and 5: the confirm button on any pad goes to step 8. */
 void func_8006CA54(Unk8006CC64 *this) {
     if (padManagerGetPressed(PAD_MANAGER_INSTANCE, -1) & PAD_CONFIRM) {
         this->unk88 = 8;
@@ -184,7 +356,7 @@ INCLUDE_ASM("title/nonmatchings/chara_select", func_8006CAFC);
 
 /* Calls func_8006FAD8; back at step 1, clears 0x94. */
 void func_8006CC2C(Unk8006CC64 *this) {
-    func_8006FAD8();
+    func_8006FAD8(this);
     if (this->unk88 == 1) {
         this->unk94 = 0;
     }
@@ -258,20 +430,6 @@ INCLUDE_ASM("title/nonmatchings/chara_select", func_8006DA20);
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006DBA4);
 
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006DCCC);
-
-/* An entry of D_80064C40 (20 bytes): unk10 picks a picture (its texture page, u, v and palette). The asm splits the
- * table at D_80064C44, inside entry 0. */
-typedef struct Unk80064C40 {
-    /* 0x00 */ s16 unk0;
-    /* 0x02 */ s16 unk2;
-    /* 0x04 */ s32 unk4;
-    /* 0x08 */ s32 unk8;
-    /* 0x0C */ s32 unkC;
-    /* 0x10 */ u16 picture;
-    /* 0x12 */ s16 unk12;
-} Unk80064C40;
-
-extern Unk80064C40 D_80064C40[];
 
 void func_8006DFA4(u_long *ot, s32 x, s32 y, s32 index, s32 arg4);
 void func_8006E1A0(u_long *ot, s32 x, s32 y);
@@ -452,9 +610,302 @@ void func_8006F31C(u_long *ot, s32 x, s32 y, s32 flag) {
     func_8006FEB8(ot, &pos, 17, 0);
 }
 
-INCLUDE_ASM("title/nonmatchings/chara_select", func_8006F3C4);
+/* An arena's picture in VRAM: its place in the texture page, its palette and the page. */
+typedef struct Unk80065268 {
+    /* 0x0 */ u8 u;
+    /* 0x1 */ u8 v;
+    /* 0x2 */ u8 unk2[2];
+    /* 0x4 */ u16 clut;
+    /* 0x6 */ u16 tpage;
+} Unk80065268;
 
-INCLUDE_ASM("title/nonmatchings/chara_select", func_8006FAD8);
+/* by arena */
+extern Unk80065268 D_80065268[];
+
+void func_800700A4(u_long *ot, DVECTOR *pos, s32 sprite, s32 shade, s32 poly);
+
+/* The arena pick's animation (its step at 0xA8) and drawing. Up to step 4 it slides the pick in and opens the
+ * picture of the arena (D_80065268); from step 5 a picture zooms out and the screen fades to black, then step 9
+ * goes to step 8 of the scene. The pick's sprites take rect's x and y as their position: the game keeps one stack
+ * slot for both. The match depends on unkB4 being a plain int (through the s32 typedef, narrowing the picture's
+ * bottom y to a short reassociates it as (y + 0x2B) - h), on one variable for the scale and on the translation
+ * being set before the scale words. */
+void func_8006F3C4(Unk8006CC64 *this, u_long *ot) {
+    switch (this->unkA8) {
+    case 0:
+        this->unkAC = 0;
+        this->unkB0 = 0x72;
+        this->unkB4 = 0;
+        this->unkB8 = 0;
+        this->unkBC = 0;
+        break;
+    case 1:
+        this->unkAC += 8;
+        if (this->unkAC > 0xA0) {
+            this->unkAC = 0xA0;
+            this->unkA8++;
+            soundControlPlaySound(&SOUND_CONTROL, 0x5D, 0);
+        }
+        this->unkB8++;
+        break;
+    case 2:
+        this->unkB4 += 2;
+        if (this->unkB4 > 0x20) {
+            this->unkB4 = 0x20;
+            this->unkA8++;
+        }
+        break;
+    case 4:
+        this->unkB0 += 8;
+        if (this->unkB0 > 0x100) {
+            this->unkB0 = 0x100;
+        }
+        if (--this->unkB8 < 0) {
+            this->unkB8 = 0;
+        }
+        if (this->unkB0 == 0x100 && this->unkB8 == 0) {
+            this->unkA8++;
+        }
+        /* fall through */
+    case 3:
+        this->unkBC++;
+        break;
+    case 5:
+        this->unk170 = 0x4000;
+        this->unk174 = 0;
+        this->unk17C = 0;
+        this->unk178 = 0;
+        this->unk180 = 0;
+        this->unkA8++;
+        /* fall through */
+    case 6:
+        this->unk170 -= 0x200;
+        if (this->unk170 < 0x1000) {
+            this->unk170 = 0x1000;
+            this->unk180 = 0x7F;
+            this->unkA8++;
+            soundControlPlaySound(&SOUND_CONTROL, 0x5D, 0);
+        }
+        break;
+    case 7:
+        this->unk180 -= 2;
+        if (this->unk180 < 0) {
+            this->unk180 = 0;
+        }
+        if (this->unk178++ > 60) {
+            this->unkA8++;
+        }
+        break;
+    case 8:
+        this->unk17C += 8;
+        if (this->unk17C >= 0xFF) {
+            this->unk17C = 0xFF;
+            this->unkA8++;
+        }
+        this->unk170 += 0x200;
+        this->unk174 += 0x80;
+        break;
+    case 9:
+        this->unk88 = 8;
+        break;
+    }
+    if (this->unkA8 >= 5) {
+        if (this->unk17C != 0) {
+            DR_TPAGE *tpage = allocDrTpage(0x25);
+            TILE *tile = allocTile();
+
+            setRGB0(tile, this->unk17C, this->unk17C, this->unk17C);
+            setXY0(tile, 0, 0);
+            setWH(tile, 320, 240);
+            SetSemiTrans(tile, 1);
+            AddPrim(ot, tile);
+            AddPrim(ot, tpage);
+        }
+        {
+            VECTOR corners[4] = {
+                { -76, -40, 0 },
+                { 75, -40, 0 },
+                { -76, 39, 0 },
+                { 75, 39, 0 },
+            };
+            VECTOR screen[4];
+            MatrixWords m;
+            u32 scale = (u16)this->unk170;
+            POLY_FT4 *poly;
+
+            m.m.t[0] = 0xA0;
+            m.m.t[1] = 0xA0;
+            m.m.t[2] = 0;
+            m.words[0] = scale;
+            m.words[1] = 0;
+            m.words[2] = scale;
+            m.words[3] = 0;
+            m.words[4] = scale;
+            matrixRotateZ(&m.m, this->unk174);
+            matrixTransformVecs(&m.m, screen, corners, 4);
+            poly = allocPolyFT4();
+            setXY4(poly, screen[0].vx, screen[0].vy, screen[1].vx, screen[1].vy, screen[2].vx, screen[2].vy,
+                   screen[3].vx, screen[3].vy);
+            setUV4(poly, 0, 0, 0x97, 0, 0, 0x4F, 0x97, 0x4F);
+            setRGB0(poly, this->unk180 + 0x80, this->unk180 + 0x80, this->unk180 + 0x80);
+            poly->tpage = 0x88;
+            poly->clut = 0x3D98;
+            setSemiTrans(poly, 1);
+            AddPrim(ot, poly);
+        }
+    } else {
+        RECT rect;
+
+        rect.x = this->unkAC - 0x50;
+        rect.y = this->unkB0;
+        func_8006FEB8(ot, (DVECTOR *)&rect, 9, 0);
+        rect.x = 320 - this->unkAC;
+        func_8006FEB8(ot, (DVECTOR *)&rect, 10, 0);
+        if (this->unkB4 > 0) {
+            Unk80065268 *picture = &D_80065268[this->arena];
+            POLY_FT4 *poly = allocPolyFT4();
+
+            setRGB0(poly, 0x80, 0x80, 0x80);
+            setXYWH(poly, 0x78, this->unkB0 + 0x2B - this->unkB4, 0x50, this->unkB4 * 2);
+            setUVWH(poly, picture->u, picture->v, 0x4F, 0x3F);
+            poly->tpage = picture->tpage;
+            poly->clut = picture->clut;
+            SetSemiTrans(poly, 0);
+            AddPrim(ot, poly);
+        }
+        getDrawBufferRect(&rect);
+        AddPrim(ot, allocDrArea(&rect));
+        if (this->unkAC == 0xA0) {
+            rect.x = 0xE8 - (u8)this->unkBC;
+            rect.y = this->unkB0 + 0x5A;
+            func_8006FEB8(ot, (DVECTOR *)&rect, 13, 0);
+        }
+        getDrawBufferSubRect(&rect, 0x5A, this->unkB0 + 0x5A, 0x8C, 0x12);
+        if (rect.h > 0) {
+            AddPrim(ot, allocDrArea(&rect));
+        }
+        rect.x = this->unkAC - 0x48;
+        rect.y = this->unkB0 + 0x5A;
+        func_800700A4(ot, (DVECTOR *)&rect, 11, 0x80, 0);
+        rect.x = 320 - this->unkAC;
+        func_800700A4(ot, (DVECTOR *)&rect, 12, 0x80, 0);
+    }
+}
+
+/* The arena pick, while 0xA8 is 3: plays sounds 0x27, 0x28 and 0x29 in turn (0x29 again every 300 frames),
+ * left and right step through the arenas (a fight's 0 to 5, the boss's too once a run was won; with SELECT_BONUS
+ * the bonus games, skipping those whose bit of save.unk18 is clear) and the confirm button sets 0xA8 to 4.
+ * The match depends on save.unk18 being a u32 (with an s32 mask, fold turns the bit test into a shift of the
+ * mask) and on each loop having its own counter. */
+void func_8006FAD8(Unk8006CC64 *this) {
+    PadManager *pads = PAD_MANAGER_INSTANCE;
+    u32 pressed = padManagerGetPressed(pads, -1);
+    u32 repeated = padManagerGetRepeated(pads, -1);
+    s32 first;
+    s32 last;
+
+    if (this->unkA8 != 3) {
+        return;
+    }
+    if (--this->unk15C < 0) {
+        this->unk15C = 0;
+    }
+    this->unk15C--;
+    switch (this->unk158) {
+    case 0:
+        this->unk15C = 60;
+        break;
+    case 1:
+        if (this->unk15C == 0) {
+            this->sound = soundControlPlaySound(&SOUND_CONTROL, 0x27, 0);
+            this->unk158++;
+        }
+        break;
+    case 2:
+        if (!isSoundPlaying(this->sound)) {
+            this->unk15C = 90;
+            this->unk158++;
+        }
+        break;
+    case 3:
+        if (this->unk15C == 0) {
+            this->sound = soundControlPlaySound(&SOUND_CONTROL, 0x28, 0);
+            this->unk158++;
+        }
+        break;
+    case 4:
+        if (!isSoundPlaying(this->sound)) {
+            this->unk15C = 300;
+            this->unk158++;
+        }
+        break;
+    case 5:
+        if (this->unk15C == 0) {
+            this->sound = soundControlPlaySound(&SOUND_CONTROL, 0x29, 0);
+            this->unk158 = 4;
+        }
+        break;
+    case 7:
+        if (isSoundPlaying(this->sound) == 1) {
+            stopSound(this->sound);
+        }
+        this->unk158++;
+        break;
+    }
+    first = 0;
+    last = ARENA_PICK_COUNT - 1;
+    if (GAME_STATE.save.cleared & 0xFFF) {
+        last = ARENA_BOSS;
+    }
+    if (this->selectFlags & SELECT_BONUS) {
+        first = ARENA_BONUS;
+        last = ARENA_BONUS + BONUS_GAME_COUNT - 1;
+    }
+    if (repeated & (PAD_LEFT | PAD_RIGHT)) {
+        soundControlPlaySound(&SOUND_CONTROL, 0xF, 0);
+    }
+    if (!(this->selectFlags & SELECT_BONUS)) {
+        if (repeated & PAD_LEFT) {
+            if (--this->arena < first) {
+                this->arena = last;
+            }
+        }
+        if (repeated & PAD_RIGHT) {
+            if (++this->arena > last) {
+                this->arena = first;
+            }
+        }
+    } else {
+        if (repeated & PAD_LEFT) {
+            s32 i;
+
+            for (i = 0; i < BONUS_GAME_COUNT; i++) {
+                if (--this->arena < first) {
+                    this->arena = last;
+                }
+                if (GAME_STATE.save.unk18 & (1 << this->arena)) {
+                    break;
+                }
+            }
+        }
+        if (repeated & PAD_RIGHT) {
+            s32 i;
+
+            for (i = 0; i < BONUS_GAME_COUNT; i++) {
+                if (++this->arena > last) {
+                    this->arena = first;
+                }
+                if (GAME_STATE.save.unk18 & (1 << this->arena)) {
+                    break;
+                }
+            }
+        }
+    }
+    if (pressed & PAD_CONFIRM) {
+        soundControlPlaySound(&SOUND_CONTROL, 0x10, 0);
+        this->unkA8 = 4;
+    }
+}
 
 /* An object with a model at 0x84; nothing references func_8006FE5C. */
 typedef struct Unk8006FE5C {
@@ -491,3 +942,17 @@ void func_800702C4(Unk8006713C *this, s32 arg) {
     this->unk20 = arg;
     this->vtable->unk20.func((u8 *)this + this->vtable->unk20.delta, arg);
 }
+
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80064C10);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80064C40);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80064C44);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80064E20);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80064E80);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80064E88);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80065120);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80065140);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80065160);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80065180);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_800651A0);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_800651B0);
+INCLUDE_RODATA("title/nonmatchings/chara_select", D_80065268);

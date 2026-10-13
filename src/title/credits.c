@@ -125,3 +125,5 @@ void func_80076DF0(Unk8006713C *this, s32 arg) {
     this->unk20 = arg;
     this->vtable->unk20.func((u8 *)this + this->vtable->unk20.delta, arg);
 }
+
+INCLUDE_RODATA("title/nonmatchings/credits", D_800664CC);

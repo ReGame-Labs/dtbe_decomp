@@ -84,9 +84,48 @@ void Unk80077AC8::stepDown(s32 arg, s32 held, u32 buttons) {
     func_8007799C();
 }
 
-INCLUDE_ASM("title/nonmatchings/option", func_800778F8);
+/* Reads the option of the item's row from the save data into the value. */
+void Unk80077AC8::refresh(s32 arg) {
+    switch (index) {
+    case 0:
+        value = GAME_STATE.save.level;
+        return;
+    case 1:
+        value = GAME_STATE.save.mono;
+        return;
+    case 2:
+        value = GAME_STATE.save.unk8;
+        return;
+    case 3:
+        value = GAME_STATE.save.unk4 == 0;
+        return;
+    case 6:
+        value = GAME_STATE.save.unkC == 0;
+        return;
+    }
+}
 
-INCLUDE_ASM("title/nonmatchings/option", func_8007799C);
+/* Writes the value into the option of the item's row in the save data, then applies the options. */
+void Unk80077AC8::func_8007799C() {
+    switch (index) {
+    case 0:
+        GAME_STATE.save.level = value;
+        break;
+    case 1:
+        GAME_STATE.save.mono = value == 1;
+        break;
+    case 2:
+        GAME_STATE.save.unk8 = value == 1;
+        break;
+    case 3:
+        GAME_STATE.save.unk4 = value == 0;
+        break;
+    case 6:
+        GAME_STATE.save.unkC = value == 0;
+        break;
+    }
+    saveDataApplyOptions(&GAME_STATE.save);
+}
 
 /* Plays sound 0xF. */
 void Unk80077AC8::focus(s32 arg) {
@@ -259,6 +298,8 @@ s32 Unk800782D8::confirm(s32 arg, s32 held, s32 own) {
 }
 
 INCLUDE_ASM("title/nonmatchings/option", func_8007850C);
+
+INCLUDE_RODATA("title/nonmatchings/option", D_80066600);
 
 INCLUDE_ASM("title/nonmatchings/option", func_80078628);
 
@@ -452,3 +493,38 @@ s32 Unk80079254::cancel(s32 arg, s32 held, s32 own) {
 void Unk80079254::refresh(s32 arg) {
     StepperGroup::refresh(arg);
 }
+
+INCLUDE_RODATA("title/nonmatchings/option", D_8006663C);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066644);
+INCLUDE_RODATA("title/nonmatchings/option", D_8006664C);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066660);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066668);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80079254.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80078A4C.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80078914.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk800786E4.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk800782D8.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80077F28.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80077D20.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80077AC8.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk800797D8);
+INCLUDE_RODATA("title/nonmatchings/option", D_8006699C);
+INCLUDE_RODATA("title/nonmatchings/option", D_800669A8);
+INCLUDE_RODATA("title/nonmatchings/option", D_800669C0);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066A2C);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066A38);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066A44);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066A50);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066A5C);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066A68);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066A74);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066A80);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066A8C);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066AA4);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066AB0);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066AC8);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066B34);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066B40);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066B48);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066B50);
+INCLUDE_RODATA("title/nonmatchings/option", D_80066B58);

@@ -54,7 +54,9 @@ typedef struct Unk8006ED20 {
     /* 0x314 */ s32 unk314;
     /* 0x318 */ u8 unk318[0x31C - 0x318];
     /* 0x31C */ Vec3 eye; /* func_80072088 copies it into lookAt.eye */
-    /* 0x328 */ u8 unk328[0x33C - 0x328];
+    /* 0x328 */ u8 unk328[0x32C - 0x328];
+    /* 0x32C */ s32 unk32C; /* st01 sways it (func_800D5650) */
+    /* 0x330 */ u8 unk330[0x33C - 0x330];
     /* 0x33C */ s32 unk33C; /* func_800700E4 sets 0x33C to 0x35C; 0x33C and 0x34C, 0x340 and 0x350 are read in pairs */
     /* 0x340 */ s32 unk340;
     /* 0x344 */ u8 unk344[0x34C - 0x344];
@@ -97,7 +99,8 @@ extern VtableEntry D_800652AC[];
  * D_8006E154); the stage classes of st07, st08 and st09 derive from it. */
 typedef struct Unk800D02C8 {
     /* 0x000 */ Unk8006ED20 base;
-    /* 0xD38 */ u8 unkD38[0xD9C - 0xD38];
+    /* 0xD38 */ u8 unkD38[0xD98 - 0xD38];
+    /* 0xD98 */ s16 unkD98[2]; /* by side: nonzero stops st09's func_800D5190 */
     /* 0xD9C */ s16 unkD9C; /* func_800D0B80 sets 2 */
     /* 0xDA0 */ u32 unkDA0; /* the handle of func_800D0B80's text entity (class 9) */
     /* 0xDA4 */ u32 unkDA4; /* a sound's handle (stopSound) */
@@ -135,6 +138,7 @@ MeshScene *func_8006F1B8(Unk8006ED20 *object);
 /* the character of a side (0 or 1) */
 struct Unk80076F34 *func_800700C8(Unk8006ED20 *object, s32 side);
 void func_800700E4(Unk8006ED20 *object, s32 unk33C, s32 unk34C, s32 unk340, s32 unk350, s32 unk354);
+void func_80070140(Unk8006ED20 *object);
 void func_80070314(Unk8006ED20 *object);
 void func_80071F6C(void);
 /* the camera's update */

@@ -263,3 +263,14 @@ void func_8006AAA0(Unk8006A11C *this, s32 flags) {
         operatorDelete(this);
     }
 }
+
+INCLUDE_RODATA("title/nonmatchings/main_menu", D_80064694);
+INCLUDE_RODATA("title/nonmatchings/main_menu", D_8006469C);
+INCLUDE_RODATA("title/nonmatchings/main_menu", D_800646A4);
+INCLUDE_RODATA("title/nonmatchings/main_menu", D_800646BC);
+INCLUDE_RODATA("title/nonmatchings/main_menu", D_8006471C);
+INCLUDE_RODATA("title/nonmatchings/main_menu", D_80064744);
+INCLUDE_RODATA("title/nonmatchings/main_menu", D_80064768);
+INCLUDE_RODATA("title/nonmatchings/main_menu", D_80064780);
+INCLUDE_RODATA("title/nonmatchings/main_menu", D_800647BC);
+INCLUDE_RODATA("title/nonmatchings/main_menu", D_800647D4);

@@ -37,10 +37,9 @@ options:
 
   ld_bss_is_noload: True
 
-  # each source unit keeps its .rodata as one piece in its own order (g++
-  # puts tables first, then the strings, then the virtual tables in reverse),
-  # not spread over its functions
-  migrate_rodata_to_functions: False
+  # a function's own rodata goes with its assembly; the rest is included by
+  # its unit's C (INCLUDE_RODATA) where the original object had it
+  migrate_rodata_to_functions: True
   create_data_pads: False
 
 segments:
@@ -51,19 +50,19 @@ segments:
     align: 4
     subalign: 4
     subsegments:
-      - [0x0, rodata, boot_logo]
-      - [0x74, rodata, title_logo]
-      - [0x294, rodata, main_menu]
-      - [0x418, rodata, chara_select]
-      - [0xF24, rodata, memory_card]
-      - [0x1994, rodata, guide]
-      - [0x1BC8, rodata, ranking]
-      - [0x1FF0, rodata, name_entry]
-      - [0x20B4, rodata, credits]
-      - [0x21BC, rodata, title_0a]
-      - [0x21E4, rodata, option]
-      - [0x2780, rodata, title_0b]
-      - [0x27A8, rodata, title_0c]
+      - [0x0, .rodata, boot_logo]
+      - [0x74, .rodata, title_logo]
+      - [0x294, .rodata, main_menu]
+      - [0x418, .rodata, chara_select]
+      - [0xED8, .rodata, memory_card]
+      - [0x15DC, .rodata, guide]
+      - [0x1BC8, .rodata, ranking]
+      - [0x1FF0, .rodata, name_entry]
+      - [0x20B4, .rodata, credits]
+      - [0x21BC, .rodata, title_0a]
+      - [0x21E4, .rodata, option]
+      - [0x2780, .rodata, title_0b]
+      - [0x27A8, .rodata, title_0c]
       - [0x2978, c, boot_logo]
       - [0x2D90, c, title_logo]
       - [0x5564, c, main_menu]

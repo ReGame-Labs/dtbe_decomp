@@ -7,6 +7,7 @@
 #include "engine/gfx/scene_graph.h"
 #include "engine/lib/list.h"
 #include "engine/system/memory.h"
+#include "engine/sound/sound_control.h"
 
 /* The class func_800D3A64 constructs (virtual table D_800D3904), derived from Unk8007C084. */
 typedef struct Unk800D3A64 {
@@ -22,6 +23,7 @@ typedef struct Unk800D3A64 {
 /* the constructor func_800D46EC calls, and what that constructor calls last */
 UnkStageQuad *func_800D5068(UnkStageQuad *this, Unk8006ED20 *owner, s32 index);
 void func_800D5410(UnkStageQuad *this);
+void func_800D5190(UnkStageQuad *this);
 
 /* the virtual tables the functions below install, and the data they read */
 extern EntityVtable D_800D3924;
@@ -51,11 +53,18 @@ typedef struct Unk800D3D58 {
     /* 0x0F2C */ s16 unkF2C[2]; /* unk15A2 again, each frame (func_800D48A4) */
     /* 0x0F30 */ u8 unkF30[0xF34 - 0xF30];
     /* 0x0F34 */ s16 unkF34;
-    /* 0x0F36 */ u8 unkF36[0x103C - 0xF36];
+    /* 0x0F36 */ u8 unkF36[0xF6A - 0xF36];
+    /* 0x0F6A */ u16 unkF6A;
+    /* 0x0F6C */ u8 unkF6C[0x103C - 0xF6C];
     /* 0x103C */ s16 unk103C; /* counts the stage's updates (func_800D4270 adds 1) */
-    /* 0x103E */ u8 unk103E[0x15A2 - 0x103E];
+    /* 0x103E */ u8 unk103E[0x1040 - 0x103E];
+    /* 0x1040 */ MeshScene *scene; /* func_8006F1B8's (func_800D41E4) */
+    /* 0x1044 */ u8 unk1044[0x1404 - 0x1044];
+    /* 0x1404 */ u16 unk1404[2]; /* by character: the next of 30 slots func_800D5190 gives an Unk800D4B78 */
+    /* 0x1408 */ u8 unk1408[0x15A0 - 0x1408];
+    /* 0x15A0 */ s16 unk15A0; /* the func_800D5BA0 entities func_800D49A0 has made, up to 16 */
     /* 0x15A2 */ u16 unk15A2[2]; /* by character: frames button 0x80 has been held, up to 30 (func_800D48A4) */
-    /* 0x15A6 */ s16 unk15A6[2]; /* by character: how long it was held, when let go */
+    /* 0x15A6 */ u16 unk15A6[2]; /* by character: how long it was held, when let go */
 } Unk800D3D58;
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D3AB0);
@@ -153,7 +162,42 @@ void func_800D48A4(Unk800D3D58 *this) {
     }
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D49A0);
+struct Unk800D5BA0 *func_800D5BA0(struct Unk800D5BA0 *this, Unk800D3D58 *stage, MeshScene *scene, Vec3 *vec,
+                                  u16 kind);
+
+/* Every 16 updates, until 16 have been made: a new func_800D5BA0 entity of a random kind (0 to 2), whose x
+ * depends on the kind and y is random. The random words are read as signed (s32) for % and abs. */
+void func_800D49A0(Unk800D3D58 *this) {
+    Vec3 vec;
+    Entity *entity;
+    u16 kind;
+
+    if (this->unk15A0 < 16 && (this->unk103C & 0xF) == 0) {
+        kind = abs((s32)func_8006F004(&this->base.base) % 3);
+        switch (kind) {
+        case 0:
+            vec.vx = ((((s32)func_8006F004(&this->base.base) % 5) | 1) << 8) - 0x80;
+            break;
+        case 1:
+            if (func_8006F004(&this->base.base) & 1) {
+                vec.vx = -0x500;
+            } else {
+                vec.vx = 0x500;
+            }
+            break;
+        case 2:
+            vec.vx = ((((s32)func_8006F004(&this->base.base) % 5) & ~1) << 8) - 0x80;
+            break;
+        }
+        vec.vy = -((func_8006F004(&this->base.base) & 3) << 8) - 0x180;
+        vec.vz = 0;
+        entity = NEW_ENTITY(0x4C, func_800D5BA0, this, this->scene, &vec, kind);
+        if (entity != NULL) {
+            func_8006F084(&this->base.base, entity);
+            this->unk15A0++;
+        }
+    }
+}
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D4B78);
 
@@ -197,7 +241,14 @@ void func_800D5104(Entity *this, s32 flags) {
     }
 }
 
-void func_800D5190(UnkStageQuad *this);
+/* The stage that owns st09's quads. */
+static inline Unk800D3D58 *quadStage(UnkStageQuad *quad) {
+    return (Unk800D3D58 *)quad->owner;
+}
+
+struct Unk800D4B78 *func_800D4B78(struct Unk800D4B78 *this, Unk8006ED20 *stage, Vec3 *position, VECTOR *vec,
+                                  u16 slot);
+void func_800D0ABC(Unk800D02C8 *this, s32 side);
 
 /* The gather of func_800D5068's UnkStageQuad: func_800D5410, func_800D5190, then counts 0x1E up. */
 void func_800D5158(UnkStageQuad *this, s32 arg) {
@@ -206,7 +257,47 @@ void func_800D5158(UnkStageQuad *this, s32 arg) {
     this->unk1E++;
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D5190);
+/* Each frame for its character (index): 0x20 follows the hold count; when the button is let go after a hold
+ * (0x15A6) and the stage allows it, throws an Unk800D4B78 from 0x44, harder the longer the hold, in the slot
+ * after the last, plays sound 10 and calls func_800D0ABC. */
+void func_800D5190(UnkStageQuad *this) {
+    VECTOR vec;
+    Entity *entity;
+    s32 power;
+    s32 x;
+    s32 y;
+
+    this->unk20 = quadStage(this)->unk15A2[this->index] * 0xCC;
+    if (quadStage(this)->base.unkD98[this->index] == 0 && quadStage(this)->unkF6A == 0
+        && quadStage(this)->unk15A6[this->index] != 0) {
+        /* The match depends on vec's address taken here: the game keeps it in a saved register from the start
+         * of the block. */
+        VECTOR *launch = &vec;
+
+        vec.vx = 0;
+        vec.vy = 0;
+        vec.vz = 0;
+        vec.pad = 0;
+        power = ((quadStage(this)->unk15A6[this->index] + 8) >> 1) * 0x71C;
+        x = ((s64)power * 0x4000) >> 16;
+        vec.vx += x * func_80079E10(func_800700C8(&quadStage(this)->base.base, this->index));
+        y = ((s64)power * 0x10000) >> 16;
+        vec.vy -= y;
+        vec.vz = quadStage(this)->unk15A6[this->index] * 0xCC;
+        vec.pad = this->index;
+        this->unk44.vz = 0;
+        entity = NEW_ENTITY(0x78, func_800D4B78, this->owner, &this->unk44, launch,
+                            quadStage(this)->unk1404[this->index]);
+        if (entity != NULL) {
+            entityAddSibling(&this->entity, entity);
+            quadStage(this)->unk1404[this->index]++;
+            quadStage(this)->unk1404[this->index] %= 30;
+        }
+        soundControlPlaySound(&SOUND_CONTROL, 10, 0);
+        func_800D0ABC(&quadStage(this)->base, this->index);
+    }
+}
+
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D5410);
 

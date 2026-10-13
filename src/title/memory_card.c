@@ -19,7 +19,6 @@
 #include "engine/text/text_printer.h"
 #include "title/title_classes.h"
 
-
 /* A message window (constructor func_800702F8, virtual table D_800656B8): a rectangle that grows open
  * and shrinks closed (func_8007043C) with lines of text centred in it (func_800705A8). The four values
  * of the constructor are the rectangle, as func_800705A8 copies them into the RECT it draws. */
@@ -70,10 +69,9 @@ typedef struct Unk8007096C {
     /* 0x0 */ s32 *unk0;
 } Unk8007096C;
 
-/* in .rodata: the yes/no window's choices, the task's name, messages and a file name pattern */
+/* in .rodata: the yes/no window's choices, messages and a file name pattern */
 extern u8 D_80065304[];
 extern u8 D_8006530C[];
-extern u8 D_80065314[];
 extern u8 D_800653B8[];
 extern u8 D_8006564C[];
 extern u8 D_80065688[];
@@ -107,6 +105,9 @@ void func_80071550(long cmds, long result);
 s32 func_80071854(MemoryCardTask *this);
 void func_800718F8(MemoryCardTask *this, s32 frames, s32 skippable);
 s32 func_80071980(MemoryCardTask *this, s32 onFirst);
+
+/* The card file's name ("BISLPS-03357" in Japan), its title and a yes/no pair that no code names. */
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_800652B8);
 
 /* Constructs a closed message window over the rectangle x, y, width, height. */
 Unk800702F8 *func_800702F8(Unk800702F8 *this, s32 x, s32 y, s32 width, s32 height) {
@@ -271,6 +272,9 @@ void func_80070768(Unk80071C78 *this) {
     }
 }
 
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065304);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_8006530C);
+
 /* The yes/no window's draw: once open, its two choices (the one picked bright) under the text. */
 void func_8007084C(Unk80071C78 *this, s32 arg) {
     TextPrinter printer;
@@ -318,7 +322,7 @@ MemoryCardTask *memoryCardTaskInit(MemoryCardTask *this, s32 mode) {
     Unk800764BC records;
     Unk80071C78 *question;
 
-    taskInit(&this->task, 0, D_80065314);
+    taskInit(&this->task, 0, "no name");
     this->task.vtable = &D_800656E0;
     threadInit(&this->thread, func_80070B6C, 0x1000, this, 0);
     entityGroupInit(&this->windows);
@@ -391,6 +395,8 @@ void func_80070D60(MemoryCardTask *this, u8 *text) {
     func_80070404(this->message, text);
 }
 
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_800653B8);
+
 /* Mode 0: shows D_800653B8 and asks; on the first choice runs func_80070EAC with 0. */
 void func_80070D84(MemoryCardTask *this) {
     func_80070D60(this, D_800653B8);
@@ -422,6 +428,9 @@ void func_80070E6C(MemoryCardTask *this) {
     func_800718F8(this, 0x14, 0);
 }
 
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_800653CC);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065418);
+
 INCLUDE_ASM("title/nonmatchings/memory_card", func_80070EAC);
 
 INCLUDE_ASM("title/nonmatchings/memory_card", func_80071020);
@@ -430,7 +439,27 @@ INCLUDE_ASM("title/nonmatchings/memory_card", func_80071204);
 
 INCLUDE_ASM("title/nonmatchings/memory_card", func_8007138C);
 
-INCLUDE_ASM("title/nonmatchings/memory_card", func_800714DC);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_8006564C);
+
+/* Shows a card result in the message window: 0 shows nothing and returns 0; 1 and 3 show D_8006564C
+ * (the card was pulled out), any other result shows text; returns -1 then. */
+s32 func_800714DC(MemoryCardTask *this, s32 result, u8 *text) {
+    switch (result) {
+    case 0:
+        return 0;
+    case 1:
+    case 3:
+        func_80070D60(this, D_8006564C);
+        break;
+    case 2:
+    case 4:
+    case 5:
+    default:
+        func_80070D60(this, text);
+        break;
+    }
+    return -1;
+}
 
 /* The memory card callback (a MemCB) that memoryCardTaskInit installs: keeps the command and its
  * result in the task for the thread waiting in func_80071854. */
@@ -449,6 +478,8 @@ s32 func_8007156C(MemoryCardTask *this, char *name) {
     }
     return files;
 }
+
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065688);
 
 /* The free blocks of the card (of its 15), -1 when the card can't say. */
 s32 func_800715AC(MemoryCardTask *this) {
@@ -667,3 +698,13 @@ Unk80071C78 *func_80071C78(Unk80071C78 *this, s32 x, s32 y, s32 width, s32 heigh
     this->choice = 0;
     return this;
 }
+
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065690);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_800656B8);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_800656E0);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065708);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_800658C8);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_800658F4);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065950);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_8006597C);
+INCLUDE_RODATA("title/nonmatchings/memory_card", D_800659A8);

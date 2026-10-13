@@ -30,7 +30,7 @@ typedef struct {
     /* 0x010 */ s32 level; /* of the fights (GameState.level) */
     /* 0x014 */ s16 screenX;
     /* 0x016 */ s16 screenY;
-    /* 0x018 */ s32 unk18;
+    /* 0x018 */ u32 unk18; /* a bit for each arena: the select scene skips the bonus games whose bit is clear */
     /* 0x01C */ u32 unlocked; /* a bit for each character that can be picked */
     /* 0x020 */ u32 cleared;  /* a bit for each character a run was won with */
     /* 0x024 */ u16 buttons[2][BUTTON_SLOT_COUNT]; /* a slot index for each slot, by player */

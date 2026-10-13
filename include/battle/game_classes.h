@@ -906,6 +906,8 @@ s32 func_80072F80(Vec3 *a, Vec3 *b);
 
 void func_80073288(Unk8006ED20 *this);
 
+void func_8007329C(Unk8006ED20 *this);
+
 void func_800732B0(Unk8006ED20 *this);
 
 MATRIX *func_80076598(Unk80076444 *this);
@@ -1044,6 +1046,7 @@ static inline void newLaunch(Unk80076F34 *this, Vec3 *vel, s32 side) {
 void func_800C71DC(Unk800C7024 *this, s32 arg);
 
 Entity *func_800C75FC(Entity *target, Vec3 *arg1, s32 arg2);
+void func_800C77C8(Unk8006ED20 *this, void *arg1, s32 arg2);
 
 extern EntityVtable D_8006D574;
 
