@@ -2,7 +2,9 @@
 #include "battle/game.h"
 #include "battle/game_classes.h"
 #include "psyq.h"
+#include "engine/game/game_state.h"
 #include "engine/math/random.h"
+#include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 
 /* The stage's computer player (StageEvolution_createController), derived from Controller: it presses the button
@@ -22,16 +24,15 @@ typedef struct StageEvolution {
     /* 0xF78 */ u16 clut[16];     /* that CLUT read back from VRAM (st08_readClut) */
     /* 0xF98 */ u16 clutCopy[16]; /* and a second copy */
     /* 0xFB8 */ s16 frames; /* the scenery's frames (StageEvolution_tickScenery) */
-    /* 0xFBA */ s16 unkFBA;
+    /* 0xFBA */ s16 endFrames; /* the frames since the race ended, from -1 (StageEvolution_tick) */
     /* 0xFBC */ s16 winner; /* the side whose meter reached 0, -1 for none (st08_checkWinner) */
-    /* 0xFBE */ s16 unkFBE;
+    /* 0xFBE */ s16 evolutions; /* the evolutions st08_checkWinner requested: 180 frames to wait each */
     /* 0xFC0 */ u8 unkFC0[0xFC8 - 0xFC0];
     /* 0xFC8 */ s16 unkFC8;
     /* 0xFCA */ s16 unkFCA;
     /* 0xFCC */ s16 unkFCC;
     /* 0xFCE */ u8 unkFCE[0xFD0 - 0xFCE];
-    /* 0xFD0 */ s32 unkFD0;
-    /* 0xFD4 */ s32 unkFD4;
+    /* 0xFD0 */ u32 sounds[2]; /* by side: the sound func_800D40DC plays while holding the fighter */
     /* 0xFD8 */ MeshScene *meshScene; /* Fight_getMeshScene's, at the round's start */
     /* 0xFDC */ s16 unkFDC;
     /* 0xFDE */ s16 unkFDE;
@@ -59,33 +60,30 @@ EvolutionController *EvolutionController_init(EvolutionController *this, BattleS
     return this;
 }
 
-/* Selects 0..2 in EvolutionController_getButtons (the period ranges 1-10, 2-7 and 3-6) */
-extern s32 D_8005FB84;
-
 /* EvolutionController's getButtons: returns 0x80 once every unk10 calls (counted at unkC), and draws a new random
- * period at the start of each one, from the range D_8005FB84 selects; returns 0 otherwise.
+ * period at the start of each one, from the level's range (1-10, 2-7 or 3-6); returns 0 otherwise.
  * The match depends on the roll taking the random value before its own "%=" (an initializer with the
  * "%" keeps the remainder out of $v0), and on the count read into a local before the increment. */
 s32 EvolutionController_getButtons(EvolutionController *this) {
     s32 count;
 
     if (this->unk8 == 0) {
-        switch (D_8005FB84) {
-        case 0: {
+        switch (GAME_STATE.level) {
+        case LEVEL_EASY: {
             s32 roll = mersenneTwisterGenerate(&RANDOM);
 
             roll %= 10;
             this->unk10 = (roll < 0 ? -roll : roll) + 1;
             break;
         }
-        case 1: {
+        case LEVEL_NORMAL: {
             s32 roll = mersenneTwisterGenerate(&RANDOM);
 
             roll %= 6;
             this->unk10 = (roll < 0 ? -roll : roll) + 2;
             break;
         }
-        case 2:
+        case LEVEL_HARD:
             this->unk10 = (mersenneTwisterGenerate(&RANDOM) & 3) + 3;
             break;
         }
@@ -114,7 +112,7 @@ StageEvolution *StageEvolution_init(StageEvolution *this) {
     this->base.nodes[5] = 8;
     this->base.nodes[6] = 15;
     this->base.nodes[7] = 16;
-    this->unkFD0 = this->unkFD4 = 0;
+    this->sounds[0] = this->sounds[1] = 0;
     return this;
 }
 
@@ -132,7 +130,7 @@ void func_800D4390(StageEvolution *this);
 void st08_resetMeters(StageEvolution *this);
 
 /* The stage's override of Fight_startRound: BonusFight's, then its own state and objects; the result waits 120
- * frames, 0xFBA and the winner start at -1 (as st07's StageBallShoot_startRound). */
+ * frames, endFrames and the winner start at -1 (as st07's StageBallShoot_startRound). */
 void StageEvolution_startRound(StageEvolution *this) {
     BonusFight_startRound(&this->base);
     st08_clearState(this);
@@ -143,7 +141,7 @@ void StageEvolution_startRound(StageEvolution *this) {
     st08_resetMeters(this);
     st08_readClut(this);
     this->base.resultDelay = 120;
-    this->unkFBA = -1;
+    this->endFrames = -1;
     this->winner = -1;
 }
 
@@ -152,14 +150,77 @@ EvolutionController *StageEvolution_createController(void *this, s32 unk, Battle
     return EvolutionController_init(operatorNew(0x14), battleSide);
 }
 
-/* Clears the frames, hudHidden and 0xFBE (StageEvolution_startRound calls it after BonusFight_startRound). */
+/* Clears the frames, hudHidden and evolutions (StageEvolution_startRound calls it after BonusFight_startRound). */
 void st08_clearState(StageEvolution *this) {
     this->frames = 0;
     this->base.hudHidden = 0;
-    this->unkFBE = 0;
+    this->evolutions = 0;
 }
 
-INCLUDE_ASM("st08/nonmatchings/st08", StageEvolution_tick);
+/* where the stage's view looks at, and from */
+extern Vec3 ST08_VIEW_TARGET;
+extern Vec3 ST08_VIEW_EYE;
+
+/* look_at.c's lookAtSetTarget and lookAtSetEye, which the game inlined here (the second dirty store is merged
+ * into the first) */
+static inline void setTarget(LookAt *this, Vec3 *target) {
+    s32 x, y, z;
+
+    this->dirty = 1;
+    x = target->vx;
+    y = target->vy;
+    z = target->vz;
+    this->target.vx = x;
+    this->target.vy = y;
+    this->target.vz = z;
+}
+
+static inline void setEye(LookAt *this, Vec3 *eye) {
+    s32 x, y, z;
+
+    this->dirty = 1;
+    x = eye->vx;
+    y = eye->vy;
+    z = eye->vz;
+    this->eye.vx = x;
+    this->eye.vy = y;
+    this->eye.vz = z;
+}
+
+/* The stage's override of Fight_tick: BonusFight's, both fighters kept at their start positions, and the fixed
+ * view while the race runs. Once it has ended, the fighters are frozen and, 180 frames per evolution later, the
+ * winner's result (or a draw) comes and the held sounds stop. */
+void StageEvolution_tick(StageEvolution *this) {
+    LookAt *lookAt;
+
+    BonusFight_tick(&this->base);
+    /* Fighter_setPosition reads the first three words of each VECTOR */
+    Fighter_setPosition(Fight_getFighter(&this->base.base, 0), (Vec3 *)&this->base.startPos[0]);
+    Fighter_setPosition(Fight_getFighter(&this->base.base, 1), (Vec3 *)&this->base.startPos[1]);
+    if (this->base.hudHidden == 0) {
+        lookAt = Fight_getLookAt(&this->base.base);
+        setTarget(lookAt, &ST08_VIEW_TARGET);
+        setEye(lookAt, &ST08_VIEW_EYE);
+        Fight_applyView(&this->base.base);
+    } else {
+        Fight_freezeFighters(&this->base.base);
+        if (++this->endFrames == this->evolutions * 180) {
+            if (this->winner != -1) {
+                if (this->winner == 0) {
+                    BonusFight_endWithWinner(&this->base, Fight_getFighter(&this->base.base, 0),
+                                             Fight_getFighter(&this->base.base, 1));
+                } else {
+                    BonusFight_endWithWinner(&this->base, Fight_getFighter(&this->base.base, 1),
+                                             Fight_getFighter(&this->base.base, 0));
+                }
+            } else {
+                BonusFight_endInDraw(&this->base);
+            }
+            stopSound(this->sounds[0]);
+            stopSound(this->sounds[1]);
+        }
+    }
+}
 
 /* the stage's own steps */
 void st08_checkWinner(StageEvolution *this);
@@ -180,8 +241,8 @@ void StageEvolution_tickScenery(StageEvolution *this) {
 }
 
 /* The stage's last step, until hudHidden is set: a side whose meter reached 0 gets Fighter_requestEvolution
- * (when bit 0 of its record is clear, counted at 0xFBE) and Fighter_addGauge(0x10000), and winner names it;
- * with both, winner and 0xFBA go to -1. 0xD28 == 1 calls BonusFight_endInDraw and sets 0xFBA to 170.
+ * (when bit 0 of its record is clear, counted in evolutions) and Fighter_addGauge(0x10000), and winner names it;
+ * with both, winner and endFrames go to -1. 0xD28 == 1 calls BonusFight_endInDraw and sets endFrames to 170.
  * The match depends on the bit tests written "(x ^ 1) & 1" (xori, andi; "!(x & 1)" branches on andi). */
 void st08_checkWinner(StageEvolution *this) {
     s16 done = 0;
@@ -197,7 +258,7 @@ void st08_checkWinner(StageEvolution *this) {
         this->winner = 0;
         if ((first ^ 1) & 1) {
             Fighter_requestEvolution(Fight_getFighter(&this->base.base, 0));
-            this->unkFBE++;
+            this->evolutions++;
         }
         Fighter_addGauge(Fight_getFighter(&this->base.base, 0), 0x10000);
         this->base.hudHidden = 1;
@@ -207,7 +268,7 @@ void st08_checkWinner(StageEvolution *this) {
         this->winner = 1;
         if ((second ^ 1) & 1) {
             Fighter_requestEvolution(Fight_getFighter(&this->base.base, 1));
-            this->unkFBE++;
+            this->evolutions++;
         }
         Fighter_addGauge(Fight_getFighter(&this->base.base, 1), 0x10000);
         this->base.hudHidden = 1;
@@ -216,13 +277,13 @@ void st08_checkWinner(StageEvolution *this) {
     if (done == 2) {
         this->base.hudHidden = 1;
         this->winner = -1;
-        this->unkFBA = -1;
+        this->endFrames = -1;
     }
     if (this->base.base.timeLeft == 1) {
         BonusFight_endInDraw(&this->base);
         this->base.hudHidden = 1;
         this->winner = -1;
-        this->unkFBA = 170;
+        this->endFrames = 170;
     }
 }
 

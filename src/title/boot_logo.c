@@ -2,9 +2,14 @@
 
 #include "common.h"
 #include <libetc.h>
+#include "engine/cd/file_load.h"
+#include "engine/gfx/display.h"
 #include "engine/gfx/ordering_table.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/pad/pad.h"
+#include "engine/system/memory.h"
+#include "engine/task/task.h"
+#include "overlay.h"
 #include "title/title_classes.h"
 
 /* A key of the boot logo's fade in: the frames it takes to reach it from the previous key, and the two
@@ -36,6 +41,10 @@ typedef struct BootLogoTask {
 #define BOOT_LOGO_STATE_FADE_OUT 1
 #define BOOT_LOGO_STATE_WAIT_END 2
 
+#define BOOT_LOGO_TASK_PRIORITY 0x2000
+
+extern TaskVtable BOOT_LOGO_TASK_VTABLE;
+
 /* the buttons that skip the boot logo: Start, circle and cross in Japan, Start and any of the four in the
  * US */
 #if VERSION_JP
@@ -51,7 +60,31 @@ void drawBootLogo(u_long *ot, s32 index, u8 level);
 
 INCLUDE_RODATA("title/nonmatchings/boot_logo", D_800643E0);
 
-INCLUDE_ASM("title/nonmatchings/boot_logo", bootLogoTaskInit);
+/* Constructs the boot logo task in memory (context unused): the fade in starts at the first key, the display
+ * goes to 640 by 480, vsync mode 0 and black, and title/bootlogo.tim is uploaded to VRAM. */
+struct Task *bootLogoTaskInit(void *memory, struct SystemContext *context) {
+    BootLogoTask *this = memory;
+    Display *display;
+    u32 *tims;
+
+    taskInit(&this->task, BOOT_LOGO_TASK_PRIORITY, "Boot Logo");
+    this->task.vtable = &BOOT_LOGO_TASK_VTABLE;
+    this->state = BOOT_LOGO_STATE_KEYS;
+    this->key = 0;
+    this->frame = 0;
+    this->fade.values.level = 0;
+    this->fade.values.unk32 = 0;
+    display = CURRENT_DISPLAY;
+    displaySetSize(display, 640, 480);
+    displayClear(display);
+    displaySetVsyncMode(display, 0);
+    displaySetClearColor(display, 0, 0, 0);
+    displayWaitFrame(display);
+    tims = loadFile("title/bootlogo.tim");
+    uploadTims(tims);
+    mainHeapFree(tims);
+    return &this->task;
+}
 
 /* The boot logo's frame: fades the logo through the keys (a skip button starts the fade out from where it
  * is), fades it out by 8 a frame, then ends the task 4 frames later. Draws the logo at its level until then.

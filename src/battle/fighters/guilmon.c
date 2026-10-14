@@ -99,7 +99,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/guilmon", GuilmonSpecial1Hitbox_tick);
 /* The special move 1's hitbox (an UnkPartsEntity38), as far as GuilmonSpecial1Hitbox_hit needs it. */
 typedef struct GuilmonSpecial1Hitbox {
     /* 0x000 */ UnkPartsEntity38 base;
-    /* 0x080 */ Fighter *chara;
+    /* 0x080 */ Fighter *fighter;
     /* 0x084 */ u8 unk84[0x9C - 0x84];
     /* 0x09C */ Vec3 unk9C; /* the first of a run of positions */
     /* 0x0A8 */ u8 unkA8[0x100 - 0xA8];

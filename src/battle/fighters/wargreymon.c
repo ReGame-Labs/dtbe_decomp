@@ -136,24 +136,24 @@ INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BB5F8);
 typedef struct WarGreymonThrowEffect {
     /* 0x00 */ Entity entity;
     /* 0x18 */ u32 handle; /* the opponent's (entityGetHandle) */
-    /* 0x1C */ Fighter *chara;
-    /* 0x20 */ s32 facing; /* Fighter_getFacing of chara */
+    /* 0x1C */ Fighter *fighter;
+    /* 0x20 */ s32 facing; /* Fighter_getFacing of fighter */
     /* 0x24 */ s32 y;      /* the opponent's height (Fighter_getPosition) */
 } WarGreymonThrowEffect;
 
 extern EntityVtable WARGREYMON_THROW_EFFECT_VTABLE;
 
-/* Builds the throw's effect for chara: keeps the opponent's handle and height, and throws the opponent
+/* Builds the throw's effect for fighter: keeps the opponent's handle and height, and throws the opponent
  * (Fighter_takeHit) with velocity (facing * 0xE38, 0xD548, 0). */
-WarGreymonThrowEffect *WarGreymonThrowEffect_init(WarGreymonThrowEffect *this, Fighter *chara, s32 facing) {
+WarGreymonThrowEffect *WarGreymonThrowEffect_init(WarGreymonThrowEffect *this, Fighter *fighter, s32 facing) {
     Fighter *opponent;
     Vec3 vec;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &WARGREYMON_THROW_EFFECT_VTABLE;
-    opponent = Fighter_getOpponent(chara);
+    opponent = Fighter_getOpponent(fighter);
     this->handle = entityGetHandle(&opponent->entity);
-    this->chara = chara;
+    this->fighter = fighter;
     this->facing = facing;
     Fighter_getPosition(opponent, &vec);
     this->y = vec.vy;
@@ -347,7 +347,54 @@ void func_800BC7CC(Fighter *this, Vec3 *pos, s32 arg) {
     Fighter_addGauge(this, -0x10000);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymonSpecial1Hitbox_init);
+/* The special move 1's hitbox (0xA0 bytes): a sphere that starts its radius in front of the fighter and up, speeds
+ * forward and grows by 8 a frame, for 13 frames. */
+typedef struct WarGreymonSpecial1Hitbox {
+    /* 0x00 */ UnkPartsEntity38 parts;
+    /* 0x80 */ Vec3 position;
+    /* 0x8C */ s32 unk8C;
+    /* 0x90 */ s32 speed;        /* 0, then the acceleration more a frame */
+    /* 0x94 */ s32 acceleration; /* forward */
+    /* 0x98 */ s32 radius;
+    /* 0x9C */ s32 frames;
+} WarGreymonSpecial1Hitbox;
+
+/* Builds the special move 1's hitbox for the fighter: its hit, and a sphere of the radius placed the radius in front
+ * of the fighter and up, accelerating forward; adds the sphere to the fighter's side. */
+WarGreymonSpecial1Hitbox *WarGreymonSpecial1Hitbox_init(WarGreymonSpecial1Hitbox *this, Fighter *fighter,
+                                                        Vec3 *knockback, s32 damage, s32 radius,
+                                                        s32 acceleration) {
+    Fight *fight;
+    s32 x, y, z;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    Hit_init(&this->parts.base, fighter, damage, knockback, 2);
+    this->parts.base.vtable = WARGREYMON_SPECIAL1_HITBOX_HIT_VTABLE;
+    this->parts.entity.vtable = &WARGREYMON_SPECIAL1_HITBOX_VTABLE;
+    CollisionSphere_init(&this->parts.part, &this->position, radius, &this->parts.base);
+    Fighter_getPosition(fighter, &this->position);
+    this->position.vx += radius * Fighter_getFacing(fighter);
+    this->position.vy -= radius;
+    this->speed = 0;
+    this->acceleration = acceleration * Fighter_getFacing(fighter);
+    this->radius = radius;
+    this->frames = 0;
+    this->parts.part.radius = radius;
+    this->parts.part.entity = &this->parts.entity;
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    this->parts.part.position.vx = x;
+    this->parts.part.position.vy = y;
+    this->parts.part.position.vz = z;
+    fight = Fighter_getScene(fighter);
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(fight, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->parts.part.link);
+    }
+    return this;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymonSpecial1Hitbox_tick);
 
@@ -382,21 +429,21 @@ extern EntityVtable D_8006CA7C;
 void func_800BCBD8(Unk800BCAD8 *this);
 void func_800BCC7C(Unk800BCAD8 *this);
 
-/* Constructs an Unk800BCAD8 for chara: Trail_init's entity with x and speed 0, the character's facing and
+/* Constructs an Unk800BCAD8 for fighter: Trail_init's entity with x and speed 0, the character's facing and
  * mode. */
-Unk800BCAD8 *func_800BCAD8(Unk800BCAD8 *this, Fighter *chara, TrailPoint *entries, s32 count,
+Unk800BCAD8 *func_800BCAD8(Unk800BCAD8 *this, Fighter *fighter, TrailPoint *entries, s32 count,
                            s32 arg4, s32 arg5, s32 mode) {
-    Trail_init(&this->base.entity, chara, entries, count, arg4, arg5);
+    Trail_init(&this->base.entity, fighter, entries, count, arg4, arg5);
     this->base.entity.vtable = &D_8006CA7C;
     this->x = 0;
     this->speed = 0;
-    this->facing = Fighter_getFacing(chara);
+    this->facing = Fighter_getFacing(fighter);
     this->mode = mode;
     return this;
 }
 
-/* The update method of Unk800BCAD8: moves x by speed and speed by facing * 10, func_800BCBD8, in mode 1
- * func_800BCC7C once the timer ends, then the base's update (Trail_tick). */
+/* The tick method of Unk800BCAD8: moves x by speed and speed by facing * 10, func_800BCBD8, in mode 1
+ * func_800BCC7C once the timer ends, then the base's tick (Trail_tick). */
 void func_800BCB4C(Unk800BCAD8 *this, CollisionSphere *sum) {
     this->x += this->speed;
     this->speed += this->facing * 10;
@@ -411,7 +458,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BCBD8);
 
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BCC7C);
 
-/* The update method of Unk800BCAD8: sets the model matrix to a translation by x, then runs the method at 0x20
+/* The draw method of Unk800BCAD8: sets the model matrix to a translation by x, then runs the method at 0x20
  * (Trail_drawStrips). */
 void func_800BCE1C(Unk800BCAD8 *this, s32 arg) {
     MatrixWords m;
@@ -447,7 +494,7 @@ typedef struct WarGreymonSpecial1Effect {
     /* 0x54 */ s32 vramY;  /* Fighter_getVramY */
 } WarGreymonSpecial1Effect;
 
-/* The special move 1 effect's update: moves the matrix by x, x += 4; eases unk40 to unk44, then fades unk48 by
+/* The special move 1 effect's tick: moves the matrix by x, x += 4; eases unk40 to unk44, then fades unk48 by
  * 0x10 and deletes the entity once it is below 0. */
 void WarGreymonSpecial1Effect_tick(WarGreymonSpecial1Effect *this) {
     s32 step;
@@ -567,17 +614,17 @@ typedef struct Unk800BDA50Vtable {
  * character in sum, takes its position to 0xA4, sets 0xC4 to 2, runs the method at 0x20 with Fighter_getOpponent's
  * character and unlinks the part at 0x38. */
 void func_800BDF28(Unk800BDA50 *this, CollisionSphere *sum) {
-    Entity *chara;
+    Entity *fighter;
     Fighter *owner;
     Unk800BDA50Vtable *vtable;
     ListNode *node;
 
     Hit_apply(&this->unk18, sum);
-    chara = getHitFighter(sum);
-    if (chara != NULL) {
-        Fighter_getPosition((Fighter *)chara, &this->unkA4);
+    fighter = getHitFighter(sum);
+    if (fighter != NULL) {
+        Fighter_getPosition((Fighter *)fighter, &this->unkA4);
         this->unkC4 = 2;
-        owner = Fighter_getOpponent((Fighter *)chara);
+        owner = Fighter_getOpponent((Fighter *)fighter);
         vtable = (Unk800BDA50Vtable *)this->entity.vtable;
         vtable->unk20.func((u8 *)this + vtable->unk20.delta, owner);
         node = &this->unk38.link;
@@ -634,7 +681,7 @@ void func_800BE71C(Unk800BE39C *this, CollisionSphere *sum) {
     }
 }
 
-/* The update of the entities of D_8006C9AC: func_800A9998, func_800BE7D0, then func_800BEA1C. */
+/* The draw of the entities of D_8006C9AC: func_800A9998, func_800BE7D0, then func_800BEA1C. */
 void func_800BE788(Entity *this, s32 arg) {
     func_800A9998(this, arg);
     func_800BE7D0(this, arg);

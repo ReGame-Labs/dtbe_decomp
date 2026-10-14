@@ -1,6 +1,8 @@
 // st09.bin's own names (config/jp/st09.yaml)
 
 // the names tools/rename.py gave (tools/renames/), in address order
+ST09_VIEW_TARGET = 0x800D38D0;
+ST09_VIEW_EYE = 0x800D38E0;
 JEWEL_HUNT_CONTROLLER_VTABLE = 0x800D3904;
 BONUS_LANDING_MARK_VTABLE = 0x800D3924;
 BONUS_THROWER_VTABLE = 0x800D394C;
@@ -11,6 +13,7 @@ JewelHuntController_getButtons = 0x800D3AB0; // type:func
 StageJewelHunt_init = 0x800D3D58; // type:func
 StageJewelHunt_createController = 0x800D4070; // type:func
 StageJewelHunt_destroy = 0x800D40A4; // type:func
+st09_getFullestColumnX = 0x800D417C; // type:func
 StageJewelHunt_startRound = 0x800D41E4; // type:func
 st09_clearFrames = 0x800D4268; // type:func
 StageJewelHunt_tickScenery = 0x800D4270; // type:func
@@ -34,4 +37,6 @@ BonusLandingMark_init = 0x800D63D4; // type:func
 BonusLandingMark_destroy = 0x800D647C; // type:func
 BonusLandingMark_tick = 0x800D64D0; // type:func
 BonusLandingMark_draw = 0x800D6538; // type:func
+StageJewelHunt_addToGroup = 0x800D66C0; // type:func
+StageJewelHunt_removeFromGroup = 0x800D66F8; // type:func
 JewelHuntController_destroy = 0x800D6724; // type:func

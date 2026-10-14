@@ -14,6 +14,7 @@ st04_copyTexturesB = 0x800D3DA0; // type:func
 st04_copyTexturesA = 0x800D3E20; // type:func
 st04_scrollTexture = 0x800D3EA4; // type:func
 st04_readClut = 0x800D40BC; // type:func
+st04_loadPulsingClut = 0x800D4104; // type:func
 st04_clearPlunged = 0x800D4198; // type:func
 st04_checkPlunge = 0x800D41A4; // type:func
 st04_clearLiftBack = 0x800D4280; // type:func

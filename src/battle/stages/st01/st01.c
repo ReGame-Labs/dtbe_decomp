@@ -8,6 +8,7 @@
 #include "engine/gfx/mesh_scene.h"
 #include "engine/gfx/scene_graph.h"
 #include "engine/gfx/look_at.h"
+#include "engine/math/divide.h"
 #include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 #include "engine/task/entity.h"
@@ -23,7 +24,7 @@ extern EntityVtable D_800D3BE4;
 extern EntityVtable ST01_DEBRIS_VTABLE;
 extern EntityVtable D_800D3C34;
 extern EntityVtable D_800D3C5C;
-extern EntityVtable D_800D3C84;
+extern EntityVtable ST01_HOVER_QUAD_VTABLE;
 extern EntityVtable ST01_PULSE_GRID_VTABLE;
 extern EntityVtable D_800D3CD4;
 extern VtableEntry STAGE_HIT_VTABLE[];
@@ -41,7 +42,7 @@ enum {
 typedef struct StageNature {
     /* 0x000 */ Fight base;
     /* 0xD38 */ MeshScene *scene;
-    /* 0xD3C */ u32 frames; /* the scenery's frames (StageNature_tickScenery) */
+    /* 0xD3C */ s32 frames; /* the scenery's frames (StageNature_tickScenery) */
     /* 0xD40 */ u8 unkD40[0xD44 - 0xD40];
     /* 0xD44 */ u32 sound;     /* sound handles, stopped by the destructor */
     /* 0xD48 */ u32 fallSound; /* the fall event's (ST01_SOUND_FALL) */
@@ -52,7 +53,10 @@ typedef struct StageNature {
     /* 0xE14 */ u8 unkE14[0xE24 - 0xE14];
     /* 0xE24 */ s16 unkE24;
     /* 0xE26 */ s16 unkE26;
-    /* 0xE28 */ u8 unkE28[0xF18 - 0xE28];
+    /* 0xE28 */ RECT clutRectA;     /* 16 by 2 pixels at (0x300, 0xF3): two CLUTs */
+    /* 0xE30 */ RECT clutRectB;     /* 16 by 5 pixels at (0x300, 0xE5): five CLUTs */
+    /* 0xE38 */ u16 clutsA[2][16]; /* those CLUTs read back from VRAM (st01_readAnimatedCluts), animated by */
+    /* 0xE78 */ u16 clutsB[5][16]; /* func_800D5A50, which sets some colours and loads them again */
     /* 0xF18 */ RECT clutRect;  /* 16 by 1 pixels at (0x310, 0xFE): a CLUT */
     /* 0xF20 */ u16 clut[16];    /* that CLUT read back from VRAM (st01_readClut) */
     /* 0xF40 */ u16 clutCopy[16]; /* and a second copy */
@@ -81,12 +85,12 @@ void func_800D47B0(StageNature *this);
 void func_800D4950(StageNature *this);
 void st01_spawnFallingObject(StageNature *this);
 void func_800D4ECC(StageNature *this);
-void func_800D50D8(StageNature *this);
+void st01_scrollTexture(StageNature *this);
 void func_800D5274(StageNature *this);
 void st01_tickFallEvent(StageNature *this);
 void func_800D5A50(StageNature *this);
 void func_800D5534(StageNature *this);
-void func_800D4DEC(StageNature *this);
+void st01_cycleClut(StageNature *this);
 void func_800D4C54(StageNature *this);
 
 INCLUDE_ASM("st01/nonmatchings/st01", StageNature_init);
@@ -119,10 +123,6 @@ void StageNature_tick(StageNature *this) {
 s32 StageNature_isFallen(StageNature *this, Vec3 *position) {
     return this->base.boundBottom + 0x200 < position->vy;
 }
-
-/* the camera's update of Fight, and its LookAt (at 0x12C) */
-void Fight_updateCamera(Fight *object);
-LookAt *Fight_getLookAt(Fight *object);
 
 /* The camera's eye of Fight, which Fight_updateCamera computes (as in st05). */
 #define BASE_EYE(stage) (*(Vec3 *)&(stage)->base.unk2CC[0x31C - 0x2CC])
@@ -167,12 +167,12 @@ void StageNature_tickScenery(StageNature *this) {
     func_800D4950(this);
     st01_spawnFallingObject(this);
     func_800D4ECC(this);
-    func_800D50D8(this);
+    st01_scrollTexture(this);
     func_800D5274(this);
     st01_tickFallEvent(this);
     func_800D5A50(this);
     func_800D5534(this);
-    func_800D4DEC(this);
+    st01_cycleClut(this);
     func_800D4C54(this);
     if ((u8)this->frames == 0) {
         soundControlPlaySound(&SOUND_CONTROL, ST01_SOUND_AMBIENT, 0);
@@ -252,7 +252,15 @@ void st01_readClut(StageNature *this) {
     StoreImage(&this->clutRect, (u_long *)this->clutCopy);
 }
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D4DEC);
+/* Cycles entries 8 to 13 of the CLUT, two steps a frame, from the copy, and loads it back to VRAM. */
+void st01_cycleClut(StageNature *this) {
+    s32 i;
+
+    for (i = 0; i < 6; i++) {
+        this->clut[8 + i] = this->clutCopy[(i + this->frames * 2) % 6 + 8];
+    }
+    LoadImage(&this->clutRect, (u_long *)this->clut);
+}
 
 /* Saves the positions of the characters of sides 0 and 1 at 0xFB4 and 0xFC4. */
 void st01_saveFighterPositions(StageNature *this) {
@@ -291,7 +299,19 @@ void st01_moveGroupNode(StageNature *this) {
     groupAddChild(&this->group, &mesh->object);
 }
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D50D8);
+/* Copies the 8 by 64 pixels at (0x2E0, (63 - frames) % 64) in VRAM to (0x338, 0x80) each tick: a texture that
+ * scrolls one line per tick (st04_scrollTexture's, every tick). The match depends on the s32 copy of frames:
+ * read in place, the front end narrows the halfword result to an lhu. */
+void st01_scrollTexture(StageNature *this) {
+    s32 count = this->frames;
+    RECT rect;
+
+    rect.x = 0x2E0;
+    rect.y = (0x3F - count) & 0x3F;
+    rect.w = 8;
+    rect.h = 64;
+    MoveImage(&rect, 0x338, 0x80);
+}
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D512C);
 
@@ -432,7 +452,20 @@ void func_800D5974(StageNature *this) {
     meshSceneHideNode(this->scene, 9);
 }
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D59D0);
+/* Reads the two CLUTs at (0x300, 0xF3) and the five at (0x300, 0xE5) back from VRAM, for func_800D5A50 to
+ * animate. */
+void st01_readAnimatedCluts(StageNature *this) {
+    this->clutRectA.x = 0x300;
+    this->clutRectA.y = 0xF3;
+    this->clutRectA.w = 16;
+    this->clutRectA.h = 2;
+    StoreImage(&this->clutRectA, (u_long *)this->clutsA);
+    this->clutRectB.x = 0x300;
+    this->clutRectB.y = 0xE5;
+    this->clutRectB.w = 16;
+    this->clutRectB.h = 5;
+    StoreImage(&this->clutRectB, (u_long *)this->clutsB);
+}
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D5A50);
 
@@ -460,6 +493,13 @@ typedef struct St01FallingObject {
     /* 0x38 */ u8 unk38[0x3C - 0x38];
     /* 0x3C */ CollisionSphere unk3C;
     /* 0x84 */ s32 unk84;
+    /* 0x88 */ u8 unk88[0x9C - 0x88];
+    /* 0x9C */ Vec3 force; /* cleared after each step (St01FallingObject_fall) */
+    /* 0xA8 */ s32 forcePad;
+    /* 0xAC */ Vec3 velocity;
+    /* 0xB8 */ s32 velocityPad;
+    /* 0xBC */ u8 unkBC[0xC8 - 0xBC];
+    /* 0xC8 */ Vec3 position;
 } St01FallingObject;
 
 extern EntityVtable ST01_FALLING_OBJECT_VTABLE;
@@ -503,7 +543,18 @@ INCLUDE_ASM("st01/nonmatchings/st01", func_800D607C);
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D63F8);
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D64D0);
+/* Falls one step: gravity into the force, the force over a mass of 5 into the vertical velocity, and 1/8 of that
+ * velocity (in 1/256 units) into the height. The match depends on the step local (the operands' pseudo order
+ * decides the schedule). */
+void St01FallingObject_fall(St01FallingObject *this) {
+    s32 step;
+
+    this->force.vy += 0x238C;
+    this->velocity.vy += divide16(this->force.vy, 0x50000);
+    this->force.vy = 0;
+    step = this->velocity.vy >> 3;
+    this->position.vy = ((this->position.vy << 8) + step) >> 8;
+}
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D652C);
 
@@ -562,20 +613,45 @@ void St01PulseGrid_tick(St01PulseGrid *this) {
 
 INCLUDE_ASM("st01/nonmatchings/st01", St01PulseGrid_draw);
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D737C);
+/* A grey quad that hovers in a figure eight around a position and flickers (St01HoverQuad_init, virtual table
+ * ST01_HOVER_QUAD_VTABLE). */
+typedef struct St01HoverQuad {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ u16 phase;     /* a random start; the tick steps it, the draw turns it into the offsets */
+    /* 0x1A */ s16 amplitude; /* the offsets' scale */
+    /* 0x1C */ s16 unk1C;
+    /* 0x1E */ u8 pad1E[2];
+    /* 0x20 */ u32 color; /* 0x808080 at first; the tick sets a grey level from the phase's sine */
+    /* 0x24 */ Vec3 position;
+    /* 0x30 */ u8 unk30[4];
+} St01HoverQuad;
 
-/* The destructor of the entity class of vtable D_800D3C84, which func_800D737C installs. */
-void func_800D7408(Entity *this, s32 flags) {
-    this->vtable = &D_800D3C84;
+/* St01HoverQuad's constructor: the VECTOR's three components are the position and its pad the amplitude. */
+St01HoverQuad *St01HoverQuad_init(St01HoverQuad *this, Fight *owner, VECTOR position) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &ST01_HOVER_QUAD_VTABLE;
+    this->unk1C = 0;
+    this->phase = Fight_random(owner) & 0xFFF;
+    this->color = 0x808080;
+    this->position.vx = position.vx;
+    this->position.vy = position.vy;
+    this->position.vz = position.vz;
+    this->amplitude = position.pad;
+    return this;
+}
+
+/* St01HoverQuad's destructor. */
+void St01HoverQuad_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST01_HOVER_QUAD_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D745C);
+INCLUDE_ASM("st01/nonmatchings/st01", St01HoverQuad_tick);
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D74AC);
+INCLUDE_ASM("st01/nonmatchings/st01", St01HoverQuad_draw);
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D7670);
 
@@ -619,7 +695,7 @@ typedef struct St01Debris {
     /* 0x26 */ s16 unk26;
     /* 0x28 */ s16 angle; /* random */
     /* 0x2A */ u8 unk2A[0x2C - 0x2A];
-    /* 0x2C */ Vec3 pos;
+    /* 0x2C */ Vec3 position;
     /* 0x38 */ u8 unk38[0x3C - 0x38];
     /* 0x3C */ Vec3 start;
     /* 0x48 */ s32 unk48; /* random, 6 to 13 */
@@ -630,9 +706,9 @@ St01Debris *St01Debris_init(St01Debris *this, Fight *stage) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &ST01_DEBRIS_VTABLE;
     this->stage = stage;
-    this->start.vx = this->pos.vx = (Fight_random(stage) & 0xFFF) - 0x800;
-    this->start.vy = this->pos.vy = -0xD00;
-    this->start.vz = this->pos.vz = Fight_random(stage) & 0x3FF;
+    this->start.vx = this->position.vx = (Fight_random(stage) & 0xFFF) - 0x800;
+    this->start.vy = this->position.vy = -0xD00;
+    this->start.vz = this->position.vz = Fight_random(stage) & 0x3FF;
     this->unk48 = (Fight_random(stage) & 7) + 6;
     this->unk1E = ((s32)Fight_random(stage) >> 3) & 1;
     this->unk24 = this->unk26 = 0;
@@ -687,9 +763,34 @@ INCLUDE_ASM("st01/nonmatchings/st01", func_800D8AF4);
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D8C70);
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D8E1C);
+/* The entity class of virtual table D_800D3B94 (func_800D8E1C constructs two of them, 0x44 bytes): it sways around
+ * center by sines of its phase (func_800D8F08). */
+typedef struct Unk800D8E1C {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ VECTOR position; /* center plus the sway */
+    /* 0x28 */ VECTOR center;
+    /* 0x38 */ s16 direction; /* -1 for the first, 1 for the second: the sign of the x and z sway */
+    /* 0x3A */ u16 phase;     /* a random start, stepped each tick */
+    /* 0x3C */ u8 unk3C[4];
+    /* 0x40 */ s16 unk40; /* the sine of phase * 256, / 4 (func_800D8F08) */
+    /* 0x42 */ s16 unk42; /* -unk40 */
+} Unk800D8E1C;
 
-/* The destructor of the entity class of vtable D_800D3B94, which func_800D8E1C installs. */
+/* Unk800D8E1C's constructor: both at (-0x900, -0x580, -0x200), the second (index 1) swaying the other way. */
+Unk800D8E1C *func_800D8E1C(Unk800D8E1C *this, Fight *owner, s32 index) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3B94;
+    this->position.vx = this->center.vx = -0x900;
+    this->position.vy = this->center.vy = -0x580;
+    this->position.vz = this->center.vz = -0x200;
+    this->direction = (index == 0) ? -1 : 1;
+    this->unk42 = 0;
+    this->unk40 = 0;
+    this->phase = Fight_random(owner);
+    return this;
+}
+
+/* Unk800D8E1C's destructor. */
 void func_800D8EB4(Entity *this, s32 flags) {
     this->vtable = &D_800D3B94;
     entityDestroy(this, 0);
@@ -732,7 +833,39 @@ INCLUDE_ASM("st01/nonmatchings/st01", func_800D984C);
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D9A98);
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D9BF4);
+/* The entity class func_800D9BF4 constructs (virtual table D_800D3B1C, 0x34 bytes); its tick counts at 0x1C, which
+ * the constructor clears. */
+typedef struct Unk800D9BF4 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Fight *owner;
+    /* 0x1C */ s16 unk1C;
+    /* 0x1E */ s16 unk1E; /* StageNature_init passes whether its counter has reached 6 */
+    /* 0x20 */ u16 unk20;
+    /* 0x22 */ u8 pad22[2];
+    /* 0x24 */ Vec3 position;
+    /* 0x30 */ s32 unk30; /* 0x1000 at first */
+} Unk800D9BF4;
+
+/* Unk800D9BF4's constructor: the owner, a copy of the position and of *arg3 (StageNature_init passes a table
+ * entry's position and the u16 at its 0xC), and arg4. */
+Unk800D9BF4 *func_800D9BF4(Unk800D9BF4 *this, Fight *owner, Vec3 *position, u16 *arg3, s16 arg4) {
+    s32 x, y, z;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3B1C;
+    this->owner = owner;
+    this->unk1E = arg4;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->unk20 = *arg3;
+    this->unk30 = 0x1000;
+    this->unk1C = 0;
+    return this;
+}
 
 /* The destructor of the entity class of vtable D_800D3B1C, which func_800D9BF4 installs. */
 void func_800D9C90(Entity *this, s32 flags) {
@@ -742,14 +875,6 @@ void func_800D9C90(Entity *this, s32 flags) {
         entityOperatorDelete(this);
     }
 }
-
-/* The entity class func_800D9BF4 constructs (virtual table D_800D3B1C); its
- * tick counts at 0x1C, which the constructor clears. */
-typedef struct Unk800D9BF4 {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 unk18;
-    /* 0x1C */ s16 unk1C;
-} Unk800D9BF4;
 
 /* The tick of D_800D3B1C: adds 1 to 0x1C. */
 void func_800D9CE4(Unk800D9BF4 *this) {

@@ -10,7 +10,7 @@ extern EntityVtable GABUMON_VTABLE;
 /* The special move 2's effect, on the fighter: its tick spawns the sparks of vtable D_8006895C. */
 typedef struct GabumonSpecial2Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ s32 unk1C;
     /* 0x20 */ s32 unk20;
     /* 0x24 */ s32 unk24;
@@ -27,13 +27,13 @@ typedef struct GabumonSpecial2Effect {
     /* 0x50 */ s32 vramY; /* Fighter_getVramY of the character */
 } GabumonSpecial2Effect;
 
-GabumonSpecial2Effect *GabumonSpecial2Effect_init(GabumonSpecial2Effect *this, Fighter *chara);
+GabumonSpecial2Effect *GabumonSpecial2Effect_init(GabumonSpecial2Effect *this, Fighter *fighter);
 
 extern EntityVtable GABUMON_SPECIAL2_EFFECT_VTABLE;
 extern EntityVtable GABUMON_SPECIAL1_PROJECTILE_VTABLE;
 extern VtableEntry GABUMON_SPECIAL1_PROJECTILE_HIT_VTABLE[];
 void Gabumon_spawnSpecial1Projectile(Fighter *this);
-Projectile *GabumonSpecial1Projectile_init(Projectile *this, Fighter *chara, Vec3 *position, Vec3 *velocity);
+Projectile *GabumonSpecial1Projectile_init(Projectile *this, Fighter *fighter, Vec3 *position, Vec3 *velocity);
 
 /* Builds Gabumon: a Fighter with its own vtable and faces. */
 Gabumon *Gabumon_init(Gabumon *this) {
@@ -162,8 +162,8 @@ void Gabumon_spawnSpecial2Effect(Fighter *this) {
 }
 
 /* Builds the special move 1's projectile, a Projectile of radius 0x60 and speed 0x900. */
-Projectile *GabumonSpecial1Projectile_init(Projectile *this, Fighter *chara, Vec3 *position, Vec3 *velocity) {
-    Projectile_init(this, chara, position, velocity, 0x60, 0x6A81E00, 0x900, 3);
+Projectile *GabumonSpecial1Projectile_init(Projectile *this, Fighter *fighter, Vec3 *position, Vec3 *velocity) {
+    Projectile_init(this, fighter, position, velocity, 0x60, 0x6A81E00, 0x900, 3);
     this->parts.base.vtable = GABUMON_SPECIAL1_PROJECTILE_HIT_VTABLE;
     this->parts.entity.vtable = &GABUMON_SPECIAL1_PROJECTILE_VTABLE;
     return this;
@@ -171,11 +171,11 @@ Projectile *GabumonSpecial1Projectile_init(Projectile *this, Fighter *chara, Vec
 
 INCLUDE_ASM("game/nonmatchings/fighters/gabumon", GabumonSpecial1Projectile_draw);
 
-/* Builds the special move 2's effect for chara: three 0x1000 scales (0x1C, 0x24, 0x2C) and 0x80 at 0x44. */
-GabumonSpecial2Effect *GabumonSpecial2Effect_init(GabumonSpecial2Effect *this, Fighter *chara) {
+/* Builds the special move 2's effect for fighter: three 0x1000 scales (0x1C, 0x24, 0x2C) and 0x80 at 0x44. */
+GabumonSpecial2Effect *GabumonSpecial2Effect_init(GabumonSpecial2Effect *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &GABUMON_SPECIAL2_EFFECT_VTABLE;
-    this->chara = chara;
+    this->fighter = fighter;
     this->unk1C = 0x1000;
     this->unk20 = 0;
     this->unk24 = 0x1000;
@@ -189,7 +189,7 @@ GabumonSpecial2Effect *GabumonSpecial2Effect_init(GabumonSpecial2Effect *this, F
     this->unk44 = 0x80;
     this->unk48 = 0;
     this->unk4C = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -210,7 +210,7 @@ typedef struct Unk80087E14 {
     /* 0x44 */ s32 unk44;
 } Unk80087E14;
 
-/* The update of D_8006895C's entity: turns its matrix by 0xB0 about z, eases 0x38 an eighth of the way to
+/* The tick of D_8006895C's entity: turns its matrix by 0xB0 about z, eases 0x38 an eighth of the way to
  * 0x280, and deletes itself once 0x3C, down 0x10 a frame, runs out. */
 void func_80087EC4(Unk80087E14 *this) {
     matrixRotateZ(&this->matrix, 0xB0);

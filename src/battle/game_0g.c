@@ -9,6 +9,8 @@
 #include "engine/gfx/sprite.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/gfx/prim/alloc_line_g2.h"
+#include "engine/gfx/camera.h"
+#include "gte.h"
 
 extern EntityVtable D_8006D54C;
 extern EntityVtable D_8006D524;
@@ -183,9 +185,48 @@ void spriteAnimRewind(SpriteAnim *this) {
     this->bottom = anim[1] + anim[3] - 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", spriteAnimStep);
+/* Moves to the next cell: one cell right along the strip, or back to the strip's x one cell lower at its end. The
+ * match depends on the end of the strip tested first (the other order inverts the branch). */
+void spriteAnimStep(SpriteAnim *this) {
+    s16 left = this->left;
+    s16 right = this->right;
+    u16 *anim = this->anim;
+    s16 top = this->top;
+    s16 bottom = this->bottom;
+    s16 width = anim[2];
+    s16 height = anim[3];
 
-INCLUDE_ASM("game/nonmatchings/game_0g", spriteAnimBuildShape);
+    right += width;
+    if (right >= (s16)(anim[0] + anim[4])) {
+        left = anim[0];
+        right = left + width - 1;
+        top += height;
+        bottom = top + height - 1;
+    } else {
+        left += width;
+    }
+    this->left = left;
+    this->right = right;
+    this->top = top;
+    this->bottom = bottom;
+}
+
+/* Builds the sprite's shape for buildPolyFT4: a model matrix turned by its angle, scaled by its size and moved to
+ * its position, then the square of SQUARE_CORNERS. The match depends on the matrix and the position taken by
+ * pointer (the calls get model; the translation is stored into m itself). */
+void spriteAnimBuildShape(SpriteAnim *this, PolyFT4Shape *shape) {
+    MATRIX m;
+    MATRIX *model = &m;
+    VECTOR *position = &this->position;
+
+    m.t[0] = position->vx;
+    m.t[1] = position->vy;
+    m.t[2] = position->vz;
+    matrixSetRotationZ(model, this->angle);
+    matrixScale(model, this->size, this->size, this->size);
+    setModelMatrix(model);
+    spriteAnimFillShape(this, shape, SQUARE_CORNERS);
+}
 
 /* Makes shape a PolyFT4Shape of the sprite: the four corners, its color, the uvs from its corners (their low
  * bytes) and the clut and tpage words of the anim (halfwords 8 and 9) with the flags of the sprite. The match
@@ -247,9 +288,9 @@ void Particle_setMotion(Particle *this, VECTOR *pos, VECTOR *vel, s32 size, u32 
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->sprite.pos.vx = x;
-    this->sprite.pos.vy = y;
-    this->sprite.pos.vz = z;
+    this->sprite.position.vx = x;
+    this->sprite.position.vy = y;
+    this->sprite.position.vz = z;
     dx = vel->vx;
     dy = vel->vy;
     dz = vel->vz;
@@ -257,9 +298,9 @@ void Particle_setMotion(Particle *this, VECTOR *pos, VECTOR *vel, s32 size, u32 
     this->sprite.angle = 0;
     this->age = 0;
     this->sprite.color = color;
-    this->vel.vx = dx;
-    this->vel.vy = dy;
-    this->vel.vz = dz;
+    this->velocity.vx = dx;
+    this->velocity.vy = dy;
+    this->velocity.vz = dz;
 }
 
 void spriteAnimStep(SpriteAnim *this);
@@ -296,7 +337,7 @@ void Particle_draw(Particle *this, Camera *camera) {
 /* The first method of D_8006D54C and SPIN_PARTICLE_VTABLE: turns the sprite by twice the low half of the velocity's x,
  * grows it by 8, then the base's (Particle_tick) with arg. The game reads that x with lhu: only its low half counts. */
 void SpinParticle_tick(Particle *this, s32 arg) {
-    this->sprite.angle += (u16)this->vel.vx * 2;
+    this->sprite.angle += (u16)this->velocity.vx * 2;
     this->sprite.size += 8;
     Particle_tick(this, arg);
 }
@@ -314,9 +355,9 @@ HitSpark *HitSpark_init(HitSpark *this, Vec3 *position, VECTOR *dir, s32 unk3, u
     x = position->vx;
     y = position->vy;
     z = position->vz;
-    this->sprite.pos.vx = x;
-    this->sprite.pos.vy = y;
-    this->sprite.pos.vz = z;
+    this->sprite.position.vx = x;
+    this->sprite.position.vy = y;
+    this->sprite.position.vz = z;
     this->sprite.angle = ratan2(dir->vy, dir->vx);
     this->targetSize = unk3;
     this->sprite.color = color;
@@ -353,8 +394,8 @@ INCLUDE_ASM("game/nonmatchings/game_0g", Sparkle_tick);
 typedef struct Sparkle {
     /* 0x00 */ Entity entity;
     /* 0x18 */ SpriteAnim sprite;
-    /* 0x40 */ Vec3 vel;
-    /* 0x4C */ u8 velPad[0x50 - 0x4C];
+    /* 0x40 */ Vec3 velocity;
+    /* 0x4C */ u8 velocityPad[0x50 - 0x4C];
     /* 0x50 */ HsvColor hsv;
     /* 0x54 */ s32 startValue; /* the value is startValue * life >> 4 */
     /* 0x58 */ s32 life;       /* 16 frames, counted down */
@@ -389,22 +430,22 @@ Entity *func_800C391C(Entity *this, Vec3 *arg1, Vec3 *arg2, s32 arg3, s32 arg4) 
 
 extern EntityVtable D_8006D434;
 
-/* The entity of func_800C3960 (vtable D_8006D434, 0xE4 bytes) for a character, by its handle. */
+/* The entity of func_800C3960 (vtable D_8006D434, 0xE4 bytes) for a fighter, by its handle. */
 typedef struct Unk800C3960 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ u32 chara; /* the character's handle */
+    /* 0x18 */ u32 fighterHandle; /* the fighter's (entityGetHandle) */
     /* 0x1C */ u8 unk1C[0xDC - 0x1C];
     /* 0xDC */ s32 unkDC; /* whether the character's func_80079E2C is 15 */
     /* 0xE0 */ s32 unkE0;
 } Unk800C3960; /* size 0xE4 */
 
 /* Constructs the character's entity of vtable D_8006D434. */
-Unk800C3960 *func_800C3960(Unk800C3960 *this, Fighter *chara) {
+Unk800C3960 *func_800C3960(Unk800C3960 *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006D434;
-    this->chara = entityGetHandle(&chara->entity);
+    this->fighterHandle = entityGetHandle(&fighter->entity);
     this->unkE0 = 0;
-    this->unkDC = func_80079E2C(chara) == 15;
+    this->unkDC = func_80079E2C(fighter) == 15;
     return this;
 }
 
@@ -628,7 +669,15 @@ void Trail_setColors(Trail *this, CVECTOR *colors, s32 count) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", Trail_draw);
+/* The trail's draw: loads the camera's matrix from the scratchpad into the GTE, then draws the strips through
+ * the drawStrips slot. */
+void Trail_draw(Trail *this, Camera *camera) {
+    TrailVtable *vtable;
+
+    gte_loadRotTransKeepArgs(SCRATCH_VIEW_MATRIX);
+    vtable = (TrailVtable *)this->entity.vtable;
+    vtable->drawStrips.func((u8 *)this + vtable->drawStrips.delta, camera);
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0g", Trail_drawStrips);
 
@@ -637,10 +686,10 @@ INCLUDE_ASM("game/nonmatchings/game_0g", Trail_drawStrips);
 typedef struct ParticleSpray {
     /* 0x00 */ Entity entity;
     /* 0x18 */ s32 kind;
-    /* 0x1C */ Vec3 pos;
-    /* 0x28 */ s32 posPad;
-    /* 0x2C */ Vec3 vel;
-    /* 0x38 */ s32 velPad;
+    /* 0x1C */ Vec3 position;
+    /* 0x28 */ s32 positionPad;
+    /* 0x2C */ Vec3 velocity;
+    /* 0x38 */ s32 velocityPad;
     /* 0x3C */ s32 size;
     /* 0x40 */ s32 count;
     /* 0x44 */ s32 color;
@@ -661,15 +710,15 @@ ParticleSpray *ParticleSpray_init(ParticleSpray *this, s32 kind, Vec3 *pos, Vec3
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     x2 = vel->vx;
     y2 = vel->vy;
     z2 = vel->vz;
-    this->vel.vx = x2;
-    this->vel.vy = y2;
-    this->vel.vz = z2;
+    this->velocity.vx = x2;
+    this->velocity.vy = y2;
+    this->velocity.vz = z2;
     this->size = size;
     this->count = count;
     this->color = color;
@@ -690,9 +739,9 @@ ParticleEmitter *func_800C6088(ParticleEmitter *this, s32 arg1, Vec3 *pos, s32 r
     y = pos->vy;
     z = pos->vz;
     this->spread = radius;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->size = arg4;
     this->count = count;
     this->color = arg6;
@@ -714,9 +763,9 @@ ParticleEmitter *ParticleBurst_init(ParticleEmitter *this, s32 kind, Vec3 *pos, 
     y = pos->vy;
     z = pos->vz;
     this->spread = spread;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->size = size;
     this->count = count;
     this->color = color;
@@ -738,9 +787,9 @@ ParticleEmitter *ParticleImplosion_init(ParticleEmitter *this, s32 kind, Vec3 *p
     y = pos->vy;
     z = pos->vz;
     this->spread = spread;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->size = size;
     this->count = count;
     this->color = color;

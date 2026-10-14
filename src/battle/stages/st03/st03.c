@@ -42,7 +42,7 @@ typedef struct Unk800D59C8 {
     /* 0x18 */ MeshScene *meshScene;
     /* 0x1C */ s32 node;
     /* 0x20 */ s32 unk20;
-    /* 0x24 */ VECTOR pos;    /* only x, y and z set */
+    /* 0x24 */ VECTOR position;    /* only x, y and z set */
     /* 0x34 */ VECTOR target; /* x, y and z of ST03_BOLT_POINTS[point] */
     /* 0x44 */ s32 point;     /* an index into ST03_BOLT_POINTS */
     /* 0x48 */ s32 unk48;
@@ -166,18 +166,18 @@ typedef struct St03Hit {
 
 extern VtableEntry ST03_HIT_VTABLE[];
 
-struct Unk800D80DC *func_800D80DC(struct Unk800D80DC *this, Fighter *chara);
+struct Unk800D80DC *func_800D80DC(struct Unk800D80DC *this, Fighter *fighter);
 
 /* St03Hit's slot 0x08: when getHitFighter finds a fighter in sum, adds its damage (saturating at HIT_DAMAGE_MASK),
  * its kind and its knockback into sum, whose flags get its own; withEffect gives the fighter a new Unk800D80DC
  * (Fighter_addEntity). */
 void St03Hit_apply(St03Hit *this, CollisionSphere *sum) {
-    Entity *chara = getHitFighter(sum);
+    Entity *fighter = getHitFighter(sum);
     u32 flags;
     s32 count;
     s32 x, y, z;
 
-    if (chara == NULL) {
+    if (fighter == NULL) {
         return;
     }
     /* The match depends on the flags taken before the count, and the vector's three words read before any
@@ -199,7 +199,7 @@ void St03Hit_apply(St03Hit *this, CollisionSphere *sum) {
     sum->hitKnockback.vy = y;
     sum->hitKnockback.vz = z;
     if (this->withEffect != 0) {
-        Fighter_addEntity((Fighter *)chara, NEW_ENTITY(0x3C, func_800D80DC, (Fighter *)chara));
+        Fighter_addEntity((Fighter *)fighter, NEW_ENTITY(0x3C, func_800D80DC, (Fighter *)fighter));
     }
 }
 
@@ -214,12 +214,12 @@ typedef struct St03LiftVtable {
 #define ST03_SOUND_LAND 0x62
 
 /* A lift (St03Lift_init, made by StageShrine_createNodeEntity and derived by St03LiftPart): one node of a mesh
- * scene, put at pos moved by offset every tick. */
+ * scene, put at position moved by offset every tick. */
 typedef struct St03Lift {
     /* 0x00 */ Entity entity;
     /* 0x18 */ MeshScene *meshScene;
-    /* 0x1C */ VECTOR pos;    /* only x, y and z set */
-    /* 0x2C */ VECTOR offset; /* the translation added to pos */
+    /* 0x1C */ VECTOR position;    /* only x, y and z set */
+    /* 0x2C */ VECTOR offset; /* the translation added to position */
     /* 0x3C */ s32 node;
 } St03Lift; /* size 0x40 */
 
@@ -253,9 +253,9 @@ St03Lift *St03Lift_init(St03Lift *this, MeshScene *meshScene, s32 node, Vec3 *po
     this->offset.vy = 0;
     this->offset.vz = 0;
     this->offset.pad = 0;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     return this;
 }
 
@@ -278,7 +278,7 @@ static inline void meshSetPosition(Mesh *mesh, VECTOR *pos) {
     mesh->object.transform.local.m.t[2] = z;
 }
 
-/* St03Lift's tick: runs the class's own method (0x20) with the stage, then puts the node's mesh at pos
+/* St03Lift's tick: runs the class's own method (0x20) with the stage, then puts the node's mesh at position
  * (no rotation) and translates it by offset. */
 void St03Lift_tick(St03Lift *this, StageShrine *stage) {
     St03LiftVtable *vtable = (St03LiftVtable *)this->entity.vtable;
@@ -286,7 +286,7 @@ void St03Lift_tick(St03Lift *this, StageShrine *stage) {
 
     vtable->unk20.func((u8 *)this + vtable->unk20.delta, stage);
     mesh = meshSceneGetMesh(this->meshScene, this->node);
-    meshSetPosition(mesh, &this->pos);
+    meshSetPosition(mesh, &this->position);
     matrixTranslate(&mesh->object.transform.local.m, this->offset.vx, this->offset.vy, this->offset.vz);
 }
 
@@ -391,9 +391,9 @@ StageMeshMover *St03MeshMover_init(StageMeshMover *this, Mesh *mesh, Vec3 *pos) 
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->motion = 0;
     this->frame = 0;
     return this;
@@ -404,11 +404,11 @@ static inline s16 getSinInline(s32 angle) {
     return COS_SIN_TABLE[angle & 0xFFF].sin;
 }
 
-/* St03MeshMover's tick: puts the mesh at pos raised by motion (no rotation), then moves motion along a sine (128
+/* St03MeshMover's tick: puts the mesh at position raised by motion (no rotation), then moves motion along a sine (128
  * frames a period). */
 void St03MeshMover_tick(StageMeshMover *this) {
-    /* stage_objects.h has pos as a Vec3 and 0x28 apart, but the game copies the four words as a VECTOR */
-    VECTOR pos = *(VECTOR *)&this->pos;
+    /* stage_objects.h has position as a Vec3 and 0x28 apart, but the game copies the four words as a VECTOR */
+    VECTOR pos = *(VECTOR *)&this->position;
 
     pos.vy += this->motion;
     meshSetPosition(this->mesh, &pos);
@@ -418,16 +418,16 @@ void St03MeshMover_tick(StageMeshMover *this) {
     this->frame++;
 }
 
-/* The entity func_800D5464 makes for a mesh of the stage (StageShrine_createNodeEntity), at pos: 0x2C0, 0x40 and 0x80
- * at 0x1C-0x1F. */
+/* The entity func_800D5464 makes for a mesh of the stage (StageShrine_createNodeEntity), at position: 0x2C0, 0x40
+ * and 0x80 at 0x1C-0x1F. */
 typedef struct Unk800D5464 {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Mesh *mesh;
     /* 0x1C */ s16 unk1C;
     /* 0x1E */ u8 unk1E;
     /* 0x1F */ u8 unk1F;
-    /* 0x20 */ VECTOR pos;  /* its update copies the four words, pad included */
-    /* 0x30 */ s32 bob;     /* added to pos.vy: the sine of 0x34, by 64 */
+    /* 0x20 */ VECTOR position;  /* its tick copies the four words, pad included */
+    /* 0x30 */ s32 bob;     /* added to position.vy: the sine of 0x34, by 64 */
     /* 0x34 */ s32 counter;
 } Unk800D5464; /* size 0x38 */
 
@@ -447,18 +447,18 @@ Unk800D5464 *func_800D5464(Unk800D5464 *this, Mesh *mesh, Vec3 *pos) {
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->bob = 0;
     this->counter = 0;
     return this;
 }
 
-/* The tick of func_800D5464's entity: puts the mesh at pos raised by bob (no rotation), then moves bob along a
+/* The tick of func_800D5464's entity: puts the mesh at position raised by bob (no rotation), then moves bob along a
  * sine (128 steps) and 0x1C by 8. */
 void func_800D54F0(Unk800D5464 *this) {
-    VECTOR pos = this->pos;
+    VECTOR pos = this->position;
 
     pos.vy += this->bob;
     meshSetPosition(this->mesh, &pos);
@@ -470,7 +470,7 @@ void func_800D54F0(Unk800D5464 *this) {
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D5594);
 
-/* The entity func_800D5804 makes for a mesh of the stage (StageShrine_createNodeEntity), at pos: StageMeshMover's
+/* The entity func_800D5804 makes for a mesh of the stage (StageShrine_createNodeEntity), at position: StageMeshMover's
  * fields, and 0x10 at 0x34. */
 typedef struct Unk800D5804 {
     /* 0x00 */ StageMeshMover base;
@@ -490,9 +490,9 @@ Unk800D5804 *func_800D5804(Unk800D5804 *this, Mesh *mesh, Vec3 *pos) {
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->base.pos.vx = x;
-    this->base.pos.vy = y;
-    this->base.pos.vz = z;
+    this->base.position.vx = x;
+    this->base.position.vy = y;
+    this->base.position.vz = z;
     this->base.motion = 0;
     this->base.frame = 0;
     this->unk34 = 0x10;
@@ -522,9 +522,9 @@ Unk800D59C8 *func_800D59C8(Unk800D59C8 *this, MeshScene *meshScene, s32 node, s3
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     switch (node) {
     case 0:
     default:
@@ -563,7 +563,7 @@ static inline s32 vecLengthInline(VECTOR *v) {
     return vecGetLength(v);
 }
 
-/* Shows the node once no character is within reach of pos (0xC0 plus the high half of the first word of the
+/* Shows the node once no character is within reach of position (0xC0 plus the high half of the first word of the
  * character's record); does nothing while one is. */
 void func_800D5E48(Unk800D59C8 *this) {
     Fight *stage = CURRENT_FIGHT;
@@ -572,17 +572,17 @@ void func_800D5E48(Unk800D59C8 *this) {
     s32 side;
 
     for (side = 0; side < 2; side++) {
-        Fighter *chara = Fight_getFighter(stage, side);
-        s32 reach = Fighter_getParams(chara)->height + 0xC0;
+        Fighter *fighter = Fight_getFighter(stage, side);
+        s32 reach = Fighter_getParams(fighter)->height + 0xC0;
 
-        func_8007A650(chara, (Vec3 *)&offset);
+        func_8007A650(fighter, (Vec3 *)&offset);
         /* The match depends on reading the whole offset before subtracting (as vecSubInPlace). */
         x = offset.vx;
         y = offset.vy;
         z = offset.vz;
-        x -= this->pos.vx;
-        y -= this->pos.vy;
-        z -= this->pos.vz;
+        x -= this->position.vx;
+        y -= this->position.vy;
+        z -= this->position.vz;
         offset.vx = x;
         offset.vy = y;
         offset.vz = z;
@@ -608,7 +608,7 @@ typedef struct St03DropBlock {
     /* 0x80 */ Mesh *mesh;
     /* 0x84 */ MeshScene *meshScene;
     /* 0x88 */ s32 node;
-    /* 0x8C */ VECTOR pos;  /* in 256ths */
+    /* 0x8C */ VECTOR position;  /* in 256ths */
     /* 0x9C */ VECTOR home; /* the position at construction, in 256ths */
     /* 0xAC */ Fighter *riders[2]; /* their weights add to the entity's */
     /* 0xB4 */ s32 unkB4;
@@ -648,7 +648,7 @@ St03DropBlock *St03DropBlock_init(St03DropBlock *this, MeshScene *meshScene, s32
     this->node = node;
     x = pos->vx;
     y = pos->vy;
-    this->pos.vz = 0;
+    this->position.vz = 0;
     this->home.vz = 0;
     this->riders[0] = NULL;
     this->riders[1] = NULL;
@@ -657,8 +657,8 @@ St03DropBlock *St03DropBlock_init(St03DropBlock *this, MeshScene *meshScene, s32
     this->unkBC = 0;
     this->unkC0 = 0;
     this->unkC4 = 0;
-    this->pos.vx = x << 8;
-    this->pos.vy = y << 8;
+    this->position.vx = x << 8;
+    this->position.vy = y << 8;
     this->home.vx = x << 8;
     this->home.vy = y << 8;
     this->unkC8 = mersenneTwisterGenerate(&RANDOM);
@@ -714,7 +714,7 @@ void func_800D6550(St03DropBlock *this, StageShrine *stage);
 void func_800D66B4(St03DropBlock *this);
 void func_800D6738(St03DropBlock *this, StageShrine *stage);
 
-/* St03DropBlock's tick, by state: 0 moves by an eighth of the way from 0x100 above pos to home until 0xC0
+/* St03DropBlock's tick, by state: 0 moves by an eighth of the way from 0x100 above position to home until 0xC0
  * passes 8; 1 moves (func_800D6738) and at 0x71C (func_800D6440) leaves the part's list, waiting 0x1E; 2
  * counts that down and shows the node again (state 0) once func_800D62B4 said 0. */
 void St03DropBlock_tick(St03DropBlock *this, StageShrine *stage) {
@@ -724,7 +724,7 @@ void St03DropBlock_tick(St03DropBlock *this, StageShrine *stage) {
     switch (this->state) {
     case 0:
         this->unkBC = 0;
-        top = this->pos.vy + 0x100;
+        top = this->position.vy + 0x100;
         func_800D6440(this, (this->home.vy - top) >> 3);
         if (this->unkC0 >= 9) {
             this->unkBC = 0;
@@ -768,19 +768,19 @@ s32 func_800D6440(St03DropBlock *this, s32 speed) {
     VECTOR to;
 
     from.vz = 0;
-    from.vx = (this->pos.vx >> 8) + 0x40;
-    from.vy = (this->pos.vy >> 8) - 0x10;
+    from.vx = (this->position.vx >> 8) + 0x40;
+    from.vy = (this->position.vy >> 8) - 0x10;
     St03DropBlock_push(this, speed);
     to.vz = 0;
-    to.vx = (this->pos.vx >> 8) + 0x40;
-    to.vy = (this->pos.vy >> 8) - 0x10;
-    if (this->pos.vy < this->home.vy) {
-        this->pos.vy = this->home.vy;
+    to.vx = (this->position.vx >> 8) + 0x40;
+    to.vy = (this->position.vy >> 8) - 0x10;
+    if (this->position.vy < this->home.vy) {
+        this->position.vy = this->home.vy;
         this->unkBC = 0;
         return speed < 0;
     }
-    if (this->pos.vy > 0x40000) {
-        this->pos.vy = 0x40000;
+    if (this->position.vy > 0x40000) {
+        this->position.vy = 0x40000;
         this->unkBC = 0;
         if (speed < 0) {
             return 0;
@@ -790,7 +790,7 @@ s32 func_800D6440(St03DropBlock *this, s32 speed) {
     }
     if (castMapRay((Vec3 *)&to, (Vec3 *)&from) != 0) {
         this->unkBC = 0;
-        this->pos.vy = to.vy << 8;
+        this->position.vy = to.vy << 8;
         func_800D6874(this);
         soundControlPlaySound(&SOUND_CONTROL, ST03_SOUND_LAND, 0);
         return speed >= 0;
@@ -804,8 +804,8 @@ void func_800D6550(St03DropBlock *this, StageShrine *stage) {
     /* VECTORs, as in func_800D6440 */
     VECTOR from;
     VECTOR to;
-    s32 x = (this->pos.vx >> 8) + 0x40;
-    s32 y = this->pos.vy >> 8;
+    s32 x = (this->position.vx >> 8) + 0x40;
+    s32 y = this->position.vy >> 8;
 
     from.vx = x;
     from.vy = y - 0x10;
@@ -815,7 +815,7 @@ void func_800D6550(St03DropBlock *this, StageShrine *stage) {
     to.vz = 0;
     if (castMapRay((Vec3 *)&to, (Vec3 *)&from) != 0) {
         this->unkBC = 0;
-        this->pos.vy = to.vy << 8;
+        this->position.vy = to.vy << 8;
     } else {
         St03DropBlock_push(this, 0x71C);
     }
@@ -844,15 +844,15 @@ void St03DropBlock_push(St03DropBlock *this, s32 force) {
     push.vz = 0;
     func_80079C1C((Vec3 *)&move, (Vec3 *)&velocity, (Vec3 *)&push, mass);
     this->unkBC = velocity.vy;
-    this->pos.vy += move.vy;
+    this->position.vy += move.vy;
 }
 
-/* Puts the mesh at pos (no rotation), then tilts it about x along a sine of the tick count (64 steps of
+/* Puts the mesh at position (no rotation), then tilts it about x along a sine of the tick count (64 steps of
  * 0x40, a 32nd of the sine). */
 void func_800D66B4(St03DropBlock *this) {
     Mesh *mesh = this->mesh;
 
-    meshSetPosition256(mesh, &this->pos);
+    meshSetPosition256(mesh, &this->position);
     matrixRotateX(&mesh->object.transform.local.m, COS_SIN_TABLE[(this->unkC8 << 6) & 0xFFF].sin >> 5);
 }
 
@@ -866,8 +866,8 @@ void func_800D6738(St03DropBlock *this, StageShrine *stage) {
     s32 wait0, wait1;
 
     v.vz = 0;
-    v.vx = this->pos.vx >> 8;
-    v.vy = (this->pos.vy >> 8) + 0x70;
+    v.vx = this->position.vx >> 8;
+    v.vy = (this->position.vy >> 8) + 0x70;
     this->part.position.vx = v.vx;
     this->part.position.vy = v.vy;
     this->part.position.vz = v.vz;
@@ -901,7 +901,7 @@ INCLUDE_ASM("st03/nonmatchings/st03", func_800D6874);
  * derives from it. 0x2C is 4 plus a 256th of how far the position is in front of z 0x1000. */
 typedef struct Unk800D69C4 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Vec3 pos;
+    /* 0x18 */ Vec3 position;
     /* 0x24 */ u8 unk24[0x2C - 0x24];
     /* 0x2C */ s32 unk2C;     /* how far it moves left each tick */
     /* 0x30 */ u8 unk30;      /* the stage's 0xD58 */
@@ -921,21 +921,21 @@ Unk800D69C4 *func_800D69C4(Unk800D69C4 *this, Vec3 *pos) {
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->unk2C = ((0x1000 - pos->vz) >> 8) + 4;
     return this;
 }
 
 /* Unk800D69C4's tick: copies the stage's 0xD58 and moves x left by 0x2C, wrapping from -0x300 to 0x300. */
 void func_800D6A38(Unk800D69C4 *this, StageShrine *stage) {
-    s32 x = this->pos.vx - this->unk2C;
+    s32 x = this->position.vx - this->unk2C;
 
     this->unk30 = stage->unkD58;
-    this->pos.vx = x;
+    this->position.vx = x;
     if (x <= -0x300) {
-        this->pos.vx = x + 0x600;
+        this->position.vx = x + 0x600;
     }
 }
 
@@ -944,18 +944,18 @@ INCLUDE_ASM("st03/nonmatchings/st03", func_800D6A6C);
 /* The tick of func_800D8B4C's entity: copies the stage's 0xD58 and moves x left by 0x2C; past -0x1800 it
  * wraps to the right at a new random depth (0x200 to 0x9FF), which sets the speed again. */
 void func_800D6C94(Unk800D69C4 *this, StageShrine *stage) {
-    s32 x = this->pos.vx - this->unk2C;
+    s32 x = this->position.vx - this->unk2C;
     /* The match depends on the generator's address taken here, before the test. */
     MersenneTwister *random = &RANDOM;
 
     this->unk30 = stage->unkD58;
-    this->pos.vx = x;
+    this->position.vx = x;
     if (x <= -0x1800) {
         s32 z;
 
-        this->pos.vx = x + 0x3000;
+        this->position.vx = x + 0x3000;
         z = (mersenneTwisterGenerate(random) & 0x7FF) + 0x200;
-        this->pos.vz = z;
+        this->position.vz = z;
         this->unk2C = ((0x1000 - z) >> 8) + 4;
     }
 }
@@ -1111,10 +1111,10 @@ INCLUDE_ASM("st03/nonmatchings/st03", func_800D7F20);
 
 extern EntityVtable D_800D3AE4;
 
-/* The stage's entity of func_800D80DC (virtual table D_800D3AE4), which keeps a character's handle. */
+/* The stage's entity of func_800D80DC (virtual table D_800D3AE4), which keeps a fighter's handle. */
 typedef struct Unk800D80DC {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ u32 chara;     /* the character's handle */
+    /* 0x18 */ u32 fighterHandle; /* the fighter's (entityGetHandle) */
     /* 0x1C */ Vec3 position; /* the character's, at construction */
     /* 0x28 */ u8 unk28[0x2C - 0x28];
     /* 0x2C */ s32 unk2C;     /* Fighter_getParams's unk2 */
@@ -1124,12 +1124,12 @@ typedef struct Unk800D80DC {
 } Unk800D80DC;
 
 /* Constructs the stage's entity for a character: its handle, its position and a value of its record. */
-Unk800D80DC *func_800D80DC(Unk800D80DC *this, Fighter *chara) {
+Unk800D80DC *func_800D80DC(Unk800D80DC *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_800D3AE4;
-    this->chara = entityGetHandle(&chara->entity);
-    func_8007A650(chara, &this->position);
-    this->unk2C = Fighter_getParams(chara)->height;
+    this->fighterHandle = entityGetHandle(&fighter->entity);
+    func_8007A650(fighter, &this->position);
+    this->unk2C = Fighter_getParams(fighter)->height;
     this->unk30 = 0;
     this->unk34 = 0;
     this->unk38 = 0xFF;
@@ -1139,13 +1139,13 @@ Unk800D80DC *func_800D80DC(Unk800D80DC *this, Fighter *chara) {
 /* Follows the character: deletes itself once the character is gone or unk38 has faded out (4 a frame);
  * meanwhile takes the character's position, a new random unk34 and steps unk30 through 0, 1, 2. */
 void func_800D8158(Unk800D80DC *this) {
-    Fighter *chara = (Fighter *)getEntityByHandle(this->chara);
+    Fighter *fighter = (Fighter *)getEntityByHandle(this->fighterHandle);
 
-    if (chara == NULL) {
+    if (fighter == NULL) {
         entityDelete(&this->entity);
         return;
     }
-    func_8007A650(chara, &this->position);
+    func_8007A650(fighter, &this->position);
     this->unk34 = mersenneTwisterGenerate(&RANDOM);
     this->unk30++;
     if (this->unk30 >= 3) {

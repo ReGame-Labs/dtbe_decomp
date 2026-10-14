@@ -89,7 +89,9 @@ typedef struct FighterSetup {
 /* the phase of the last step: the bonus step has none */
 #define RUN_PHASE_LAST (RUN_STEP_LAST - 1)
 
-/* GameState.level: the hardest (LEVEL_NAMES: "EASY", "NORMAL", "HARD") */
+/* GameState.level (LEVEL_NAMES: "EASY", "NORMAL", "HARD") */
+#define LEVEL_EASY 0
+#define LEVEL_NORMAL 1
 #define LEVEL_HARD 2
 /* the levels */
 #define LEVEL_COUNT 3

@@ -101,6 +101,11 @@ typedef struct Fight {
 /* the fight Fight_init constructed last */
 extern Fight *CURRENT_FIGHT;
 
+/* where each side's fighter stands, by arena and side: at the start of a round (Fight_startRound) and when it is
+ * put back (Fight_respawnFighter) */
+extern DVECTOR ARENA_START_POSITIONS[10][2];
+extern DVECTOR ARENA_RESPAWN_POSITIONS[10][2];
+
 /* What makes the pad word of a side without a pad: its slot 0x08 gives the buttons for the side's fighter
  * (Controller_getButtons). The computer player derives from it, and the bonus stages derive their own. */
 typedef struct Controller {
@@ -162,6 +167,8 @@ void Fight_destroy(Fight *this, s32 flags);
 /* the fight's camera and its look-at */
 Camera *Fight_getCamera(Fight *this);
 LookAt *Fight_getLookAt(Fight *this);
+/* sets the camera's view from the look-at (the stages call it after moving the look-at) */
+void Fight_applyView(Fight *this);
 
 /* a random number from the fight's own generator */
 u32 Fight_random(Fight *this);
@@ -175,6 +182,8 @@ void Fight_addStageShape(Fight *this, ListNode *node);
 Entity *Fight_addStageEntity(Fight *this, Entity *entity);
 Entity *Fight_addEntity(Fight *this, Entity *entity);
 
+EntityGroup *func_8006F0E4(Fight *this, Entity *entity);
+s32 func_8006F104(Fight *this);
 s32 func_8006F144(Fight *this);
 s32 Fight_isRoundOver(Fight *this);
 s32 Fight_isContinueShown(Fight *this);

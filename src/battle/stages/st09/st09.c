@@ -56,11 +56,26 @@ typedef struct StageJewelHunt {
     /* 0x1040 */ MeshScene *scene; /* Fight_getMeshScene's (StageJewelHunt_startRound) */
     /* 0x1044 */ u8 unk1044[0x1404 - 0x1044];
     /* 0x1404 */ u16 nextThrowSlot[2]; /* by side: the next of 30 slots BonusThrower_throw gives an St09Throw */
-    /* 0x1408 */ u8 unk1408[0x15A0 - 0x1408];
+    /* 0x1408 */ u8 unk1408[0x1480 - 0x1408];
+    /* 0x1480 */ Group groups[3]; /* each drawn in the view of its own camera (StageJewelHunt_drawWorld) */
     /* 0x15A0 */ s16 unk15A0; /* the func_800D5BA0 entities func_800D49A0 has made, up to 16 */
     /* 0x15A2 */ u16 holdFrames[2]; /* by side: frames button 0x80 has been held, up to BONUS_CHARGE_FRAMES */
     /* 0x15A6 */ u16 heldCharge[2]; /* by side: how long it was held, when let go (st09_updateCharge) */
-} StageJewelHunt;
+    /* 0x15AA */ u8 jewelCounts[10][4]; /* the jewels in each cell: column (x + 0x480) >> 8, row (y + 0x480) >> 8 */
+    /* 0x15D2 */ s16 unk15D2; /* cleared by StageJewelHunt_startRound */
+    /* 0x15D4 */ s16 unk15D4;
+    /* 0x15D6 */ u8 unk15D6[0x15D8 - 0x15D6];
+} StageJewelHunt; /* size 0x15D8 */
+
+/* the stage's own steps, which its slots call */
+void st09_clearFrames(StageJewelHunt *this);
+void st09_resetCharge(StageJewelHunt *this);
+void st09_createThrowers(Fight *this);
+void func_800D476C(StageJewelHunt *this);
+void func_800D42EC(StageJewelHunt *this);
+void st09_updateCharge(StageJewelHunt *this);
+void func_800D49A0(StageJewelHunt *this);
+void func_800D45F8(StageJewelHunt *this);
 
 INCLUDE_ASM("st09/nonmatchings/st09", JewelHuntController_getButtons);
 
@@ -73,20 +88,107 @@ void *StageJewelHunt_createController(void *this, s32 unk, BattleSide *battleSid
 
 INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_destroy);
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D417C);
+/* The x of the column with the most jewels (the first of the fullest, column 0 when there are none), where
+ * JewelHuntController_getButtons aims. */
+s32 st09_getFullestColumnX(StageJewelHunt *this) {
+    s32 column;
+    s32 best = 0;
+    s32 bestCount = 0;
 
-INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_startRound);
+    for (column = 0; column < 10; column++) {
+        s32 count = 0;
+        s32 row;
+
+        for (row = 0; row < 4; row++) {
+            count += this->jewelCounts[column][row];
+        }
+        if (bestCount < count) {
+            bestCount = count;
+            best = column;
+        }
+    }
+    return (best << 8) - 0x480;
+}
+
+/* The stage's override of Fight_startRound: BonusFight's, then the frames cleared, the arena's bounds, the scene, the
+ * hold counts and the HUD reset, the throwers and func_800D476C; the result waits 90 frames. */
+void StageJewelHunt_startRound(StageJewelHunt *this) {
+    BonusFight_startRound(&this->base);
+    st09_clearFrames(this);
+    Fight_setBounds(&this->base.base, -0x800, 0x800, -0xC80, 0x400, 0);
+    this->scene = Fight_getMeshScene(&this->base.base);
+    this->unk15D2 = 0;
+    this->unk15D4 = 0;
+    this->base.hudHidden = 0;
+    st09_resetCharge(this);
+    st09_createThrowers(&this->base.base);
+    func_800D476C(this);
+    this->base.resultDelay = 90;
+}
 
 /* Clears the stage's frames. */
 void st09_clearFrames(StageJewelHunt *this) {
     this->frames = 0;
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_tickScenery);
+/* The stage's override of Fight_tickScenery: both fighters kept invulnerable, BonusFight's, then its own four
+ * steps, and counts the frame. */
+void StageJewelHunt_tickScenery(StageJewelHunt *this) {
+    Fight_getFighter(&this->base.base, 0)->invulnerableFrames = 10;
+    Fight_getFighter(&this->base.base, 1)->invulnerableFrames = 10;
+    BonusFight_tickScenery(&this->base);
+    func_800D42EC(this);
+    st09_updateCharge(this);
+    func_800D49A0(this);
+    func_800D45F8(this);
+    this->frames++;
+}
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D42EC);
 
-INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_tick);
+/* where the stage's view looks at, and from */
+extern Vec3 ST09_VIEW_TARGET;
+extern Vec3 ST09_VIEW_EYE;
+
+/* look_at.c's lookAtSetTarget and lookAtSetEye, which the game inlined here (the second dirty store is merged
+ * into the first) */
+static inline void setTarget(LookAt *this, Vec3 *target) {
+    s32 x, y, z;
+
+    this->dirty = 1;
+    x = target->vx;
+    y = target->vy;
+    z = target->vz;
+    this->target.vx = x;
+    this->target.vy = y;
+    this->target.vz = z;
+}
+
+static inline void setEye(LookAt *this, Vec3 *eye) {
+    s32 x, y, z;
+
+    this->dirty = 1;
+    x = eye->vx;
+    y = eye->vy;
+    z = eye->vz;
+    this->eye.vx = x;
+    this->eye.vy = y;
+    this->eye.vz = z;
+}
+
+/* The stage's override of Fight_tick: BonusFight's, then, while the HUD is shown, the fixed view from
+ * ST09_VIEW_EYE at ST09_VIEW_TARGET. */
+void StageJewelHunt_tick(StageJewelHunt *this) {
+    LookAt *lookAt;
+
+    BonusFight_tick(&this->base);
+    if (this->base.hudHidden == 0) {
+        lookAt = Fight_getLookAt(&this->base.base);
+        setTarget(lookAt, &ST09_VIEW_TARGET);
+        setEye(lookAt, &ST09_VIEW_EYE);
+        Fight_applyView(&this->base.base);
+    }
+}
 
 INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_drawWorld);
 
@@ -241,7 +343,6 @@ static inline StageJewelHunt *throwerStage(BonusThrower *thrower) {
 
 struct St09Throw *St09Throw_init(struct St09Throw *this, Fight *stage, Vec3 *position, VECTOR *vec,
                                   u16 slot);
-void BonusFight_holdFighter(BonusFight *this, s32 side);
 
 /* BonusThrower's tick: BonusThrower_place, BonusThrower_throw, then counts its frames. */
 void BonusThrower_tick(BonusThrower *this, s32 arg) {
@@ -434,9 +535,9 @@ BonusLandingMark *BonusLandingMark_init(BonusLandingMark *this, Fight *owner, Ve
     this->corners[2].vy = this->corners[3].vy = 0x100;
     this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = 0;
     this->frame = 0;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     return this;
 }
 
@@ -458,11 +559,14 @@ void BonusLandingMark_tick(BonusLandingMark *this, s32 arg) {
 
 INCLUDE_ASM("st09/nonmatchings/st09", BonusLandingMark_draw);
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D66C0);
+/* Adds child to the stage's group index. Nothing calls it. */
+void StageJewelHunt_addToGroup(StageJewelHunt *this, SceneObject *child, s16 index) {
+    groupAddChild(&this->groups[index], child);
+}
 
-/* Takes child out of the group it is in; the object is not used. Nothing calls it (nor
- * func_800D66C0, which adds a child to one of the object's groups at 0x1480). */
-void func_800D66F8(void *this, SceneObject *child) {
+/* Takes child out of the group it is in (StageJewelHunt_addToGroup's undo); the stage is not used. Nothing
+ * calls it. */
+void StageJewelHunt_removeFromGroup(StageJewelHunt *this, SceneObject *child) {
     listRemove(&child->link);
 }
 

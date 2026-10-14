@@ -7,9 +7,10 @@
 
 Entity *DukemonSpecial1Effect_init(Entity *this, Fighter *arg, Fight *arg2);
 Entity *func_80085B7C(Entity *this, Fighter *arg, Vec3 *vec);
-struct Unk800862C0 *func_800862C0(struct Unk800862C0 *this, Fighter *chara, Vec3 *position);
-Entity *DukemonSpecial2Effect_init(Entity *this, Fighter *chara, Vec3 *position, Fight *obj);
-Entity *DukemonSpecial3Hitbox_init(Entity *this, Fighter *chara, Vec3 *position, VECTOR *velocity, Fight *obj);
+struct Unk800862C0 *func_800862C0(struct Unk800862C0 *this, Fighter *fighter, Vec3 *position);
+struct DukemonSpecial2Effect *DukemonSpecial2Effect_init(struct DukemonSpecial2Effect *this, Fighter *fighter,
+                                                          Vec3 *position, Fight *fight);
+Entity *DukemonSpecial3Hitbox_init(Entity *this, Fighter *fighter, Vec3 *position, VECTOR *velocity, Fight *obj);
 extern VtableEntry DUKEMON_SPECIAL3_HITBOX_HIT_VTABLE[];
 extern EntityVtable DUKEMON_SPECIAL3_HITBOX_VTABLE;
 extern EntityVtable D_800686E4;
@@ -335,7 +336,40 @@ INCLUDE_ASM("game/nonmatchings/fighters/dukemon", DukemonSpecial1Effect_tick);
 
 INCLUDE_ASM("game/nonmatchings/fighters/dukemon", DukemonSpecial1Effect_draw);
 
-INCLUDE_ASM("game/nonmatchings/fighters/dukemon", DukemonSpecial2Effect_init);
+/* The special move 2's effect (0x34 bytes): it follows the fighter for 21 frames, fading from frame 13. */
+typedef struct DukemonSpecial2Effect {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Fighter *fighter;
+    /* 0x1C */ u16 age;       /* frames */
+    /* 0x1E */ u8 brightness; /* 0x80 at first, - 0x10 a frame from frame 13 */
+    /* 0x1F */ u8 unk1F;
+    /* 0x20 */ s16 vramY; /* Fighter_getVramY of the character */
+    /* 0x22 */ u8 unk22[0x24 - 0x22];
+    /* 0x24 */ Vec3 position;
+    /* 0x30 */ u8 unk30[0x34 - 0x30];
+} DukemonSpecial2Effect;
+
+/* Builds the special move 2's effect at the position, and plays its sound. */
+DukemonSpecial2Effect *DukemonSpecial2Effect_init(DukemonSpecial2Effect *this, Fighter *fighter, Vec3 *position,
+                                                  Fight *fight) {
+    s32 x, y, z;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &DUKEMON_SPECIAL2_EFFECT_VTABLE;
+    this->vramY = Fighter_getVramY(fighter);
+    this->fighter = fighter;
+    this->age = 0;
+    this->brightness = 0x80;
+    /* The match depends on reading the position whole before storing it (a struct copy interleaves). */
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    Fighter_playSound(fighter, 0x7A);
+    return this;
+}
 
 /* The special move 2 effect's destructor. */
 void DukemonSpecial2Effect_destroy(Entity *this, s32 flags) {
@@ -346,22 +380,9 @@ void DukemonSpecial2Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-/* The special move 2's effect (0x34 bytes): it follows the fighter for 21 frames, fading from frame 13. */
-typedef struct DukemonSpecial2Effect {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
-    /* 0x1C */ u16 age;       /* frames */
-    /* 0x1E */ u8 brightness; /* 0x80 at first, - 0x10 a frame from frame 13 */
-    /* 0x1F */ u8 unk1F;
-    /* 0x20 */ s16 vramY; /* Fighter_getVramY of the character */
-    /* 0x22 */ u8 unk22[0x24 - 0x22];
-    /* 0x24 */ Vec3 position;
-    /* 0x30 */ u8 unk30[0x34 - 0x30];
-} DukemonSpecial2Effect;
-
 /* Follows the fighter, fades from frame 13 and deletes itself after frame 20. */
 void DukemonSpecial2Effect_tick(DukemonSpecial2Effect *this) {
-    Fighter_getPosition(this->chara, &this->position);
+    Fighter_getPosition(this->fighter, &this->position);
     if (this->age >= 13) {
         this->brightness -= 0x10;
     }
@@ -412,7 +433,7 @@ extern VECTOR D_80068674;
 
 INCLUDE_RODATA("game/nonmatchings/fighters/dukemon", D_80068674);
 
-/* The update of Unk80085B7C: follows the owner's point 18 moved by D_80068674 and eases unk1C and unk1D; then by
+/* The tick of Unk80085B7C: follows the owner's point 18 moved by D_80068674 and eases unk1C and unk1D; then by
  * state: grows unk54 toward 0x3400 while bobbing up and down, waits 20 frames, shrinks unk58 below 5 and deletes
  * itself. It goes to state 3 early when the owner's special3 is over. */
 void func_80085CE4(Unk80085B7C *this) {
@@ -467,7 +488,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/dukemon", func_80085EF4);
  * each. */
 typedef struct Unk800862C0 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ u8 unk1C;
     /* 0x1D */ u8 unk1D;
     /* 0x1E */ s16 unk1E;
@@ -477,15 +498,15 @@ typedef struct Unk800862C0 {
     /* 0x34 */ s32 unk34[8];
 } Unk800862C0;
 
-/* Constructs the entity of virtual table D_800686E4 for chara (the position is not used): 0x80 at 0x1C,
+/* Constructs the entity of virtual table D_800686E4 for fighter (the position is not used): 0x80 at 0x1C,
  * and its eight values at 0 with the scale 0x2800. */
-Unk800862C0 *func_800862C0(Unk800862C0 *this, Fighter *chara, Vec3 *position) {
+Unk800862C0 *func_800862C0(Unk800862C0 *this, Fighter *fighter, Vec3 *position) {
     s32 i;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_800686E4;
-    this->vramY = Fighter_getVramY(chara);
-    this->chara = chara;
+    this->vramY = Fighter_getVramY(fighter);
+    this->fighter = fighter;
     this->unk1E = 0;
     this->unk32 = 0;
     this->unk1C = 0x80;

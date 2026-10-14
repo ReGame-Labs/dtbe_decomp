@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/math/sin_cos.h"
 #include "engine/system/memory.h"
 
 s32 isInTerrainLineSpanXY(TerrainLine *line, s32 x, s32 y);
@@ -376,7 +377,26 @@ void addCollisionLink(MeshSceneLink *link, s32 *lines, s32 lineCount) {
     link->shown = 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0c", initTerrainLine);
+/* Builds the line from `from` to `to`: its endpoints, then its normal (the cosine and sine of the angle of
+ * ratan2(x0 - x1, y1 - y0)) and the offset that puts both endpoints at distance 0. The match depends on the
+ * normal read into locals (the stored fields reload as lhu) and on the angle masked in the index (masked into
+ * the local, the table's address loads after the mask). */
+void initTerrainLine(TerrainLine *this, DVECTOR *from, DVECTOR *to) {
+    s32 angle;
+    s32 normalX;
+    s32 normalY;
+
+    this->x0 = from->vx;
+    this->y0 = from->vy;
+    this->x1 = to->vx;
+    this->y1 = to->vy;
+    angle = ratan2(this->x0 - this->x1, this->y1 - this->y0);
+    normalX = COS_SIN_TABLE[angle & 0xFFF].cos;
+    this->normalX = normalX;
+    normalY = COS_SIN_TABLE[angle & 0xFFF].sin;
+    this->normalY = normalY;
+    this->offset = -(normalX * this->x0 + normalY * this->y0);
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0c", func_80076BB4);
 

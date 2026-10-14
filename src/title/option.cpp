@@ -5,6 +5,8 @@
 #include "engine/gfx/fade.h"
 #include "engine/gfx/prim/alloc_sprt_16.h"
 #include "engine/gfx/prim/alloc_sprt.h"
+#include "engine/gfx/prim/alloc_line_f2.h"
+#include "engine/gfx/ordering_table.h"
 #include "engine/sound/sound_control.h"
 #include "engine/game/game_state.h"
 #include "engine/game/sequencer.h"
@@ -28,6 +30,21 @@ void loadInputTim(NameEntry *entry);
 
 /* the image OptionButtonMenu's draw puts right of the menu's title row */
 extern TitleImage OPTION_BUTTON_MENU_TITLE;
+
+/* a line from (x0, y0) to (x1, y1) */
+typedef struct ScreenPoint {
+    /* 0x0 */ s16 x;
+    /* 0x2 */ s16 y;
+} ScreenPoint;
+
+typedef struct ScreenLine {
+    /* 0x0 */ ScreenPoint from;
+    /* 0x4 */ ScreenPoint to;
+} ScreenLine;
+
+/* the guides OptionScreenItem's draw shows while the screen moves: x 16 and 303, y 16 and 223 */
+#define OPTION_SCREEN_LINE_COUNT 4
+extern ScreenLine OPTION_SCREEN_LINES[OPTION_SCREEN_LINE_COUNT];
 EXTERN_C_END
 
 /* The x of the menu row index: 45, or 35 on every other row. */
@@ -303,7 +320,33 @@ INCLUDE_ASM("title/nonmatchings/option", OptionScreenItem_input);
 
 INCLUDE_RODATA("title/nonmatchings/option", OPTION_SCREEN_LINES);
 
-INCLUDE_ASM("title/nonmatchings/option", OptionScreenItem_draw);
+/* Draws OptionItem's, and while active the four white guide lines 16 pixels inside the screen's edges
+ * (OPTION_SCREEN_LINES), near the front of the frame. */
+void OptionScreenItem::draw(s32 ot, s32 isCurrent, s32 active) {
+    s32 i;
+
+    OptionItem::draw(ot, isCurrent, active);
+    if (active) {
+        u_long *front = FRAME_OT.firstDrawn + 2;
+
+        for (i = 0; i < OPTION_SCREEN_LINE_COUNT; i++) {
+            LINE_F2 *line = allocLineF2();
+            /* The match depends on reading the four coordinates into u16 locals before the color: the loads
+             * come first, as lhu. */
+            u16 x0 = OPTION_SCREEN_LINES[i].from.x;
+            u16 y0 = OPTION_SCREEN_LINES[i].from.y;
+            u16 x1 = OPTION_SCREEN_LINES[i].to.x;
+            u16 y1 = OPTION_SCREEN_LINES[i].to.y;
+
+            setRGB0(line, 0xFF, 0xFF, 0xFF);
+            line->x0 = x0;
+            line->y0 = y0;
+            line->x1 = x1;
+            line->y1 = y1;
+            AddPrim(front, line);
+        }
+    }
+}
 
 /* Constructs an item drawing image, with a name entry on the second character grid whose maxLength goes
  * from 5 to 6, and loads the entry's images ("/zascii.tim", "/title/input.tim"). */

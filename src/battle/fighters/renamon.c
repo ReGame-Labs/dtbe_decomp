@@ -5,7 +5,7 @@
 #include "battle/game_classes.h"
 #include "engine/pad/pad.h"
 
-struct RenamonSpecial1Effect *RenamonSpecial1Effect_init(struct RenamonSpecial1Effect *this, Fighter *chara);
+struct RenamonSpecial1Effect *RenamonSpecial1Effect_init(struct RenamonSpecial1Effect *this, Fighter *fighter);
 extern VtableEntry RENAMON_SPECIAL1_HITBOX_HIT_VTABLE[];
 extern EntityVtable RENAMON_SPECIAL1_HITBOX_VTABLE;
 
@@ -146,7 +146,7 @@ extern EntityVtable RENAMON_SPECIAL1_EFFECT_VTABLE;
 /* The special move 1's effect (0x44 bytes). */
 typedef struct RenamonSpecial1Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Vec3 position; /* the character's at construction (Fighter_getPosition) */
     /* 0x28 */ s32 unk28;
     /* 0x2C */ s32 unk2C;
@@ -157,16 +157,16 @@ typedef struct RenamonSpecial1Effect {
     /* 0x40 */ s32 vramY; /* Fighter_getVramY of the character */
 } RenamonSpecial1Effect;
 
-/* Builds the special move 1's effect for chara, at its position and facing its way. */
-RenamonSpecial1Effect *RenamonSpecial1Effect_init(RenamonSpecial1Effect *this, Fighter *chara) {
+/* Builds the special move 1's effect for fighter, at its position and facing its way. */
+RenamonSpecial1Effect *RenamonSpecial1Effect_init(RenamonSpecial1Effect *this, Fighter *fighter) {
     Vec3 position;
     s32 facing;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &RENAMON_SPECIAL1_EFFECT_VTABLE;
-    facing = Fighter_getFacing(chara);
-    Fighter_getPosition(chara, &position);
-    this->chara = chara;
+    facing = Fighter_getFacing(fighter);
+    Fighter_getPosition(fighter, &position);
+    this->fighter = fighter;
     this->unk2C = 0;
     this->unk30 = 0x80;
     this->facing = facing;
@@ -175,7 +175,7 @@ RenamonSpecial1Effect *RenamonSpecial1Effect_init(RenamonSpecial1Effect *this, F
     this->position.vx = position.vx;
     this->position.vy = position.vy;
     this->position.vz = position.vz;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 

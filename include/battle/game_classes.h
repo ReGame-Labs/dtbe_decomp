@@ -334,8 +334,8 @@ enum Move {
     MOVE_SPECIAL3 = 12  /* (3000) */
 };
 
-/* adds delta to the side's 16.16 evolution gauge, kept between 0 and 1.0 */
-void Fighter_addGauge(Fighter *this, s32 delta);
+/* adds amount to the side's 16.16 evolution gauge, kept between 0 and 1.0 */
+void Fighter_addGauge(Fighter *this, s32 amount);
 /* the fighter's CHARACTER_* */
 s32 Fighter_getCharacter(Fighter *this);
 /* sets the position (kept in 1/256ths) from whole units */
@@ -347,13 +347,13 @@ FighterParams *Fighter_getParams(Fighter *this);
 /* whether the fighter stands on the stage part that moves with matrix */
 s32 Fighter_isStandingOn(Fighter *fighter, MATRIX *matrix);
 void Fighter_requestEvolution(Fighter *this);
-Vec3 *func_8007A650(Fighter *chara, Vec3 *out);
+Vec3 *func_8007A650(Fighter *this, Vec3 *out);
 
 /* Entity classes that keep the Fighter they were created for, named
  * after their constructors (the ones with the same layout share a struct). */
 typedef struct Unk800AFD78 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Fight *unk1C;
     /* 0x20 */ s32 unk20[4];
     /* 0x30 */ s32 unk30;
@@ -365,18 +365,18 @@ typedef struct Unk800AFD78 {
 } Unk800AFD78;
 
 /* The entity func_800B01AC constructs (virtual table D_8006B624); func_800B050C
- * constructs another class (D_8006B5FC) with the same fields. Their updates move
+ * constructs another class (D_8006B5FC) with the same fields. Their ticks move
  * 0x24 down by 0x120 for 24 (16) calls, then delete them. */
 typedef struct Unk800B01AC {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Fight *unk1C;
     /* 0x20 */ s32 unk20;
     /* 0x24 */ s32 unk24;
     /* 0x28 */ s32 unk28;
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30;
-    /* 0x34 */ s32 ticks; /* updates so far */
+    /* 0x34 */ s32 ticks; /* ticks so far */
     /* 0x38 */ s32 unk38;
     /* 0x3C */ s16 vramY; /* Fighter_getVramY of the character */
 } Unk800B01AC;
@@ -385,13 +385,13 @@ typedef Unk800B01AC Unk800B050C;
 /* Terriermon's special move 1 effect; Seraphimon's special move 2 effect has the same layout. */
 typedef struct TerriermonSpecial1Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
-    /* 0x1C */ Vec3 position; /* the character's (Fighter_getPosition), followed every update */
+    /* 0x18 */ Fighter *fighter;
+    /* 0x1C */ Vec3 position; /* the character's (Fighter_getPosition), followed every tick */
     /* 0x28 */ s32 unk28;
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30;
     /* 0x34 */ s32 unk34;
-    /* 0x38 */ s32 ticks; /* updates so far */
+    /* 0x38 */ s32 ticks; /* ticks so far */
     /* 0x3C */ s32 unk3C;
     /* 0x40 */ s16 vramY; /* Fighter_getVramY of the character */
 } TerriermonSpecial1Effect;
@@ -455,11 +455,11 @@ typedef struct Unk800D1F8C {
 } Unk800D1F8C; /* size 0x70 */
 
 /* A particle emitter (func_800C6088, ParticleBurst_init, ParticleImplosion_init): spawns count particles of
- * createParticle's kind around pos, up to spread away (count > 0: one a frame; < 0: all at once). */
+ * createParticle's kind around position, up to spread away (count > 0: one a frame; < 0: all at once). */
 typedef struct ParticleEmitter {
     /* 0x00 */ Entity entity;
     /* 0x18 */ s32 kind;   /* createParticle's */
-    /* 0x1C */ VECTOR pos;
+    /* 0x1C */ VECTOR position;
     /* 0x2C */ s32 spread; /* the random speed (burst) or shell radius (implosion) */
     /* 0x30 */ s32 size;
     /* 0x34 */ s32 count;
@@ -480,7 +480,7 @@ typedef struct SpriteAnim {
     /* 0x06 */ s16 angle;
     /* 0x08 */ s32 size;   /* half the side of the square func_8009F120 draws */
     /* 0x0C */ u32 color;
-    /* 0x10 */ VECTOR pos;
+    /* 0x10 */ VECTOR position;
     /* 0x20 */ s16 left, top, right, bottom;
 } SpriteAnim; /* size 0x28 */
 
@@ -503,8 +503,8 @@ typedef struct Particle {
     /* 0x18 */ SpriteAnim sprite;
     /* 0x40 */ s16 cell; /* the cells stepped (Particle_stepAnim) */
     /* 0x42 */ s16 unk42;
-    /* 0x44 */ Vec3 vel;
-    /* 0x50 */ s32 velPad;
+    /* 0x44 */ Vec3 velocity;
+    /* 0x50 */ s32 velocityPad;
     /* 0x54 */ s32 age;
 } Particle; /* size 0x58 */
 
@@ -608,13 +608,13 @@ typedef struct UnkPartsEntity38 {
 
 /* A projectile (Projectile_init, virtual tables PROJECTILE_VTABLE and PROJECTILE_HIT_VTABLE): an entity of kind
  * 0x30000 with an attack and a hit part (UnkPartsEntity38) that flies by its velocity until it has gone its range.
- * Nine fighter classes and the item shot derive from it (AgumonSpecial1Projectile_init's adds 0xC0). */
+ * Nine fighter classes and the item projectile derive from it (AgumonSpecial1Projectile_init's adds 0xC0). */
 typedef struct Projectile {
     /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Vec3 pos;      /* copied to the hit part every frame */
-    /* 0x8C */ s32 posPad;
-    /* 0x90 */ Vec3 vel;
-    /* 0x9C */ s32 velPad;
+    /* 0x80 */ Vec3 position;      /* copied to the hit part every frame */
+    /* 0x8C */ s32 positionPad;
+    /* 0x90 */ Vec3 velocity;
+    /* 0x9C */ s32 velocityPad;
     /* 0xA0 */ s32 hitLevel;  /* bits 24-25 of the attack word: the burst it spawns (Projectile_getBurstKind) */
     /* 0xA4 */ s32 radius;    /* copied to the hit part */
     /* 0xA8 */ s32 maxRadius;
@@ -648,15 +648,15 @@ typedef struct Unk80097FA0 {
     /* 0x8C */ Vec3 unk8C;
 } Unk80097FA0;
 
-/* The classes func_800ACA60 and func_800AC470 construct (0xB0 bytes): parts that move from pos by vel
+/* The classes func_800ACA60 and func_800AC470 construct (0xB0 bytes): parts that move from position by velocity
  * every frame and, after 12 frames, spawn two entities and delete themselves. */
 typedef struct Unk800ACA60 {
     /* 0x00 */ UnkPartsEntity38 parts;
     /* 0x80 */ Fighter *owner;
     /* 0x84 */ Fight *unk84;
-    /* 0x88 */ Vec3 pos;
+    /* 0x88 */ Vec3 position;
     /* 0x94 */ s32 unk94;
-    /* 0x98 */ Vec3 vel;
+    /* 0x98 */ Vec3 velocity;
     /* 0xA4 */ s32 unkA4;
     /* 0xA8 */ s32 frames;
     /* 0xAC */ s16 vramY; /* Fighter_getVramY of the owner */
@@ -670,17 +670,15 @@ typedef struct Unk800AD050 {
     /* 0x00 */ UnkPartsEntity38 parts;
     /* 0x80 */ Fighter *owner;
     /* 0x84 */ Fight *list; /* the part goes into one of its two lists (Fighter_getSide picks which) */
-    /* 0x88 */ Vec3 pos;
+    /* 0x88 */ Vec3 position;
     /* 0x94 */ s32 unk94;
-    /* 0x98 */ Vec3 charaPosition; /* the owner's when made (Fighter_getPosition) */
+    /* 0x98 */ Vec3 fighterPosition; /* the owner's when made (Fighter_getPosition) */
     /* 0xA4 */ s32 unkA4;
-    /* 0xA8 */ Vec3 vel;
+    /* 0xA8 */ Vec3 velocity;
     /* 0xB4 */ s32 unkB4;
-    /* 0xB8 */ s32 unkB8;
-    /* 0xBC */ s32 unkBC;
-    /* 0xC0 */ s32 unkC0;
+    /* 0xB8 */ Vec3 acceleration; /* (0, 10, 0): it falls */
     /* 0xC4 */ s32 unkC4;
-    /* 0xC8 */ s32 unkC8;
+    /* 0xC8 */ s32 frames;
     /* 0xCC */ s16 vramY; /* Fighter_getVramY of the owner */
 } Unk800AD050;
 
@@ -903,9 +901,9 @@ typedef struct Unk800A9944 {
     /* 0xD4 */ u32 unkD4; /* a sound's handle (stopSound) */
 } Unk800A9944;
 
-/* Projectile_init constructs an entity for chara at position, moving by
+/* Projectile_init constructs an entity for fighter at position, moving by
  * velocity; the other four arguments are set by the derived classes. */
-Projectile *Projectile_init(Projectile *this, Fighter *chara, Vec3 *position, Vec3 *velocity, s32 unkA8, u32 unk14,
+Projectile *Projectile_init(Projectile *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, s32 unkA8, u32 unk14,
                             s32 unkB4, s32 unk1C);
 
 /* Returns the entity at 0x14 of arg when entityGetKind gives 0x10000 for it, else NULL. */
@@ -993,30 +991,12 @@ s32 FighterState_getClip(FighterState *this);
 void *FighterStateHeld_init(FighterState *this, s32 arg);
 ListNode *listAppend(ListNode *head, ListNode *node);
 
-u32 Fight_random(Fight *this);
-
-void Fight_addSide1Shape(Fight *this, ListNode *node);
-
-void Fight_addSide0Shape(Fight *this, ListNode *node);
-
-Entity *Fight_addStageEntity(Fight *this, Entity *entity);
-
-Entity *Fight_addEntity(Fight *this, Entity *entity);
-
-EntityGroup *func_8006F0E4(Fight *this, Entity *entity);
-
-s32 func_8006F104(Fight *this);
-
-s32 Fight_isRoundOver(Fight *this);
-
-Fighter *Fight_getFighter(Fight *this, s32 side);
-
 void InputHistory_record(InputHistory *this, u32 buttons);
 void BattleSide_tickGauges(BattleSide *this);
 
-void func_8007A158(Fighter *chara, Fighter *other);
+void func_8007A158(Fighter *fighter, Fighter *other);
 
-void func_80079268(Fighter *chara);
+void func_80079268(Fighter *fighter);
 /* The battle's messages (BattleMessage_init's kind): each indexes BATTLE_MESSAGE_LAYOUTS, _TICKS and _DRAWS. */
 enum BattleMessageKind {
     BATTLE_MESSAGE_READY_FIGHT,    /* the round's call, READY? then FIGHT! */
@@ -1040,8 +1020,6 @@ Entity *BattleMessage_init(void *this, s32 kind, s32 character);
 
 Vec3 *TerrainProbe_getHitPoint(TerrainProbe *this, Vec3 *out);
 
-s32 castMapRay(Vec3 *to, Vec3 *from);
-
 void Fight_freezeFighters(Fight *this);
 
 void Fight_unfreezeFighters(Fight *this);
@@ -1052,9 +1030,7 @@ MATRIX *TerrainProbe_getMatrix(TerrainProbe *this);
 
 void Fighter_addScore(Fighter *this, s32 points);
 
-void Fighter_addHp(Fighter *this, s32 amount);
-
-void Fighter_addGauge(Fighter *this, s32 amount);
+void Fighter_addLife(Fighter *this, s32 amount);
 
 void Fighter_evolveIfReady(Fighter *this);
 
@@ -1063,8 +1039,6 @@ void Fighter_startItemEffect(Fighter *this, s32 kind, s32 timer, s32 power);
 void func_80077508(Fighter *this);
 
 s32 Fighter_isComputer(Fighter *this);
-
-void Fighter_setPosition(Fighter *chara, Vec3 *in);
 
 s32 func_800777BC(Fighter *this);
 
@@ -1096,7 +1070,7 @@ s32 Fighter_isActionClipDone(Fighter *this);
 
 s32 Fighter_isClipDone(Fighter *this);
 
-Fighter *Fight_getOpponent(Fight *this, Fighter *chara);
+Fighter *Fight_getOpponent(Fight *this, Fighter *fighter);
 s32 Fighter_isThrowable(Fighter *this);
 s32 func_80079DD8(Fighter *this);
 Fighter *func_80079E50(Fighter *this, VECTOR *arg1, s32 arg2, s32 arg3);
@@ -1106,8 +1080,6 @@ s32 func_80079E2C(Fighter *this);
 void Fighter_setAttackParts(Fighter *this, s32 parts);
 
 void func_8007A718(Fighter *this);
-
-Vec3 *func_8007A650(Fighter *this, Vec3 *out);
 
 Vec3 *Fighter_getOpponentPosition(Fighter *this, Vec3 *out);
 
@@ -1136,10 +1108,6 @@ void Fighter_takeHit(Fighter *this, u32 unk, Vec3 *velocity, s32 unk3);
 void Hit_set(Hit *this, s32 damage, s32 kind);
 
 TrackedHit *TrackedHit_init(TrackedHit *this, Fighter *owner, s32 damage, Vec3 *knockback, s32 kind);
-
-Controller *Controller_init(Controller *this, struct BattleSide *side);
-
-void Controller_destroy(Controller *this, s32 flags);
 
 CollisionSphere *shapeListFindNearest(ListNode *list, Vec3 *point, Vec3 *nearest);
 
@@ -1260,6 +1228,12 @@ typedef struct Trail {
     /* 0x030 */ TrailPoint points[4];
     /* 0x090 */ TrailSample samples[4][32];
 } Trail; /* size 0x690 */
+
+/* The virtual table of Trail (TRAIL_VTABLE): Entity's four entries, then the strips' draw. */
+typedef struct TrailVtable {
+    /* 0x00 */ EntityVtable entity;
+    /* 0x20 */ VtableEntry drawStrips; /* (Trail *, Camera *): the POLY_G4 strips */
+} TrailVtable;
 void Trail_tick(Trail *this, CollisionSphere *sum);
 
 /* The entity HitSpark_init constructs (virtual table HIT_SPARK_VTABLE): a sprite with frame 7 of PARTICLE_ANIMS, turned

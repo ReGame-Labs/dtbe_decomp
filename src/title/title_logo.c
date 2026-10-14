@@ -48,7 +48,7 @@ typedef struct TitleLogoTask {
 #else
     /* 0x0024 */ RECT clutRect;  /* 16 by 1 pixels at (0x200, 0xFD): a CLUT */
     /* 0x002C */ u16 clut[16];   /* that CLUT, read back from VRAM by TitleLogoTask_readClut */
-    /* 0x004C */ s16 unk4C;
+    /* 0x004C */ u16 clutPhase; /* the phase of the sine func_8007236C pulses the CLUT with */
     /* 0x004E */ u8 unk4E[0x50 - 0x4E];
     /* 0x0050 */ EntityGroup group;
     /* 0x0060 */ Sprite *sprites[3];
@@ -60,7 +60,8 @@ typedef struct TitleLogoTask {
     /* 0x0054 */ s32 logoBrightness; /* 0x80 up to 0xFF */
     /* 0x0058 */ s32 logoScale;      /* 0x1000 the logo's own size */
     /* 0x005C */ s32 promptPhase;    /* the angle the press Start prompt blinks with */
-    /* 0x0060 */ s32 unk60;
+    /* 0x0060 */ s32 shownCopyrightLevel; /* the copyright's level while the logo shows (80 full); Japan copies it into
+                                         * copyrightLevel each frame */
 #if VERSION_JP
     /* 0x0064 */ MATRIX view;
     /* 0x0084 */ SVECTOR ringPoints[6][33]; /* the tunnel's rings (TitleLogoTask_initTunnel) */
@@ -80,7 +81,7 @@ typedef struct TitleLogoTask {
     /* 0x10C0 */ Camera camera;
     /* 0x10FC */ s32 step; /* TITLE_LOGO_STEP_* */
     /* 0x1100 */ s32 spawnCounter; /* an entity is made each time its low bits are 0 */
-    /* 0x1104 */ s16 soundStarted;
+    /* 0x1104 */ u16 soundStarted;
     /* 0x1106 */ u8 unk1106[0x1108 - 0x1106];
     /* 0x1108 */ u32 sound; /* a sound's handle (stopSound) */
 #if VERSION_US
@@ -112,6 +113,26 @@ typedef struct TitleSparkle {
     /* 0x44 */ s32 speed;
     /* 0x48 */ s32 distance;
 } TitleSparkle;
+
+#if VERSION_JP
+/* The entity class of vtable D_800645E4 (func_80068E0C, Japan only, which nothing makes): a semi-transparent
+ * quad that waits, then drifts from a random point of an ellipse to (256, 240) in 0x78 frames, growing and
+ * fading. Positions are 20.12 fixed point. */
+typedef struct Unk800645E4 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ s32 x;
+    /* 0x1C */ s32 y;
+    /* 0x20 */ s32 vx; /* the distance to (256, 240) over 0x78 frames */
+    /* 0x24 */ s32 vy;
+    /* 0x28 */ s32 scale; /* 0x1000 for 1 */
+    /* 0x2C */ s32 frame; /* starts at -20 times its index: a delay, drawn from 0 */
+    /* 0x30 */ u8 unk30;  /* a pair from D_80064664, picked by the index; the draw scales unk31 */
+    /* 0x31 */ u8 unk31;
+    /* 0x32 */ u8 brightness; /* 0xF0, down by 1 a frame */
+    /* 0x33 */ u8 unk33;
+    /* 0x34 */ u16 unk34;
+} Unk800645E4;
+#endif
 
 /* Destroys a sprite and frees it, as `delete` does: nothing for NULL. */
 static inline void spriteDelete(Sprite *sprite) {
@@ -275,7 +296,16 @@ void TitleLogoTask_tick(TitleLogoTask *this) {
     TITLE_SPIN_PHASE += 4;
 }
 
-INCLUDE_ASM("title/nonmatchings/title_logo", TitleLogoTask_stepWait);
+/* Waits 0x100 frames, then moves to the next step; Start or circle skips ahead (TitleLogoTask_checkSkip). The
+ * copyright takes the level the steps set. */
+void TitleLogoTask_stepWait(TitleLogoTask *this) {
+    if (++this->stepFrame > 0x100) {
+        this->stepFrame = 0;
+        this->step++;
+    }
+    TitleLogoTask_checkSkip(this);
+    this->copyrightLevel = this->shownCopyrightLevel;
+}
 
 INCLUDE_ASM("title/nonmatchings/title_logo", TitleLogoTask_stepShowLogo);
 #else
@@ -283,7 +313,7 @@ INCLUDE_ASM("title/nonmatchings/title_logo", TitleLogoTask_stepShowLogo);
 void TitleLogoTask_readClut(TitleLogoTask *this) {
     this->clutRect.x = 0x200;
     this->clutRect.y = 0xFD;
-    this->unk4C = 0;
+    this->clutPhase = 0;
     this->clutRect.w = 16;
     this->clutRect.h = 1;
     StoreImage(&this->clutRect, (u_long *)this->clut);
@@ -344,7 +374,7 @@ void TitleLogoTask_stepShowLogo(TitleLogoTask *this) {
     }
     }
     frame = this->stepFrame;
-    this->unk60 = frame * 80 / 60;
+    this->shownCopyrightLevel = frame * 80 / 60;
     this->stepFrame = frame + 1;
     if (frame >= 0x78) {
         this->stepFrame = 0;
@@ -356,7 +386,44 @@ void TitleLogoTask_stepShowLogo(TitleLogoTask *this) {
 }
 #endif
 
-INCLUDE_ASM("title/nonmatchings/title_logo", TitleLogoTask_stepWaitStart);
+void TitleLogoTask_checkStart(TitleLogoTask *this);
+
+/* the frames the title waits for Start before it moves on */
+#if VERSION_JP
+#define TITLE_WAIT_START_FRAMES 2400
+#else
+#define TITLE_WAIT_START_FRAMES 1680
+#endif
+
+/* the smaller of a and b; the one it returns is evaluated twice */
+#define MIN(a, b) ((a) > (b) ? (b) : (a))
+
+/* Waits for Start (TitleLogoTask_checkStart): starts sound 0x16 once, dims the logo by 4 a frame down to 0x80,
+ * blinks the press Start prompt and raises the copyright by 2 a frame up to 80; after
+ * TITLE_WAIT_START_FRAMES moves to the next step. */
+void TitleLogoTask_stepWaitStart(TitleLogoTask *this) {
+    s32 *level;
+
+    if (!this->soundStarted) {
+        this->sound = soundControlPlaySound(&SOUND_CONTROL, 0x16, 0);
+        this->soundStarted = 1;
+    }
+    this->logoBrightness -= 4;
+    if (this->logoBrightness < 0x80) {
+        this->logoBrightness = 0x80;
+    }
+    this->promptPhase += 0x30;
+    /* MIN evaluates the increment twice: the copyright rises by 2 a frame below 80. The match depends on
+     * that, and on the level written through a pointer taken here (the store after the join goes through it). */
+    level = &this->shownCopyrightLevel;
+    *level = MIN(++*level, 80);
+    if (++this->stepFrame >= TITLE_WAIT_START_FRAMES) {
+        this->stepFrame = 0;
+        this->step++;
+    }
+    TitleLogoTask_checkStart(this);
+    this->copyrightLevel = this->shownCopyrightLevel;
+}
 
 /* Grows the logo's scale by 5 times the step's frame (up to 0x8000), takes the copyright's level down by 8
  * to 0 and brightens the logo * by 0x12 (up to 0xFF); after 0x3C frames moves to the next step. */
@@ -442,7 +509,7 @@ void TitleLogoTask_checkSkip(TitleLogoTask *this) {
         entityGroupDestroyAll(&this->group);
         this->logoBrightness = 0xFF;
         this->logoScale = 0x1000;
-        this->unk60 = 0x50;
+        this->shownCopyrightLevel = 0x50;
         this->step = TITLE_LOGO_STEP_WAIT_START;
 #if VERSION_US
         this->unk110C = 0;
@@ -493,7 +560,19 @@ void func_80068F6C(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/title_logo", func_80068FC0);
+/* Unk800645E4's tick: once its delay is over it moves, grows by 0x33 and fades by 1 a frame; it deletes
+ * itself after frame 0xF0. */
+void func_80068FC0(Unk800645E4 *this) {
+    if (this->frame > 0) {
+        this->x += this->vx;
+        this->y += this->vy;
+        this->scale += 0x33;
+        this->brightness--;
+    }
+    if (++this->frame > 0xF0) {
+        entityDelete(&this->entity);
+    }
+}
 
 INCLUDE_ASM("title/nonmatchings/title_logo", func_80069064);
 #endif

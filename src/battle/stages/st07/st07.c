@@ -121,7 +121,52 @@ void st07_clearState(StageBallShoot *this) {
     this->unkF80 = 0;
 }
 
-INCLUDE_ASM("st07/nonmatchings/st07", StageBallShoot_tick);
+/* where the stage's view looks at, and from */
+extern Vec3 ST07_VIEW_TARGET;
+extern Vec3 ST07_VIEW_EYE;
+
+/* look_at.c's lookAtSetTarget and lookAtSetEye, which the game inlined here (the second dirty store is merged
+ * into the first) */
+static inline void setTarget(LookAt *this, Vec3 *target) {
+    s32 x, y, z;
+
+    this->dirty = 1;
+    x = target->vx;
+    y = target->vy;
+    z = target->vz;
+    this->target.vx = x;
+    this->target.vy = y;
+    this->target.vz = z;
+}
+
+static inline void setEye(LookAt *this, Vec3 *eye) {
+    s32 x, y, z;
+
+    this->dirty = 1;
+    x = eye->vx;
+    y = eye->vy;
+    z = eye->vz;
+    this->eye.vx = x;
+    this->eye.vy = y;
+    this->eye.vz = z;
+}
+
+/* The stage's override of Fight_tick: BonusFight's, then, while the HUD is shown, both fighters kept at their
+ * start positions and the fixed view from ST07_VIEW_EYE at ST07_VIEW_TARGET. */
+void StageBallShoot_tick(StageBallShoot *this) {
+    LookAt *lookAt;
+
+    BonusFight_tick(&this->base);
+    if (this->base.hudHidden == 0) {
+        /* Fighter_setPosition reads the first three words of each VECTOR */
+        Fighter_setPosition(Fight_getFighter(&this->base.base, 0), (Vec3 *)&this->base.startPos[0]);
+        Fighter_setPosition(Fight_getFighter(&this->base.base, 1), (Vec3 *)&this->base.startPos[1]);
+        lookAt = Fight_getLookAt(&this->base.base);
+        setTarget(lookAt, &ST07_VIEW_TARGET);
+        setEye(lookAt, &ST07_VIEW_EYE);
+        Fight_applyView(&this->base.base);
+    }
+}
 
 /* The stage's override of Fight_tickScenery: BonusFight's, then its own three steps, and counts the frame. */
 void StageBallShoot_tickScenery(StageBallShoot *this) {
@@ -240,7 +285,7 @@ typedef struct St07Ball {
     /* 0x50 */ s32 unk50;
     /* 0x54 */ Vec3 velocity;
     /* 0x60 */ s32 unk60;
-    /* 0x64 */ Vec3 pos;
+    /* 0x64 */ Vec3 position;
     /* 0x70 */ u8 unk70[0x78 - 0x70];
     /* 0x78 */ s32 unk78;
     /* 0x7C */ s32 unk7C; /* added to 0x78 each tick */
@@ -259,19 +304,19 @@ void St07Ball_tick(St07Ball *this, s32 arg) {
     this->unk78 += this->unk7C;
     this->force.vy += 0x71C;
     func_80079C1C(&move, &this->velocity, &this->force, 0x10000);
-    /* The match depends on taking &this->pos here, after the step: the game keeps it in a saved register from
+    /* The match depends on taking &this->position here, after the step: the game keeps it in a saved register from
      * this point for the constructor, while the updates below still address the fields from this. */
-    pos = &this->pos;
+    pos = &this->position;
     this->force.vx = 0;
     this->force.vy = 0;
     this->force.vz = 0;
     this->unk50 = 0;
-    this->pos.vx += move.vx >> 8;
-    this->pos.vy += move.vy >> 8;
-    this->pos.vz += move.vz >> 8;
+    this->position.vx += move.vx >> 8;
+    this->position.vy += move.vy >> 8;
+    this->position.vz += move.vz >> 8;
     if (St07Ball_testGoal(this, arg)) {
         entityDelete(&this->entity);
-    } else if (this->pos.vy > 0) {
+    } else if (this->position.vy > 0) {
         entityAddSibling(&this->entity,
                          NEW_ENTITY(sizeof(BonusLandingMark), BonusLandingMark_init, &this->stage->base.base, pos));
         entityDelete(&this->entity);
@@ -296,7 +341,7 @@ enum {
 
 /* The ball's test against the stage's goal point goalPoints[1]: BALL_GOAL_MISS when the side has 10 hits or
  * more, when the ball goes up (velocity.vy < 0) or when it is 0x80 or more away from the point in x or in y (0x180
- * off in y); otherwise BALL_GOAL_HIT when pos.vy is less than the point's + 0x180 (the hits go up,
+ * off in y); otherwise BALL_GOAL_HIT when position.vy is less than the point's + 0x180 (the hits go up,
  * st07_spawnGoalEffect and ST07_SOUND_GOAL), or BALL_GOAL_OUT when it is not, with a BonusLandingMark left at its
  * position. */
 s32 St07Ball_testGoal(St07Ball *this, s32 arg) {
@@ -310,13 +355,14 @@ s32 St07Ball_testGoal(St07Ball *this, s32 arg) {
     }
     /* The match depends on the nested ifs (with early returns the two arms' tests cross-jump into one), on each
      * distance written out in both arms (with a local d, fold swaps the arms) and on the last test's form
-     * (written pos.vy - 0x180 - point, it computes point + 0x180 first). */
-    if ((this->pos.vx - this->stage->goalPoints[1].vx >= 0 ? this->pos.vx - this->stage->goalPoints[1].vx
-                                                        : this->stage->goalPoints[1].vx - this->pos.vx) < 0x80) {
-        y = this->pos.vy - 0x180;
+     * (written position.vy - 0x180 - point, it computes point + 0x180 first). */
+    if ((this->position.vx - this->stage->goalPoints[1].vx >= 0
+             ? this->position.vx - this->stage->goalPoints[1].vx
+             : this->stage->goalPoints[1].vx - this->position.vx) < 0x80) {
+        y = this->position.vy - 0x180;
         if ((y - this->stage->goalPoints[1].vy >= 0 ? y - this->stage->goalPoints[1].vy
                                                  : this->stage->goalPoints[1].vy - y) < 0x80) {
-            if (this->pos.vy - (this->stage->goalPoints[1].vy + 0x180) < 0) {
+            if (this->position.vy - (this->stage->goalPoints[1].vy + 0x180) < 0) {
                 this->stage->hits[this->side]++;
                 this->stage->unkF8C = 1;
                 st07_spawnGoalEffect(this, this->side, arg);
@@ -324,7 +370,7 @@ s32 St07Ball_testGoal(St07Ball *this, s32 arg) {
                 return BALL_GOAL_HIT;
             }
             entityAddSibling(&this->entity, NEW_ENTITY(sizeof(BonusLandingMark), BonusLandingMark_init,
-                                                       &this->stage->base.base, &this->pos));
+                                                       &this->stage->base.base, &this->position));
             return BALL_GOAL_OUT;
         }
     }
@@ -388,9 +434,9 @@ BonusLandingMark *BonusLandingMark_init(BonusLandingMark *this, Fight *owner, Ve
     this->corners[2].vy = this->corners[3].vy = 0x100;
     this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = 0;
     this->frame = 0;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     return this;
 }
 

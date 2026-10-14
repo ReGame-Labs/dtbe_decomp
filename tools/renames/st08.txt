@@ -23,3 +23,6 @@ func_800D3FB4 st08_readClut
 func_800D40BC st08_resetCounts
 func_800D47A4 st08_resetMeters
 func_800D47CC st08_copyMeters
+# the fixed view StageEvolution_tick sets while the race runs
+D_800D3824 ST08_VIEW_TARGET
+D_800D3834 ST08_VIEW_EYE

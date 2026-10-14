@@ -8,11 +8,11 @@
 
 void MetalGarurumon_spawnAirAttackTrails(Fighter *this);
 
-/* the parts of entity updates that the functions below call in a row */
+/* the parts of the draw that func_8009AF7C calls in a row */
 void func_8009AFC4(Entity *this, s32 arg);
 void func_8009B370(Entity *this, s32 arg);
 void func_8009B664(Entity *this, s32 arg);
-struct Unk8009AB40 *func_8009AB40(struct Unk8009AB40 *this, Fighter *chara, s32 vramY);
+struct Unk8009AB40 *func_8009AB40(struct Unk8009AB40 *this, Fighter *fighter, s32 vramY);
 extern EntityVtable D_8006A15C;
 extern VtableEntry METALGARURUMON_SPECIAL3_HITBOX_HIT_VTABLE[];
 extern EntityVtable METALGARURUMON_SPECIAL3_HITBOX_VTABLE;
@@ -28,7 +28,7 @@ typedef struct MetalGarurumon {
 } MetalGarurumon;
 
 /* constructs the entity of virtual table D_8006A25C for a character */
-Entity *func_8009B834(void *this, Fighter *chara, s32 arg2, s32 arg3);
+Entity *func_8009B834(void *this, Fighter *fighter, s32 arg2, s32 arg3);
 
 /* The entity class of virtual table D_8006A15C, which MetalGarurumon_special3 makes for its object. */
 typedef struct Unk8009D20C {
@@ -363,7 +363,8 @@ void MetalGarurumon_airSpecial2(Fighter *this, s32 frame) {
 extern VECTOR D_80069EE0;
 
 MetalGarurumonSpecial2Projectile *MetalGarurumonSpecial2Projectile_init(MetalGarurumonSpecial2Projectile *this,
-                                                                        Fighter *chara, Vec3 *position, Vec3 *velocity);
+                                                                        Fighter *fighter, Vec3 *position,
+                                                                        Vec3 *velocity);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/metalgarurumon", D_80069EE0);
 
@@ -388,7 +389,7 @@ void MetalGarurumon_spawnSpecial2Projectile(Fighter *this) {
 }
 
 Unk8009D20C *func_8009D20C(Unk8009D20C *this, void *arg);
-Entity *func_8009D4EC(void *this, Fighter *chara);
+Entity *func_8009D4EC(void *this, Fighter *fighter);
 void func_8009A920(Fighter *this);
 
 /* Special move 3: Fighter's; at frame 0 func_8009D20C's effect, 12 invulnerable frames and Fighter_addGauge(-0x8000);
@@ -430,7 +431,7 @@ extern EntityVtable D_8006A284;
 /* The entity class of virtual table D_8006A284 (constructor func_8009AB40, size 0x4C). */
 typedef struct Unk8009AB40 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ VECTOR position; /* node 5 of the character, offset D_80069D2C */
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 facing; /* Fighter_getFacing: 1 or -1 */
@@ -442,14 +443,14 @@ typedef struct Unk8009AB40 {
     /* 0x48 */ s32 vramY; /* Fighter_getVramY of the character */
 } Unk8009AB40;
 
-/* Constructs the entity of virtual table D_8006A284 for chara, at its node 5 and facing its way. */
-Unk8009AB40 *func_8009AB40(Unk8009AB40 *this, Fighter *chara, s32 vramY) {
+/* Constructs the entity of virtual table D_8006A284 for fighter, at its node 5 and facing its way. */
+Unk8009AB40 *func_8009AB40(Unk8009AB40 *this, Fighter *fighter, s32 vramY) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006A284;
-    this->chara = chara;
-    Fighter_getNodePosition(chara, &this->position, 5, &D_80069D2C);
+    this->fighter = fighter;
+    Fighter_getNodePosition(fighter, &this->position, 5, &D_80069D2C);
     this->unk2C = 4;
-    this->facing = Fighter_getFacing(chara);
+    this->facing = Fighter_getFacing(fighter);
     this->vramY = vramY;
     this->unk38 = 0;
     this->unk34 = 0x2000;
@@ -461,7 +462,7 @@ Unk8009AB40 *func_8009AB40(Unk8009AB40 *this, Fighter *chara, s32 vramY) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009ABE0);
 
-/* The update of the entities of D_8006A284: func_8009AFC4, func_8009B370, then func_8009B664. */
+/* The draw of the entities of D_8006A284: func_8009AFC4, func_8009B370, then func_8009B664. */
 void func_8009AF7C(Entity *this, s32 arg) {
     func_8009AFC4(this, arg);
     func_8009B370(this, arg);
@@ -486,9 +487,9 @@ extern VtableEntry METALGARURUMON_SPECIAL2_PROJECTILE_HIT_VTABLE[];
 /* Builds the special move 2's projectile: Projectile_init (size 0x80, 0x1000, 3), its vtables and Hit_set(0x84AC4000,
  * 7). */
 MetalGarurumonSpecial2Projectile *MetalGarurumonSpecial2Projectile_init(MetalGarurumonSpecial2Projectile *this,
-                                                                        Fighter *chara, Vec3 *position,
+                                                                        Fighter *fighter, Vec3 *position,
                                                                         Vec3 *velocity) {
-    Projectile_init(&this->base, chara, position, velocity, 0x80, 0, 0x1000, 3);
+    Projectile_init(&this->base, fighter, position, velocity, 0x80, 0, 0x1000, 3);
     this->base.parts.base.vtable = METALGARURUMON_SPECIAL2_PROJECTILE_HIT_VTABLE;
     this->base.parts.entity.vtable = &METALGARURUMON_SPECIAL2_PROJECTILE_VTABLE;
     Hit_set(&this->base.parts.base, 0x84AC4000, 7);
@@ -502,8 +503,8 @@ MetalGarurumonSpecial2Projectile *MetalGarurumonSpecial2Projectile_init(MetalGar
 void MetalGarurumonSpecial2Projectile_tick(MetalGarurumonSpecial2Projectile *this, s32 arg) {
     Entity *child;
 
-    this->base.vel.vx = (this->base.vel.vx * 17) >> 4;
-    this->base.speed = vecGetLength((VECTOR *)&this->base.vel);
+    this->base.velocity.vx = (this->base.velocity.vx * 17) >> 4;
+    this->base.speed = vecGetLength((VECTOR *)&this->base.velocity);
     this->unkC0 += (0x100 - this->unkC0) >> 2;
     this->unkC4 += 16;
     if (this->unkC4 > 0xA0) {
@@ -511,7 +512,7 @@ void MetalGarurumonSpecial2Projectile_tick(MetalGarurumonSpecial2Projectile *thi
     }
     child = allocEntityMemory(0x3C);
     if (child != NULL) {
-        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 6, &this->base.pos, 0x30, 0xC0, 1, 0x808080);
+        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 6, &this->base.position, 0x30, 0xC0, 1, 0x808080);
     }
     entityAddSibling(&this->base.parts.entity, child);
     Projectile_tick(&this->base, arg);
@@ -521,7 +522,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", MetalGarurumonSpecial2P
 
 INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", MetalGarurumonSpecial2Projectile_draw);
 
-/* A point of MetalGarurumonSpecial3Hitbox's trail: where it was, and an age that grows by 3 an update. */
+/* A point of MetalGarurumonSpecial3Hitbox's trail: where it was, and an age that grows by 3 a tick. */
 typedef struct MetalGarurumonSpecial3HitboxTrail {
     /* 0x0 */ Vec3 position;
     /* 0xC */ s32 age;
@@ -535,7 +536,7 @@ typedef struct MetalGarurumonSpecial3Hitbox {
     /* 0x90 */ u8 unk90[0xB4 - 0x90];
     /* 0xB4 */ s32 unkB4;
     /* 0xB8 */ u8 unkB8[0xC0 - 0xB8];
-    /* 0xC0 */ s32 ticks; /* updates so far */
+    /* 0xC0 */ s32 ticks; /* ticks so far */
     /* 0xC4 */ u8 unkC4[0xCC - 0xC4];
     /* 0xCC */ s32 trailIndex; /* the newest point of trail */
     /* 0xD0 */ s32 unkD0;
@@ -615,11 +616,11 @@ extern EntityVtable D_8006A184;
 extern VtableEntry D_8006A1AC[];
 
 /* Constructs the class of virtual table D_8006A184 (and D_8006A1AC for its base at 0x18) on
- * MetalGarurumonSpecial2Projectile_init's for chara at position, moving by velocity, with 0x6B08000 and 7 in its base's
- * 0x8 and 0xC. */
-MetalGarurumonSpecial2Projectile *func_8009CE8C(MetalGarurumonSpecial2Projectile *this, Fighter *chara,
+ * MetalGarurumonSpecial2Projectile_init's for fighter at position, moving by velocity, with 0x6B08000 and 7 in its
+ * base's 0x8 and 0xC. */
+MetalGarurumonSpecial2Projectile *func_8009CE8C(MetalGarurumonSpecial2Projectile *this, Fighter *fighter,
                                                 Vec3 *position, Vec3 *velocity) {
-    MetalGarurumonSpecial2Projectile_init(this, chara, position, velocity);
+    MetalGarurumonSpecial2Projectile_init(this, fighter, position, velocity);
     this->base.parts.base.vtable = D_8006A1AC;
     this->base.parts.entity.vtable = &D_8006A184;
     Hit_set(&this->base.parts.base, 0x6B08000, 7);
@@ -640,7 +641,7 @@ Unk8009D20C *func_8009D20C(Unk8009D20C *this, void *arg) {
     return this;
 }
 
-/* The update of func_8009D20C's entity: 0x1C rises with 0x20 (by 8) for 16 updates, holds, and from 45 on
+/* The tick of func_8009D20C's entity: 0x1C rises with 0x20 (by 8) for 16 ticks, holds, and from 45 on
  * (at once when Fighter_isAttackIdle holds for the character) falls by 16 until the entity deletes itself. */
 void func_8009D25C(Unk8009D20C *this) {
     s32 time;
@@ -670,7 +671,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009D4EC);
 /* The entity class of virtual table D_8006A134 (constructor func_8009D4EC, size 0x14C). */
 typedef struct Unk8009D4EC {
     /* 0x000 */ Entity entity;
-    /* 0x018 */ Fighter *chara;
+    /* 0x018 */ Fighter *fighter;
     /* 0x01C */ u8 unk1C[0x12C - 0x1C]; /* 17 points of 0x10 bytes, from COS_SIN_TABLE */
     /* 0x12C */ Vec3 position; /* the character's (Fighter_getPosition) */
     /* 0x138 */ u8 unk138[0x13C - 0x138];
@@ -680,14 +681,14 @@ typedef struct Unk8009D4EC {
     /* 0x148 */ s32 vramY;  /* Fighter_getVramY of the character */
 } Unk8009D4EC;
 
-/* The update of func_8009D4EC's entity: follows the character's position until Fighter_isAttackIdle holds or bit 2
+/* The tick of func_8009D4EC's entity: follows the character's position until Fighter_isAttackIdle holds or bit 2
  * of its flags (Fighter_isOnGround) clears, and deletes itself once 0x13C, growing by 0x15, reaches 0x200. */
 void func_8009D5D4(Unk8009D4EC *this) {
     if (this->unk140 == 0) {
-        if (Fighter_isAttackIdle(this->chara) || !Fighter_isOnGround(this->chara)) {
+        if (Fighter_isAttackIdle(this->fighter) || !Fighter_isOnGround(this->fighter)) {
             this->unk140++;
         } else {
-            Fighter_getPosition(this->chara, &this->position);
+            Fighter_getPosition(this->fighter, &this->position);
         }
     }
     this->unk13C += 0x15;

@@ -16,7 +16,7 @@ Entity *OmegamonSpecial2Hitbox_init(Entity *this, Fighter *owner, Fight *fight, 
 struct Unk800A0054 *func_800A0054(struct Unk800A0054 *this, Fighter *owner, Fight *fight, Vec3 *pos,
                                   Vec3 *vel, s32 arg5);
 struct Unk800A0830 *func_800A0830(struct Unk800A0830 *this, Fighter *owner, Fight *fight, Vec3 *pos,
-                                  Vec3 *vel, s32 arg5);
+                                  Vec3 *vel, s32 index);
 Unk8009F248 *func_8009F248(Unk8009F248 *this, Fighter *owner);
 Unk8009F248 *func_8009F4D4(Unk8009F248 *this, Fighter *owner);
 extern VECTOR D_8006A43C;
@@ -68,8 +68,7 @@ INCLUDE_RODATA("game/nonmatchings/fighters/omegamon", D_8006A3D4);
 
 INCLUDE_ASM("game/nonmatchings/fighters/omegamon", Omegamon_attack3);
 
-Fighter *Fighter_getOpponentInReach(Fighter *this, s32 index);
-void Fighter_attachTo(Fighter *this, Fighter *chara, s32 index);
+void Fighter_attachTo(Fighter *this, Fighter *fighter, s32 index);
 
 /* Throw: Fighter's; at frame 0 the opponent is held (Fighter_hold(8)); at frame 7, unless no opponent is in reach (then
  * Fighter_stopActionClip), it is held (14), takes a clip by its character, is attached to node 13 and its model moved
@@ -372,23 +371,23 @@ INCLUDE_ASM("game/nonmatchings/fighters/omegamon", OmegamonSpecial1Projectile_dr
 
 Entity *func_8009F014(Entity *this, s32 arg1, VECTOR *pos, VECTOR *vel);
 
-/* Spawns func_8009F014's entity (0x58 bytes) at the shot's position as a sibling, moving back at a 16th of
- * the shot's x speed and up by 13 to 20 (a random of the owner's Fight). */
+/* Spawns func_8009F014's entity (0x58 bytes) at the projectile's position as a sibling, moving back at a 16th
+ * of its x speed and up by 13 to 20 (a random of the owner's Fight). */
 void func_8009EF64(OmegamonSpecial1Projectile *this) {
     VECTOR velocity;
     Entity *child;
 
     /* the game copies all four words (0x9C too) before it overwrites three of them */
-    velocity.vx = this->base.vel.vx;
-    velocity.vy = this->base.vel.vy;
-    velocity.vz = this->base.vel.vz;
-    velocity.pad = this->base.velPad;
+    velocity.vx = this->base.velocity.vx;
+    velocity.vy = this->base.velocity.vy;
+    velocity.vz = this->base.velocity.vz;
+    velocity.pad = this->base.velocityPad;
     velocity.vy = (mersenneTwisterGenerate(&this->fight->random) & 7) - 20;
     velocity.vz = 0;
-    velocity.vx = -this->base.vel.vx >> 4;
+    velocity.vx = -this->base.velocity.vx >> 4;
     child = allocEntityMemory(0x58);
     if (child != NULL) {
-        func_8009F014(entityOperatorNewAt(0x58, child), (s32)this->owner, (VECTOR *)&this->base.pos, &velocity);
+        func_8009F014(entityOperatorNewAt(0x58, child), (s32)this->owner, (VECTOR *)&this->base.position, &velocity);
     }
     entityAddSibling(&this->base.parts.entity, child);
 }
@@ -400,7 +399,7 @@ Entity *func_8009F014(Entity *this, s32 arg1, VECTOR *pos, VECTOR *vel) {
     return this;
 }
 
-/* The update of D_8006A554's entity: eleven times moves it by its velocity and fades its blue (200 - 16 a step, red
+/* The tick of D_8006A554's entity: eleven times moves it by its velocity and fades its blue (200 - 16 a step, red
  * and green a quarter of it), then deletes it.
  * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads unk54. */
 void func_8009F064(Particle *this, s32 arg) {
@@ -409,17 +408,17 @@ void func_8009F064(Particle *this, s32 arg) {
     } else {
         /* The match depends on reading the three words before storing any, as vecAddInPlace does, and on counting
          * the step last. */
-        s32 x = this->sprite.pos.vx;
-        s32 y = this->sprite.pos.vy;
-        s32 z = this->sprite.pos.vz;
+        s32 x = this->sprite.position.vx;
+        s32 y = this->sprite.position.vy;
+        s32 z = this->sprite.position.vz;
         s32 blue;
 
-        x += this->vel.vx;
-        y += this->vel.vy;
-        z += this->vel.vz;
-        this->sprite.pos.vx = x;
-        this->sprite.pos.vy = y;
-        this->sprite.pos.vz = z;
+        x += this->velocity.vx;
+        y += this->velocity.vy;
+        z += this->velocity.vz;
+        this->sprite.position.vx = x;
+        this->sprite.position.vy = y;
+        this->sprite.position.vz = z;
         blue = 200 - this->age * 16;
         this->sprite.color = (blue >> 2) | ((blue >> 2) << 8) | (blue << 16);
         this->age++;
@@ -448,7 +447,7 @@ Unk8009F248 *func_8009F248(Unk8009F248 *this, Fighter *owner) {
     return this;
 }
 
-/* The update of D_8006A52C's entity: five times fades its grey by 32 from 150, then deletes it.
+/* The tick of D_8006A52C's entity: five times fades its grey by 32 from 150, then deletes it.
  * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads unk54. */
 void func_8009F30C(Unk8009F248 *this, s32 arg) {
     if (this->base.age >= 5) {
@@ -476,7 +475,7 @@ void func_8009F394(Unk8009F248 *this, Camera *camera) {
     side = Fighter_getFacing(this->owner);
     /* The match depends on size read before the pos copy. */
     size = this->base.sprite.size;
-    pos = this->base.sprite.pos;
+    pos = this->base.sprite.position;
     corners[0].vx = corners[1].vx = pos.vx - size * side;
     corners[2].vx = corners[3].vx = pos.vx + size * side;
     corners[0].vy = corners[2].vy = pos.vy - size;
@@ -507,7 +506,7 @@ Unk8009F248 *func_8009F4D4(Unk8009F248 *this, Fighter *owner) {
     return this;
 }
 
-/* The update of D_8006A504's entity: five times fades its grey by 32 from 180 and grows it by 25, then deletes
+/* The tick of D_8006A504's entity: five times fades its grey by 32 from 180 and grows it by 25, then deletes
  * it.
  * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads unk54.
  * It also depends on growing the size before counting the step. */
@@ -538,7 +537,7 @@ void func_8009F62C(Unk8009F248 *this, Camera *camera) {
     side = Fighter_getFacing(this->owner);
     /* The match depends on size read before the pos copy. */
     size = this->base.sprite.size;
-    pos = this->base.sprite.pos;
+    pos = this->base.sprite.position;
     corners[0].vx = corners[1].vx = pos.vx - size * side;
     corners[2].vx = corners[3].vx = pos.vx + size * side;
     corners[0].vy = corners[2].vy = pos.vy - size;
@@ -580,17 +579,17 @@ typedef struct Unk800A0054 {
     /* 0x00 */ UnkPartsEntity3C parts;
     /* 0x84 */ Fighter *owner;
     /* 0x88 */ Fight *fight; /* the part goes into one of its two lists (Fighter_getSide picks which) */
-    /* 0x8C */ Vec3 pos;
+    /* 0x8C */ Vec3 position;
     /* 0x98 */ s32 unk98;
     /* 0x9C */ Vec3 start;
     /* 0xA8 */ s32 unkA8;
-    /* 0xAC */ Vec3 vel;
+    /* 0xAC */ Vec3 velocity;
     /* 0xB8 */ s32 unkB8;
     /* 0xBC */ s32 unkBC;
     /* 0xC0 */ s32 unkC0; /* random, 0 to 3 */
     /* 0xC4 */ s32 unkC4; /* random, 0 to 0x7F */
     /* 0xC8 */ s32 unkC8;
-    /* 0xCC */ s32 unkCC;
+    /* 0xCC */ s32 rise; /* how far the tick has moved position.vy up */
     /* 0xD0 */ s32 unkD0;
     /* 0xD4 */ s16 vramY; /* the owner's 0x440 (Fighter_getVramY) */
 } Unk800A0054;
@@ -621,9 +620,9 @@ Unk800A0054 *func_800A0054(Unk800A0054 *this, Fighter *owner, Fight *fight, Vec3
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     sx = pos->vx;
     sy = pos->vy;
     sz = pos->vz;
@@ -633,14 +632,14 @@ Unk800A0054 *func_800A0054(Unk800A0054 *this, Fighter *owner, Fight *fight, Vec3
     vx = vel->vx;
     vy = vel->vy;
     vz = vel->vz;
-    this->vel.vx = vx;
-    this->vel.vy = vy;
-    this->vel.vz = vz;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
     this->unkBC = arg5;
     this->unkC0 = mersenneTwisterGenerate(&fight->random) & 3;
     this->unkC4 = mersenneTwisterGenerate(&fight->random) & 0x7F;
     this->unkC8 = 300;
-    this->unkCC = 0;
+    this->rise = 0;
     this->unkD0 = 0;
     this->vramY = Fighter_getVramY(owner);
     if (Fighter_getSide(owner) == 0) {
@@ -676,7 +675,30 @@ INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A04BC);
 
 INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A0680);
 
-INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A0774);
+/* Hands parent a new ParticleSpray (0x48 bytes) of one pink particle (kind 6, size 0x60) at position, moving by
+ * velocity. The match depends on this being an inline: its copy of position (the frame's first local) stays in a
+ * saved register across the allocation. */
+static inline void spawnOneParticle(Entity *parent, Vec3 *position, Vec3 *velocity) {
+    Entity *child = allocEntityMemory(0x48);
+
+    if (child != NULL) {
+        ParticleSpray_init(entityOperatorNewAt(0x48, child), 6, position, velocity, 0x60, 1, 0xFFE0E0);
+    }
+    entityAddSibling(parent, child);
+}
+
+/* Sprays one particle where it started rising (position.vy + rise), drifting up by 20. */
+void func_800A0774(Unk800A0054 *this) {
+    Vec3 position;
+    Vec3 velocity;
+
+    velocity.vx = 0;
+    velocity.vy = -20;
+    velocity.vz = 0;
+    position = this->position;
+    position.vy += this->rise;
+    spawnOneParticle(&this->parts.entity, &position, &velocity);
+}
 
 /* The class func_800A0830 constructs (0xD4 bytes, virtual table D_8006A48C): parts for an owner at pos,
  * moving at vel, with the owner's facing. */
@@ -684,13 +706,12 @@ typedef struct Unk800A0830 {
     /* 0x00 */ UnkPartsEntity3C parts;
     /* 0x84 */ Fighter *owner;
     /* 0x88 */ Fight *fight; /* the part goes into one of its two lists (Fighter_getSide picks which) */
-    /* 0x8C */ Vec3 pos;
-    /* 0x98 */ s32 unk98;
+    /* 0x8C */ VECTOR position; /* the next link copies its four words */
     /* 0x9C */ Vec3 start;
     /* 0xA8 */ s32 unkA8;
-    /* 0xAC */ Vec3 vel;
+    /* 0xAC */ Vec3 velocity;
     /* 0xB8 */ s32 unkB8;
-    /* 0xBC */ s32 unkBC;
+    /* 0xBC */ s32 index; /* its place in the chain (func_800A0D94); only link 0 can hit */
     /* 0xC0 */ s32 facing; /* the owner's (Fighter_getFacing) */
     /* 0xC4 */ s32 unkC4;
     /* 0xC8 */ s32 unkC8;
@@ -698,10 +719,9 @@ typedef struct Unk800A0830 {
     /* 0xD0 */ s16 vramY; /* the owner's 0x440 (Fighter_getVramY) */
 } Unk800A0830;
 
-/* Constructs Unk800A0830 for owner at pos, moving at vel, with arg5 (non-zero also sets bit 0 of the part's
- * flags), and adds its part to one of fight's two lists (Fighter_getSide picks which). */
+/* Constructs link index of the Unk800A0830 chain for owner at pos, moving at vel (links past 0 disable the part), and adds its part to one of fight's two lists (Fighter_getSide picks which). */
 Unk800A0830 *func_800A0830(Unk800A0830 *this, Fighter *owner, Fight *fight, Vec3 *pos, Vec3 *vel,
-                           s32 arg5) {
+                           s32 index) {
     VECTOR v;
     s32 x, y, z;
     s32 sx, sy, sz;
@@ -716,7 +736,7 @@ Unk800A0830 *func_800A0830(Unk800A0830 *this, Fighter *owner, Fight *fight, Vec3
     v.vz = 0;
     Hit_setKnockback(&this->parts.unk18.base, &v);
     this->parts.part.entity = &this->parts.entity;
-    if (arg5 != 0) {
+    if (index != 0) {
         this->parts.part.flags |= COLLISION_SHAPE_DISABLED;
     }
     this->owner = owner;
@@ -726,9 +746,9 @@ Unk800A0830 *func_800A0830(Unk800A0830 *this, Fighter *owner, Fight *fight, Vec3
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     sx = pos->vx;
     sy = pos->vy;
     sz = pos->vz;
@@ -738,10 +758,10 @@ Unk800A0830 *func_800A0830(Unk800A0830 *this, Fighter *owner, Fight *fight, Vec3
     vx = vel->vx;
     vy = vel->vy;
     vz = vel->vz;
-    this->vel.vx = vx;
-    this->vel.vy = vy;
-    this->vel.vz = vz;
-    this->unkBC = arg5;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
+    this->index = index;
     this->facing = Fighter_getFacing(owner);
     this->vramY = Fighter_getVramY(owner);
     this->unkC4 = 0;
@@ -778,7 +798,28 @@ INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A0A84);
 
 INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A0BD0);
 
-INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A0D94);
+/* Hands parent the next link of its chain (func_800A0830) at position, moving by velocity. The match depends on this
+ * being an inline: its copies of both pointers stay in saved registers across the allocation (spawnOneParticle). */
+static inline void spawnNextLink(Unk800A0830 *parent, VECTOR *position, Vec3 *velocity) {
+    Entity *child = allocEntityMemory(0xD4);
+
+    if (child != NULL) {
+        func_800A0830(entityOperatorNewAt(0xD4, child), parent->owner, parent->fight, (Vec3 *)position, velocity,
+                      parent->index + 1);
+    }
+    entityAddSibling(&parent->parts.entity, child);
+}
+
+/* Spawns the next link of the chain one velocity step ahead (func_800A0A84 calls it for links below 10). */
+void func_800A0D94(Unk800A0830 *this) {
+    VECTOR position;
+
+    position = this->position;
+    position.vx += this->velocity.vx;
+    position.vy += this->velocity.vy;
+    position.vz += this->velocity.vz;
+    spawnNextLink(this, &position, &this->velocity);
+}
 
 /* The projectile's destructor, a copy of Projectile's (game has 11 identical ones). */
 void OmegamonSpecial1Projectile_destroy(UnkPartsEntity38 *this, s32 flags) {

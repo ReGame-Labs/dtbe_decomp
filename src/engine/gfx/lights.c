@@ -103,6 +103,8 @@ INCLUDE_RODATA("main/nonmatchings/gfx/lights", AXIS_Y);
 
 INCLUDE_RODATA("main/nonmatchings/gfx/lights", AXIS_Z);
 
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", SQUARE_CORNERS);
+
 /* Points light 1 in direction (see lightsSetDirection0). */
 void lightsSetDirection1(Lights *this, VECTOR *direction) {
     VECTOR unit;

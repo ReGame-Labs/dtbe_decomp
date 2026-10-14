@@ -11,9 +11,10 @@
 #include "engine/math/random.h"
 #include "engine/math/sin_cos.h"
 #include "engine/math/vector.h"
+#include "engine/sound/sound_control.h"
 #include "engine/task/entity.h"
 
-/* An entity the stage keeps by handle, with the level it last gave it (0 to 0xFF, func_800D43A4). */
+/* An entity the stage keeps by handle, with the level it last gave it (0 to 0xFF, st06_applyLevel). */
 typedef struct St06LevelEntry {
     /* 0x0 */ u32 handle;
     /* 0x4 */ s32 level;
@@ -24,14 +25,15 @@ typedef struct St06LevelEntry {
 typedef struct StageBoss {
     /* 0x000 */ Fight base;
     /* 0xD38 */ St06LevelEntry levels[4]; /* st06_setLevel */
-    /* 0xD58 */ u8 unkD58[0xD74 - 0xD58];
+    /* 0xD58 */ MeshSceneLink collisionLink; /* lines of the arena itself, in COLLISION_LINKS (StageBoss_init) */
+    /* 0xD70 */ s32 unkD70;
     /* 0xD74 */ s32 scrollX; /* the x its meshes are put at (st06_getScrollX) */
     /* 0xD78 */ s32 unkD78;
     /* 0xD7C */ u32 freezeFrame; /* set: copy the shown buffer once, a frozen frame (StageBoss_drawWorld) */
-    /* 0xD80 */ s32 unkD80;
+    /* 0xD80 */ u32 sound; /* a sound's handle (StageBoss_startRound plays it), stopped by the destructor */
 } StageBoss;
 
-void func_800D43A4(St06LevelEntry *entry);
+void st06_applyLevel(St06LevelEntry *entry);
 
 /* The entity class of virtual table D_800D3A4C (0x28 bytes). */
 typedef struct Unk800D5164 {
@@ -91,7 +93,23 @@ void func_800D46C4(Unk800D4468 *this, s32 arg);
 
 INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_init);
 
-INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_destroy);
+extern VtableEntry STAGE_BOSS_VTABLE[];
+
+/* The stage's destructor: stops its sound, unlinks its collision link from COLLISION_LINKS, then Fight's
+ * destructor. */
+void StageBoss_destroy(StageBoss *this, s32 flags) {
+    ListNode *node;
+
+    this->base.vtable = STAGE_BOSS_VTABLE;
+    stopSound(this->sound);
+    /* listRemove(&this->collisionLink.link), in the access order of StageShrine_destroy's */
+    node = &this->collisionLink.link;
+    this->collisionLink.link.next->prev = this->collisionLink.link.prev;
+    node->prev->next = this->collisionLink.link.next;
+    this->collisionLink.link.next = node;
+    this->collisionLink.link.prev = node;
+    Fight_destroy(&this->base, flags);
+}
 
 INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_startRound);
 
@@ -114,7 +132,41 @@ void StageBoss_drawWorld(StageBoss *this) {
     }
 }
 
-INCLUDE_ASM("st06/nonmatchings/st06", func_800D43A4);
+/* The virtual table of the entities in StageBoss.levels: an entity's, then the slot that takes the level. */
+typedef struct St06LevelVtable {
+    /* 0x00 */ EntityVtable entity;
+    /* 0x20 */ VtableEntry setLevel; /* (Entity *, s32 level) */
+} St06LevelVtable;
+
+/* Clamps *level to 0..0xFF. The match depends on the pointer (the caller reads the level again) and on the
+ * value read again inside the first branch. */
+static inline void clampLevel(s32 *level) {
+    s32 value;
+
+    if (*level >= 0) {
+        value = *level;
+        if (value > 0xFF) {
+            value = 0xFF;
+        }
+    } else {
+        value = 0;
+    }
+    *level = value;
+}
+
+/* Passes the entry's level, clamped to 0..0xFF, to its entity, or forgets the handle once the entity is gone. */
+void st06_applyLevel(St06LevelEntry *entry) {
+    Entity *entity = getEntityByHandle(entry->handle);
+    St06LevelVtable *vtable;
+
+    if (entity != NULL) {
+        clampLevel(&entry->level);
+        vtable = (St06LevelVtable *)entity->vtable;
+        vtable->setLevel.func((u8 *)entity + vtable->setLevel.delta, entry->level);
+    } else {
+        entry->handle = 0;
+    }
+}
 
 /* Sets the level of the stage's entity number index (a negative level keeps the last one) and passes it on. */
 void st06_setLevel(StageBoss *this, s32 index, s32 level) {
@@ -123,7 +175,7 @@ void st06_setLevel(StageBoss *this, s32 index, s32 level) {
     if (level >= 0) {
         entry->level = level;
     }
-    func_800D43A4(entry);
+    st06_applyLevel(entry);
 }
 
 extern EntityVtable D_800D3B2C;

@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "engine/cd/file_load.h"
+#include "engine/debug/system_menu.h"
 #include "engine/game/game_state.h"
 #include "engine/gfx/camera.h"
 #include "engine/gfx/display.h"
@@ -99,7 +100,7 @@ typedef struct CharacterSelectTask {
     /* 0x0B8 */ s32 unkB8;
     /* 0x0BC */ s32 arenaFrame; /* counted every frame of the pick and the confirmation */
     /* 0x0C0 */ CharacterSelectSide sides[FIGHTER_COUNT];
-    /* 0x130 */ s32 selectFlags; /* what is being picked: SELECT_* */
+    /* 0x130 */ u32 selectFlags; /* what is being picked: SELECT_* */
     /* 0x134 */ u32 voices[FIGHTER_COUNT]; /* by side: the tamer's voice line (loadTamerVoice) */
     /* 0x13C */ s32 unk13C;
     /* 0x140 */ u8 unk140[0x154 - 0x140];
@@ -132,7 +133,29 @@ INCLUDE_RODATA("title/nonmatchings/chara_select", CHARACTER_SELECT_CAMERA_TARGET
 INCLUDE_RODATA("title/nonmatchings/chara_select", CHARACTER_SELECT_CAMERA_EYE);
 INCLUDE_RODATA("title/nonmatchings/chara_select", PATH_CHARASEL_TIM);
 
-INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_destroy);
+extern TickTaskVtable CHARACTER_SELECT_TASK_VTABLE;
+
+/* The character select's destructor: turns dithering back on, deletes the host, leaves the scene's result
+ * for the sequencer (-1 when a side backed out, else CHARACTER_SELECT_CHALLENGE when a player joined in, 0
+ * otherwise), unloads the sounds and destroys the entities, the camera and the Task. */
+void CharacterSelectTask_destroy(CharacterSelectTask *this, s32 flags) {
+    s32 result;
+
+    this->task.vtable = &CHARACTER_SELECT_TASK_VTABLE.task;
+    displayEnable(CURRENT_DISPLAY, DISPLAY_DITHER);
+    entityDelete(&this->chara->entity);
+    /* The match depends on the result set, then overridden: a ternary branches around the second load. */
+    result = this->challengerJoined != 0;
+    if (this->backedOut) {
+        result = -1;
+    }
+    SYSTEM_CONTEXT.sceneResult = result;
+    soundControlUnloadVabs(&SOUND_CONTROL);
+    soundControlUnloadSeps(&SOUND_CONTROL);
+    entityGroupDestroy(&this->entities, DESTROY_BASES);
+    cameraDestroy(&this->camera, DESTROY_BASES);
+    taskDestroy(&this->task, flags);
+}
 
 INCLUDE_RODATA("title/nonmatchings/chara_select", CELL_NEIGHBORS);
 INCLUDE_RODATA("title/nonmatchings/chara_select", CELL_PAIRS);
@@ -161,7 +184,17 @@ INCLUDE_ASM("title/nonmatchings/chara_select", uploadSidePictures);
 
 INCLUDE_ASM("title/nonmatchings/chara_select", uploadRunPictures);
 
-INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_isTamerPictureWide);
+/* Whether side's tamer picture is the 64-pixel-wide one (WIDE_TAMER_PICTURE_PLACES): tamer 0 of Holydramon and
+ * Tailmon, tamer 1 of Stingmon and Wormmon. */
+s32 CharacterSelectTask_isTamerPictureWide(CharacterSelectTask *this, s32 side) {
+    if (((this->characters[side] == CHARACTER_HOLYDRAMON || this->characters[side] == CHARACTER_TAILMON) &&
+         this->tamers[side] == 0) ||
+        (this->characters[side] == CHARACTER_STINGMON && this->tamers[side] == 1) ||
+        (this->characters[side] == CHARACTER_WORMMON && this->tamers[side] == 1)) {
+        return 1;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_loadTamerVoice);
 
@@ -324,7 +357,32 @@ void CharacterSelectTask_tickHostVoice(CharacterSelectTask *this) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_isBackedOut);
+/* Whether a side backed out: cancel pressed on a side being picked that has not picked yet (either side
+ * when both are being picked). Sets backedOut and returns it. */
+s32 CharacterSelectTask_isBackedOut(CharacterSelectTask *this) {
+    PadManager *pads = PAD_MANAGER_INSTANCE;
+    s32 cancel0 = padManagerGetPressed(pads, 0) & PAD_CANCEL;
+    s32 cancel1 = padManagerGetPressed(pads, 1) & PAD_CANCEL;
+
+    switch (this->selectFlags & (SELECT_SIDE_0 | SELECT_SIDE_1)) {
+    case SELECT_SIDE_0:
+        if (!this->sides[0].picked && cancel0) {
+            this->backedOut = 1;
+        }
+        break;
+    case SELECT_SIDE_1:
+        if (!this->sides[1].picked && cancel1) {
+            this->backedOut = 1;
+        }
+        break;
+    case SELECT_SIDE_0 | SELECT_SIDE_1:
+        if (!this->sides[0].picked && !this->sides[1].picked && (cancel0 | cancel1)) {
+            this->backedOut = 1;
+        }
+        break;
+    }
+    return this->backedOut;
+}
 
 INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_checkChallenger);
 
@@ -592,7 +650,24 @@ void drawGaugeFromLeft(u_long *ot, DVECTOR pos, s32 level) {
 
 INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_drawGrid);
 
-INCLUDE_ASM("title/nonmatchings/chara_select", drawSelectBackground);
+/* Draws the select screen's background: five 64 by 240 strips across the screen, strip i from the 4-bit
+ * texels at VRAM x 704 + i * 16 (u i * 64 of its page), clut 0x3C32, in neutral gray. task is unused. */
+void drawSelectBackground(CharacterSelectTask *task, u_long *ot) {
+    s32 i;
+
+    for (i = 0; i < 5; i++) {
+        DR_TPAGE *tpage = allocDrTpage(getTPage(0, 0, 704 + i * 16, 0));
+        SPRT *sprt = allocSprt();
+
+        setRGB0(sprt, 0x80, 0x80, 0x80);
+        setXY0(sprt, i * 64, 0);
+        setUV0(sprt, i * 64, 0);
+        sprt->clut = 0x3C32;
+        setWH(sprt, 64, 240);
+        AddPrim(ot, sprt);
+        AddPrim(ot, tpage);
+    }
+}
 
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006EF94);
 

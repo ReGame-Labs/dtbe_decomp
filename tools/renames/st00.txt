@@ -55,3 +55,12 @@ func_800D8930 St00SignalQuads_init
 func_800D8A58 St00SignalQuads_tick
 func_800D8AB4 St00SignalQuads_draw
 func_800D8A04 St00SignalQuads_destroy
+# St00GlowQuad: a screen-wide translucent tile and a 1024-wide quad whose brightness follows the sine of the
+# stage's angle while it turns (its tick), dark otherwise
+Unk800D819C St00GlowQuad
+D_800D39EC ST00_GLOW_QUAD_VTABLE
+func_800D819C St00GlowQuad_init
+func_800D827C St00GlowQuad_tick
+func_800D82D4 St00GlowQuad_draw
+func_800D8228 St00GlowQuad_destroy
+func_800D7064 st00_resetFallingObject

@@ -11,7 +11,7 @@
 #include "engine/text/font.h"
 
 extern EntityVtable D_8006E014;
-extern EntityVtable D_8006E03C;
+extern EntityVtable CONFETTI_VTABLE;
 extern EntityVtable D_8006E064;
 extern EntityVtable D_8006E08C;
 extern EntityVtable D_8006E0B4;
@@ -34,6 +34,20 @@ typedef struct Unk800D1C50 {
     /* 0x18 */ Fight *unk18;
     /* 0x1C */ s16 unk1C;
 } Unk800D1C50;
+
+/* The confetti at the winner's position (Confetti_init, virtual table CONFETTI_VTABLE, 0x12E0 bytes): 128 spinning
+ * triangles of 4 colors that fall from 0x400 above the ground and start again from the top at the winner's x. */
+typedef struct Confetti {
+    /* 0x0000 */ Entity entity;
+    /* 0x0018 */ Fight *scene;
+    /* 0x001C */ Vec3 origin;          /* the winner's position */
+    /* 0x0028 */ u8 unk28[0x30 - 0x28];
+    /* 0x0030 */ s32 angles[128];      /* random, turned by 0x40 a frame */
+    /* 0x0230 */ u8 colors[128];       /* 0-3, random */
+    /* 0x02B0 */ VECTOR positions[128];
+    /* 0x0AB0 */ VECTOR velocities[128];
+    /* 0x12B0 */ SVECTOR shape[6];     /* the triangle's corners */
+} Confetti; /* size 0x12E0 */
 
 /* Constructs the bonus fight on Fight. */
 BonusFight *BonusFight_init(BonusFight *this) {
@@ -502,22 +516,48 @@ void BonusTimer_destroy(Entity *this, s32 flags) {
 
 INCLUDE_ASM("game/nonmatchings/game_0k", BonusTimer_draw);
 
-INCLUDE_ASM("game/nonmatchings/game_0k", func_800D29C8);
+INCLUDE_ASM("game/nonmatchings/game_0k", Confetti_init);
 
-/* The destructor of the entity class of vtable D_8006E03C, which func_800D29C8 installs. */
-void func_800D2B94(Entity *this, s32 flags) {
-    this->vtable = &D_8006E03C;
+/* Destroys the confetti. */
+void Confetti_destroy(Entity *this, s32 flags) {
+    this->vtable = &CONFETTI_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0k", func_800D2BE8);
+/* The confetti's tick: every piece falls by its velocity and starts again at the top (0x400 above the ground, at
+ * the winner's x) once it passes the ground, and turns by 0x40. */
+void Confetti_tick(Confetti *this) {
+    s32 i;
+
+    for (i = 0; i < 128; i++) {
+        VECTOR *position = &this->positions[i];
+        /* The match depends on the position read into locals before the velocity is added (all loads first). */
+        s32 x = position->vx;
+        s32 y = position->vy;
+        s32 z = position->vz;
+
+        x += this->velocities[i].vx;
+        y += this->velocities[i].vy;
+        z += this->velocities[i].vz;
+
+        position->vx = x;
+        position->vy = y;
+        position->vz = z;
+        if (y > 0) {
+            position->vx = this->origin.vx;
+            position->vy = -0x400;
+            position->vz = 0;
+        }
+        this->angles[i] += 0x40;
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/game_0k", D_8006DFE4);
 
-INCLUDE_ASM("game/nonmatchings/game_0k", func_800D2C64);
+INCLUDE_ASM("game/nonmatchings/game_0k", Confetti_draw);
 
 INCLUDE_ASM("game/nonmatchings/game_0k", func_800D2E98);
 
@@ -563,7 +603,7 @@ void func_800D32AC(BonusFight *this, s32 value) {
 }
 
 INCLUDE_RODATA("game/nonmatchings/game_0k", D_8006E014);
-INCLUDE_RODATA("game/nonmatchings/game_0k", D_8006E03C);
+INCLUDE_RODATA("game/nonmatchings/game_0k", CONFETTI_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0k", D_8006E064);
 INCLUDE_RODATA("game/nonmatchings/game_0k", D_8006E08C);
 INCLUDE_RODATA("game/nonmatchings/game_0k", D_8006E0B4);

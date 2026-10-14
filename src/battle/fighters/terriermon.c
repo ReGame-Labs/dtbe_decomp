@@ -9,7 +9,7 @@ void Terriermon_spawnSpecial2Effect(Fighter *this);
 struct TerriermonSpecial2Hitbox *TerriermonSpecial2Hitbox_init(struct TerriermonSpecial2Hitbox *this,
                                                                Terriermon *owner, VECTOR *pos, Fight *list, u32 damage);
 TerriermonSpecial1Effect *TerriermonSpecial1Effect_init(TerriermonSpecial1Effect *this, Fighter *arg);
-Projectile *TerriermonSpecial1Projectile_init(Projectile *this, Fighter *chara, Vec3 *position, Vec3 *velocity,
+Projectile *TerriermonSpecial1Projectile_init(Projectile *this, Fighter *fighter, Vec3 *position, Vec3 *velocity,
                                               Fight *fight);
 Entity *TerriermonSpecial2Effect_init(Entity *this, Fighter *arg);
 extern FaceEntry TERRIERMON_FACES[];
@@ -343,11 +343,11 @@ void Terriermon_spawnSpecial2Effect(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-/* A hitbox of the special move 2: it lives one update. */
+/* A hitbox of the special move 2: it lives one tick. */
 typedef struct TerriermonSpecial2Hitbox {
     /* 0x00 */ UnkPartsEntity38 parts;
     /* 0x80 */ Terriermon *owner;
-    /* 0x84 */ Vec3 pos;
+    /* 0x84 */ Vec3 position;
     /* 0x90 */ s32 unk90;
 } TerriermonSpecial2Hitbox;
 
@@ -388,9 +388,9 @@ TerriermonSpecial2Hitbox *TerriermonSpecial2Hitbox_init(TerriermonSpecial2Hitbox
     /* The match depends on the node's address taken here, kept in a saved register for the list calls */
     node = &this->parts.part.link;
     this->parts.part.entity = &this->parts.entity;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     if (Fighter_getSide(&owner->base) == 0) {
         Fight_addSide0Shape(list, node);
     } else {
@@ -421,15 +421,15 @@ void TerriermonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/terriermon", TerriermonSpecial2Hitbox_hit);
 
-/* Deletes the hitbox at its first update. */
+/* Deletes the hitbox at its first tick. */
 void TerriermonSpecial2Hitbox_tick(TerriermonSpecial2Hitbox *this, s32 arg) {
     entityDelete(&this->parts.entity);
 }
 
 /* Builds the special move 1's projectile: Projectile_init with 0x80, 0x7A81800, 0x2000 and 3, then its vtables. */
-Projectile *TerriermonSpecial1Projectile_init(Projectile *this, Fighter *chara, Vec3 *position, Vec3 *velocity,
+Projectile *TerriermonSpecial1Projectile_init(Projectile *this, Fighter *fighter, Vec3 *position, Vec3 *velocity,
                                               Fight *fight) {
-    Projectile_init(this, chara, position, velocity, 0x80, 0x7A81800, 0x2000, 3);
+    Projectile_init(this, fighter, position, velocity, 0x80, 0x7A81800, 0x2000, 3);
     this->parts.base.vtable = TERRIERMON_SPECIAL1_PROJECTILE_HIT_VTABLE;
     this->parts.entity.vtable = &TERRIERMON_SPECIAL1_PROJECTILE_VTABLE;
     return this;
@@ -437,18 +437,18 @@ Projectile *TerriermonSpecial1Projectile_init(Projectile *this, Fighter *chara, 
 
 INCLUDE_ASM("game/nonmatchings/fighters/terriermon", TerriermonSpecial1Projectile_draw);
 
-/* Builds the special move 1's effect for chara at its position (Fighter_getPosition). */
-TerriermonSpecial1Effect *TerriermonSpecial1Effect_init(TerriermonSpecial1Effect *this, Fighter *chara) {
+/* Builds the special move 1's effect for fighter at its position (Fighter_getPosition). */
+TerriermonSpecial1Effect *TerriermonSpecial1Effect_init(TerriermonSpecial1Effect *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &TERRIERMON_SPECIAL1_EFFECT_VTABLE;
-    this->chara = chara;
-    Fighter_getPosition(chara, &this->position);
+    this->fighter = fighter;
+    Fighter_getPosition(fighter, &this->position);
     this->unk2C = 0x40;
     this->unk30 = 0x80;
     this->unk34 = 0;
     this->ticks = 0;
     this->unk3C = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -461,13 +461,13 @@ void TerriermonSpecial1Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-/* Follows the character's position, 0x60 above it, for 13 updates, then deletes itself. */
+/* Follows the character's position, 0x60 above it, for 13 ticks, then deletes itself. */
 void TerriermonSpecial1Effect_tick(TerriermonSpecial1Effect *this, s32 arg) {
     if (this->ticks >= 13) {
         entityDelete(&this->entity);
     } else {
         this->ticks++;
-        Fighter_getPosition(this->chara, &this->position);
+        Fighter_getPosition(this->fighter, &this->position);
         this->position.vy -= 0x60;
     }
 }

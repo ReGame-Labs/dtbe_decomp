@@ -37,6 +37,10 @@ func_800D4268 st09_clearFrames
 func_800D46D0 st09_resetCharge
 func_800D46EC st09_createThrowers
 func_800D48A4 st09_updateCharge
+func_800D417C st09_getFullestColumnX
+# the fixed view StageJewelHunt_tick sets while the HUD is shown
+D_800D38D0 ST09_VIEW_TARGET
+D_800D38E0 ST09_VIEW_EYE
 # St09Throw: what a BonusThrower throws, which falls and leaves a BonusLandingMark
 Unk800D4B78 St09Throw
 D_800D3974 ST09_THROW_VTABLE
@@ -46,3 +50,6 @@ func_800D4EC8 St09Throw_draw
 func_800D4CDC St09Throw_destroy
 # Unk800D6360: an object whose 0x20 is a scene object (its class is not known)
 func_800D6360 Unk800D6360_getLocalMatrix
+# the stage's three groups at 0x1480 (each drawn in the view of its own camera): add to one, take out of it
+func_800D66C0 StageJewelHunt_addToGroup
+func_800D66F8 StageJewelHunt_removeFromGroup

@@ -23,8 +23,10 @@ func_800D49C4 StageNature_updateCamera
 # the fall event's states and sound, its group drawn through its own camera)
 func_800D4934 st01_clearState
 func_800D4D88 st01_readClut
+func_800D59D0 st01_readAnimatedCluts
 func_800D4E80 st01_saveFighterPositions
 func_800D500C st01_moveGroupNode
+func_800D50D8 st01_scrollTexture
 func_800D54C8 st01_drawGroup
 func_800D5614 st01_stopFallEvent
 func_800D5650 st01_tickFallEvent
@@ -35,6 +37,7 @@ D_800D3CFC ST01_FALLING_OBJECT_VTABLE
 func_800D5BA0 St01FallingObject_init
 func_800D5DB0 St01FallingObject_tick
 func_800D5CB0 St01FallingObject_destroy
+func_800D64D0 St01FallingObject_fall
 # St01Debris: a gray particle falling from a random place (init) or starting around a position (initAt)
 Unk800D7EC4 St01Debris
 D_800D3C0C ST01_DEBRIS_VTABLE
@@ -50,3 +53,9 @@ func_800D7058 St01PulseGrid_init
 func_800D7178 St01PulseGrid_tick
 func_800D71B8 St01PulseGrid_draw
 func_800D7124 St01PulseGrid_destroy
+func_800D737C St01HoverQuad_init
+func_800D7408 St01HoverQuad_destroy
+func_800D745C St01HoverQuad_tick
+func_800D74AC St01HoverQuad_draw
+D_800D3C84 ST01_HOVER_QUAD_VTABLE
+func_800D4DEC st01_cycleClut

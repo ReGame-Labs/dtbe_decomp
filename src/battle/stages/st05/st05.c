@@ -32,15 +32,15 @@ INCLUDE_ASM("st05/nonmatchings/st05", StageVolcano_startRound);
 INCLUDE_ASM("st05/nonmatchings/st05", StageVolcano_tickScenery);
 
 /* the stage's steps for one fighter */
-void st05_clampFighterX(StageVolcano *this, Fighter *chara);
-void func_800D45E0(StageVolcano *this, Fighter *chara);
+void st05_clampFighterX(StageVolcano *this, Fighter *fighter);
+void func_800D45E0(StageVolcano *this, Fighter *fighter);
 
 /* The stage's override of Fight_tick: the base tick, then for each side st05_clampFighterX and, unless
  * func_8006F144 or Fight_isRoundOver holds, func_800D45E0. */
 void StageVolcano_tick(StageVolcano *this) {
     s32 held;
     s32 side;
-    Fighter *chara;
+    Fighter *fighter;
 
     Fight_tick(&this->base);
     held = 0;
@@ -50,21 +50,21 @@ void StageVolcano_tick(StageVolcano *this) {
         held = 1;
     }
     for (side = 0; side < 2; side++) {
-        chara = Fight_getFighter(&this->base, side);
-        st05_clampFighterX(this, chara);
+        fighter = Fight_getFighter(&this->base, side);
+        st05_clampFighterX(this, fighter);
         if (!held) {
-            func_800D45E0(this, chara);
+            func_800D45E0(this, fighter);
         }
     }
 }
 
 /* Keeps a fighter's x within -0xE00..0xF00 (gcc folds the in-range test into one unsigned compare).
  * The match depends on the clamp testing the low bound first, with the high one inside it. */
-void st05_clampFighterX(StageVolcano *this, Fighter *chara) {
+void st05_clampFighterX(StageVolcano *this, Fighter *fighter) {
     Vec3 position;
     s32 x;
 
-    Fighter_getPosition(chara, &position);
+    Fighter_getPosition(fighter, &position);
     x = position.vx;
     if (x >= -0xE00 && x <= 0xF00) {
         return;
@@ -77,14 +77,14 @@ void st05_clampFighterX(StageVolcano *this, Fighter *chara) {
         x = -0xE00;
     }
     position.vx = x;
-    Fighter_setPosition(chara, &position);
+    Fighter_setPosition(fighter, &position);
 }
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D45E0);
 
 /* A value by bits 8-9 of 0x0 of the character's table (Fighter_getParams): 0xC0, 0x40, 0x80 or 0x100. */
-s32 func_800D4768(Fighter *chara) {
-    switch (Fighter_getParams(chara)->flags & 0x300) {
+s32 func_800D4768(Fighter *fighter) {
+    switch (Fighter_getParams(fighter)->flags & 0x300) {
     case 0x000:
         return 0xC0;
     case 0x100:

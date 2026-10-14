@@ -264,7 +264,7 @@ typedef struct Unk800ABE6C {
     /* 0x18 */ Hit unk18;
     /* 0x34 */ u8 unk34[0x38 - 0x34];
     /* 0x38 */ CollisionSphere unk38;
-    /* 0x80 */ Fighter *chara;
+    /* 0x80 */ Fighter *fighter;
     /* 0x84 */ Vec3 position;
     /* 0x90 */ u8 unk90[0x94 - 0x90];
     /* 0x94 */ Vec3 unk94; /* where func_800AC138 puts it: position moved by the velocity */
@@ -277,16 +277,16 @@ typedef struct Unk800ABE6C {
     /* 0xBC */ u16 unkBC; /* 1 once func_800AC080 made its burst */
 } Unk800ABE6C;
 
-/* Constructs Unk800ABE6C for chara at position, moving by velocity, and adds the part at 0x38 to one of list's two
+/* Constructs Unk800ABE6C for fighter at position, moving by velocity, and adds the part at 0x38 to one of list's two
  * lists (Fighter_getSide picks which). */
-Unk800ABE6C *func_800ABE6C(Unk800ABE6C *this, Fighter *chara, Vec3 *position, VECTOR *velocity,
+Unk800ABE6C *func_800ABE6C(Unk800ABE6C *this, Fighter *fighter, Vec3 *position, VECTOR *velocity,
                            Fight *list) {
     VECTOR v;
     s32 x, y, z;
     s32 vx, vy, vz;
 
     entityInit(&this->entity, ENTITY_KIND_FIGHTER_OBJECT);
-    Hit_init(&this->unk18, chara, 0x7B00100, (Vec3 *)velocity, 0);
+    Hit_init(&this->unk18, fighter, 0x7B00100, (Vec3 *)velocity, 0);
     this->unk18.vtable = D_8006B434;
     this->entity.vtable = &D_8006B454;
     CollisionSphere_init(&this->unk38, position, 0x40, &this->unk18);
@@ -295,8 +295,8 @@ Unk800ABE6C *func_800ABE6C(Unk800ABE6C *this, Fighter *chara, Vec3 *position, VE
     v.vy <<= 5;
     v.vz <<= 5;
     Hit_setKnockback(&this->unk18, &v);
-    this->chara = chara;
-    this->facing = Fighter_getFacing(chara);
+    this->fighter = fighter;
+    this->facing = Fighter_getFacing(fighter);
     /* The match depends on reading each vector's three words before storing any, as vecCopy does, with
      * locals of its own for each vector */
     x = position->vx;
@@ -313,9 +313,9 @@ Unk800ABE6C *func_800ABE6C(Unk800ABE6C *this, Fighter *chara, Vec3 *position, VE
     this->velocity.vz = vz;
     this->unkB4 = 0;
     this->unkBC = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     this->unk38.entity = &this->entity;
-    if (Fighter_getSide(this->chara) == 0) {
+    if (Fighter_getSide(this->fighter) == 0) {
         Fight_addSide0Shape(list, &this->unk38.link);
     } else {
         Fight_addSide1Shape(list, &this->unk38.link);
@@ -392,15 +392,15 @@ Unk800AC470 *func_800AC470(Unk800AC470 *this, Fighter *owner, VECTOR *pos, VECTO
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     vx = vel->vx;
     vy = vel->vy;
     vz = vel->vz;
-    this->vel.vx = vx;
-    this->vel.vy = vy;
-    this->vel.vz = vz;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
     this->frames = 0;
     this->vramY = Fighter_getVramY(owner);
     this->parts.part.entity = &this->parts.entity;
@@ -433,7 +433,7 @@ void func_800AC5D4(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
-/* Spawns an entity of func_800AD5BC's class and one of ParticleBurst_init's at pos, then deletes itself
+/* Spawns an entity of func_800AD5BC's class and one of ParticleBurst_init's at position, then deletes itself
  * (func_800ACC64 without the sound). */
 void func_800AC674(Unk800AC470 *this) {
     Entity *child;
@@ -441,14 +441,14 @@ void func_800AC674(Unk800AC470 *this) {
 
     child = allocEntityMemory(0xB0);
     if (child != NULL) {
-        func_800AD5BC(entityOperatorNewAt(0xB0, child), this->owner, this->unk84, &this->pos, 0x280, 0x7B00500);
+        func_800AD5BC(entityOperatorNewAt(0xB0, child), this->owner, this->unk84, &this->position, 0x280, 0x7B00500);
     }
     entityAddSibling(&this->parts.entity, child);
-    /* The match depends on reading vel.vx before allocating the second entity. */
-    vx = this->vel.vx;
+    /* The match depends on reading velocity.vx before allocating the second entity. */
+    vx = this->velocity.vx;
     child = allocEntityMemory(0x3C);
     if (child != NULL) {
-        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->pos, vx, 0x100, 3, 0x808080);
+        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->position, vx, 0x100, 3, 0x808080);
     }
     entityAddSibling(&this->parts.entity, child);
     entityDelete(&this->parts.entity);
@@ -460,19 +460,19 @@ void func_800AC778(Unk800AC470 *this, void *arg) {
     func_800AC674(this);
 }
 
-/* The update of Unk800AC470 (D_8006B40C): the same as func_800ACDA4, with func_800AC674. */
+/* The tick of Unk800AC470 (D_8006B40C): the same as func_800ACDA4, with func_800AC674. */
 void func_800AC7A8(Unk800AC470 *this, s32 arg) {
     s32 x, y, z;
 
-    x = this->pos.vx;
-    y = this->pos.vy;
-    z = this->pos.vz;
-    x += this->vel.vx;
-    y += this->vel.vy;
-    z += this->vel.vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->parts.part.position.vx = x;
     this->parts.part.position.vy = y;
     this->parts.part.position.vz = z;
@@ -519,11 +519,11 @@ void func_800AC820(Unk800AC470 *this, Camera *camera) {
     s32 zShift;
     s32 vramY;
 
-    pos = *(VECTOR *)&this->pos;
+    pos = *(VECTOR *)&this->position;
     packet = PRIM_BUFFER_FREE;
     ot = camera->ot.slots;
     zShift = camera->zShift;
-    matrixInitRotationZ(&m, ratan2(this->vel.vy, this->vel.vx));
+    matrixInitRotationZ(&m, ratan2(this->velocity.vy, this->velocity.vx));
     matrixSetTranslationVecInline(&m, &pos);
     setModelMatrix(&m);
     corners[0].vx = corners[2].vx = -0x30;
@@ -591,15 +591,15 @@ Unk800ACA60 *func_800ACA60(Unk800ACA60 *this, Fighter *owner, VECTOR *pos, VECTO
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     vx = vel->vx;
     vy = vel->vy;
     vz = vel->vz;
-    this->vel.vx = vx;
-    this->vel.vy = vy;
-    this->vel.vz = vz;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
     this->frames = 0;
     this->vramY = Fighter_getVramY(owner);
     this->parts.part.entity = &this->parts.entity;
@@ -633,7 +633,7 @@ void func_800ACBC4(UnkPartsEntity38 *this, s32 flags) {
 }
 
 /* Plays sound 0x4D of the owner, spawns an entity of func_800AD5BC's class and one of ParticleBurst_init's at
- * pos, then deletes itself. */
+ * position, then deletes itself. */
 void func_800ACC64(Unk800ACA60 *this) {
     Entity *child;
     s32 vx;
@@ -641,14 +641,14 @@ void func_800ACC64(Unk800ACA60 *this) {
     Fighter_playSound(this->owner, 0x4D);
     child = allocEntityMemory(0xB0);
     if (child != NULL) {
-        func_800AD5BC(entityOperatorNewAt(0xB0, child), this->owner, this->unk84, &this->pos, 0x280, 0x7B00500);
+        func_800AD5BC(entityOperatorNewAt(0xB0, child), this->owner, this->unk84, &this->position, 0x280, 0x7B00500);
     }
     entityAddSibling(&this->parts.entity, child);
-    /* The match depends on reading vel.vx before allocating the second entity. */
-    vx = this->vel.vx;
+    /* The match depends on reading velocity.vx before allocating the second entity. */
+    vx = this->velocity.vx;
     child = allocEntityMemory(0x3C);
     if (child != NULL) {
-        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->pos, vx, 0x100, 3, 0x808080);
+        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->position, vx, 0x100, 3, 0x808080);
     }
     entityAddSibling(&this->parts.entity, child);
     entityDelete(&this->parts.entity);
@@ -660,20 +660,20 @@ void func_800ACD74(Unk800ACA60 *this, void *arg) {
     func_800ACC64(this);
 }
 
-/* The update of Unk800ACA60 (D_8006B37C): moves pos by vel, puts the part there, and after 12 frames
+/* The tick of Unk800ACA60 (D_8006B37C): moves position by velocity, puts the part there, and after 12 frames
  * calls func_800ACC64. */
 void func_800ACDA4(Unk800ACA60 *this, s32 arg) {
     s32 x, y, z;
 
-    x = this->pos.vx;
-    y = this->pos.vy;
-    z = this->pos.vz;
-    x += this->vel.vx;
-    y += this->vel.vy;
-    z += this->vel.vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->parts.part.position.vx = x;
     this->parts.part.position.vy = y;
     this->parts.part.position.vz = z;
@@ -683,7 +683,7 @@ void func_800ACDA4(Unk800ACA60 *this, s32 arg) {
     }
 }
 
-/* Entry 0x14 of vtable D_8006B37C: draws the part at pos, turned along its velocity (ratan2): a 0x60 square
+/* Entry 0x14 of vtable D_8006B37C: draws the part at position, turned along its velocity (ratan2): a 0x60 square
  * textured from the owner's VRAM rows (vramY at 0xAC), then a gouraud quad (blue to black) behind it whose tip
  * flickers with frames. */
 void func_800ACE1C(Unk800ACA60 *this, Camera *camera) {
@@ -697,11 +697,11 @@ void func_800ACE1C(Unk800ACA60 *this, Camera *camera) {
     s32 zShift;
     s32 vramY;
 
-    pos = *(VECTOR *)&this->pos;
+    pos = *(VECTOR *)&this->position;
     packet = PRIM_BUFFER_FREE;
     ot = camera->ot.slots;
     zShift = camera->zShift;
-    matrixInitRotationZ(&m, ratan2(this->vel.vy, this->vel.vx));
+    matrixInitRotationZ(&m, ratan2(this->velocity.vy, this->velocity.vx));
     matrixSetTranslationVecInline(&m, &pos);
     setModelMatrix(&m);
     corners[0].vx = corners[2].vx = -0x30;
@@ -745,16 +745,16 @@ void func_800ACE1C(Unk800ACA60 *this, Camera *camera) {
     PRIM_BUFFER_FREE = buildPolyG4(&trail, packet, ot, zShift);
 }
 
-/* Constructs Unk800AD050 for chara at position, moving by velocity, keeps where the character is, and adds the
+/* Constructs Unk800AD050 for fighter at position, moving by velocity, keeps where the character is, and adds the
  * part at 0x38 to one of list's two lists (Fighter_getSide picks which). */
-Unk800AD050 *func_800AD050(Unk800AD050 *this, Fighter *chara, Vec3 *position, VECTOR *velocity,
+Unk800AD050 *func_800AD050(Unk800AD050 *this, Fighter *fighter, Vec3 *position, VECTOR *velocity,
                            Fight *list) {
     VECTOR v;
     s32 x, y, z;
     s32 vx, vy, vz;
 
     entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
-    Hit_init(&this->parts.base, chara, 0, (Vec3 *)velocity, 0);
+    Hit_init(&this->parts.base, fighter, 0, (Vec3 *)velocity, 0);
     this->parts.base.vtable = D_8006B3A4;
     this->parts.entity.vtable = &D_8006B3C4;
     CollisionSphere_init(&this->parts.part, position, 0x40, &this->parts.base);
@@ -763,28 +763,28 @@ Unk800AD050 *func_800AD050(Unk800AD050 *this, Fighter *chara, Vec3 *position, VE
     v.vy <<= 5;
     v.vz <<= 5;
     Hit_setKnockback(&this->parts.base, &v);
-    this->owner = chara;
+    this->owner = fighter;
     this->list = list;
     /* The match depends on reading each vector's three words before storing any, as vecCopy does, with
      * locals of its own for each vector */
     x = position->vx;
     y = position->vy;
     z = position->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     vx = velocity->vx;
     vy = velocity->vy;
     vz = velocity->vz;
-    this->vel.vx = vx;
-    this->vel.vy = vy;
-    this->vel.vz = vz;
-    Fighter_getPosition(chara, &this->charaPosition);
-    this->unkB8 = 0;
-    this->unkBC = 10;
-    this->unkC0 = 0;
-    this->unkC8 = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
+    Fighter_getPosition(fighter, &this->fighterPosition);
+    this->acceleration.vx = 0;
+    this->acceleration.vy = 10;
+    this->acceleration.vz = 0;
+    this->frames = 0;
+    this->vramY = Fighter_getVramY(fighter);
     this->parts.part.entity = &this->parts.entity;
     if (Fighter_getSide(this->owner) == 0) {
         Fight_addSide0Shape(list, &this->parts.part.link);
@@ -816,7 +816,7 @@ void func_800AD1D0(UnkPartsEntity38 *this, s32 flags) {
 }
 
 /* Plays sound 0x4D of the owner, spawns an entity of func_800AD5BC's class and one of ParticleBurst_init's at
- * pos, then deletes itself (the same as func_800ACC64, for Unk800AD050). */
+ * position, then deletes itself (the same as func_800ACC64, for Unk800AD050). */
 void func_800AD270(Unk800AD050 *this) {
     Entity *child;
     s32 vx;
@@ -824,14 +824,14 @@ void func_800AD270(Unk800AD050 *this) {
     Fighter_playSound(this->owner, 0x4D);
     child = allocEntityMemory(0xB0);
     if (child != NULL) {
-        func_800AD5BC(entityOperatorNewAt(0xB0, child), this->owner, this->list, &this->pos, 0x280, 0x7B00500);
+        func_800AD5BC(entityOperatorNewAt(0xB0, child), this->owner, this->list, &this->position, 0x280, 0x7B00500);
     }
     entityAddSibling(&this->parts.entity, child);
-    /* The match depends on reading vel.vx before allocating the second entity. */
-    vx = this->vel.vx;
+    /* The match depends on reading velocity.vx before allocating the second entity. */
+    vx = this->velocity.vx;
     child = allocEntityMemory(0x3C);
     if (child != NULL) {
-        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->pos, vx, 0x100, 3, 0x808080);
+        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->position, vx, 0x100, 3, 0x808080);
     }
     entityAddSibling(&this->parts.entity, child);
     entityDelete(&this->parts.entity);
@@ -843,7 +843,39 @@ void func_800AD380(Unk800AD050 *this, void *arg) {
     func_800AD270(this);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AD3B0);
+/* The tick of Unk800AD050: falls (velocity += acceleration), moves, puts the part there, and bursts
+ * (func_800AD270) once it is below the height its owner had when it was made. */
+void func_800AD3B0(Unk800AD050 *this) {
+    s32 vx, vy, vz;
+    s32 x, y, z;
+
+    /* The match depends on reading both vectors whole before any store (in place: 30 diffs). */
+    vx = this->velocity.vx;
+    vy = this->velocity.vy;
+    vz = this->velocity.vz;
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    vx += this->acceleration.vx;
+    vy += this->acceleration.vy;
+    vz += this->acceleration.vz;
+    x += vx;
+    y += vy;
+    z += vz;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->parts.part.position.vx = x;
+    this->parts.part.position.vy = y;
+    this->parts.part.position.vz = z;
+    if (this->fighterPosition.vy < y) {
+        func_800AD270(this);
+    }
+    this->frames++;
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/saintgargomon", D_8006B2F0);
 
@@ -890,7 +922,7 @@ typedef struct Unk800AD7CC {
     /* 0xAE */ s16 unkAE;
 } Unk800AD7CC;
 
-/* The update of func_800AD5BC's entity: puts its part at the position, and deletes itself after 8 frames.
+/* The tick of func_800AD5BC's entity: puts its part at the position, and deletes itself after 8 frames.
  * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads 0xA4. */
 void func_800AD7CC(Unk800AD7CC *this) {
     s32 x, y, z;

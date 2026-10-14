@@ -1,5 +1,5 @@
 /* The projectile (Projectile_init, virtual tables PROJECTILE_HIT_VTABLE and PROJECTILE_VTABLE) that nine fighters'
- * shots and the item shot derive from. */
+ * projectiles and the item projectile derive from. */
 
 #include "common.h"
 #include "battle/game_classes.h"

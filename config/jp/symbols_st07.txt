@@ -1,6 +1,8 @@
 // st07.bin's own names (config/jp/st07.yaml)
 
 // the names tools/rename.py gave (tools/renames/), in address order
+ST07_VIEW_TARGET = 0x800D3824;
+ST07_VIEW_EYE = 0x800D3834;
 BALL_SHOOT_CONTROLLER_VTABLE = 0x800D3854;
 BONUS_LANDING_MARK_VTABLE = 0x800D389C;
 BONUS_THROWER_VTABLE = 0x800D38C4;
