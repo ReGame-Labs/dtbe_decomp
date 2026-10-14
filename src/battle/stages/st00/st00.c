@@ -10,21 +10,22 @@
 #include "engine/task/entity.h"
 #include "engine/gfx/scene_graph.h"
 
-/* The stage's class, which func_800D3B74 constructs on func_8006ED20's. */
-typedef struct Unk800D3B74 {
-    /* 0x000 */ Unk8006ED20 base;
+/* Arena 0's stage, "Machine" in STAGE_NAMES (StageMachine_init, virtual table STAGE_MACHINE_VTABLE): a Fight
+ * whose scenery animates the map's nodes, its CLUTs and its textures (StageMachine_tickScenery). */
+typedef struct StageMachine {
+    /* 0x000 */ Fight base;
     /* 0xD38 */ u8 unkD38[0xD3C - 0xD38];
-    /* 0xD3C */ s32 unkD3C; /* counted up by func_800D4A70 */
+    /* 0xD3C */ s32 frames; /* the scenery's frames (StageMachine_tickScenery) */
     /* 0xD40 */ u8 unkD40[0xD4C - 0xD40];
-    /* 0xD4C */ u32 unkD4C; /* a sound's handle (stopSound) */
+    /* 0xD4C */ u32 sound; /* a sound's handle, stopped before the next round */
     /* 0xD50 */ ListNode unkD50; /* a list node the destructor unlinks */
     /* 0xD58 */ u8 unkD58[0xDA8 - 0xD58];
-    /* 0xDA8 */ RECT unkDA8;     /* 16 by 1 pixels at (0x300, 0xFE): a CLUT */
+    /* 0xDA8 */ RECT clutRect; /* 16 by 1 pixels at (0x300, 0xFE): a CLUT */
     /* 0xDB0 */ u8 unkDB0[0xE90 - 0xDB0];
-    /* 0xE90 */ u16 unkE90[16]; /* that CLUT, read back from VRAM by func_800D4074 */
+    /* 0xE90 */ u16 clut[16]; /* that CLUT, read back from VRAM by st00_readClut */
     /* 0xEB0 */ u8 unkEB0[0xEC4 - 0xEB0];
-    /* 0xEC4 */ MeshScene *unkEC4; /* the stage's meshes */
-    /* 0xEC8 */ u32 unkEC8; /* an angle (0..0xFFF), stepped by func_800D704C */
+    /* 0xEC4 */ MeshScene *meshScene; /* the stage's meshes */
+    /* 0xEC8 */ u32 angle; /* 0..0xFFF, stepped by st00_turnAngle */
     /* 0xECC */ u8 unkECC[0xEF4 - 0xECC];
     /* 0xEF4 */ s16 unkEF4;
     /* 0xEF6 */ u8 unkEF6[0x1020 - 0xEF6];
@@ -34,103 +35,102 @@ typedef struct Unk800D3B74 {
     /* 0x1044 */ s32 unk1044;
     /* 0x1048 */ s16 unk1048;
     /* 0x104A */ u8 unk104A[0x1050 - 0x104A];
-    /* 0x1050 */ s32 unk1050; /* while set, func_800D8930's quads turn red */
+    /* 0x1050 */ s32 unk1050; /* while set, St00SignalQuads turn red */
     /* 0x1054 */ u8 unk1054[0x1060 - 0x1054];
-    /* 0x1060 */ Group unk1060; /* drawn by func_800D7A24's entity */
-    /* 0x10C0 */ s32 unk10C0;   /* while set, that group is not drawn */
-} Unk800D3B74;
+    /* 0x1060 */ Group group;      /* node 28's mesh, drawn by St00GroupDrawer */
+    /* 0x10C0 */ s32 continueShown; /* Fight_isContinueShown: the group is not drawn, the scenery stops */
+} StageMachine;
 
 void func_800D9B9C(void *this);
-UnkSt00Entity *func_800D7978(UnkSt00Entity *this, Unk8006ED20 *owner, MeshScene *meshScene, s32 arg3);
-void func_800D4BB0(Unk800D3B74 *this);
+St00GroupDrawer *St00GroupDrawer_init(St00GroupDrawer *this, Fight *owner, MeshScene *meshScene, s32 arg3);
+void func_800D4BB0(StageMachine *this);
 
 /* the virtual tables the functions below install, and the data they read */
-extern EntityVtable D_800D3924;
-extern EntityVtable D_800D394C;
-extern EntityVtable D_800D3974;
-extern EntityVtable D_800D399C;
+extern EntityVtable ST00_SLIDING_SPRITES_VTABLE;
+extern EntityVtable ST00_CROSSING_SPRITES_VTABLE;
+extern EntityVtable ST00_COLOR_QUAD_VTABLE;
+extern EntityVtable ST00_SIGNAL_QUADS_VTABLE;
 extern EntityVtable D_800D39C4;
 extern EntityVtable D_800D39EC;
 extern EntityVtable D_800D3A14;
 extern EntityVtable D_800D3A3C;
-extern EntityVtable D_800D3AB4;
-extern VtableEntry D_800D3ADC[];
-extern VtableEntry D_800D3AFC[];
+extern EntityVtable ST00_GROUP_DRAWER_VTABLE;
+extern VtableEntry STAGE_HIT_VTABLE[];
+extern VtableEntry STAGE_MACHINE_VTABLE[];
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D3B74);
+INCLUDE_ASM("st00/nonmatchings/st00", StageMachine_init);
 
-/* The stage's destructor: virtual table D_800D3AFC, the group at 0x1060, unlinks the node at 0xD50, then
- * func_8006ED20's class's destructor. */
-void func_800D3C34(Unk800D3B74 *this, s32 flags) {
+/* The stage's destructor: its virtual table, the group, unlinks the node at 0xD50, then Fight's destructor. */
+void StageMachine_destroy(StageMachine *this, s32 flags) {
     ListNode *node;
 
-    this->base.vtable = D_800D3AFC;
-    groupDestroy(&this->unk1060, DESTROY_BASES);
+    this->base.vtable = STAGE_MACHINE_VTABLE;
+    groupDestroy(&this->group, DESTROY_BASES);
     /* listRemove(&this->unkD50), in the access order the game's compiler used */
     node = &this->unkD50;
     this->unkD50.next->prev = this->unkD50.prev;
     node->prev->next = this->unkD50.next;
     this->unkD50.next = node;
     this->unkD50.prev = node;
-    func_8006F254(&this->base, flags);
+    Fight_destroy(&this->base, flags);
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D3CA8);
+INCLUDE_ASM("st00/nonmatchings/st00", st00_resetRound);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D3D94);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D3E80);
 
-/* Reads the 16-colour CLUT at (0x300, 0xFE) back from VRAM into 0xE90. */
-void func_800D4074(Unk800D3B74 *this) {
-    this->unkDA8.x = 0x300;
-    this->unkDA8.y = 0xFE;
+/* Reads the 16-colour CLUT at (0x300, 0xFE) back from VRAM into clut. */
+void st00_readClut(StageMachine *this) {
+    this->clutRect.x = 0x300;
+    this->clutRect.y = 0xFE;
     this->unkEF4 = 0;
-    this->unkDA8.w = 16;
-    this->unkDA8.h = 1;
-    StoreImage(&this->unkDA8, (u_long *)this->unkE90);
+    this->clutRect.w = 16;
+    this->clutRect.h = 1;
+    StoreImage(&this->clutRect, (u_long *)this->clut);
 }
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D40C0);
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D4198);
+INCLUDE_ASM("st00/nonmatchings/st00", StageMachine_startRound);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D468C);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D47C8);
 
-/* One frame of the stage: func_80071F6C, then flag 0x10C0 from bit 8 of the flags at 0x2C8; while that bit
- * is clear and (func_8006F144 is false or bit 4 is set), runs func_800D4BB0 and counts the frame at 0xD3C. */
-void func_800D4A70(Unk800D3B74 *this) {
-    func_80071F6C();
-    if (func_8006F1A4(&this->base)) {
-        this->unk10C0 = 1;
+/* One frame of the scenery: Fight_tickScenery; while the continue prompt is not shown and (func_8006F144 is false
+ * or the round is over), runs the animations (func_800D4BB0) and counts the frame. */
+void StageMachine_tickScenery(StageMachine *this) {
+    Fight_tickScenery();
+    if (Fight_isContinueShown(&this->base)) {
+        this->continueShown = 1;
         return;
     }
-    this->unk10C0 = 0;
-    if (func_8006F144(&this->base) && !func_8006F190(&this->base)) {
+    this->continueShown = 0;
+    if (func_8006F144(&this->base) && !Fight_isRoundOver(&this->base)) {
         return;
     }
     func_800D4BB0(this);
-    this->unkD3C++;
+    this->frames++;
 }
 
-/* Stops the sound at 0xD4C. */
-void func_800D4AE8(Unk800D3B74 *this) {
-    stopSound(this->unkD4C);
+/* Before the next round: stops the stage's sound. */
+void StageMachine_prepareNextRound(StageMachine *this) {
+    stopSound(this->sound);
 }
 
-/* Moves the mesh of node 28 out of the stage's meshes into the group at 0x1060, and creates the entity of
- * func_800D7978's class that draws that group, put into the entity group of this. */
-void func_800D4B0C(Unk800D3B74 *this) {
-    Mesh *mesh = this->unkEC4->meshes[28];
+/* Moves the mesh of node 28 out of the stage's meshes into its group, and creates the St00GroupDrawer that draws
+ * that group, put into the entity group of this. */
+void st00_createGroupDrawer(StageMachine *this) {
+    Mesh *mesh = this->meshScene->meshes[28];
     Entity *entity;
 
     listRemove(&mesh->object.link);
-    groupAddChild(&this->unk1060, &mesh->object);
-    entity = NEW_ENTITY(sizeof(UnkSt00Entity), func_800D7978, &this->base, this->unkEC4, 0x1C);
+    groupAddChild(&this->group, &mesh->object);
+    entity = NEW_ENTITY(sizeof(St00GroupDrawer), St00GroupDrawer_init, &this->base, this->meshScene, 0x1C);
     if (entity != NULL) {
-        func_8006F0B4(&this->base, entity);
+        Fight_addEntity(&this->base, entity);
     }
 }
 
@@ -146,8 +146,8 @@ INCLUDE_ASM("st00/nonmatchings/st00", func_800D55B4);
 
 /* Fills 0x1034 with four consecutive values (mod 4) from a random start, clears 0x1044 and 0x1030, and
  * sets 0x1048 to a random bit. */
-void func_800D59CC(Unk800D3B74 *this) {
-    u16 value = func_8006F004(&this->base) & 3;
+void func_800D59CC(StageMachine *this) {
+    u16 value = Fight_random(&this->base) & 3;
     s32 i;
 
     for (i = 0; i < 4; i++) {
@@ -155,11 +155,11 @@ void func_800D59CC(Unk800D3B74 *this) {
     }
     this->unk1044 = 0;
     this->unk1030 = 0;
-    this->unk1048 = func_8006F004(&this->base) & 1;
+    this->unk1048 = Fight_random(&this->base) & 1;
 }
 
 /* Returns how many of the four words at 0x1020 are set. */
-s32 func_800D5A34(Unk800D3B74 *this) {
+s32 func_800D5A34(StageMachine *this) {
     s32 count = 0;
     s32 i;
 
@@ -179,9 +179,9 @@ INCLUDE_ASM("st00/nonmatchings/st00", func_800D6534);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D6D74);
 
-/* Turns the angle at 0xEC8 by 0x40. */
-void func_800D704C(Unk800D3B74 *this) {
-    this->unkEC8 = (this->unkEC8 + 0x40) & 0xFFF;
+/* Turns the stage's angle by 0x40. */
+void st00_turnAngle(StageMachine *this) {
+    this->angle = (this->angle + 0x40) & 0xFFF;
 }
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D7064);
@@ -190,31 +190,31 @@ INCLUDE_ASM("st00/nonmatchings/st00", func_800D70E4);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D76FC);
 
-/* Constructs an entity of D_800D3AB4 for the Unk8006ED20 whose entity group will hold it, and the
- * MeshScene that object keeps at 0xEC4 (func_800D4B0C, which also passes 0x1C, unused). */
-UnkSt00Entity *func_800D7978(UnkSt00Entity *this, Unk8006ED20 *owner, MeshScene *meshScene, s32 arg3) {
+/* Constructs a St00GroupDrawer for the Fight whose entity group will hold it, and the stage's MeshScene
+ * (st00_createGroupDrawer, which also passes 0x1C, unused). */
+St00GroupDrawer *St00GroupDrawer_init(St00GroupDrawer *this, Fight *owner, MeshScene *meshScene, s32 arg3) {
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_800D3AB4;
+    this->entity.vtable = &ST00_GROUP_DRAWER_VTABLE;
     this->owner = owner;
-    this->unk1C = meshScene;
+    this->meshScene = meshScene;
     return this;
 }
 
-/* The destructor of the entity class of vtable D_800D3AB4, which func_800D7978 installs. */
-void func_800D79D0(Entity *this, s32 flags) {
-    this->vtable = &D_800D3AB4;
+/* St00GroupDrawer's destructor. */
+void St00GroupDrawer_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST00_GROUP_DRAWER_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* Its update: unless the stage's 0x10C0 is set, draws the stage's group in view of camera and marks its
- * matrices out of date. */
-void func_800D7A24(UnkSt00Entity *this, Camera *camera) {
-    if (((Unk800D3B74 *)this->owner)->unk10C0 == 0) {
-        sceneObjectDrawInView(&((Unk800D3B74 *)this->owner)->unk1060.object, camera);
-        groupInvalidate(&((Unk800D3B74 *)this->owner)->unk1060);
+/* St00GroupDrawer's draw: unless the continue prompt is shown, draws the stage's group in view of camera and marks
+ * its matrices out of date. */
+void St00GroupDrawer_draw(St00GroupDrawer *this, Camera *camera) {
+    if (((StageMachine *)this->owner)->continueShown == 0) {
+        sceneObjectDrawInView(&((StageMachine *)this->owner)->group.object, camera);
+        groupInvalidate(&((StageMachine *)this->owner)->group);
     }
 }
 
@@ -253,18 +253,18 @@ INCLUDE_ASM("st00/nonmatchings/st00", func_800D7FDC);
  * height -0xA8E to -0x68E. */
 typedef struct Unk800D819C {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8006ED20 *owner;
+    /* 0x18 */ Fight *owner;
     /* 0x1C */ u8 unk1C;
     /* 0x1D */ u8 unk1D[0x40 - 0x1D];
     /* 0x40 */ SVECTOR corners[4];
 } Unk800D819C; /* size 0x60 */
 
 /* Constructs the stage's quad entity of owner: corners from (-0x200, -0xA8E) to (0x200, -0x68E). */
-Unk800D819C *func_800D819C(Unk800D819C *this, Unk8006ED20 *owner) {
+Unk800D819C *func_800D819C(Unk800D819C *this, Fight *owner) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_800D39EC;
     this->owner = owner;
-    /* The match depends on these chained assignments, as in st07's func_800D5080. */
+    /* The match depends on these chained assignments, as in st07's BonusThrower_init. */
     this->corners[0].vx = this->corners[2].vx = -0x200;
     this->corners[1].vx = this->corners[3].vx = 0x200;
     this->corners[0].vy = this->corners[1].vy = -0xA8E;
@@ -302,21 +302,21 @@ INCLUDE_ASM("st00/nonmatchings/st00", func_800D8648);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D875C);
 
-/* An entity of the stage (func_800D8930, vtable D_800D399C; func_800D4198 constructs it): two quads side by
- * side at z -0x400, teal while the stage's 0x1050 is clear and red while it is set. */
-typedef struct Unk800D8930 {
+/* Two quads side by side at z -0x400 (StageMachine_startRound makes it), teal while the stage's 0x1050 is clear
+ * and red while it is set. */
+typedef struct St00SignalQuads {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk800D3B74 *stage;
+    /* 0x18 */ StageMachine *stage;
     /* 0x1C */ s32 red; /* the color below is the red one */
     /* 0x20 */ u32 color;
     /* 0x24 */ SVECTOR corners[8]; /* two quads of four */
-} Unk800D8930;
+} St00SignalQuads;
 
-/* Constructs the stage's two-quad entity: x from -0x540 to -0x240 and from 0x240 to 0x540, y from 0x60 to
+/* Constructs the St00SignalQuads: x from -0x540 to -0x240 and from 0x240 to 0x540, y from 0x60 to
  * 0x360, z -0x400. */
-Unk800D8930 *func_800D8930(Unk800D8930 *this, Unk800D3B74 *stage) {
+St00SignalQuads *St00SignalQuads_init(St00SignalQuads *this, StageMachine *stage) {
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_800D399C;
+    this->entity.vtable = &ST00_SIGNAL_QUADS_VTABLE;
     this->stage = stage;
     this->red = 0;
     this->corners[0].vx = this->corners[2].vx = -0x540;
@@ -333,17 +333,17 @@ Unk800D8930 *func_800D8930(Unk800D8930 *this, Unk800D3B74 *stage) {
     return this;
 }
 
-/* The destructor of the entity class of vtable D_800D399C, which func_800D8930 installs. */
-void func_800D8A04(Entity *this, s32 flags) {
-    this->vtable = &D_800D399C;
+/* St00SignalQuads's destructor. */
+void St00SignalQuads_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST00_SIGNAL_QUADS_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* Follows the stage's 0x1050: red (0x101080) while it is set, teal (0x808010) otherwise. */
-void func_800D8A58(Unk800D8930 *this) {
+/* St00SignalQuads's tick: follows the stage's 0x1050: red (0x101080) while it is set, teal (0x808010) otherwise. */
+void St00SignalQuads_tick(St00SignalQuads *this) {
     if (this->stage->unk1050) {
         if (this->red != 1) {
             this->color = 0x101080;
@@ -355,26 +355,25 @@ void func_800D8A58(Unk800D8930 *this) {
     }
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D8AB4);
+INCLUDE_ASM("st00/nonmatchings/st00", St00SignalQuads_draw);
 
-/* An entity of the stage (func_800D8C0C, vtable D_800D3974; nothing calls its constructor): a 512 by 512 quad
- * at depth -0x200, color 0x208080. */
-typedef struct Unk800D8C0C {
+/* A 512 by 512 quad at depth -0x200, color 0x208080 (nothing calls St00ColorQuad_init). */
+typedef struct St00ColorQuad {
     /* 0x00 */ Entity entity;
     /* 0x18 */ void *unk18;
     /* 0x1C */ s16 unk1C;
     /* 0x1E */ u8 unk1E[0x20 - 0x1E];
     /* 0x20 */ u32 color;
     /* 0x24 */ SVECTOR corners[4];
-} Unk800D8C0C;
+} St00ColorQuad;
 
-/* Constructs the stage's colored quad entity: corners from (-0x100, -0x100) to (0x100, 0x100) at z -0x200. */
-Unk800D8C0C *func_800D8C0C(Unk800D8C0C *this, void *arg) {
+/* Constructs the St00ColorQuad: corners from (-0x100, -0x100) to (0x100, 0x100) at z -0x200. */
+St00ColorQuad *St00ColorQuad_init(St00ColorQuad *this, void *arg) {
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_800D3974;
+    this->entity.vtable = &ST00_COLOR_QUAD_VTABLE;
     this->unk18 = arg;
     this->unk1C = 0;
-    /* The match depends on these chained assignments, as in st07's func_800D5080. */
+    /* The match depends on these chained assignments, as in st07's BonusThrower_init. */
     this->corners[0].vx = this->corners[2].vx = -0x100;
     this->corners[1].vx = this->corners[3].vx = 0x100;
     this->corners[0].vy = this->corners[1].vy = -0x100;
@@ -384,65 +383,62 @@ Unk800D8C0C *func_800D8C0C(Unk800D8C0C *this, void *arg) {
     return this;
 }
 
-/* The destructor of the entity class of vtable D_800D3974, which func_800D8C0C installs. */
-void func_800D8CA0(Entity *this, s32 flags) {
-    this->vtable = &D_800D3974;
+/* St00ColorQuad's destructor. */
+void St00ColorQuad_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST00_COLOR_QUAD_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D8CF4);
+INCLUDE_ASM("st00/nonmatchings/st00", St00ColorQuad_tick);
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D8D48);
+INCLUDE_ASM("st00/nonmatchings/st00", St00ColorQuad_draw);
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D8ED4);
+INCLUDE_ASM("st00/nonmatchings/st00", St00CrossingSprites_init);
 
-/* The destructor of the entity class of vtable D_800D394C, which func_800D8ED4 installs. */
-void func_800D8FB4(Entity *this, s32 flags) {
-    this->vtable = &D_800D394C;
+/* St00CrossingSprites's destructor. */
+void St00CrossingSprites_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST00_CROSSING_SPRITES_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D9008);
+INCLUDE_ASM("st00/nonmatchings/st00", St00CrossingSprites_tick);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D9128);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D9234);
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D932C);
+INCLUDE_ASM("st00/nonmatchings/st00", St00CrossingSprites_draw);
 
-/* The entity func_800D950C constructs (virtual table D_800D3924): up to 16 items that slide out from
- * x = 0x880 (even) or -0x880 (odd), brightest at x = +-0xA80. */
-typedef struct Unk800D950C {
+/* Up to 16 sprites that slide out from x = 0x880 (even) or -0x880 (odd), brightest at x = +-0xA80. */
+typedef struct St00SlidingSprites {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 unk18; /* func_800D950C's second argument */
+    /* 0x18 */ s32 unk18; /* St00SlidingSprites_init's second argument */
     /* 0x1C */ u16 frame;
-    /* 0x1E */ u16 count; /* items moving: 2 more every 16 frames, up to 16 */
+    /* 0x1E */ u16 count; /* sprites moving: 2 more every 16 frames, up to 16 */
     /* 0x20 */ u16 speed[16];
     /* 0x40 */ u8 brightness[16];
-    /* 0x50 */ u16 unk50[16]; /* the item stays still when set */
+    /* 0x50 */ u16 unk50[16]; /* the sprite stays still when set */
     /* 0x70 */ VECTOR position[16];
-} Unk800D950C;
+} St00SlidingSprites;
 
-/* PsyQ libc (stdlib.h); not in psyq.h yet. */
-
-/* Whether item i is an even one (they move right).
+/* Whether sprite i is an even one (they move right).
  * The match depends on this inline: its store-flag gives the game's xori/andi test. */
 static inline s32 isEven(s32 i) {
     return (i & 1) == 0;
 }
 
-/* Constructs the stage's sliding items: even ones at x 0x880, odd ones at -0x880, all at y -0x900, still. */
-Unk800D950C *func_800D950C(Unk800D950C *this, s32 arg) {
+/* Constructs the St00SlidingSprites: even ones at x 0x880, odd ones at -0x880, all at y -0x900, still. */
+St00SlidingSprites *St00SlidingSprites_init(St00SlidingSprites *this, s32 arg) {
     s32 i;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_800D3924;
+    this->entity.vtable = &ST00_SLIDING_SPRITES_VTABLE;
     this->unk18 = arg;
     for (i = 0; i < 16; i++) {
         /* The match depends on a whole setVector in each arm (the stores before the join). */
@@ -460,9 +456,9 @@ Unk800D950C *func_800D950C(Unk800D950C *this, s32 arg) {
     return this;
 }
 
-/* The destructor of the entity class of vtable D_800D3924, which func_800D950C installs. */
-void func_800D95C0(Entity *this, s32 flags) {
-    this->vtable = &D_800D3924;
+/* St00SlidingSprites's destructor. */
+void St00SlidingSprites_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST00_SLIDING_SPRITES_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
@@ -470,9 +466,9 @@ void func_800D95C0(Entity *this, s32 flags) {
 }
 
 
-/* Unk800D950C's gather: every 16 frames two more items move; each speeds up, outwards, its brightness
+/* St00SlidingSprites's tick: every 16 frames two more sprites move; each speeds up, outwards, its brightness
  * falling with the distance to +-0xA80, and starts again from +-0x880 past it. */
-void func_800D9614(Unk800D950C *this, s32 arg) {
+void St00SlidingSprites_tick(St00SlidingSprites *this, s32 arg) {
     s32 i;
 
     if ((this->frame & 0xF) == 0) {
@@ -514,75 +510,74 @@ void func_800D9614(Unk800D950C *this, s32 arg) {
     this->frame++;
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D977C);
+INCLUDE_ASM("st00/nonmatchings/st00", St00SlidingSprites_draw);
 
-/* Constructs an object of D_800D3ADC (an UnkStageObject: a part with a virtual table, a word and a
- * vector) for arg, with the vector (0x40, 0, 0). */
-UnkStageObject *func_800D9970(UnkStageObject *this, s32 arg) {
+/* Constructs a StageHit with damage and the knockback (0x40, 0, 0). */
+StageHit *StageHit_init(StageHit *this, s32 damage) {
     Vec3 vec;
 
     /* The match depends on vec, a whole vector copied in (its stores stay on the stack), and on filling it
      * after the vtable store. */
-    this->vtable = D_800D3ADC;
+    this->vtable = STAGE_HIT_VTABLE;
     vec.vx = 0x40;
     vec.vy = 0;
     vec.vz = 0;
-    this->unk4 = arg;
-    this->unk8 = vec;
+    this->damage = damage;
+    this->knockback = vec;
     return this;
 }
 
-/* Entry 0xC of D_800D3ADC: adds the word of the object to the part's unk18, and its vector to the part's
- * unk20 (func_80075B48 calls it for the part linked to the one the object owns). */
-void func_800D99AC(UnkStageObject *this, Unk80075EE4 *part) {
+/* StageHit's slot 0x08 (collideShapes calls it with the sphere its own touched): adds its damage and knockback
+ * into the sphere's. */
+void StageHit_apply(StageHit *this, CollisionSphere *part) {
     s32 x, y, z;
 
-    part->unk18 += this->unk4;
+    part->hitDamage += this->damage;
     /* The match depends on the vector sum reading everything before writing (as vecAddInPlace). */
-    x = part->unk20.vx;
-    y = part->unk20.vy;
-    z = part->unk20.vz;
-    x += this->unk8.vx;
-    y += this->unk8.vy;
-    z += this->unk8.vz;
-    part->unk20.vx = x;
-    part->unk20.vy = y;
-    part->unk20.vz = z;
+    x = part->hitKnockback.vx;
+    y = part->hitKnockback.vy;
+    z = part->hitKnockback.vz;
+    x += this->knockback.vx;
+    y += this->knockback.vy;
+    z += this->knockback.vz;
+    part->hitKnockback.vx = x;
+    part->hitKnockback.vy = y;
+    part->hitKnockback.vz = z;
 }
 
 /* The entity class func_800D99F0 constructs (virtual table D_800D3A8C): an
- * UnkStageObject part at 0x44 and an Unk80075EE4 member at 0x5C. */
+ * StageHit part at 0x44 and a CollisionSphere member at 0x5C. */
 typedef struct Unk800D99F0 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8006ED20 *list;
+    /* 0x18 */ Fight *list;
     /* 0x1C */ u32 unk1C;
     /* 0x20 */ Vec3 position;
     /* 0x2C */ u8 unk2C[0x30 - 0x2C];
     /* 0x30 */ Vec3 velocity;
     /* 0x3C */ u8 unk3C[0x40 - 0x3C];
     /* 0x40 */ s32 unk40;
-    /* 0x44 */ UnkStageObject unk44;
+    /* 0x44 */ StageHit unk44;
     /* 0x58 */ u8 unk58[0x5C - 0x58];
-    /* 0x5C */ Unk80075EE4 unk5C;
+    /* 0x5C */ CollisionSphere unk5C;
 } Unk800D99F0;
 
 extern EntityVtable D_800D3A8C;
 
 
 /* Constructs Unk800D99F0 at position and adds its member to list; its part's vector is the velocity
- * scaled and lifted as func_8008A9BC does it. */
-Unk800D99F0 *func_800D99F0(Unk800D99F0 *this, Unk8006ED20 *list, Vec3 *position, u16 arg) {
+ * scaled and lifted as HolydramonSpecial1Hitbox_init does it. */
+Unk800D99F0 *func_800D99F0(Unk800D99F0 *this, Fight *list, Vec3 *position, u16 arg) {
     VECTOR velocity;
     VECTOR v;
     s32 x, y, z;
 
     entityInit(&this->entity, 0x40000);
     this->entity.vtable = &D_800D3A8C;
-    func_800D9970(&this->unk44, 0x80002800);
-    func_80075EE4(&this->unk5C, position, 0x80, &this->unk44);
+    StageHit_init(&this->unk44, 0x80002800);
+    CollisionSphere_init(&this->unk5C, position, 0x80, &this->unk44);
     this->list = list;
     this->unk1C = arg;
-    func_8006F064(list, &this->unk5C.node);
+    Fight_addStageShape(list, &this->unk5C.link);
     this->unk40 = 0;
     this->unk5C.flags |= 1;
     /* The match depends on velocity and v being whole VECTORs on the stack (v = velocity copies its pad
@@ -594,9 +589,9 @@ Unk800D99F0 *func_800D99F0(Unk800D99F0 *this, Unk8006ED20 *list, Vec3 *position,
     v.vx <<= 5;
     v.vy -= 0x3000;
     v.vz <<= 5;
-    this->unk44.unk8.vx = v.vx;
-    this->unk44.unk8.vy = v.vy;
-    this->unk44.unk8.vz = v.vz;
+    this->unk44.knockback.vx = v.vx;
+    this->unk44.knockback.vy = v.vy;
+    this->unk44.knockback.vz = v.vz;
     x = position->vx;
     y = position->vy;
     z = position->vz;
@@ -614,15 +609,15 @@ void func_800D9B08(Unk800D99F0 *this, s32 flags) {
     ListNode *link;
 
     this->entity.vtable = &D_800D3A8C;
-    this->unk5C.vtable = D_80065184;
+    this->unk5C.vtable = COLLISION_SHAPE_VTABLE;
     /* listRemove(&this->unk5C.node) written out: the match depends on this
      * access order (soundControlDestroy's) */
-    link = &this->unk5C.node;
-    this->unk5C.node.next->prev = this->unk5C.node.prev;
-    link->prev->next = this->unk5C.node.next;
-    this->unk5C.node.next = link;
-    this->unk5C.node.prev = link;
-    this->unk44.vtable = D_80065164;
+    link = &this->unk5C.link;
+    this->unk5C.link.next->prev = this->unk5C.link.prev;
+    link->prev->next = this->unk5C.link.next;
+    this->unk5C.link.next = link;
+    this->unk5C.link.prev = link;
+    this->unk44.vtable = COLLISION_OWNER_VTABLE;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
@@ -637,34 +632,34 @@ void func_800D9DBC(void *this) {
 }
 
 /* The entity class func_800D9DDC constructs (virtual table D_800D3A64): an
- * UnkStageObject part at 0x3C and an Unk80075EE4 member at 0x54. */
+ * StageHit part at 0x3C and a CollisionSphere member at 0x54. */
 typedef struct Unk800D9DDC {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8006ED20 *list;
+    /* 0x18 */ Fight *list;
     /* 0x1C */ Vec3 position;
     /* 0x28 */ u8 unk28[0x2C - 0x28];
     /* 0x2C */ Vec3 velocity;
     /* 0x38 */ u8 unk38[0x3C - 0x38];
-    /* 0x3C */ UnkStageObject unk3C;
+    /* 0x3C */ StageHit unk3C;
     /* 0x50 */ u8 unk50[0x54 - 0x50];
-    /* 0x54 */ Unk80075EE4 unk54;
+    /* 0x54 */ CollisionSphere unk54;
 } Unk800D9DDC;
 
 extern EntityVtable D_800D3A64;
 
 /* Constructs Unk800D9DDC at position and adds its member to list: func_800D99F0's
  * twin, with its part's vector at four times the velocity. */
-Unk800D9DDC *func_800D9DDC(Unk800D9DDC *this, Unk8006ED20 *list, Vec3 *position) {
+Unk800D9DDC *func_800D9DDC(Unk800D9DDC *this, Fight *list, Vec3 *position) {
     VECTOR velocity;
     VECTOR v;
     s32 x, y, z;
 
     entityInit(&this->entity, 0x40000);
     this->entity.vtable = &D_800D3A64;
-    func_800D9970(&this->unk3C, 0x80002800);
-    func_80075EE4(&this->unk54, position, 0x80, &this->unk3C);
+    StageHit_init(&this->unk3C, 0x80002800);
+    CollisionSphere_init(&this->unk54, position, 0x80, &this->unk3C);
     this->list = list;
-    func_8006F064(list, &this->unk54.node);
+    Fight_addStageShape(list, &this->unk54.link);
     this->unk54.flags |= 1;
     /* The match depends on the same velocity, v copy and order as in func_800D99F0 */
     velocity.vx = 0x20;
@@ -674,9 +669,9 @@ Unk800D9DDC *func_800D9DDC(Unk800D9DDC *this, Unk8006ED20 *list, Vec3 *position)
     v.vx <<= 2;
     v.vy <<= 2;
     v.vz <<= 2;
-    this->unk3C.unk8.vx = v.vx;
-    this->unk3C.unk8.vy = v.vy;
-    this->unk3C.unk8.vz = v.vz;
+    this->unk3C.knockback.vx = v.vx;
+    this->unk3C.knockback.vy = v.vy;
+    this->unk3C.knockback.vz = v.vz;
     x = position->vx;
     y = position->vy;
     z = position->vz;
@@ -694,15 +689,15 @@ void func_800D9EDC(Unk800D9DDC *this, s32 flags) {
     ListNode *link;
 
     this->entity.vtable = &D_800D3A64;
-    this->unk54.vtable = D_80065184;
+    this->unk54.vtable = COLLISION_SHAPE_VTABLE;
     /* listRemove(&this->unk54.node) written out: the match depends on this
      * access order (soundControlDestroy's) */
-    link = &this->unk54.node;
-    this->unk54.node.next->prev = this->unk54.node.prev;
-    link->prev->next = this->unk54.node.next;
-    this->unk54.node.next = link;
-    this->unk54.node.prev = link;
-    this->unk3C.vtable = D_80065164;
+    link = &this->unk54.link;
+    this->unk54.link.next->prev = this->unk54.link.prev;
+    link->prev->next = this->unk54.link.next;
+    this->unk54.link.next = link;
+    this->unk54.link.prev = link;
+    this->unk3C.vtable = COLLISION_OWNER_VTABLE;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
@@ -712,32 +707,31 @@ void func_800D9EDC(Unk800D9DDC *this, s32 flags) {
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D9F70);
 
 /* Returns whether the stage's 0x1050 is set. */
-s32 func_800DA140(Unk800D3B74 *this) {
+s32 func_800DA140(StageMachine *this) {
     return this->unk1050 != 0;
 }
 
-/* The destructor of the class of virtual table D_800D3ADC: Unk80076308's, inlined. */
-void func_800DA14C(Unk80076308 *this, s32 flags) {
-    this->vtable = D_80065164;
+/* StageHit's destructor: CollisionOwner's, inlined. */
+void StageHit_destroy(CollisionOwner *this, s32 flags) {
+    this->vtable = COLLISION_OWNER_VTABLE;
     if (flags & DESTROY_FREE) {
         operatorDelete(this);
     }
 }
 
-/* Sets the object's vector, reading all three components before writing any (as vecCopy
- * does). */
-void func_800DA180(UnkStageObject *this, Vec3 *vec) {
+/* Sets the hit's knockback, reading all three components before writing any (as vecCopy does). */
+void StageHit_setKnockback(StageHit *this, Vec3 *knockback) {
     s32 x, y, z;
 
-    x = vec->vx;
-    y = vec->vy;
-    z = vec->vz;
-    this->unk8.vx = x;
-    this->unk8.vy = y;
-    this->unk8.vz = z;
+    x = knockback->vx;
+    y = knockback->vy;
+    z = knockback->vz;
+    this->knockback.vx = x;
+    this->knockback.vy = y;
+    this->knockback.vz = z;
 }
 
-/* Sets the object's word at 4. */
-void func_800DA19C(UnkStageObject *this, s32 value) {
-    this->unk4 = value;
+/* Sets the hit's damage. */
+void StageHit_setDamage(StageHit *this, s32 damage) {
+    this->damage = damage;
 }

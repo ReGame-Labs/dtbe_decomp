@@ -16,10 +16,10 @@ EXTERN_C_BEGIN
  * memory from the main heap (operatorNew) and returns it.
  */
 struct Task *movieTaskInit(void *memory);
-struct Task *func_80065AE4(void *memory, struct SystemContext *context);
-struct Task *func_80066084(void *memory, struct SystemContext *context);
+struct Task *hanamasuTestTaskInit(void *memory, struct SystemContext *context);
+struct Task *iwanagaTestTaskInit(void *memory, struct SystemContext *context);
 struct Task *bootLogoTaskInit(void *memory, struct SystemContext *context);
-struct Task *func_80066F74(void *memory, struct SystemContext *context);
+struct Task *teradaTestTaskInit(void *memory, struct SystemContext *context);
 struct Task *titleLogoTaskInit(void *memory, struct SystemContext *context);
 /* The title's task size: the USA release's task is 0x30 bytes bigger. */
 #if VERSION_JP
@@ -27,19 +27,19 @@ struct Task *titleLogoTaskInit(void *memory, struct SystemContext *context);
 #else
 #define TITLE_LOGO_TASK_SIZE 0x113C
 #endif
-struct Task *func_800673A4(void *memory, struct SystemContext *context);
-struct Task *func_800681A4(void *memory, struct SystemContext *context);
-struct Task *mainMenuTaskInit(void *memory, s32 arg);
-struct Task *func_8006A43C(void *memory, struct SystemContext *context);
-struct Task *characterSelectTaskInit(void *memory, struct SystemContext *context, s32 arg);
+struct Task *shohyamaTestTaskInit(void *memory, struct SystemContext *context);
+struct Task *modelViewTaskInit(void *memory, struct SystemContext *context);
+struct Task *mainMenuTaskInit(void *memory, s32 cursor);
+struct Task *mapViewTaskInit(void *memory, struct SystemContext *context);
+struct Task *characterSelectTaskInit(void *memory, struct SystemContext *context, s32 selectFlags);
 struct Task *gameMainTaskInit(void *memory, struct SystemContext *context);
-struct Task *memoryCardTaskInit(void *memory, s32 arg);
-struct Task *guideLogoTaskInit(void *memory, struct SystemContext *context, u16 arg);
-struct Task *rankingTaskInit(void *memory, struct SystemContext *context, s32 arg);
+struct Task *memoryCardTaskInit(void *memory, s32 mode);
+struct Task *guideLogoTaskInit(void *memory, struct SystemContext *context, u16 bonusGame);
+struct Task *rankingTaskInit(void *memory, struct SystemContext *context, s32 enterName);
 struct Task *creditsTaskInit(void *memory, struct SystemContext *context);
 struct Task *optionTaskInit(void *memory);
 /* called on the list node of a MeshSceneLink that is in a list */
-void func_80076A5C(struct ListNode *node);
+void moveCollisionLinkToBack(struct ListNode *node);
 
 EXTERN_C_END
 

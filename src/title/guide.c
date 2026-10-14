@@ -8,78 +8,71 @@
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/lib/string.h"
 #include "engine/math/matrix.h"
+#include "engine/math/random.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 #include "engine/task/entity.h"
 #include "engine/text/font.h"
 #include "title/title_classes.h"
 
-/* The guide logo task, which guideLogoTaskInit sets up. */
+/* The guide logo task, which guideLogoTaskInit sets up: the host explains a bonus game in a window, typing
+ * its text a character a frame, four lines a page. */
 typedef struct GuideLogoTask {
     /* 0x000 */ Task task;
-    /* 0x020 */ s32 unk20;
+    /* 0x020 */ s32 updateArg; /* the argument of the last update */
     /* 0x024 */ EntityGroup entities;
-    /* 0x034 */ Unk80076E24 *model; /* a character model entity (title_0a.c) */
+    /* 0x034 */ TitleChara *chara; /* the guide's host (title_chara.c) */
     /* 0x038 */ u32 sound; /* a sound's handle (stopSound) */
     /* 0x03C */ Camera camera;
-    /* 0x078 */ MatrixWords view; /* func_800721C0 looks at the guide through it */
+    /* 0x078 */ MatrixWords view; /* GuideLogoTask_tick looks at the guide through it */
     /* 0x098 */ VECTOR unk98;
-    /* 0x0A8 */ u8 unkA8[0xA6C - 0xA8]; /* a Mersenne twister */
-    /* 0xA6C */ u16 unkA6C; /* a frame count (func_800721C0) */
+    /* 0x0A8 */ MersenneTwister random;
+    /* 0xA6C */ u16 frame; /* counted every tick: the strips and the page mark follow it */
     /* 0xA6E */ s16 leaving; /* -1 once the guide fades out to leave */
     /* 0xA70 */ s16 leaveFrame; /* frames since it started leaving */
-    /* 0xA72 */ s16 unkA72;
-    /* 0xA74 */ u16 unkA74; /* guideLogoTaskInit's argument */
-    /* 0xA76 */ u16 unkA76; /* the confirm button set it: type the rest of the page at once */
-    /* 0xA78 */ u16 unkA78; /* characters typed so far */
-    /* 0xA7A */ u16 unkA7A; /* the next page's first character count, and 0xA80 its text */
-    /* 0xA7C */ u16 unkA7C; /* the page's, and 0xA84 its text */
+    /* 0xA72 */ s16 typeDelay; /* counts to 0x21 before the typing starts */
+    /* 0xA74 */ u16 bonusGame; /* guideLogoTaskInit's argument: which text (GUIDE_TEXTS) and pictures */
+    /* 0xA76 */ u16 typeAll; /* the confirm button set it: type the rest of the page at once */
+    /* 0xA78 */ u16 typed; /* characters typed so far */
+    /* 0xA7A */ u16 nextPageCount; /* the next page's first character count, and nextPageText its text */
+    /* 0xA7C */ u16 pageCount; /* the page's, and pageText its text */
     /* 0xA7E */ u8 unkA7E[0xA80 - 0xA7E];
-    /* 0xA80 */ u8 *unkA80; /* in the text of 0xA74 */
-    /* 0xA84 */ u8 *unkA84;
-    /* 0xA88 */ s16 unkA88; /* the page is full; func_80073210 draws its blinking mark while it is set */
-    /* 0xA8A */ s16 unkA8A; /* the whole text is out */
-    /* 0xA8C */ u32 unkA8C; /* a bit per voice tag already played (func_80072D2C) */
+    /* 0xA80 */ u8 *nextPageText; /* in the text of bonusGame */
+    /* 0xA84 */ u8 *pageText;
+    /* 0xA88 */ s16 pageFull; /* GuideLogoTask_drawPageMark draws its blinking mark while it is set */
+    /* 0xA8A */ s16 textDone; /* the whole text is out: the confirm button leaves */
+    /* 0xA8C */ u32 playedVoices; /* a bit per voice tag already played (GuideLogoTask_typeText) */
 } GuideLogoTask;
 
-/* The buttons that confirm and that leave the guide: circle and cross in Japan, cross and triangle in the
- * US. */
-#if VERSION_JP
-#define PAD_CONFIRM PADRright
-#define PAD_CANCEL PADRdown
-#else
-#define PAD_CONFIRM PADRdown
-#define PAD_CANCEL PADRup
-#endif
 
-extern Unk8006713CVtable D_80065EC4;
-extern u8 *D_8007B244[]; /* the guides' texts, by 0xA74 */
+extern TickTaskVtable GUIDE_LOGO_TASK_VTABLE;
+extern u8 *GUIDE_TEXTS[]; /* the guides' texts, by bonus game */
 
-void func_80072CF0(GuideLogoTask *this);
+void GuideLogoTask_resetText(GuideLogoTask *this);
 void func_80073208(void);
-void func_800726EC(GuideLogoTask *this);
-void func_800728D8(GuideLogoTask *this);
-void func_80072D2C(GuideLogoTask *this);
-void func_80073210(GuideLogoTask *this);
+void GuideLogoTask_drawBonusGamePicture(GuideLogoTask *this);
+void GuideLogoTask_drawTextWindow(GuideLogoTask *this);
+void GuideLogoTask_typeText(GuideLogoTask *this);
+void GuideLogoTask_drawPageMark(GuideLogoTask *this);
 
-/* The minigames' explanations, which D_8007B244 points into. */
-INCLUDE_RODATA("title/nonmatchings/guide", D_800659BC);
+/* The minigames' explanations, which GUIDE_TEXTS points into. */
+INCLUDE_RODATA("title/nonmatchings/guide", STR_GUIDE_TEXTS);
 
-/* The same as func_80073390. */
-SprtColorWords *func_80071CB8(u_long *ot, s32 x, s32 y, Unk80073390Image *image) {
+/* The same as drawImage. */
+SprtColorWords *guideDrawImage(u_long *ot, s32 x, s32 y, TitleImage *image) {
     SprtColorWords *sprt = (SprtColorWords *)allocSprt();
 
     sprt->xy = (y << 16) | (x & 0xFFFF);
-    sprt->uvClut = image->uvClut;
-    sprt->wh = image->wh;
+    sprt->uvClut = image->uvClut.word;
+    sprt->wh = image->wh.word;
     AddPrim(ot, sprt);
     AddPrim(ot, allocDrTpage(image->tpage));
     return sprt;
 }
 
-/* func_8007342C with texture (0..15, 0x40..0x80), page 0x16 and CLUT 0x7F18: two columns of six scrolling
- * strips. The match depends on the same forms as func_8007342C's. */
-void func_80071D54(u_long *ot, s32 frame) {
+/* drawSideStrips with texture (0..15, 0x40..0x80), page 0x16 and CLUT 0x7F18: two columns of six scrolling
+ * strips. The match depends on the same forms as drawSideStrips's. */
+void guideDrawSideStrips(u_long *ot, s32 frame) {
     s32 i;
 
     for (i = 0; i < 6; i++) {
@@ -124,29 +117,29 @@ void func_80071D54(u_long *ot, s32 frame) {
 
 INCLUDE_ASM("title/nonmatchings/guide", guideLogoTaskInit);
 
-/* The destructor of the guide logo task: stops its sound, unloads the sounds, deletes the model, fades the
+/* The destructor of the guide logo task: stops its sound, unloads the sounds, deletes the host, fades the
  * screen in, then destroys the camera, the entities and the task. */
-void func_80072100(GuideLogoTask *this, s32 flags) {
-    this->task.vtable = &D_80065EC4.task;
+void GuideLogoTask_destroy(GuideLogoTask *this, s32 flags) {
+    this->task.vtable = &GUIDE_LOGO_TASK_VTABLE.task;
     stopSound(this->sound);
     soundControlUnloadSeps(&SOUND_CONTROL);
     soundControlUnloadVabs(&SOUND_CONTROL);
-    entityDelete((Entity *)this->model);
+    entityDelete((Entity *)this->chara);
     fadeControlFadeIn(&FADE_CONTROL, 0);
     cameraDestroy(&this->camera, DESTROY_BASES);
     entityGroupDestroy(&this->entities, DESTROY_BASES);
     taskDestroy(&this->task, flags);
 }
 
-INCLUDE_RODATA("title/nonmatchings/guide", D_80065D90);
-INCLUDE_RODATA("title/nonmatchings/guide", D_80065DA0);
-INCLUDE_RODATA("title/nonmatchings/guide", D_80065DB0);
+INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_CAMERA_UP);
+INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_CAMERA_TARGET);
+INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_CAMERA_EYE);
 
-INCLUDE_ASM("title/nonmatchings/guide", func_800721C0);
+INCLUDE_ASM("title/nonmatchings/guide", GuideLogoTask_tick);
 
-/* Reads both pads: the cancel button starts leaving (fade out, model clip 1); the confirm button sets 0xA76
- * or plays model clip 9, and leaves too once 0xA8A is set. */
-void func_800722CC(GuideLogoTask *this) {
+/* Reads both pads: the cancel button starts leaving (fade out, the host's action 1); the confirm button sets
+ * typeAll or plays the host's action 9, and leaves too once textDone is set. */
+void GuideLogoTask_readPads(GuideLogoTask *this) {
     PadManager *pads = PAD_MANAGER_INSTANCE;
     s32 port;
 
@@ -156,37 +149,37 @@ void func_800722CC(GuideLogoTask *this) {
         if ((pressed & PAD_CANCEL) && this->leaving == 0) {
             this->leaving = -1;
             fadeControlFadeOut(&FADE_CONTROL, 0x1E);
-            func_800773C8(this->model, 1);
+            TitleChara_setAction(this->chara, 1);
         }
         if (pressed & PAD_CONFIRM) {
-            if (this->unkA88 == 0) {
-                this->unkA76 = 1;
-            } else if (func_800773F0(this->model) == 0) {
-                func_800773C8(this->model, 9);
+            if (this->pageFull == 0) {
+                this->typeAll = 1;
+            } else if (TitleChara_getAction(this->chara) == TITLE_CHARA_IDLE) {
+                TitleChara_setAction(this->chara, 9);
             }
-            if (this->unkA8A != 0 && this->leaving == 0) {
+            if (this->textDone != 0 && this->leaving == 0) {
                 this->leaving = -1;
                 fadeControlFadeOut(&FADE_CONTROL, 0x1E);
-                func_800773C8(this->model, 1);
+                TitleChara_setAction(this->chara, 1);
             }
         }
     }
 }
 
-/* Makes the guide's character model (func_80076E24), seen by its camera, at position turned by rotation. */
-static inline Unk80076E24 *guideNewModel(GuideLogoTask *this, Vec3 *position, Vec3 *rotation) {
-    return (Unk80076E24 *)NEW_ENTITY(sizeof(Unk80076E24), func_80076E24, &this->camera, position, rotation);
+/* Makes the guide's host (TitleChara_init), seen by its camera, at position turned by rotation. */
+static inline TitleChara *guideNewChara(GuideLogoTask *this, Vec3 *position, Vec3 *rotation) {
+    return (TitleChara *)NEW_ENTITY(sizeof(TitleChara), TitleChara_init, &this->camera, position, rotation);
 }
 
-/* Sets the view to the identity and 0x98 to (0xC00, 0xC00, 0xC00), then makes the character model at
- * (-0x100, 0, 0), turned 0x78E about y, adds it to the entities and sets its 0x38. The match depends on
- * guideNewModel taking the position as a parameter: its copy keeps the address in $s2 across the allocation
+/* Sets the view to the identity and 0x98 to (0xC00, 0xC00, 0xC00), then makes the host at
+ * (-0x100, 0, 0), turned 0x78E about y, adds it to the entities and makes it interruptible. The match depends on
+ * guideNewChara taking the position as a parameter: its copy keeps the address in $s2 across the allocation
  * (the rotation, at frame offset 0x10, gets integrate.c's constant equivalence and is folded back into
  * `sp + 0x20`; the position, at offset 0, does not). */
-void func_800723FC(GuideLogoTask *this) {
+void GuideLogoTask_createModel(GuideLogoTask *this) {
     Vec3 position;
     Vec3 rotation;
-    Unk80076E24 *model;
+    TitleChara *chara;
 
     this->view.words[0] = ONE;
     this->view.words[1] = 0;
@@ -206,52 +199,53 @@ void func_800723FC(GuideLogoTask *this) {
     rotation.vx = 0;
     rotation.vy = 0x78E;
     rotation.vz = 0;
-    model = guideNewModel(this, &position, &rotation);
-    this->model = model;
-    if (model != NULL) {
-        entityGroupAppend(&this->entities, &model->entity);
+    chara = guideNewChara(this, &position, &rotation);
+    this->chara = chara;
+    if (chara != NULL) {
+        entityGroupAppend(&this->entities, &chara->entity);
     }
-    this->model->unk38 = 1;
+    this->chara->interruptible = 1;
 }
 
-/* Calls the empty func_80073208, then func_80072CF0, which resets fields 0xA76-0xA8A. */
-void func_800724D8(void *this) {
+/* Calls the empty func_80073208, then GuideLogoTask_resetText, which resets the typing (typeAll to textDone). */
+void GuideLogoTask_startText(void *this) {
     func_80073208();
-    func_80072CF0(this);
+    GuideLogoTask_resetText(this);
 }
 
-/* A frame of the guide: draws the blinking mark, counts 0xA72 up to 0x21 and then runs func_80072D2C, then
- * runs func_800726EC and func_800728D8. */
-void func_80072504(GuideLogoTask *this) {
-    func_80073210(this);
-    if (this->unkA72 > 0x20) {
-        func_80072D2C(this);
+/* A frame of the guide: draws the blinking mark, counts typeDelay up to 0x21 and then runs
+ * GuideLogoTask_typeText, then runs GuideLogoTask_drawBonusGamePicture and GuideLogoTask_drawTextWindow. */
+void GuideLogoTask_drawExplanation(GuideLogoTask *this) {
+    GuideLogoTask_drawPageMark(this);
+    if (this->typeDelay > 0x20) {
+        GuideLogoTask_typeText(this);
     } else {
-        this->unkA72++;
+        this->typeDelay++;
     }
-    func_800726EC(this);
-    func_800728D8(this);
+    GuideLogoTask_drawBonusGamePicture(this);
+    GuideLogoTask_drawTextWindow(this);
 }
 
-void func_80072560(void) {
+/* An empty function that guideLogoTaskInit calls. */void func_80072560(void) {
 }
 
-extern Unk80073390Image D_80065EF4[];
+extern TitleImage GUIDE_IMAGES[];
 
-/* Draws the guide logo screen: func_80071D54's strips at the frame count, picture 4 + 0xA74 and picture 14
- * of D_80065EF4, then the 0x140 x 0xF0 picture at (0, 0) of texture pages 6 and 7 (func_80073F94's shape). */
-void func_80072568(GuideLogoTask *this) {
+/* Draws the guide logo screen: guideDrawSideStrips's strips at the frame count, picture 4 + bonusGame (the
+ * game's title) and picture 14 of GUIDE_IMAGES, then the 0x140 x 0xF0 picture at (0, 0) of texture pages 6
+ * and 7 (RankingTask_draw's shape). */
+void GuideLogoTask_drawScreen(GuideLogoTask *this) {
     u_long *ot = this->camera.ot.head;
-    Unk80073390Image *pictures;
+    TitleImage *pictures;
     SPRT *sprt;
     DR_TPAGE *tpage;
 
-    func_80071D54(ot, this->unkA6C);
+    guideDrawSideStrips(ot, this->frame);
     /* The match depends on the table in a local, set after the first call (it then keeps s1). */
-    pictures = D_80065EF4;
-    sprt = (SPRT *)func_80071CB8(ot, 0x2F, 0xD, &pictures[(u16)(this->unkA74 + 4)]);
+    pictures = GUIDE_IMAGES;
+    sprt = (SPRT *)guideDrawImage(ot, 0x2F, 0xD, &pictures[(u16)(this->bonusGame + 4)]);
     setRGB0(sprt, 0x80, 0x80, 0x80);
-    sprt = (SPRT *)func_80071CB8(ot, 0x46, 0xD1, &pictures[14]);
+    sprt = (SPRT *)guideDrawImage(ot, 0x46, 0xD1, &pictures[14]);
     setRGB0(sprt, 0x80, 0x80, 0x80);
     tpage = allocDrTpage(6);
     sprt = allocSprt();
@@ -273,34 +267,34 @@ void func_80072568(GuideLogoTask *this) {
     AddPrim(ot, tpage);
 }
 
-void func_800726E4(void) {
+/* An empty function that nothing calls. */void func_800726E4(void) {
 }
 
-INCLUDE_RODATA("title/nonmatchings/guide", D_80065DC0);
-INCLUDE_RODATA("title/nonmatchings/guide", D_80065DCC);
+INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_PICTURE_UVS);
+INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_PICTURE_CLUTS);
 
-INCLUDE_ASM("title/nonmatchings/guide", func_800726EC);
+INCLUDE_ASM("title/nonmatchings/guide", GuideLogoTask_drawBonusGamePicture);
 
-void func_800728D0(void) {
+/* An empty function that nothing calls. */void func_800728D0(void) {
 }
 
-INCLUDE_RODATA("title/nonmatchings/guide", D_80065DD8);
+INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_WINDOW_CORNERS);
 
-INCLUDE_ASM("title/nonmatchings/guide", func_800728D8);
+INCLUDE_ASM("title/nonmatchings/guide", GuideLogoTask_drawTextWindow);
 
-/* Resets 0xA76-0xA8A, 0xA80 and 0xA84 from D_8007B244 by 0xA74. */
-void func_80072CF0(GuideLogoTask *this) {
+/* Resets the typing to the first page of the bonus game's text (GUIDE_TEXTS). */
+void GuideLogoTask_resetText(GuideLogoTask *this) {
     u8 *value;
 
-    this->unkA76 = 0;
-    this->unkA78 = 0;
-    this->unkA7A = 0;
-    this->unkA7C = 0;
-    value = D_8007B244[this->unkA74];
-    this->unkA88 = 0;
-    this->unkA8A = 0;
-    this->unkA80 = value;
-    this->unkA84 = value;
+    this->typeAll = 0;
+    this->typed = 0;
+    this->nextPageCount = 0;
+    this->pageCount = 0;
+    value = GUIDE_TEXTS[this->bonusGame];
+    this->pageFull = 0;
+    this->textDone = 0;
+    this->nextPageText = value;
+    this->pageText = value;
 }
 
 /* A TextPrinter's virtual setColor and putChar, inlined as the game has them (the virtual table read from the
@@ -310,14 +304,14 @@ void func_80072CF0(GuideLogoTask *this) {
 #define TEXT_PUT_CHAR(printer, x, y, code) \
     (printer).printer.vtable->putChar.func((u8 *)&(printer) + (printer).printer.vtable->putChar.delta, x, y, code)
 
-/* Types out the guide's text (D_8007B244 by 0xA74) a character more each frame, four lines of 16 columns a
- * page, from (0x20, 0x86); the confirm button turns a full page. Tags: "<cN>" sets one of five colours, "<i"
- * and two more characters skip a column, "<vN>" plays voice N once (and the model's clip 0xB). The match depends
- * on three forms: each colour case calls setColor itself, with its text++ after the call (cross-jumping merges
- * the calls' tails and leaves the virtual table read in each case); `c - '0'` switched on, not stored (one
- * register for the character and the index); the destructor's address taken into a local (gcse then keeps the
- * printer's address in $s4 across the loop). */
-void func_80072D2C(GuideLogoTask *this) {
+/* Types out the guide's text (GUIDE_TEXTS by bonusGame) a character more each frame, four lines of 16 columns
+ * a page, from (0x20, 0x86); the confirm button turns a full page. Tags: "<cN>" sets one of five colours,
+ * "<i" and two more characters skip a column, "<vN>" plays voice N once (and the host's TITLE_CHARA_TALK).
+ * The match depends on three forms: each colour case calls setColor itself, with its text++ after the call
+ * (cross-jumping merges the calls' tails and leaves the virtual table read in each case); `c - '0'` switched
+ * on, not stored (one register for the character and the index); the destructor's address taken into a local
+ * (gcse then keeps the printer's address in $s4 across the loop). */
+void GuideLogoTask_typeText(GuideLogoTask *this) {
     TextPrinter printer;
     Printer *base;
     s32 x = 0x20;
@@ -335,7 +329,7 @@ void func_80072D2C(GuideLogoTask *this) {
     u_long *ot = this->camera.ot.slots;
     PadManager *pads = PAD_MANAGER_INSTANCE;
 
-    length = strlen(D_8007B244[this->unkA74]);
+    length = strlen(GUIDE_TEXTS[this->bonusGame]);
     textPrinterInit(&printer, ot);
 #if VERSION_JP
     textPrinterSetShadow(&printer, 1);
@@ -345,35 +339,35 @@ void func_80072D2C(GuideLogoTask *this) {
 #if !VERSION_JP
     narrow = 0;
 #endif
-    if (this->unkA88 == 0) {
-        this->unkA78++;
-        if (this->unkA78 > length) {
+    if (this->pageFull == 0) {
+        this->typed++;
+        if (this->typed > length) {
 #if VERSION_JP
-            this->unkA78 = length >> 1;
+            this->typed = length >> 1;
 #else
-            this->unkA78 = length;
+            this->typed = length;
 #endif
         }
     }
-    if ((padManagerGetPressed(pads, -1) & PAD_CONFIRM) && this->unkA88 != 0) {
-        this->unkA88 = 0;
-        this->unkA76 = 0;
-        this->unkA7C = this->unkA7A;
-        this->unkA84 = this->unkA80;
+    if ((padManagerGetPressed(pads, -1) & PAD_CONFIRM) && this->pageFull != 0) {
+        this->pageFull = 0;
+        this->typeAll = 0;
+        this->pageCount = this->nextPageCount;
+        this->pageText = this->nextPageText;
     }
-    count = this->unkA7C;
-    text = this->unkA84;
+    count = this->pageCount;
+    text = this->pageText;
     for (;;) {
         c = *text++;
         if (c == 0) {
-            this->unkA8A = 1;
+            this->textDone = 1;
             break;
         }
-        if (this->unkA76 == 0) {
-            if (count >= this->unkA78) {
+        if (this->typeAll == 0) {
+            if (count >= this->typed) {
                 break;
             }
-        } else if (this->unkA88 != 0) {
+        } else if (this->pageFull != 0) {
             break;
         }
         switch (c) {
@@ -427,7 +421,7 @@ void func_80072D2C(GuideLogoTask *this) {
             case 'v':
                 c = *text++;
                 voice = c - '0';
-                if (!(this->unkA8C & (1 << voice))) {
+                if (!(this->playedVoices & (1 << voice))) {
                     if (this->sound != 0) {
                         stopSound(this->sound);
                     }
@@ -466,9 +460,9 @@ void func_80072D2C(GuideLogoTask *this) {
                         this->sound = soundControlPlaySound(&SOUND_CONTROL, 0x3E, 0);
                         break;
                     }
-                    func_800773E8(this->model, this->sound);
-                    func_800773C8(this->model, 0xB);
-                    this->unkA8C |= 1 << voice;
+                    TitleChara_setVoice(this->chara, this->sound);
+                    TitleChara_setAction(this->chara, TITLE_CHARA_TALK);
+                    this->playedVoices |= 1 << voice;
                 }
                 text++;
                 break;
@@ -509,39 +503,39 @@ void func_80072D2C(GuideLogoTask *this) {
         if (line >= 4) {
             x = 0x20;
             y = 0x86;
-            this->unkA88 = 1;
-            this->unkA78 = count;
-            this->unkA7A = count;
-            this->unkA80 = text;
-            this->unkA76 = 0;
+            this->pageFull = 1;
+            this->typed = count;
+            this->nextPageCount = count;
+            this->nextPageText = text;
+            this->typeAll = 0;
         }
     }
     base = &printer.printer;
     printerDestroy(base, DESTROY_BASES);
 }
 
-void func_80073200(void) {
+/* An empty function that nothing calls. */void func_80073200(void) {
 }
 
-void func_80073208(void) {
+/* An empty function that GuideLogoTask_startText calls. */void func_80073208(void) {
 }
 
-/* While 0xA88 is set, draws a 16 by 16 mark at (0x110, 0xB4) of texture page 0x17 that blinks every 8 frames
+/* While pageFull is set, draws a 16 by 16 mark at (0x110, 0xB4) of texture page 0x17 that blinks every 8 frames
  * (u 0x40 and 0x50). The match depends on the blink phase kept in a local: the test is then a computed
  * truth value (srl, xori, andi), not a branch on the bit. */
-void func_80073210(GuideLogoTask *this) {
+void GuideLogoTask_drawPageMark(GuideLogoTask *this) {
     u_long *ot = this->camera.ot.slots;
     DR_TPAGE *tpage;
     SPRT *sprt;
     s32 firstFrame;
 
-    if (this->unkA88 == 0) {
+    if (this->pageFull == 0) {
         return;
     }
     tpage = allocDrTpage(0x17);
     sprt = allocSprt();
     setRGB0(sprt, 0x80, 0x80, 0x80);
-    firstFrame = (this->unkA6C & 8) == 0;
+    firstFrame = (this->frame & 8) == 0;
     if (firstFrame) {
         setUV0(sprt, 0x40, 0);
     } else {
@@ -554,15 +548,15 @@ void func_80073210(GuideLogoTask *this) {
     AddPrim(ot, tpage);
 }
 
-/* Clears leaving, leaveFrame and 0xA72. */
-void func_800732D8(GuideLogoTask *this) {
+/* Clears leaving, leaveFrame and typeDelay. */
+void GuideLogoTask_clearLeaving(GuideLogoTask *this) {
     this->leaving = 0;
     this->leaveFrame = 0;
-    this->unkA72 = 0;
+    this->typeDelay = 0;
 }
 
 /* While leaving: stops the sound at frame 0x20 and kills the task after frame 0x80. */
-void func_800732E8(GuideLogoTask *this) {
+void GuideLogoTask_tickLeaving(GuideLogoTask *this) {
     if (this->leaving != 0) {
         if (this->leaveFrame == 0x20) {
             stopSound(this->sound);
@@ -575,11 +569,11 @@ void func_800732E8(GuideLogoTask *this) {
     }
 }
 
-/* Update: keeps arg at 0x20 and runs the task's own method at 0x20. */
-void func_8007335C(Unk8006713C *this, s32 arg) {
-    this->unk20 = arg;
-    this->vtable->unk20.func((u8 *)this + this->vtable->unk20.delta, arg);
+/* Update: keeps arg and runs the task's tick. */
+void GuideLogoTask_update(TickTask *this, s32 arg) {
+    this->updateArg = arg;
+    this->vtable->tick.func((u8 *)this + this->vtable->tick.delta, arg);
 }
 
-INCLUDE_RODATA("title/nonmatchings/guide", D_80065EC4);
-INCLUDE_RODATA("title/nonmatchings/guide", D_80065EF4);
+INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_LOGO_TASK_VTABLE);
+INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_IMAGES);

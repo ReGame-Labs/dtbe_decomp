@@ -1,33 +1,33 @@
-/* The class of the constructor func_8007F920 and its kin (virtual tables D_80067C44 to D_80068154). */
+/* A fighter's states (FighterState and its subclasses): each one runs its slot of the fighter every frame, reads
+ * the input, and turns itself into the next state in place. */
 
 #include "common.h"
 #include "battle/game_classes.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 
-/* functions of Unk8007F920 that constructors of its kin call */
-void func_8007FCFC(Unk8007F920 *this);
-void func_8007FED8(Unk8007F920 *this);
-void func_8007FF1C(Unk8007F920 *this);
+/* functions of FighterState that constructors of its kin call */
+void func_8007FCFC(FighterState *this);
+void func_8007FED8(FighterState *this);
+void func_8007FF1C(FighterState *this);
 
-/* returns whether the word that the pointer at 0x230 of the Unk80076F34 of an Unk8007F920 points to is 1 */
-s32 func_8007F98C(Unk8007F920 *this);
-Unk8007F920 *func_80080BF0(Unk8007F920 *this, s32 arg);
-void func_80081A54(Unk8007F920 *this, s32 arg);
-/* the steps func_80081A54 runs with the character's input (func_80081E18, 80081EEC and 80081FC4 don't read it) */
-void func_80081B84(Unk8007F920 *this, Unk80075000 *input);
-void func_80081E18(Unk8007F920 *this, Unk80075000 *input);
-void func_80081EEC(Unk8007F920 *this, Unk80075000 *input);
-void func_80081FC4(Unk8007F920 *this, Unk80075000 *input);
-Unk8007F920 *func_8007F920(Unk8007F920 *this, s32 unk0);
+s32 func_8007F98C(FighterState *this);
+FighterState *FighterStateJump_init(FighterState *this, s32 jumpsBefore);
+void FighterAttackIdle_attack(FighterState *this, s32 attack);
+/* the steps FighterAttackIdle_attack runs with the fighter's input (func_80081E18, 80081EEC and 80081FC4 ignore it) */
+void func_80081B84(FighterState *this, InputHistory *input);
+void func_80081E18(FighterState *this, InputHistory *input);
+void func_80081EEC(FighterState *this, InputHistory *input);
+void func_80081FC4(FighterState *this, InputHistory *input);
+FighterState *FighterState_init(FighterState *this, s32 state);
 
 /* the virtual tables the functions below install, and the data they read */
-extern VtableEntry D_80067E0C[];
-extern VtableEntry D_80067E7C[];
+extern VtableEntry FIGHTER_ATTACK_IDLE_VTABLE[];
+extern VtableEntry FIGHTER_STATE_GET_UP_VTABLE[];
 extern VtableEntry D_80067E44[];
-extern VtableEntry D_80068154[];
-extern VtableEntry D_80068004[];
-extern VtableEntry D_80068074[];
+extern VtableEntry FIGHTER_STATE_VTABLE[];
+extern VtableEntry FIGHTER_STATE_JUMP_VTABLE[];
+extern VtableEntry FIGHTER_STATE_GROUND_VTABLE[];
 extern VtableEntry D_800680E4[];
 extern VtableEntry D_8006811C[];
 
@@ -37,27 +37,26 @@ extern VtableEntry D_8006811C[];
  * {0xFFFF0000, function}). */
 typedef VtableEntry MemberFunction;
 
-typedef struct Unk80080C5C {
-    /* 0x00 */ Unk8007F920 base;
-    /* 0x10 */ s32 unk10;
-    /* 0x14 */ s32 unk14;
-} Unk80080C5C;
+typedef struct FighterStateJump {
+    /* 0x00 */ FighterState base;
+    /* 0x10 */ s32 jumpCount; /* the jumps made: a second one while it is below 2 */
+    /* 0x14 */ s32 frames; /* frames since the jump */
+} FighterStateJump;
 
-/* The class of virtual table D_80067E44 (func_80081874): func_8007F920's with a word at 0x10. */
+/* The state of virtual table D_80067E44 (func_80081874): a FighterState with a word at 0x10. */
 typedef struct Unk80081874 {
-    /* 0x00 */ Unk8007F920 base;
+    /* 0x00 */ FighterState base;
     /* 0x10 */ s32 unk10;
 } Unk80081874;
 
-Unk8007F920 *func_80080778(Unk8007F920 *this, s32 unk0);
-/* func_800796F0 on the character at 8, from frame 0 */
-void func_8007FC2C(Unk8007F920 *this, s32 clip, s32 blendFrames);
-void func_8007FC50(Unk8007F920 *this, s32 clip, s32 blendFrames);
-void func_80081438(Unk8007F920 *this, s32 arg);
-/* Constructs, in place, the state of virtual table D_80067DD4 (on
- * func_80081A20's) with arg and the step function, which it then calls. */
-Unk8007F920 *func_8008209C(Unk8007F920 *this, s32 arg, MemberFunction step);
-/* the step functions of func_8008209C's states (pointers to member functions) */
+FighterState *func_80080778(FighterState *this, s32 state);
+void FighterState_playClip(FighterState *this, s32 clip, s32 blendFrames);
+void func_8007FC50(FighterState *this, s32 clip, s32 blendFrames);
+void FighterStateFlinch_init(FighterState *this, s32 hitBits);
+/* Constructs, in place, the attack `state` (virtual table FIGHTER_STATE_ATTACK_VTABLE, on func_80081A20's) with
+ * its step function, which it then calls. */
+FighterState *FighterStateAttack_init(FighterState *this, s32 state, MemberFunction step);
+/* the step functions of FighterStateAttack_init's states (pointers to member functions) */
 extern MemberFunction D_80067C44;
 extern MemberFunction D_80067C4C;
 extern MemberFunction D_80067C54;
@@ -71,390 +70,390 @@ extern MemberFunction D_80067CDC;
 extern MemberFunction D_80067CE4;
 extern MemberFunction D_80067CEC;
 extern MemberFunction D_80067CF4;
-/* Constructs, in place, the state of virtual table D_80067D94 (on
- * func_8007F920's) with arg and the step function at 0x14. */
-Unk8007F920 *func_800823EC(Unk8007F920 *this, s32 arg, MemberFunction step);
+/* Constructs, in place, the attack chain's `state` (virtual table D_80067D94, on FighterState_init's) with its
+ * step function at 0x14. */
+FighterState *func_800823EC(FighterState *this, s32 state, MemberFunction step);
 extern MemberFunction D_80067D04;
 extern MemberFunction D_80067D0C;
 extern VtableEntry D_80067D14[];
 extern VtableEntry D_80067D54[];
-Unk8007F920 *func_8008230C(Unk8007F920 *this);
-Unk8007F920 *func_80080FDC(Unk8007F920 *this, s32 state);
-Unk8007F920 *func_80081200(Unk8007F920 *this, s32 arg);
-Unk8007F920 *func_80082690(Unk8007F920 *this);
-Unk8007F920 *func_800826E8(Unk8007F920 *this);
+FighterState *func_8008230C(FighterState *this);
+FighterState *func_80080FDC(FighterState *this, s32 state);
+FighterState *func_80081200(FighterState *this, s32 state);
+FighterState *func_80082690(FighterState *this);
+FighterState *func_800826E8(FighterState *this);
 
-/* Constructs an Unk8007F920 with its value (its virtual table D_80068154, 4 cleared). */
-Unk8007F920 *func_8007F920(Unk8007F920 *this, s32 unk0) {
-    this->vtable = D_80068154;
-    this->unk0 = unk0;
-    this->unk4 = 0;
+/* Constructs a state with its FIGHTER_STATE_* id, from frame 0 (virtual table FIGHTER_STATE_VTABLE). */
+FighterState *FighterState_init(FighterState *this, s32 state) {
+    this->vtable = FIGHTER_STATE_VTABLE;
+    this->state = state;
+    this->frame = 0;
     return this;
 }
 
-/* Returns the object at 0x22C of the character at 8. */
-Unk8007F920 *func_8007F93C(Unk8007F920 *this) {
-    return this->unk8->unk22C;
+/* Returns the fighter's body state. */
+FighterState *FighterState_getBodyState(FighterState *this) {
+    return this->fighter->bodyState;
 }
 
-/* Returns the pointer at 0x230 of the character at 8 (func_800792AC's; the header types it s32). */
-s32 *func_8007F950(Unk8007F920 *this) {
-    return (s32 *)this->unk8->unk230;
+/* Returns the fighter's attack state. */
+FighterState *FighterState_getAttackState(FighterState *this) {
+    return this->fighter->attackState;
 }
 
-/* Whether the word the character's 0x230 points to is 1. */
-s32 func_8007F964(Unk8007F920 *this) {
-    return *func_8007F950(this) == 1;
+/* Whether the fighter attacks with nothing (its attack state is FIGHTER_STATE_IDLE). */
+s32 FighterState_isAttackIdle(FighterState *this) {
+    return FighterState_getAttackState(this)->state == FIGHTER_STATE_IDLE;
 }
 
-/* Whether the character's flag of func_80079AF8 is clear. */
-s32 func_8007F98C(Unk8007F920 *this) {
+/* Whether the fighter's flag of func_80079AF8 is clear. */
+s32 func_8007F98C(FighterState *this) {
     /* The match depends on the ^ 1 after the mask: ! xors before masking. */
-    return ((this->unk8->flags >> UNK80076F34_FLAG_AF8_BIT) & 1) ^ 1;
+    return ((this->fighter->flags >> FIGHTER_FLAG_80079AF8_BIT) & 1) ^ 1;
 }
 
-/* Whether the character's last input (func_800750C4) holds button 0x4. */
-s32 func_8007F9AC(Unk8007F920 *this) {
-    return (func_800750C4(func_800776C4(this->unk8)) & 0x4) != 0;
+/* Whether the fighter's last input (InputHistory_getHeld) holds the guard button (0x4). */
+s32 FighterState_isGuardHeld(FighterState *this) {
+    return (InputHistory_getHeld(Fighter_getInput(this->fighter)) & 0x4) != 0;
 }
 
-s32 func_8007F9DC(Unk8007F920 *this);
-INCLUDE_ASM("game/nonmatchings/game_0f", func_8007F9DC);
+s32 FighterState_updateGuard(FighterState *this);
+INCLUDE_ASM("game/nonmatchings/game_0f", FighterState_updateGuard);
 
-/* Whether the character's last input (func_800750C4) holds PAD_DOWN. */
-s32 func_8007FAC0(Unk8007F920 *this) {
-    return (func_800750C4(func_800776C4(this->unk8)) & PAD_DOWN) != 0;
+/* Whether the fighter's last input (InputHistory_getHeld) holds PAD_DOWN. */
+s32 FighterState_isDownHeld(FighterState *this) {
+    return (InputHistory_getHeld(Fighter_getInput(this->fighter)) & PAD_DOWN) != 0;
 }
 
-Unk8007F920 *func_80080BA8(Unk8007F920 *this);
-Unk8007F920 *func_80081384(Unk8007F920 *this);
-Unk8007F920 *func_800813F8(Unk8007F920 *this);
+FighterState *FighterStateGround_initCrouch(FighterState *this);
+FighterState *FighterStateGround_initGuard(FighterState *this);
+FighterState *FighterStateGround_initCrouchGuard(FighterState *this);
 
-/* Turns this object into another state in place by its state (0) and whether PAD_DOWN is held
- * (func_8007FAC0): held, 9 becomes 10 (func_800813F8) and any other but 2 and 10 becomes 2 (func_80080BA8);
- * not held, 10 becomes 9 (func_80081384) and 2 becomes 1 (func_800808EC). Returns whether it changed. */
-s32 func_8007FAF0(Unk8007F920 *this) {
-    s32 state = this->unk0;
+/* Crouches or stands up by PAD_DOWN (FighterState_isDownHeld), in place: held, a guard becomes a crouching guard
+ * and any other state but the crouches becomes a crouch; not held, a crouching guard becomes a guard and a crouch
+ * becomes idle. Returns whether the state changed. */
+s32 FighterState_updateCrouch(FighterState *this) {
+    s32 state = this->state;
 
-    if (func_8007FAC0(this)) {
-        if (state == 2 || state == 10) {
+    if (FighterState_isDownHeld(this)) {
+        if (state == FIGHTER_STATE_CROUCH || state == FIGHTER_STATE_CROUCH_GUARD) {
             return 0;
         }
-        if (state == 9) {
-            func_800813F8(this);
+        if (state == FIGHTER_STATE_GUARD) {
+            FighterStateGround_initCrouchGuard(this);
             return 1;
         }
-        func_80080BA8(this);
+        FighterStateGround_initCrouch(this);
         return 1;
     }
-    if (state == 10) {
-        func_80081384(this);
+    if (state == FIGHTER_STATE_CROUCH_GUARD) {
+        FighterStateGround_initGuard(this);
         return 1;
     }
-    if (state == 2) {
-        func_800808EC(this, 1);
+    if (state == FIGHTER_STATE_CROUCH) {
+        FighterStateGround_init(this, FIGHTER_STATE_IDLE);
         return 1;
     }
     return 0;
 }
 
-/* Returns 0x250 of the character at 8. */
-s32 func_8007FB9C(Unk8007F920 *this) {
-    return this->unk8->unk250;
+/* Returns the fighter's clip. */
+s32 FighterState_getClip(FighterState *this) {
+    return this->fighter->clip;
 }
 
-/* Returns the address of the character's unk3A4. */
-Vec3 *func_8007FBB0(Unk8007F920 *this) {
-    return &this->unk8->unk3A4;
+/* Returns the fighter's velocity. */
+Vec3 *func_8007FBB0(FighterState *this) {
+    return &this->fighter->velocity;
 }
 
-/* Calls func_80078804 for the Unk80076F34 of an Unk8007F920 when func_8007F964 holds. */
-void func_8007FBBC(Unk8007F920 *this) {
-    if (func_8007F964(this)) {
-        func_80078804(this->unk8, 0);
+/* Turns the fighter left (Fighter_faceLeft) when it is not attacking. */
+void func_8007FBBC(FighterState *this) {
+    if (FighterState_isAttackIdle(this)) {
+        Fighter_faceLeft(this->fighter, 0);
     }
 }
 
-/* Calls func_8007881C for the Unk80076F34 of an Unk8007F920 when func_8007F964 holds. */
-void func_8007FBF4(Unk8007F920 *this) {
-    if (func_8007F964(this)) {
-        func_8007881C(this->unk8, 0);
+/* Turns the fighter right (Fighter_faceRight) when it is not attacking. */
+void func_8007FBF4(FighterState *this) {
+    if (FighterState_isAttackIdle(this)) {
+        Fighter_faceRight(this->fighter, 0);
     }
 }
 
-/* func_800796F0 on the character at 8, from frame 0. */
-void func_8007FC2C(Unk8007F920 *this, s32 clip, s32 blendFrames) {
-    func_800796F0(this->unk8, clip, blendFrames, 0);
+/* Starts the fighter's clip from frame 0 (Fighter_setClip), blended in over blendFrames. */
+void FighterState_playClip(FighterState *this, s32 clip, s32 blendFrames) {
+    Fighter_setClip(this->fighter, clip, blendFrames, 0);
 }
 
-/* func_80079830 on the character at 8, from frame 0, plays -1. */
-void func_8007FC50(Unk8007F920 *this, s32 clip, s32 blendFrames) {
-    func_80079830(this->unk8, clip, blendFrames, 0, -1);
+/* Starts the fighter's action clip from frame 0 (Fighter_playActionClip), blended in over blendFrames, plays -1. */
+void func_8007FC50(FighterState *this, s32 clip, s32 blendFrames) {
+    Fighter_playActionClip(this->fighter, clip, blendFrames, 0, -1);
 }
 
-/* Whether the character's model is done with its clip at 0x254 (func_80079A0C) when second is set, else
- * with the one at 0x250 (func_800799A0). */
-s32 func_8007FC7C(Unk8007F920 *this, s32 second) {
+/* Whether the fighter is done with its action clip (Fighter_isActionClipDone) when action is set, else with its
+ * clip (Fighter_isClipDone). */
+s32 FighterState_isClipDone(FighterState *this, s32 action) {
     s32 done;
 
     /* The match depends on one result variable: a return in each arm inverts the branch. */
-    if (second) {
-        done = func_80079A0C(this->unk8);
+    if (action) {
+        done = Fighter_isActionClipDone(this->fighter);
     } else {
-        done = func_800799A0(this->unk8);
+        done = Fighter_isClipDone(this->fighter);
     }
     return done;
 }
 
-/* Calls the character's virtual method at 0x38 with 0x4, then increments 0x4. */
-void func_8007FCB8(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's intro slot (FighterVtable 0x38) with the state's frame, then counts the frame up. */
+void func_8007FCB8(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk38.func((u8 *)chara + vtable->unk38.delta, this->unk4++);
+    vtable->intro.func((u8 *)fighter + vtable->intro.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x40 with 0x4, then increments 0x4. */
-void func_8007FCFC(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's getUp slot (FighterVtable 0x40) with the state's frame, then counts the frame up. */
+void func_8007FCFC(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk40.func((u8 *)chara + vtable->unk40.delta, this->unk4++);
+    vtable->getUp.func((u8 *)fighter + vtable->getUp.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x48 with 0x4, then increments 0x4. */
-void func_8007FD40(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's walkLeft slot (FighterVtable 0x48) with the state's frame, then counts the frame up. */
+void func_8007FD40(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk48.func((u8 *)chara + vtable->unk48.delta, this->unk4++);
+    vtable->walkLeft.func((u8 *)fighter + vtable->walkLeft.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x50 with 0x4, then increments 0x4. */
-void func_8007FD84(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's walkRight slot (FighterVtable 0x50) with the state's frame, then counts the frame up. */
+void func_8007FD84(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk50.func((u8 *)chara + vtable->unk50.delta, this->unk4++);
+    vtable->walkRight.func((u8 *)fighter + vtable->walkRight.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x58 with 0x4, then increments 0x4. */
-void func_8007FDC8(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's dashLeft slot (FighterVtable 0x58) with the state's frame, then counts the frame up. */
+void func_8007FDC8(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk58.func((u8 *)chara + vtable->unk58.delta, this->unk4++);
+    vtable->dashLeft.func((u8 *)fighter + vtable->dashLeft.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x60 with 0x4, then increments 0x4. */
-void func_8007FE0C(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's dashRight slot (FighterVtable 0x60) with the state's frame, then counts the frame up. */
+void func_8007FE0C(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk60.func((u8 *)chara + vtable->unk60.delta, this->unk4++);
+    vtable->dashRight.func((u8 *)fighter + vtable->dashRight.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x68 with 0x4, then increments 0x4. */
-void func_8007FE50(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's jump slot (FighterVtable 0x68) with the state's frame, then counts the frame up. */
+void func_8007FE50(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk68.func((u8 *)chara + vtable->unk68.delta, this->unk4++);
+    vtable->jump.func((u8 *)fighter + vtable->jump.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x70 with 0x4, then increments 0x4. */
-void func_8007FE94(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's crouch slot (FighterVtable 0x70) with the state's frame, then counts the frame up. */
+void func_8007FE94(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk70.func((u8 *)chara + vtable->unk70.delta, this->unk4++);
+    vtable->crouch.func((u8 *)fighter + vtable->crouch.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x78 with 0x4, then increments 0x4. */
-void func_8007FED8(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's guard slot (FighterVtable 0x78) with the state's frame, then counts the frame up. */
+void func_8007FED8(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk78.func((u8 *)chara + vtable->unk78.delta, this->unk4++);
+    vtable->guard.func((u8 *)fighter + vtable->guard.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x80 with 0x4, then increments 0x4. */
-void func_8007FF1C(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's crouchGuard slot (FighterVtable 0x80) with the state's frame, then counts the frame up. */
+void func_8007FF1C(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk80.func((u8 *)chara + vtable->unk80.delta, this->unk4++);
+    vtable->crouchGuard.func((u8 *)fighter + vtable->crouchGuard.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x88 with 0x4, then increments 0x4. */
-void func_8007FF60(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's dizzy slot (FighterVtable 0x88) with the state's frame, then counts the frame up. */
+void func_8007FF60(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk88.func((u8 *)chara + vtable->unk88.delta, this->unk4++);
+    vtable->dizzy.func((u8 *)fighter + vtable->dizzy.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x90 with 0x4, then increments 0x4. */
-void func_8007FFA4(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's flinch slot (FighterVtable 0x90) with the state's frame, then counts the frame up. */
+void func_8007FFA4(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk90.func((u8 *)chara + vtable->unk90.delta, this->unk4++);
+    vtable->flinch.func((u8 *)fighter + vtable->flinch.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x98 with 0x4, then increments 0x4. */
-void func_8007FFE8(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's airFlinch slot (FighterVtable 0x98) with the state's frame, then counts the frame up. */
+void func_8007FFE8(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk98.func((u8 *)chara + vtable->unk98.delta, this->unk4++);
+    vtable->airFlinch.func((u8 *)fighter + vtable->airFlinch.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xA0 with 0x4, then increments 0x4. */
-void func_8008002C(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's attack1 slot (FighterVtable 0xA0) with the state's frame, then counts the frame up. */
+void func_8008002C(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkA0.func((u8 *)chara + vtable->unkA0.delta, this->unk4++);
+    vtable->attack1.func((u8 *)fighter + vtable->attack1.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xA8 with 0x4, then increments 0x4. */
-void func_80080070(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's attack2 slot (FighterVtable 0xA8) with the state's frame, then counts the frame up. */
+void func_80080070(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkA8.func((u8 *)chara + vtable->unkA8.delta, this->unk4++);
+    vtable->attack2.func((u8 *)fighter + vtable->attack2.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xB0 with 0x4, then increments 0x4. */
-void func_800800B4(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's attack3 slot (FighterVtable 0xB0) with the state's frame, then counts the frame up. */
+void func_800800B4(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkB0.func((u8 *)chara + vtable->unkB0.delta, this->unk4++);
+    vtable->attack3.func((u8 *)fighter + vtable->attack3.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xB8 with 0x4, then increments 0x4. */
-void func_800800F8(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's upAttack slot (FighterVtable 0xB8) with the state's frame, then counts the frame up. */
+void func_800800F8(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkB8.func((u8 *)chara + vtable->unkB8.delta, this->unk4++);
+    vtable->upAttack.func((u8 *)fighter + vtable->upAttack.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xC0 with 0x4, then increments 0x4. */
-void func_8008013C(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's dashAttack slot (FighterVtable 0xC0) with the state's frame, then counts the frame up. */
+void func_8008013C(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkC0.func((u8 *)chara + vtable->unkC0.delta, this->unk4++);
+    vtable->dashAttack.func((u8 *)fighter + vtable->dashAttack.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xC8 with 0x4, then increments 0x4. */
-void func_80080180(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's crouchAttack slot (FighterVtable 0xC8) with the state's frame, then counts the frame up. */
+void func_80080180(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkC8.func((u8 *)chara + vtable->unkC8.delta, this->unk4++);
+    vtable->crouchAttack.func((u8 *)fighter + vtable->crouchAttack.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xD0 with 0x4, then increments 0x4. */
-void func_800801C4(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's throw slot (FighterVtable 0xD0) with the state's frame, then counts the frame up. */
+void func_800801C4(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkD0.func((u8 *)chara + vtable->unkD0.delta, this->unk4++);
+    vtable->throw.func((u8 *)fighter + vtable->throw.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xD8 with 0x4, then increments 0x4. */
-void func_80080208(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's special1 slot (FighterVtable 0xD8) with the state's frame, then counts the frame up. */
+void func_80080208(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkD8.func((u8 *)chara + vtable->unkD8.delta, this->unk4++);
+    vtable->special1.func((u8 *)fighter + vtable->special1.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xE0 with 0x4, then increments 0x4. */
-void func_8008024C(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's special2 slot (FighterVtable 0xE0) with the state's frame, then counts the frame up. */
+void func_8008024C(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkE0.func((u8 *)chara + vtable->unkE0.delta, this->unk4++);
+    vtable->special2.func((u8 *)fighter + vtable->special2.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xE8 with 0x4, then increments 0x4. */
-void func_80080290(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's special3 slot (FighterVtable 0xE8) with the state's frame, then counts the frame up. */
+void func_80080290(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkE8.func((u8 *)chara + vtable->unkE8.delta, this->unk4++);
+    vtable->special3.func((u8 *)fighter + vtable->special3.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xF0 with 0x4, then increments 0x4. */
-void func_800802D4(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's airSpecial3 slot (FighterVtable 0xF0) with the state's frame, then counts the frame up. */
+void func_800802D4(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkF0.func((u8 *)chara + vtable->unkF0.delta, this->unk4++);
+    vtable->airSpecial3.func((u8 *)fighter + vtable->airSpecial3.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0xF8 with 0x4, then increments 0x4. */
-void func_80080318(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's airAttack slot (FighterVtable 0xF8) with the state's frame, then counts the frame up. */
+void func_80080318(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unkF8.func((u8 *)chara + vtable->unkF8.delta, this->unk4++);
+    vtable->airAttack.func((u8 *)fighter + vtable->airAttack.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x100 with 0x4, then increments 0x4. */
-void func_8008035C(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's airUpAttack slot (FighterVtable 0x100) with the state's frame, then counts the frame up. */
+void func_8008035C(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk100.func((u8 *)chara + vtable->unk100.delta, this->unk4++);
+    vtable->airUpAttack.func((u8 *)fighter + vtable->airUpAttack.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x108 with 0x4, then increments 0x4. */
-void func_800803A0(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's airSideAttack slot (FighterVtable 0x108) with the state's frame, then counts the frame up. */
+void func_800803A0(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk108.func((u8 *)chara + vtable->unk108.delta, this->unk4++);
+    vtable->airSideAttack.func((u8 *)fighter + vtable->airSideAttack.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x110 with 0x4, then increments 0x4. */
-void func_800803E4(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's airSpecial1 slot (FighterVtable 0x110) with the state's frame, then counts the frame up. */
+void func_800803E4(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk110.func((u8 *)chara + vtable->unk110.delta, this->unk4++);
+    vtable->airSpecial1.func((u8 *)fighter + vtable->airSpecial1.delta, this->frame++);
 }
 
-/* Calls the character's virtual method at 0x118 with 0x4, then increments 0x4. */
-void func_80080428(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* Runs the fighter's airSpecial2 slot (FighterVtable 0x118) with the state's frame, then counts the frame up. */
+void func_80080428(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk118.func((u8 *)chara + vtable->unk118.delta, this->unk4++);
+    vtable->airSpecial2.func((u8 *)fighter + vtable->airSpecial2.delta, this->frame++);
 }
 
-/* Reads a press of PAD_LEFT or PAD_RIGHT in the last input (func_800750C4): looks back 10 frames
- * (func_8007516C) and returns 3 (left) or 4 (right) when func_80075454 finds the button twice there, else 1 or
- * 2; 0 without either. */
-s32 func_8008046C(Unk80075000 *input) {
-    u32 buttons = func_800750C4(input);
+/* Reads a side press in the last input (InputHistory_getHeld): 1 for PAD_LEFT, 2 for PAD_RIGHT, or 3 / 4 when the
+ * button was pressed twice in the last 10 frames (a dash: InputHistory_startSearch, InputHistory_findPresses); 0
+ * without either. */
+s32 readSideTap(InputHistory *input) {
+    u32 buttons = InputHistory_getHeld(input);
 
     /* The match depends on the full if / else if / else chain: a plain `return 0` after them is moved to the
      * end with the branch inverted. */
     if (buttons & PAD_LEFT) {
-        func_8007516C(input, 10);
-        if (func_80075454(input, PAD_LEFT, 2, 0)) {
+        InputHistory_startSearch(input, 10);
+        if (InputHistory_findPresses(input, PAD_LEFT, 2, 0)) {
             return 3;
         }
         return 1;
     } else if (buttons & PAD_RIGHT) {
-        func_8007516C(input, 10);
-        if (func_80075454(input, PAD_RIGHT, 2, 0)) {
+        InputHistory_startSearch(input, 10);
+        if (InputHistory_findPresses(input, PAD_RIGHT, 2, 0)) {
             return 4;
         }
         return 2;
@@ -463,345 +462,343 @@ s32 func_8008046C(Unk80075000 *input) {
     }
 }
 
-/* func_80081438 with buttons, unless the state of the object at 0x22C (func_8007F93C) is 9 without bit 28 of
- * buttons or 10 without bit 27. */
-void func_80080510(Unk8007F920 *this, u32 buttons) {
+/* Flinches (FighterStateFlinch_init with the hit's bits), unless the body state guards against it: a guard
+ * without bit 28 of the hit, or a crouching guard without bit 27. */
+void FighterState_hitUnlessGuarded(FighterState *this, u32 hitBits) {
     /* The match depends on case 9 breaking on its bit: written as case 10, the two tests are merged. */
-    switch (func_8007F93C(this)->unk0) {
-    case 9:
-        if (buttons & 0x10000000) {
+    switch (FighterState_getBodyState(this)->state) {
+    case FIGHTER_STATE_GUARD:
+        if (hitBits & 0x10000000) {
             break;
         }
         return;
-    case 10:
-        if (!(buttons & 0x8000000)) {
+    case FIGHTER_STATE_CROUCH_GUARD:
+        if (!(hitBits & 0x8000000)) {
             return;
         }
         break;
     }
-    func_80081438(this, buttons);
+    FighterStateFlinch_init(this, hitBits);
 }
 
-/* Calls the character's virtual method at 0x20, then makes this a func_800819E0 object in place. */
-void func_80080590(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* The attack idle state's hit: ends the fighter's move (its endMove slot), then starts over as attack idle. */
+void FighterAttackIdle_hit(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk20.func((u8 *)chara + vtable->unk20.delta);
-    func_800819E0(this);
+    vtable->endMove.func((u8 *)fighter + vtable->endMove.delta);
+    FighterAttackIdle_init(this);
 }
 
-/* The class of virtual table D_800680AC (func_800805DC): func_8007F920's with a flag at 0x10 and a frame
- * count at 0x14. */
-typedef struct Unk800805DC {
-    /* 0x00 */ Unk8007F920 base;
+/* The intro state (FighterStateIntro_init, virtual table FIGHTER_STATE_INTRO_VTABLE): a FighterState with a flag
+ * at 0x10 and a frame count at 0x14. */
+typedef struct FighterStateIntro {
+    /* 0x00 */ FighterState base;
     /* 0x10 */ s32 unk10;
-    /* 0x14 */ s32 unk14;
-} Unk800805DC;
+    /* 0x14 */ s32 frames;
+} FighterStateIntro;
 
-extern VtableEntry D_800680AC[];
-s32 func_8007FC7C(Unk8007F920 *this, s32 arg);
+extern VtableEntry FIGHTER_STATE_INTRO_VTABLE[];
+s32 FighterState_isClipDone(FighterState *this, s32 action);
 
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_800656D4);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_PARAMS);
 
-/* Constructs the object of virtual table D_800680AC with 0 at 0. 0x10 is set unless the low two bits
- * of the character's D_800656D4 entry are 1; when it is clear, the character's clip 0x1E is run in
- * (func_800797B8). The match depends on taking the table into a local before the call: the game
- * keeps its address in a saved register across it. */
-Unk800805DC *func_800805DC(Unk800805DC *this) {
-    Unk80077698 *table;
+/* Starts the intro (FIGHTER_STATE_INTRO). 0x10 is set unless the low two bits of the character's params flags are
+ * 1; when it is clear, the intro clip is run in (func_800797B8). The match depends on taking the table into a
+ * local before the call: the game keeps its address in a saved register across it. */
+FighterStateIntro *FighterStateIntro_init(FighterStateIntro *this) {
+    FighterParams *table;
 
-    func_8007F920(&this->base, 0);
-    this->base.vtable = D_800680AC;
-    table = D_800656D4;
-    this->unk10 = (table[func_80077568(this->base.unk8)].unk0 & 3) != 1;
+    FighterState_init(&this->base, FIGHTER_STATE_INTRO);
+    this->base.vtable = FIGHTER_STATE_INTRO_VTABLE;
+    table = FIGHTER_PARAMS;
+    this->unk10 = (table[Fighter_getCharacter(this->base.fighter)].flags & 3) != 1;
     if (!this->unk10) {
-        func_800797B8(this->base.unk8, 0x1E);
+        func_800797B8(this->base.fighter, FIGHTER_CLIP_INTRO);
     }
-    this->unk14 = 0;
+    this->frames = 0;
     func_8007FCB8(&this->base);
     return this;
 }
 
-/* The tick of D_800680AC's class: at frame 10 starts the character's clip 0x1E (directly when 0x10 is
- * set, else blended in over 0x32 frames); from frame 90, or from frame 11 once func_8007FC7C holds,
- * becomes a func_800808EC object (1), else calls func_8007FCB8. */
-void func_80080670(Unk800805DC *this) {
-    if (++this->unk14 == 10) {
+/* The intro's tick: at frame 10 starts the intro clip (directly when 0x10 is set, else blended in over 0x32
+ * frames); from frame 90, or from frame 11 once the clip is done, the fighter stands idle (FighterStateGround_init),
+ * else its intro slot runs (func_8007FCB8). */
+void FighterStateIntro_tick(FighterStateIntro *this) {
+    if (++this->frames == 10) {
         if (this->unk10) {
-            func_8007FC2C(&this->base, 0x1E, 0);
+            FighterState_playClip(&this->base, FIGHTER_CLIP_INTRO, 0);
         } else {
-            func_800796F0(this->base.unk8, 0x1E, 0, 0);
-            func_800796F0(this->base.unk8, 0x1E, 0x32, 1);
+            Fighter_setClip(this->base.fighter, FIGHTER_CLIP_INTRO, 0, 0);
+            Fighter_setClip(this->base.fighter, FIGHTER_CLIP_INTRO, 0x32, 1);
         }
     }
-    if (this->unk14 >= 90 || (this->unk14 >= 11 && func_8007FC7C(&this->base, 0))) {
-        func_800808EC(&this->base, 1);
+    if (this->frames >= 90 || (this->frames >= 11 && FighterState_isClipDone(&this->base, 0))) {
+        FighterStateGround_init(&this->base, FIGHTER_STATE_IDLE);
     } else {
         func_8007FCB8(&this->base);
     }
 }
 
-/* Constructs the object of virtual table D_8006811C with 0x11 at 0 and starts the
- * character's clip 0x1D, blended over 10 frames. */
-Unk8007F920 *func_80080730(Unk8007F920 *this) {
-    func_8007F920(this, 0x11);
+/* Starts the end pose (FIGHTER_STATE_END_POSE, virtual table D_8006811C) and its clip, blended in over 10 frames. */
+FighterState *func_80080730(FighterState *this) {
+    FighterState_init(this, FIGHTER_STATE_END_POSE);
     this->vtable = D_8006811C;
-    func_8007FC2C(this, 0x1D, 10);
+    FighterState_playClip(this, FIGHTER_CLIP_END_POSE, 10);
     return this;
 }
 
-/* Constructs an object of the class of vtable D_8006811C, which derives from func_8007F920's. */
-Unk8007F920 *func_80080778(Unk8007F920 *this, s32 arg) {
-    func_8007F920(this, arg);
+/* Constructs a pose state (virtual table D_8006811C) with its FIGHTER_STATE_* id. */
+FighterState *func_80080778(FighterState *this, s32 state) {
+    FighterState_init(this, state);
     this->vtable = D_8006811C;
     return this;
 }
 
-/* Constructs the object of virtual table D_8006811C (func_80080778) with 0x12 at 0
- * and starts the character's clip 0x1C, blended over 10 frames. */
-Unk8007F920 *func_800807AC(Unk8007F920 *this) {
-    func_80080778(this, 0x12);
+/* Starts the win pose (FIGHTER_STATE_WIN_POSE, func_80080778) and its clip, blended in over 10 frames. */
+FighterState *func_800807AC(FighterState *this) {
+    func_80080778(this, FIGHTER_STATE_WIN_POSE);
     this->vtable = D_8006811C;
-    func_8007FC2C(this, 0x1C, 10);
+    FighterState_playClip(this, FIGHTER_CLIP_WIN_POSE, 10);
     return this;
 }
 
-/* The class of virtual table D_8006803C (func_800807F4): func_8007F920's with a frame count at 0x10. */
-typedef struct Unk800807F4 {
-    /* 0x00 */ Unk8007F920 base;
-    /* 0x10 */ s32 unk10;
-} Unk800807F4;
+/* The held state (FighterStateHeld_init, virtual table FIGHTER_STATE_HELD_VTABLE): a FighterState with a frame
+ * count at 0x10. */
+typedef struct FighterStateHeld {
+    /* 0x00 */ FighterState base;
+    /* 0x10 */ s32 frames; /* counted down */
+} FighterStateHeld;
 
-extern VtableEntry D_8006803C[];
+extern VtableEntry FIGHTER_STATE_HELD_VTABLE[];
 
-/* Makes this an object of virtual table D_8006803C (0x13 at 0) that counts down `frames`: gives the
- * character clip -1 (func_8007FC2C) and, when func_8007F1C0 holds for the character's object at 0x238,
- * calls func_8007F1B8 on it. */
-void *func_800807F4(Unk8007F920 *this, s32 frames) {
-    Unk8007F184 *object;
+/* Holds the fighter (FIGHTER_STATE_HELD) for `frames`, with no clip (-1); a side stunned to its limit
+ * (func_8007F1C0) has its stun count cleared (func_8007F1B8). */
+void *FighterStateHeld_init(FighterState *this, s32 frames) {
+    BattleSide *side;
 
-    func_8007F920(this, 0x13);
-    this->vtable = D_8006803C;
-    ((Unk800807F4 *)this)->unk10 = frames;
-    func_8007FC2C(this, -1, 0);
-    object = func_8007758C(this->unk8);
-    if (func_8007F1C0(object)) {
-        func_8007F1B8(object);
+    FighterState_init(this, FIGHTER_STATE_HELD);
+    this->vtable = FIGHTER_STATE_HELD_VTABLE;
+    ((FighterStateHeld *)this)->frames = frames;
+    FighterState_playClip(this, -1, 0);
+    side = func_8007758C(this->fighter);
+    if (func_8007F1C0(side)) {
+        func_8007F1B8(side);
     }
     return this;
 }
 
-/* The class of virtual table D_80067EB4 (func_800816B4): func_8007F920's with a frame count at 0x10. */
-typedef struct Unk800816B4 {
-    /* 0x00 */ Unk8007F920 base;
-    /* 0x10 */ s32 unk10;
-} Unk800816B4;
+/* The down state (FighterStateDown_init, virtual table FIGHTER_STATE_DOWN_VTABLE): a FighterState with a frame
+ * count at 0x10. */
+typedef struct FighterStateDown {
+    /* 0x00 */ FighterState base;
+    /* 0x10 */ s32 frames; /* counted down */
+} FighterStateDown;
 
-Unk8007F920 *func_800816B4(Unk8007F920 *this, s32 state);
+FighterState *FighterStateDown_init(FighterState *this, s32 state);
 
-/* The tick of D_8006803C's class: once the 0x20 of the character's object at 0x238 is down to 0,
- * becomes a func_800816B4 object (0xE); else when the count at 0x10 is out, a func_800808EC object (1);
- * else counts it down. */
-void func_80080874(Unk800807F4 *this) {
-    if (func_8007758C(this->base.unk8)->unk20 <= 0) {
-        func_800816B4(&this->base, 0xE);
-    } else if (this->unk10 == 0) {
-        func_800808EC(&this->base, 1);
-    } else if (this->unk10 > 0) {
-        this->unk10--;
+/* The held state's tick: once the side's life is out the fighter is knocked out (FighterStateDown_init); else when
+ * the frames are out it stands idle (FighterStateGround_init); else counts them down. */
+void FighterStateHeld_tick(FighterStateHeld *this) {
+    if (func_8007758C(this->base.fighter)->life <= 0) {
+        FighterStateDown_init(&this->base, FIGHTER_STATE_KNOCKED_OUT);
+    } else if (this->frames == 0) {
+        FighterStateGround_init(&this->base, FIGHTER_STATE_IDLE);
+    } else if (this->frames > 0) {
+        this->frames--;
     }
 }
 
-/* The class of virtual table D_80067FCC (func_80080EBC): D_80068004's (func_80080C5C) with a word at
- * 0x1C. */
-typedef struct Unk80080EBC {
-    /* 0x00 */ Unk80080C5C base;
+/* The fall state (FighterStateFall_init, virtual table FIGHTER_STATE_FALL_VTABLE): a FighterStateJump with a word
+ * at 0x1C. */
+typedef struct FighterStateFall {
+    /* 0x00 */ FighterStateJump base;
     /* 0x18 */ u8 unk18[0x1C - 0x18];
     /* 0x1C */ s32 unk1C;
-} Unk80080EBC;
+} FighterStateFall;
 
-Unk8007F920 *func_80080EBC(Unk8007F920 *this, s32 arg1, s32 arg2);
+FighterState *FighterStateFall_init(FighterState *this, s32 jumpCount, s32 fromJump);
 
-/* Makes this an object of virtual table D_80068074 with `state` at 0. When bit 2 of the character's flags
- * is clear it becomes a func_80080EBC object (0, 0) instead; in state 1 it starts the character's clip 0,
- * blended over 4 frames. */
-Unk8007F920 *func_800808EC(Unk8007F920 *this, s32 state) {
-    func_8007F920(this, state);
-    this->vtable = D_80068074;
-    if (!func_800778BC(this->unk8)) {
-        func_80080EBC(this, 0, 0);
-    } else if (this->unk0 == 1) {
-        func_8007FC2C(this, 0, 4);
+/* Starts a ground state (`state`, virtual table FIGHTER_STATE_GROUND_VTABLE); off the ground it falls instead
+ * (FighterStateFall_init). Idle, it starts the stand clip, blended in over 4 frames. */
+FighterState *FighterStateGround_init(FighterState *this, s32 state) {
+    FighterState_init(this, state);
+    this->vtable = FIGHTER_STATE_GROUND_VTABLE;
+    if (!Fighter_isOnGround(this->fighter)) {
+        FighterStateFall_init(this, 0, 0);
+    } else if (this->state == FIGHTER_STATE_IDLE) {
+        FighterState_playClip(this, FIGHTER_CLIP_STAND, 4);
     }
     return this;
 }
 
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067AD4);
 
-/* The tick of D_80068074's class: without func_800778BC becomes a func_80080EBC object (0, 0); else unless
- * func_8007F9DC or (with func_8007F964) func_8007FAF0 changed the state: with func_8007F964 in state 1, 3, 4, 5
- * or 6 a PAD_LEFT/PAD_RIGHT press (func_8008046C) makes it a func_80080FDC (5, 6) or func_80081200 (7, 8)
- * object; otherwise, once the 0x20 of the character's object at 0x238 is down to 0, a func_800816B4 object (0xE). */
-void func_80080968(Unk8007F920 *this) {
-    if (!func_800778BC(this->unk8)) {
-        func_80080EBC(this, 0, 0);
+/* A ground state's tick: off the ground the fighter falls (FighterStateFall_init); else unless it guarded
+ * (FighterState_updateGuard) or crouched (FighterState_updateCrouch, when not attacking): idle, jumping, falling or
+ * walking and not attacking, a side press (readSideTap) makes it walk (func_80080FDC) or dash (func_80081200);
+ * otherwise, once the side's life is out, it is knocked out (FighterStateDown_init). */
+void FighterStateGround_tick(FighterState *this) {
+    if (!Fighter_isOnGround(this->fighter)) {
+        FighterStateFall_init(this, 0, 0);
         return;
     }
-    if (func_8007F9DC(this)) {
+    if (FighterState_updateGuard(this)) {
         return;
     }
-    if (func_8007F964(this) && func_8007FAF0(this)) {
+    if (FighterState_isAttackIdle(this) && FighterState_updateCrouch(this)) {
         return;
     }
     /* The match depends on the loop its first break leaves (as in func_80081B84): the game rolls that test to the
      * loop's end and enters it with a jump; a plain if gives the test first. The jump table starts at case 0. */
     do {
-        if (!func_8007F964(this) || !(this->unk0 == 1 || this->unk0 == 4 || this->unk0 == 3 || this->unk0 == 5 ||
-                                      this->unk0 == 6)) {
+        if (!FighterState_isAttackIdle(this) ||
+            !(this->state == FIGHTER_STATE_IDLE || this->state == FIGHTER_STATE_FALL ||
+              this->state == FIGHTER_STATE_JUMP || this->state == FIGHTER_STATE_WALK_LEFT ||
+              this->state == FIGHTER_STATE_WALK_RIGHT)) {
             break;
         }
-        switch (func_8008046C(func_800776C4(this->unk8))) {
+        switch (readSideTap(Fighter_getInput(this->fighter))) {
         case 0:
             break;
         case 1:
-            func_80080FDC(this, 5);
+            func_80080FDC(this, FIGHTER_STATE_WALK_LEFT);
             return;
         case 2:
-            func_80080FDC(this, 6);
+            func_80080FDC(this, FIGHTER_STATE_WALK_RIGHT);
             return;
         case 3:
-            func_80081200(this, 7);
+            func_80081200(this, FIGHTER_STATE_DASH_LEFT);
             return;
         case 4:
-            func_80081200(this, 8);
+            func_80081200(this, FIGHTER_STATE_DASH_RIGHT);
             return;
         }
     } while (0);
-    if (func_8007758C(this->unk8)->unk20 <= 0) {
-        func_800816B4(this, 0xE);
+    if (func_8007758C(this->fighter)->life <= 0) {
+        FighterStateDown_init(this, FIGHTER_STATE_KNOCKED_OUT);
     }
 }
 
-/* The method at 0x10 of D_80068074: for a positive arg, when func_8007F964 holds and the character's
- * object at 0x22C is not in state 2, 9 or 10, becomes a func_80080BF0 object (0). */
-void func_80080ADC(Unk8007F920 *this, s32 arg) {
-    if (arg > 0 && func_8007F964(this)) {
-        switch (func_8007F93C(this)->unk0) {
-        case 2:
-        case 9:
-        case 10:
+/* A ground state's jump (slot 0x10): for a positive arg, when not attacking, crouching or guarding, the fighter
+ * jumps (FighterStateJump_init). */
+void FighterStateGround_jump(FighterState *this, s32 arg) {
+    if (arg > 0 && FighterState_isAttackIdle(this)) {
+        switch (FighterState_getBodyState(this)->state) {
+        case FIGHTER_STATE_CROUCH:
+        case FIGHTER_STATE_GUARD:
+        case FIGHTER_STATE_CROUCH_GUARD:
             break;
         default:
-            func_80080BF0(this, 0);
+            FighterStateJump_init(this, 0);
             break;
         }
     }
 }
 
-/* The method at 0x18 of D_80068074: when func_80077848 and func_8007F964 hold, becomes a func_80080EBC
- * object (1, 0) and sets the character's 0x48C to 8 (the US build calls func_8007A718 for that). */
-void func_80080B4C(Unk8007F920 *this) {
-    if (func_80077848(this->unk8) && func_8007F964(this)) {
-        func_80080EBC(this, 1, 0);
+/* A ground state's drop (slot 0x18): over a floor below (Fighter_probeFloorBelow) and when not attacking, the
+ * fighter falls through (FighterStateFall_init (1, 0)) and its 0x48C is set to 8 (the US build calls func_8007A718
+ * for that). */
+void FighterStateGround_drop(FighterState *this) {
+    if (Fighter_probeFloorBelow(this->fighter) && FighterState_isAttackIdle(this)) {
+        FighterStateFall_init(this, 1, 0);
 #if VERSION_JP
-        this->unk8->unk48C = 8;
+        this->fighter->unk48C = 8;
 #else
-        func_8007A718(this->unk8);
+        func_8007A718(this->fighter);
 #endif
     }
 }
 
-/* Constructs an object of the class of vtable D_80068074 with func_800808EC and 2, then calls
- * func_8007FE94 and func_8007F9DC. */
-Unk8007F920 *func_80080BA8(Unk8007F920 *this) {
-    func_800808EC(this, 2);
-    this->vtable = D_80068074;
+/* Crouches (FIGHTER_STATE_CROUCH, a ground state), then runs func_8007FE94 and FighterState_updateGuard. */
+FighterState *FighterStateGround_initCrouch(FighterState *this) {
+    FighterStateGround_init(this, FIGHTER_STATE_CROUCH);
+    this->vtable = FIGHTER_STATE_GROUND_VTABLE;
     func_8007FE94(this);
-    func_8007F9DC(this);
+    FighterState_updateGuard(this);
     return this;
 }
 
-/* Makes this an object of virtual table D_80068004 with 3 at 0: plays sound 8, keeps arg + 1 at 0x10
- * and clears the count at 0x14. */
-Unk8007F920 *func_80080BF0(Unk8007F920 *this, s32 arg) {
-    func_8007F920(this, 3);
-    this->vtable = D_80068004;
+/* Jumps (FIGHTER_STATE_JUMP): plays the jump sound (8), counts this jump after jumpsBefore, runs func_8007FE50 and
+ * clears the frames. */
+FighterState *FighterStateJump_init(FighterState *this, s32 jumpsBefore) {
+    FighterState_init(this, FIGHTER_STATE_JUMP);
+    this->vtable = FIGHTER_STATE_JUMP_VTABLE;
     soundControlPlaySound(&SOUND_CONTROL, 8, 0);
-    ((Unk80080C5C *)this)->unk10 = arg + 1;
+    ((FighterStateJump *)this)->jumpCount = jumpsBefore + 1;
     func_8007FE50(this);
-    ((Unk80080C5C *)this)->unk14 = 0;
+    ((FighterStateJump *)this)->frames = 0;
     return this;
 }
 
-/* Constructs the class of virtual table D_80068004 on func_8007F920's. */
-Unk80080C5C *func_80080C5C(Unk80080C5C *this, s32 arg1, s32 arg2) {
-    func_8007F920(&this->base, arg1);
-    this->base.vtable = D_80068004;
-    this->unk10 = arg2;
+/* Constructs an airborne state (virtual table FIGHTER_STATE_JUMP_VTABLE) with its FIGHTER_STATE_* id and the jumps
+ * made (FighterStateFall_init's base). */
+FighterStateJump *func_80080C5C(FighterStateJump *this, s32 state, s32 jumpCount) {
+    FighterState_init(&this->base, state);
+    this->base.vtable = FIGHTER_STATE_JUMP_VTABLE;
+    this->jumpCount = jumpCount;
     return this;
 }
 
-Vec3 *func_8007FBB0(Unk8007F920 *this);
-void func_80080D38(Unk80080C5C *this);
+Vec3 *func_8007FBB0(FighterState *this);
+void func_80080D38(FighterStateJump *this);
 
-/* The tick of D_80068004's class: once the vy of the character's 0x3A4 is not negative, becomes a
- * func_80080EBC object (0x10, 1); else, from the second frame on, moves the character's 0x3B4.vy by its
- * scale at 0x3C4 times 0x71C, then calls func_80080D38. The match depends on the step being a local
- * of its own: added in place, the old vy takes the step's register. */
-void func_80080CA0(Unk80080C5C *this) {
+/* The jump's tick: once the fighter stops rising (velocity vy not negative) it falls (FighterStateFall_init, from
+ * a jump); else, from the second frame on, pushes its force.vy by its mass times 0x71C, then runs func_80080D38.
+ * The match depends on the step being a local of its own: added in place, the old vy takes the step's register. */
+void FighterStateJump_tick(FighterStateJump *this) {
     s32 vy = func_8007FBB0(&this->base)->vy;
-    Unk80076F34 *chara = this->base.unk8;
+    Fighter *fighter = this->base.fighter;
 
     if (vy >= 0) {
-        func_80080EBC(&this->base, this->unk10, 1);
+        FighterStateFall_init(&this->base, this->jumpCount, 1);
     } else {
-        if (this->unk14) {
-            s32 delta = ((s64)chara->unk3C4 * 0x71C) >> 16;
+        if (this->frames) {
+            s32 delta = ((s64)fighter->mass * 0x71C) >> 16;
 
-            chara->unk3B4.vy += delta;
+            fighter->force.vy += delta;
         }
-        this->unk14 = 1;
+        this->frames = 1;
         func_80080D38(this);
     }
 }
 
 INCLUDE_ASM("game/nonmatchings/game_0f", func_80080D38);
 
-/* The method at 0x10 of D_80068004 and D_80067FCC: clears 0x14, then for a positive arg, when
- * func_8007F964 holds and 0x10 is below 2, becomes a func_80080BF0 object (0x10). */
-void func_80080E68(Unk80080C5C *this, s32 arg) {
-    this->unk14 = 0;
-    if (arg > 0 && func_8007F964(&this->base) && this->unk10 < 2) {
-        func_80080BF0(&this->base, this->unk10);
+/* The jump (slot 0x10) of the jump and the fall: clears the frames, then for a positive arg, when not attacking
+ * and with fewer than 2 jumps made, jumps again (FighterStateJump_init). */
+void FighterStateJump_jump(FighterStateJump *this, s32 arg) {
+    this->frames = 0;
+    if (arg > 0 && FighterState_isAttackIdle(&this->base) && this->jumpCount < 2) {
+        FighterStateJump_init(&this->base, this->jumpCount);
     }
 }
 
-extern VtableEntry D_80067FCC[];
+extern VtableEntry FIGHTER_STATE_FALL_VTABLE[];
 
-/* Makes this an object of virtual table D_80067FCC: func_80080C5C's (4, arg1) with arg2 at 0x1C, starting
- * the character's clip 4, blended over 6 frames. */
-Unk8007F920 *func_80080EBC(Unk8007F920 *this, s32 arg1, s32 arg2) {
-    func_80080C5C((Unk80080C5C *)this, 4, arg1);
-    this->vtable = D_80067FCC;
-    ((Unk80080EBC *)this)->unk1C = arg2;
-    func_8007FC2C(this, 4, 6);
+/* Falls (FIGHTER_STATE_FALL, after jumpCount jumps; fromJump is 1 only from FighterStateJump_tick) and starts the
+ * fall clip, blended in over 6 frames. */
+FighterState *FighterStateFall_init(FighterState *this, s32 jumpCount, s32 fromJump) {
+    func_80080C5C((FighterStateJump *)this, FIGHTER_STATE_FALL, jumpCount);
+    this->vtable = FIGHTER_STATE_FALL_VTABLE;
+    ((FighterStateFall *)this)->unk1C = fromJump;
+    FighterState_playClip(this, FIGHTER_CLIP_FALL, 6);
     return this;
 }
 
-/* The tick of D_80067FCC's class: when bit 2 of the character's flags is set and its 0x48C is down to 0,
- * calls func_8007A6FC (1 and -1, 0x60, 2 or 3 after func_80077794), plays sound 9 and becomes a
- * func_800808EC object (1); else calls func_80080D38. */
-void func_80080F1C(Unk80080EBC *this) {
-    Unk80076F34 *chara = this->base.base.unk8;
+/* The fall's tick: on the ground with its 0x48C down to 0, the fighter lands: dust on both sides
+ * (Fighter_spawnDust: 2 or 3 by Fighter_canEvolve), the landing sound (9), and it stands idle
+ * (FighterStateGround_init); else runs func_80080D38. */
+void FighterStateFall_tick(FighterStateFall *this) {
+    Fighter *fighter = this->base.base.fighter;
     s32 arg;
 
-    if (func_800778BC(chara) && chara->unk48C <= 0) {
-        arg = func_80077794(chara) ? 2 : 3;
-        func_8007A6FC(chara, 1, 0x60, arg);
-        func_8007A6FC(chara, -1, 0x60, arg);
+    if (Fighter_isOnGround(fighter) && fighter->unk48C <= 0) {
+        arg = Fighter_canEvolve(fighter) ? 2 : 3;
+        Fighter_spawnDust(fighter, 1, 0x60, arg);
+        Fighter_spawnDust(fighter, -1, 0x60, arg);
         soundControlPlaySound(&SOUND_CONTROL, 9, 0);
-        func_800808EC(&this->base.base, 1);
+        FighterStateGround_init(&this->base.base, FIGHTER_STATE_IDLE);
     } else {
         func_80080D38(&this->base);
     }
@@ -809,95 +806,94 @@ void func_80080F1C(Unk80080EBC *this) {
 
 extern VtableEntry D_80067F94[];
 
-/* Makes this an object of virtual table D_80067F94 with `state` at 0 and plays sound 0xB; states 5 and 6
- * call func_8007FD40 and func_8007FD84. */
-Unk8007F920 *func_80080FDC(Unk8007F920 *this, s32 state) {
-    func_8007F920(this, state);
+/* Walks (`state`, virtual table D_80067F94): plays sound 0xB, then takes a step left (func_8007FD40) or right
+ * (func_8007FD84) by the state. */
+FighterState *func_80080FDC(FighterState *this, s32 state) {
+    FighterState_init(this, state);
     this->vtable = D_80067F94;
     soundControlPlaySound(&SOUND_CONTROL, 0xB, 0);
-    if (this->unk0 == 5) {
+    if (this->state == FIGHTER_STATE_WALK_LEFT) {
         func_8007FD40(this);
     }
-    if (this->unk0 == 6) {
+    if (this->state == FIGHTER_STATE_WALK_RIGHT) {
         func_8007FD84(this);
     }
     return this;
 }
 
-/* Without func_800778BC becomes a func_80080EBC object (0, 0); else unless func_8007F9DC changed the state, by
- * the PAD_LEFT/PAD_RIGHT press (func_8008046C): none, or func_8007F964 false, becomes a func_800808EC object (1);
- * 1 and 2 become a func_80080FDC object (5 or 6) unless already in it, then func_8007FD40 or func_8007FD84;
- * 3 and 4 a func_80081200 object (7 or 8). */
-void func_80081054(Unk8007F920 *this) {
+/* The walk's tick: off the ground the fighter falls (FighterStateFall_init); else unless it guarded
+ * (FighterState_updateGuard), by the side press (readSideTap): none, or attacking, it stands idle; left or right
+ * walks that way (func_80080FDC unless already) and steps; a double press dashes (func_80081200). */
+void func_80081054(FighterState *this) {
     s32 press;
     s32 state;
 
-    if (!func_800778BC(this->unk8)) {
-        func_80080EBC(this, 0, 0);
+    if (!Fighter_isOnGround(this->fighter)) {
+        FighterStateFall_init(this, 0, 0);
         return;
     }
-    if (func_8007F9DC(this)) {
+    if (FighterState_updateGuard(this)) {
         return;
     }
-    press = func_8008046C(func_800776C4(this->unk8));
-    if (press == 0 || !func_8007F964(this)) {
-        func_800808EC(this, 1);
+    press = readSideTap(Fighter_getInput(this->fighter));
+    if (press == 0 || !FighterState_isAttackIdle(this)) {
+        FighterStateGround_init(this, FIGHTER_STATE_IDLE);
         return;
     }
-    state = this->unk0;
+    state = this->state;
     switch (press) {
     /* press is not 0 here, but the game's jump table starts at case 0 (it indexes it by press, not press - 1) */
     case 0:
-        if (state == 5) {
+        if (state == FIGHTER_STATE_WALK_LEFT) {
             func_8007FD40(this);
         }
-        if (state == 6) {
+        if (state == FIGHTER_STATE_WALK_RIGHT) {
             func_8007FD84(this);
         }
         break;
     case 1:
-        if (state != 5) {
-            func_80080FDC(this, 5);
+        if (state != FIGHTER_STATE_WALK_LEFT) {
+            func_80080FDC(this, FIGHTER_STATE_WALK_LEFT);
         }
         func_8007FD40(this);
         break;
     case 2:
-        if (state != 6) {
-            func_80080FDC(this, 6);
+        if (state != FIGHTER_STATE_WALK_RIGHT) {
+            func_80080FDC(this, FIGHTER_STATE_WALK_RIGHT);
         }
         func_8007FD84(this);
         break;
     case 3:
-        func_80081200(this, 7);
+        func_80081200(this, FIGHTER_STATE_DASH_LEFT);
         break;
     case 4:
-        func_80081200(this, 8);
+        func_80081200(this, FIGHTER_STATE_DASH_RIGHT);
         break;
     }
 }
 
-/* The method at 0x10 of D_80067F5C and D_80067F94: func_80080BF0(0) when func_8007F964 holds and arg is
+/* The jump (slot 0x10) of the walk and the dash: jumps (FighterStateJump_init) when not attacking and arg is
  * positive. */
-void func_800811B8(Unk8007F920 *this, s32 arg) {
-    if (func_8007F964(this) && arg > 0) {
-        func_80080BF0(this, 0);
+void func_800811B8(FighterState *this, s32 arg) {
+    if (FighterState_isAttackIdle(this) && arg > 0) {
+        FighterStateJump_init(this, 0);
     }
 }
 
 extern VtableEntry D_80067F5C[];
 
-/* Makes this an object of virtual table D_80067F5C on func_80080FDC's (arg); states 7 and 8 call
- * func_8007FDC8 and func_8007FE0C. */
-Unk8007F920 *func_80081200(Unk8007F920 *this, s32 arg) {
-    s32 state;
+/* Dashes (`state`, virtual table D_80067F5C, on the walk's constructor), then pushes left (func_8007FDC8) or
+ * right (func_8007FE0C) by the state. */
+FighterState *func_80081200(FighterState *this, s32 state) {
+    s32 current;
 
-    func_80080FDC(this, arg);
+    func_80080FDC(this, state);
     this->vtable = D_80067F5C;
-    state = this->unk0;
-    if (state == 7) {
+    current = this->state;
+    if (current == FIGHTER_STATE_DASH_LEFT) {
         func_8007FDC8(this);
     }
-    if (state == 8) {
+    if (current == FIGHTER_STATE_DASH_RIGHT) {
         func_8007FE0C(this);
     }
     return this;
@@ -905,241 +901,236 @@ Unk8007F920 *func_80081200(Unk8007F920 *this, s32 arg) {
 
 INCLUDE_ASM("game/nonmatchings/game_0f", func_80081264);
 
-/* Constructs an object of the class of vtable D_80068074 with func_800808EC and 9, then calls
- * func_8007FED8. */
-Unk8007F920 *func_80081384(Unk8007F920 *this) {
-    func_800808EC(this, 9);
-    this->vtable = D_80068074;
+/* Guards (FIGHTER_STATE_GUARD, a ground state), then runs func_8007FED8. */
+FighterState *FighterStateGround_initGuard(FighterState *this) {
+    FighterStateGround_init(this, FIGHTER_STATE_GUARD);
+    this->vtable = FIGHTER_STATE_GROUND_VTABLE;
     func_8007FED8(this);
     return this;
 }
 
-/* Constructs an object of the class of vtable D_80068074, which derives from func_800808EC's. */
-Unk8007F920 *func_800813C4(Unk8007F920 *this, s32 arg) {
-    func_800808EC(this, arg);
-    this->vtable = D_80068074;
+/* Constructs a ground state with its FIGHTER_STATE_* id (FighterStateGround_initCrouchGuard's base). */
+FighterState *func_800813C4(FighterState *this, s32 state) {
+    FighterStateGround_init(this, state);
+    this->vtable = FIGHTER_STATE_GROUND_VTABLE;
     return this;
 }
 
-/* Constructs an object of the class of vtable D_80068074 with func_800813C4 and 10, then calls
- * func_8007FF1C. */
-Unk8007F920 *func_800813F8(Unk8007F920 *this) {
-    func_800813C4(this, 10);
-    this->vtable = D_80068074;
+/* Guards crouching (FIGHTER_STATE_CROUCH_GUARD, a ground state), then runs func_8007FF1C. */
+FighterState *FighterStateGround_initCrouchGuard(FighterState *this) {
+    func_800813C4(this, FIGHTER_STATE_CROUCH_GUARD);
+    this->vtable = FIGHTER_STATE_GROUND_VTABLE;
     func_8007FF1C(this);
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_80081438);
+INCLUDE_ASM("game/nonmatchings/game_0f", FighterStateFlinch_init);
 
-/* The class of virtual table D_80067F24 (func_80081438): func_8007F920's with a frame count at 0x10. */
-typedef struct Unk80081438 {
-    /* 0x00 */ Unk8007F920 base;
-    /* 0x10 */ s32 unk10;
-} Unk80081438;
+/* The flinch (FighterStateFlinch_init, virtual table FIGHTER_STATE_FLINCH_VTABLE): a FighterState with a frame
+ * count at 0x10. */
+typedef struct FighterStateFlinch {
+    /* 0x00 */ FighterState base;
+    /* 0x10 */ s32 frames; /* counted down */
+} FighterStateFlinch;
 
-Unk8007F920 *func_800815C4(Unk8007F920 *this);
+FighterState *FighterStateAirFlinch_init(FighterState *this);
 
-/* The tick of D_80067F24's class: counts 0x10 down; when bit 2 of the character's flags is clear becomes
- * a func_800815C4 object, once the 0x20 of its object at 0x238 is down to 0 a func_800816B4 object (0xE),
- * else when the count is out a func_800808EC object (1). */
-void func_80081528(Unk80081438 *this) {
-    Unk80076F34 *chara = this->base.unk8;
-    Unk8007F184 *object = func_8007758C(chara);
+/* The flinch's tick: counts the frames down; off the ground the fighter flinches in the air
+ * (FighterStateAirFlinch_init), once the side's life is out it is knocked out (FighterStateDown_init), else when the
+ * frames are out it stands idle. */
+void FighterStateFlinch_tick(FighterStateFlinch *this) {
+    Fighter *fighter = this->base.fighter;
+    BattleSide *side = func_8007758C(fighter);
 
-    this->unk10--;
-    if (!func_800778BC(chara)) {
-        func_800815C4(&this->base);
-    } else if (object->unk20 <= 0) {
-        func_800816B4(&this->base, 0xE);
-    } else if (this->unk10 < 0) {
-        func_800808EC(&this->base, 1);
+    this->frames--;
+    if (!Fighter_isOnGround(fighter)) {
+        FighterStateAirFlinch_init(&this->base);
+    } else if (side->life <= 0) {
+        FighterStateDown_init(&this->base, FIGHTER_STATE_KNOCKED_OUT);
+    } else if (this->frames < 0) {
+        FighterStateGround_init(&this->base, FIGHTER_STATE_IDLE);
     }
 }
 
-/* The class of virtual table D_80067EEC (func_800815C4): func_8007F920's with a frame count at 0x10. */
-typedef struct Unk800815C4 {
-    /* 0x00 */ Unk8007F920 base;
-    /* 0x10 */ s32 unk10;
-} Unk800815C4;
+/* The class of virtual table FIGHTER_STATE_AIR_FLINCH_VTABLE (FighterStateAirFlinch_init): FighterState_init's with a
+ * frame count at 0x10. */
+typedef struct FighterStateAirFlinch {
+    /* 0x00 */ FighterState base;
+    /* 0x10 */ s32 frames; /* counted down */
+} FighterStateAirFlinch;
 
-extern VtableEntry D_80067EEC[];
+extern VtableEntry FIGHTER_STATE_AIR_FLINCH_VTABLE[];
 
-/* Makes this an object of virtual table D_80067EEC with 0xC at 0: clears the character's 0x494
- * (func_8007A12C with 0), counts 4 frames at 0x10 and calls func_8007FFE8. */
-Unk8007F920 *func_800815C4(Unk8007F920 *this) {
-    func_8007F920(this, 0xC);
-    this->vtable = D_80067EEC;
-    func_8007A12C(this->unk8, 0);
-    ((Unk800815C4 *)this)->unk10 = 4;
+/* Flinches in the air (FIGHTER_STATE_AIR_FLINCH): clears the fighter's 0x494 (func_8007A12C with 0), counts
+ * 4 frames and runs func_8007FFE8. */
+FighterState *FighterStateAirFlinch_init(FighterState *this) {
+    FighterState_init(this, FIGHTER_STATE_AIR_FLINCH);
+    this->vtable = FIGHTER_STATE_AIR_FLINCH_VTABLE;
+    func_8007A12C(this->fighter, 0);
+    ((FighterStateAirFlinch *)this)->frames = 4;
     func_8007FFE8(this);
     return this;
 }
 
-/* The tick of D_80067EEC's class: once the count at 0x10 runs out and bit 2 of the character's flags is
- * set, calls func_8007A6FC (1 and -1, 0x60, 2 or 3 after func_80077794) and becomes a func_800816B4
- * object (0xE). */
-void func_80081618(Unk800815C4 *this) {
+/* The air flinch's tick: once its frames are out and the fighter is on the ground, it lands with dust on both
+ * sides (Fighter_spawnDust: 2 or 3 by Fighter_canEvolve) and is knocked out (FighterStateDown_init). */
+void FighterStateAirFlinch_tick(FighterStateAirFlinch *this) {
     s32 arg;
 
-    if (--this->unk10 < 0 && func_800778BC(this->base.unk8)) {
-        arg = func_80077794(this->base.unk8) ? 2 : 3;
-        func_8007A6FC(this->base.unk8, 1, 0x60, arg);
-        func_8007A6FC(this->base.unk8, -1, 0x60, arg);
-        func_800816B4(&this->base, 0xE);
+    if (--this->frames < 0 && Fighter_isOnGround(this->base.fighter)) {
+        arg = Fighter_canEvolve(this->base.fighter) ? 2 : 3;
+        Fighter_spawnDust(this->base.fighter, 1, 0x60, arg);
+        Fighter_spawnDust(this->base.fighter, -1, 0x60, arg);
+        FighterStateDown_init(&this->base, FIGHTER_STATE_KNOCKED_OUT);
     }
 }
 
-extern VtableEntry D_80067EB4[];
+extern VtableEntry FIGHTER_STATE_DOWN_VTABLE[];
 
-/* Makes this an object of virtual table D_80067EB4 with `state` at 0: state 0xE starts the character's
- * clip 0x11 (blended over 2 frames) with no count at 0x10; any other starts clip 0x10 (over 1 frame) and
- * counts 0x16 frames. The match depends on the switch: the game tests 0xD, then 0xE, and falls into the
- * 0xD arm. */
-Unk8007F920 *func_800816B4(Unk8007F920 *this, s32 state) {
-    func_8007F920(this, state);
-    this->vtable = D_80067EB4;
+/* Goes down (`state`): knocked out starts the down clip (blended in over 2 frames) with no frames to wait; any
+ * other (knocked down) starts the knocked down clip (over 1 frame) and waits 0x16 frames. The match depends on
+ * the switch: the game tests 0xD, then 0xE, and falls into the 0xD arm. */
+FighterState *FighterStateDown_init(FighterState *this, s32 state) {
+    FighterState_init(this, state);
+    this->vtable = FIGHTER_STATE_DOWN_VTABLE;
     switch (state) {
-    case 0xD:
+    case FIGHTER_STATE_KNOCKED_DOWN:
     default:
-        func_8007FC2C(this, 0x10, 1);
-        ((Unk800816B4 *)this)->unk10 = 0x16;
+        FighterState_playClip(this, FIGHTER_CLIP_KNOCKED_DOWN, 1);
+        ((FighterStateDown *)this)->frames = 0x16;
         break;
-    case 0xE:
-        func_8007FC2C(this, 0x11, 2);
-        ((Unk800816B4 *)this)->unk10 = 0;
+    case FIGHTER_STATE_KNOCKED_OUT:
+        FighterState_playClip(this, FIGHTER_CLIP_DOWN, 2);
+        ((FighterStateDown *)this)->frames = 0;
         break;
     }
     return this;
 }
 
-Unk8007F920 *func_800817B4(Unk8007F920 *this);
+FighterState *FighterStateGetUp_init(FighterState *this);
 
-/* The tick of D_80067EB4's class: while the 0x20 of the character's object at 0x238 is above 0, counts
- * 0x10 down; once it is out, bit 2 of the character's flags is set and func_8007FC7C holds, becomes a
- * func_800817B4 object. */
-void func_80081734(Unk800816B4 *this) {
-    if (func_8007758C(this->base.unk8)->unk20 > 0 && --this->unk10 <= 0 && func_800778BC(this->base.unk8)
-        && func_8007FC7C(&this->base, 0)) {
-        func_800817B4(&this->base);
+/* The down state's tick: while the side has life, counts the frames down; once they are out, the fighter is on the
+ * ground and the clip is done, it gets up (FighterStateGetUp_init). */
+void FighterStateDown_tick(FighterStateDown *this) {
+    if (func_8007758C(this->base.fighter)->life > 0 && --this->frames <= 0 && Fighter_isOnGround(this->base.fighter)
+        && FighterState_isClipDone(&this->base, 0)) {
+        FighterStateGetUp_init(&this->base);
     }
 }
 
-/* Constructs an object of the class of vtable D_80067E7C with func_8007F920 and 15, then calls
- * func_8007FCFC. */
-Unk8007F920 *func_800817B4(Unk8007F920 *this) {
-    func_8007F920(this, 15);
-    this->vtable = D_80067E7C;
+/* Gets up (FIGHTER_STATE_GET_UP), running the fighter's getUp slot (func_8007FCFC). */
+FighterState *FighterStateGetUp_init(FighterState *this) {
+    FighterState_init(this, FIGHTER_STATE_GET_UP);
+    this->vtable = FIGHTER_STATE_GET_UP_VTABLE;
     func_8007FCFC(this);
     return this;
 }
 
 Unk80081874 *func_80081874(Unk80081874 *this);
 
-/* The tick of D_80067E7C's class (func_800817B4): once func_8007FC7C holds, becomes a func_80081874
- * object when func_8007F1C0 holds for the character's object at 0x238, else sets the character's 0x498 to
- * 8 and becomes a func_800808EC object (1); until then calls func_8007FCFC. */
-void func_800817F4(Unk8007F920 *this) {
-    if (func_8007FC7C(this, 0)) {
-        if (func_8007F1C0(func_8007758C(this->unk8))) {
+/* The get-up's tick: once the clip is done, a side stunned to its limit (func_8007F1C0) turns dizzy
+ * (func_80081874); else the fighter gets 8 invulnerable frames and stands idle. Until then its getUp slot runs. */
+void FighterStateGetUp_tick(FighterState *this) {
+    if (FighterState_isClipDone(this, 0)) {
+        if (func_8007F1C0(func_8007758C(this->fighter))) {
             func_80081874((Unk80081874 *)this);
         } else {
-            this->unk8->unk498 = 8;
-            func_800808EC(this, 1);
+            this->fighter->invulnerableFrames = 8;
+            FighterStateGround_init(this, FIGHTER_STATE_IDLE);
         }
     } else {
         func_8007FCFC(this);
     }
 }
 
-/* Constructs an object of the class of vtable D_80067E44 with func_8007F920 and 16, calls
- * func_8007FF60 and clears 0x10. */
+/* Turns dizzy (FIGHTER_STATE_DIZZY, virtual table D_80067E44): runs the fighter's dizzy slot (func_8007FF60) and
+ * clears the frame count at 0x10. */
 Unk80081874 *func_80081874(Unk80081874 *this) {
-    func_8007F920(&this->base, 16);
+    FighterState_init(&this->base, FIGHTER_STATE_DIZZY);
     this->base.vtable = D_80067E44;
     func_8007FF60(&this->base);
     this->unk10 = 0;
     return this;
 }
 
-/* The tick of D_80067E44's class: once the 0x20 of the character's object at 0x238 is down to 0, becomes
- * a func_800816B4 object (0xE); else calls func_8007FF60, plays sound 0xC every 22 frames (count at 0x10)
- * and, once func_8007FC7C holds, calls func_8007F1B8 on that object and becomes a func_800808EC object
- * (1). */
+/* The dizzy state's tick: once the side's life is out the fighter is knocked out; else its dizzy slot runs, sound
+ * 0xC plays every 22 frames (count at 0x10), and once the clip is done the side's stun count is cleared
+ * (func_8007F1B8) and the fighter stands idle. */
 void func_800818B8(Unk80081874 *this) {
-    Unk8007F184 *object = func_8007758C(this->base.unk8);
+    BattleSide *side = func_8007758C(this->base.fighter);
 
-    if (object->unk20 <= 0) {
-        func_800816B4(&this->base, 0xE);
+    if (side->life <= 0) {
+        FighterStateDown_init(&this->base, FIGHTER_STATE_KNOCKED_OUT);
     } else {
         func_8007FF60(&this->base);
         if (this->unk10++ % 22 == 0) {
             soundControlPlaySound(&SOUND_CONTROL, 0xC, 0);
         }
-        if (func_8007FC7C(&this->base, 0)) {
-            func_8007F1B8(object);
-            func_800808EC(&this->base, 1);
+        if (FighterState_isClipDone(&this->base, 0)) {
+            func_8007F1B8(side);
+            FighterStateGround_init(&this->base, FIGHTER_STATE_IDLE);
         }
     }
 }
 
-/* The method at 0x28 of D_80067E44: func_8007F1B8 on the character's object at 0x238, then
- * func_80081438. */
-void func_80081998(Unk8007F920 *this, s32 arg) {
-    func_8007F1B8(func_8007758C(this->unk8));
-    func_80081438(this, arg);
+/* The dizzy state's hit (slot 0x28): clears the side's stun count (func_8007F1B8), then flinches
+ * (FighterStateFlinch_init). */
+void func_80081998(FighterState *this, s32 hitBits) {
+    func_8007F1B8(func_8007758C(this->fighter));
+    FighterStateFlinch_init(this, hitBits);
 }
 
-/* Constructs an object of the class of vtable D_80067E0C with func_8007F920 and 1, and clears the
- * character's 0x448. */
-Unk8007F920 *func_800819E0(Unk8007F920 *this) {
-    func_8007F920(this, 1);
-    this->vtable = D_80067E0C;
-    this->unk8->unk448 = 0;
+/* Makes the attack state idle (FIGHTER_STATE_IDLE, virtual table FIGHTER_ATTACK_IDLE_VTABLE): no parts hit. */
+FighterState *FighterAttackIdle_init(FighterState *this) {
+    FighterState_init(this, FIGHTER_STATE_IDLE);
+    this->vtable = FIGHTER_ATTACK_IDLE_VTABLE;
+    this->fighter->attackParts = 0;
     return this;
 }
 
-/* Constructs an object of the class of vtable D_80067E0C, which derives from func_8007F920's. */
-Unk8007F920 *func_80081A20(Unk8007F920 *this, s32 arg) {
-    func_8007F920(this, arg);
-    this->vtable = D_80067E0C;
+/* Constructs an attack state with its FIGHTER_STATE_* id (virtual table FIGHTER_ATTACK_IDLE_VTABLE; the attacks'
+ * base). */
+FighterState *func_80081A20(FighterState *this, s32 state) {
+    FighterState_init(this, state);
+    this->vtable = FIGHTER_ATTACK_IDLE_VTABLE;
     return this;
 }
 
-/* Clears the character's 0x448 to 0x460 (but 0x450), then unless the state of its 0x22C object (func_8007F93C)
- * is 0, 9 to 16 or 19, or 2 with arg not 0, runs the step arg (0 to 3) with its input (func_800776C4). */
-void func_80081A54(Unk8007F920 *this, s32 arg) {
-    Unk80076F34 *chara;
-    Unk80075000 *input;
+/* The attack idle state's attack: clears the fighter's attack parts and hit, then, unless its body state is in the
+ * intro, guarding, hit, down, getting up, dizzy or held (or crouching, for a special), starts the attack the input
+ * asks for: 0 an attack (func_80081B84), 1 to 3 the specials 1 to 3. */
+void FighterAttackIdle_attack(FighterState *this, s32 attack) {
+    Fighter *fighter;
+    InputHistory *input;
 
-    this->unk8->unk448 = 0;
-    this->unk8->unk44C = 0;
+    this->fighter->attackParts = 0;
+    this->fighter->hitDamage = 0;
     /* The match depends on these four through a local: the game reloads 8 after each store above, not here. */
-    chara = this->unk8;
-    chara->unk454 = 0;
-    chara->unk458 = 0;
-    chara->unk45C = 0;
-    chara->unk460 = 0;
-    input = func_800776C4(this->unk8);
-    switch (func_8007F93C(this)->unk0) {
-    case 0:
-    case 9:
-    case 10:
-    case 11:
-    case 12:
-    case 13:
-    case 14:
-    case 15:
-    case 16:
-    case 19:
+    fighter = this->fighter;
+    fighter->hitKnockback.vx = 0;
+    fighter->hitKnockback.vy = 0;
+    fighter->hitKnockback.vz = 0;
+    fighter->hitKnockbackPad = 0;
+    input = Fighter_getInput(this->fighter);
+    switch (FighterState_getBodyState(this)->state) {
+    case FIGHTER_STATE_INTRO:
+    case FIGHTER_STATE_GUARD:
+    case FIGHTER_STATE_CROUCH_GUARD:
+    case FIGHTER_STATE_FLINCH:
+    case FIGHTER_STATE_AIR_FLINCH:
+    case FIGHTER_STATE_KNOCKED_DOWN:
+    case FIGHTER_STATE_KNOCKED_OUT:
+    case FIGHTER_STATE_GET_UP:
+    case FIGHTER_STATE_DIZZY:
+    case FIGHTER_STATE_HELD:
         break;
-    case 2:
-        if (arg != 0) {
+    case FIGHTER_STATE_CROUCH:
+        if (attack != 0) {
             break;
         }
         /* fallthrough */
     default:
-        switch (arg) {
+        switch (attack) {
         case 0:
             func_80081B84(this, input);
             break;
@@ -1165,59 +1156,61 @@ INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067C64);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067C6C);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067C74);
 
-/* Step 0 of func_80081A54: by the character's clip (func_8007FB9C) and its input, picks the next state of
- * func_8008209C (0x17 to 0x1C) with its step function and calls func_800788B4, or func_8008230C. */
-void func_80081B84(Unk8007F920 *this, Unk80075000 *input) {
-    s32 clip = func_8007FB9C(this);
-    Unk80076F34 *chara = this->unk8;
+/* Starts an attack by the fighter's clip and input: in the air an air up attack (PAD_UP), an air side attack
+ * (PAD_LEFT or PAD_RIGHT) or an air attack, each using an air move; dashing a dash attack; crouching a crouch
+ * attack; crouch guarding none; else a throw (toward an opponent in reach), an up attack (PAD_UP) or the attack
+ * chain (func_8008230C). Each sets the move's reward (Fighter_setMoveReward). */
+void func_80081B84(FighterState *this, InputHistory *input) {
+    s32 clip = FighterState_getClip(this);
+    Fighter *fighter = this->fighter;
 
     switch (clip) {
-    case 3:
-    case 4:
-        func_8007516C(input, 4);
-        if (func_800751A8(input, 0x1000, 0)) {
-            if (func_800778D0(this->unk8, 0)) {
-                func_800788B4(chara, 7, 400);
-                func_8008209C(this, 0x1B, D_80067C44);
+    case FIGHTER_CLIP_JUMP:
+    case FIGHTER_CLIP_FALL:
+        InputHistory_startSearch(input, 4);
+        if (InputHistory_findHeld(input, PAD_UP, 0)) {
+            if (Fighter_tryUseAirMove(this->fighter, 0)) {
+                Fighter_setMoveReward(fighter, MOVE_AIR_UP, 400);
+                FighterStateAttack_init(this, FIGHTER_STATE_AIR_UP_ATTACK, D_80067C44);
             }
-        } else if (func_800750C4(input) & 0xA000) {
-            if (func_800778D0(this->unk8, 1)) {
-                func_800788B4(chara, 9, 400);
-                func_8008209C(this, 0x1C, D_80067C4C);
+        } else if (InputHistory_getHeld(input) & (PAD_LEFT | PAD_RIGHT)) {
+            if (Fighter_tryUseAirMove(this->fighter, 1)) {
+                Fighter_setMoveReward(fighter, MOVE_AIR_SIDE, 400);
+                FighterStateAttack_init(this, FIGHTER_STATE_AIR_ATTACK, D_80067C4C);
             }
         } else {
-            func_800788B4(chara, 8, 400);
-            func_8008209C(this, 0x1C, D_80067C54);
+            Fighter_setMoveReward(fighter, MOVE_AIR, 400);
+            FighterStateAttack_init(this, FIGHTER_STATE_AIR_ATTACK, D_80067C54);
         }
         break;
-    case 2:
-        func_800788B4(chara, 6, 300);
-        func_8008209C(this, 0x1A, D_80067C5C);
+    case FIGHTER_CLIP_DASH:
+        Fighter_setMoveReward(fighter, MOVE_DASH, 300);
+        FighterStateAttack_init(this, FIGHTER_STATE_DASH_ATTACK, D_80067C5C);
         break;
-    case 19:
-        func_800788B4(chara, 5, 100);
-        func_8008209C(this, 0x19, D_80067C64);
+    case FIGHTER_CLIP_CROUCH:
+        Fighter_setMoveReward(fighter, MOVE_CROUCH, 100);
+        FighterStateAttack_init(this, FIGHTER_STATE_CROUCH_ATTACK, D_80067C64);
         break;
-    case 21:
+    case FIGHTER_CLIP_CROUCH_GUARD:
         break;
     default:
         /* The match depends on a loop around the 0x2000 test that its break leaves: the game rolls that test to the
          * loop's end (entered with a jump), hoists &D_80067C6C out of it and moves the 0x17 block before it, which
          * a plain if/else never gives. A do/while (0) and a for (;;) ending in return both match. */
         do {
-            if (func_80079CF4(this->unk8, 0)) {
-                func_80078848(this->unk8, input);
-                func_8007516C(input, 4);
-                if (func_800751A8(input, 0x2000, 0)) {
-                    func_800788B4(chara, 3, 400);
-                    func_8008209C(this, 0x18, D_80067C6C);
+            if (Fighter_getOpponentInReach(this->fighter, 0)) {
+                Fighter_mirrorInput(this->fighter, input);
+                InputHistory_startSearch(input, 4);
+                if (InputHistory_findHeld(input, PAD_RIGHT, 0)) {
+                    Fighter_setMoveReward(fighter, MOVE_THROW, 400);
+                    FighterStateAttack_init(this, FIGHTER_STATE_THROW, D_80067C6C);
                     break;
                 }
             }
-            func_8007516C(input, 4);
-            if (func_800751A8(input, 0x1000, 0)) {
-                func_800788B4(chara, 4, 200);
-                func_8008209C(this, 0x17, D_80067C74);
+            InputHistory_startSearch(input, 4);
+            if (InputHistory_findHeld(input, PAD_UP, 0)) {
+                Fighter_setMoveReward(fighter, MOVE_UP, 200);
+                FighterStateAttack_init(this, FIGHTER_STATE_UP_ATTACK, D_80067C74);
             } else {
                 func_8008230C(this);
             }
@@ -1226,101 +1219,93 @@ void func_80081B84(Unk8007F920 *this, Unk80075000 *input) {
     }
 }
 
-/* With the character's clip (0x250) 3 or 4: unless func_800798F4 says so for
- * 0x17, and if func_800778D0 does for 2, turns into state 0x1E stepping with
- * D_80067CCC; with any other value, unless func_800798F4 says so for 0x16,
- * into state 0x1D with D_80067CD4. Either way then func_800788B4 with 10, 100. */
-void func_80081E18(Unk8007F920 *this, Unk80075000 *input) {
-    s32 value = func_8007FB9C(this);
-    Unk80076F34 *chara = this->unk8;
+/* Starts special 1: in the air (jump or fall clip) its air form, using an air move; else its ground form; only
+ * when the model has the clip (Fighter_lacksClip). Either way the move pays its reward. */
+void func_80081E18(FighterState *this, InputHistory *input) {
+    s32 value = FighterState_getClip(this);
+    Fighter *fighter = this->fighter;
 
     switch (value) {
-    case 3:
-    case 4:
-        if (!func_800798F4(chara, 0x17) && func_800778D0(chara, 2)) {
-            func_8008209C(this, 0x1E, D_80067CCC);
-            func_800788B4(chara, 0xA, 100);
+    case FIGHTER_CLIP_JUMP:
+    case FIGHTER_CLIP_FALL:
+        if (!Fighter_lacksClip(fighter, FIGHTER_CLIP_AIR_SPECIAL1) && Fighter_tryUseAirMove(fighter, 2)) {
+            FighterStateAttack_init(this, FIGHTER_STATE_AIR_SPECIAL1, D_80067CCC);
+            Fighter_setMoveReward(fighter, MOVE_SPECIAL1, 100);
         }
         break;
     default:
-        if (!func_800798F4(chara, 0x16)) {
-            func_8008209C(this, 0x1D, D_80067CD4);
-            func_800788B4(chara, 0xA, 100);
+        if (!Fighter_lacksClip(fighter, FIGHTER_CLIP_SPECIAL1)) {
+            FighterStateAttack_init(this, FIGHTER_STATE_SPECIAL1, D_80067CD4);
+            Fighter_setMoveReward(fighter, MOVE_SPECIAL1, 100);
         }
         break;
     }
 }
 
-/* With the character's clip (0x250) 3 or 4: unless func_800798F4 says so for
- * 0x19, and if func_800778D0 does for 3, turns into state 0x20 stepping with
- * D_80067CDC; with any other value, unless func_800798F4 says so for 0x18,
- * into state 0x1F with D_80067CE4. Either way then func_800788B4 with 11, 1000. */
-void func_80081EEC(Unk8007F920 *this, Unk80075000 *input) {
-    s32 value = func_8007FB9C(this);
-    Unk80076F34 *chara = this->unk8;
+/* Starts special 2, as func_80081E18 does special 1. */
+void func_80081EEC(FighterState *this, InputHistory *input) {
+    s32 value = FighterState_getClip(this);
+    Fighter *fighter = this->fighter;
 
     switch (value) {
-    case 3:
-    case 4:
-        /* the game reads 0x8 again here, where its siblings use chara */
-        if (!func_800798F4(chara, 0x19) && func_800778D0(this->unk8, 3)) {
-            func_8008209C(this, 0x20, D_80067CDC);
-            func_800788B4(chara, 0xB, 1000);
+    case FIGHTER_CLIP_JUMP:
+    case FIGHTER_CLIP_FALL:
+        /* the game reads 0x8 again here, where its siblings use fighter */
+        if (!Fighter_lacksClip(fighter, FIGHTER_CLIP_AIR_SPECIAL2) && Fighter_tryUseAirMove(this->fighter, 3)) {
+            FighterStateAttack_init(this, FIGHTER_STATE_AIR_SPECIAL2, D_80067CDC);
+            Fighter_setMoveReward(fighter, MOVE_SPECIAL2, 1000);
         }
         break;
     default:
-        if (!func_800798F4(chara, 0x18)) {
-            func_8008209C(this, 0x1F, D_80067CE4);
-            func_800788B4(chara, 0xB, 1000);
+        if (!Fighter_lacksClip(fighter, FIGHTER_CLIP_SPECIAL2)) {
+            FighterStateAttack_init(this, FIGHTER_STATE_SPECIAL2, D_80067CE4);
+            Fighter_setMoveReward(fighter, MOVE_SPECIAL2, 1000);
         }
         break;
     }
 }
 
-/* With the character's clip (0x250) 3 or 4: unless func_800798F4 says so for
- * 0x1B, and if func_800778D0 does for 4, turns into state 0x22 stepping with
- * D_80067CEC; with any other value, unless func_800798F4 says so for 0x1A,
- * into state 0x21 with D_80067CF4. Either way then func_800788B4 with 12, 3000. */
-void func_80081FC4(Unk8007F920 *this, Unk80075000 *input) {
-    Unk80076F34 *chara = this->unk8;
-    s32 value = func_8007FB9C(this);
+/* Starts special 3, as func_80081E18 does special 1. */
+void func_80081FC4(FighterState *this, InputHistory *input) {
+    Fighter *fighter = this->fighter;
+    s32 value = FighterState_getClip(this);
 
     switch (value) {
-    case 3:
-    case 4:
-        if (!func_800798F4(chara, 0x1B) && func_800778D0(chara, 4)) {
-            func_8008209C(this, 0x22, D_80067CEC);
-            func_800788B4(chara, 0xC, 3000);
+    case FIGHTER_CLIP_JUMP:
+    case FIGHTER_CLIP_FALL:
+        if (!Fighter_lacksClip(fighter, FIGHTER_CLIP_AIR_SPECIAL3) && Fighter_tryUseAirMove(fighter, 4)) {
+            FighterStateAttack_init(this, FIGHTER_STATE_AIR_SPECIAL3, D_80067CEC);
+            Fighter_setMoveReward(fighter, MOVE_SPECIAL3, 3000);
         }
         break;
     default:
-        if (!func_800798F4(chara, 0x1A)) {
-            func_8008209C(this, 0x21, D_80067CF4);
-            func_800788B4(chara, 0xC, 3000);
+        if (!Fighter_lacksClip(fighter, FIGHTER_CLIP_SPECIAL3)) {
+            FighterStateAttack_init(this, FIGHTER_STATE_SPECIAL3, D_80067CF4);
+            Fighter_setMoveReward(fighter, MOVE_SPECIAL3, 3000);
         }
         break;
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_8008209C);
+INCLUDE_ASM("game/nonmatchings/game_0f", FighterStateAttack_init);
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_80082158);
+INCLUDE_ASM("game/nonmatchings/game_0f", FighterStateAttack_tick);
 
-/* The method at 0x28 of D_80067DD4: calls the character's virtual method at 0x20, then resets the object
- * (func_800819E0) and calls func_8007FC50 on it with -1 and 0. */
-void func_80082270(Unk8007F920 *this) {
-    Unk80076F34 *chara = this->unk8;
-    Unk80076F34Vtable *vtable = UNK80076F34_VTABLE(chara);
+/* An attack's hit (slot 0x28): ends the fighter's move (its endMove slot), makes the attack state idle and stops
+ * no action clip (func_8007FC50 with -1). */
+void FighterStateAttack_hit(FighterState *this) {
+    Fighter *fighter = this->fighter;
+    FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
 
-    vtable->unk20.func((u8 *)chara + vtable->unk20.delta);
-    func_800819E0(this);
+    vtable->endMove.func((u8 *)fighter + vtable->endMove.delta);
+    FighterAttackIdle_init(this);
     func_8007FC50(this, -1, 0);
 }
 
-/* func_80081A54 unless func_8007F98C holds. */
-void func_800822CC(Unk8007F920 *this, s32 arg) {
+/* An attack's attack: starts the next one (FighterAttackIdle_attack) unless func_8007F98C holds. */
+void FighterStateAttack_attack(FighterState *this, s32 attack) {
     if (!func_8007F98C(this)) {
-        func_80081A54(this, arg);
+        FighterAttackIdle_attack(this, attack);
     }
 }
 
@@ -1330,97 +1315,104 @@ INCLUDE_ASM("game/nonmatchings/game_0f", func_800823EC);
 
 INCLUDE_ASM("game/nonmatchings/game_0f", func_800824B8);
 
-/* The class of virtual table D_80067D94 (func_800823EC): func_8007F920's with a flag at 0x10 and the
+/* The attack chain's state (func_800823EC, virtual table D_80067D94): a FighterState with a flag at 0x10 and the
  * step function at 0x14. */
 typedef struct Unk800823EC {
-    /* 0x00 */ Unk8007F920 base;
+    /* 0x00 */ FighterState base;
     /* 0x10 */ s32 unk10;
     /* 0x14 */ MemberFunction step;
 } Unk800823EC;
 
-/* The method at 0x20 of D_80067D54 and D_80067D94: unless func_8007F98C holds or arg is set, sets 0x10,
- * calls func_8007FC50 with -1 and 0, then its own method at 0x30 (func_8008261C in D_80067D94). */
-void func_800825AC(Unk800823EC *this, s32 arg) {
-    if (!func_8007F98C(&this->base) && arg == 0) {
+/* The attack chain's attack (slot 0x20 of D_80067D54 and D_80067D94): for an attack (not a special), unless
+ * func_8007F98C holds, sets 0x10, sets no action clip (func_8007FC50 with -1) and runs its slot 0x30, the next
+ * link of the chain (func_8008261C in D_80067D94). */
+void func_800825AC(Unk800823EC *this, s32 attack) {
+    if (!func_8007F98C(&this->base) && attack == 0) {
         this->unk10 = 1;
         func_8007FC50(&this->base, -1, 0);
         this->base.vtable[6].func((u8 *)this + this->base.vtable[6].delta);
     }
 }
 
-/* Turns the object into the class of virtual table D_80067D54 (func_80082690 constructs it in place). */
-Unk8007F920 *func_8008261C(Unk8007F920 *this) {
+/* The chain's next link after the first attack: the second (func_80082690). */
+FighterState *func_8008261C(FighterState *this) {
     return func_80082690(this);
 }
 
-/* Resets the object (func_800819E0), then calls func_8007FC50 on it with -1 and 0. */
+/* Makes the attack state idle (FighterAttackIdle_init) and sets no action clip (func_8007FC50 with -1). */
 void func_8008263C(void *this) {
-    func_800819E0(this);
+    FighterAttackIdle_init(this);
     func_8007FC50(this, -1, 0);
 }
 
-/* Turns the object into the class of virtual table D_80067D14 (func_800826E8 constructs it in place). */
-Unk8007F920 *func_80082670(Unk8007F920 *this) {
+/* The chain's next link after the second attack: the third (func_800826E8). */
+FighterState *func_80082670(FighterState *this) {
     return func_800826E8(this);
 }
 
-/* Constructs the state 0x15 stepping with D_80067D04 (virtual table D_80067D54), then
- * func_800788B4 on the character with 1, 100. */
-Unk8007F920 *func_80082690(Unk8007F920 *this) {
-    func_800823EC(this, 0x15, D_80067D04);
+/* Starts the chain's second attack (FIGHTER_STATE_ATTACK2, virtual table D_80067D54, step D_80067D04), with its
+ * reward. */
+FighterState *func_80082690(FighterState *this) {
+    func_800823EC(this, FIGHTER_STATE_ATTACK2, D_80067D04);
     this->vtable = D_80067D54;
-    func_800788B4(this->unk8, 1, 100);
+    Fighter_setMoveReward(this->fighter, MOVE_ATTACK2, 100);
     return this;
 }
 
-/* Constructs the state 0x16 stepping with D_80067D0C (virtual table D_80067D14), then
- * func_800788B4 on the character with 2, 200. */
-Unk8007F920 *func_800826E8(Unk8007F920 *this) {
-    func_800823EC(this, 0x16, D_80067D0C);
+/* Starts the chain's third attack (FIGHTER_STATE_ATTACK3, virtual table D_80067D14, step D_80067D0C), with its
+ * reward. */
+FighterState *func_800826E8(FighterState *this) {
+    func_800823EC(this, FIGHTER_STATE_ATTACK3, D_80067D0C);
     this->vtable = D_80067D14;
-    func_800788B4(this->unk8, 2, 200);
+    Fighter_setMoveReward(this->fighter, MOVE_ATTACK3, 200);
     return this;
 }
 
-void func_80082740(void) {
+/* The base state's tick: does nothing. */
+void FighterState_tick(void) {
 }
 
-void func_80082748(void) {
+/* The base state's jump: does nothing. */
+void FighterState_jump(void) {
 }
 
-void func_80082750(void) {
+/* The base state's drop: does nothing. */
+void FighterState_drop(void) {
 }
 
-void func_80082758(void) {
+/* The base state's attack: does nothing. */
+void FighterState_attack(void) {
 }
 
-void func_80082760(void) {
+/* The base state's hit: does nothing. */
+void FighterState_hit(void) {
 }
 
 /* Returns its second argument (no caller is known: a virtual method, as its neighbours, is likely). */
-s32 func_80082768(Unk8007F920 *this, s32 arg) {
+s32 func_80082768(FighterState *this, s32 arg) {
     return arg;
 }
 
-/* Returns the word at 0 (no caller is known; between the Unk8007F920 methods, that is the state number). */
-s32 func_80082770(Unk8007F920 *this) {
-    return this->unk0;
+/* Returns the state's FIGHTER_STATE_* id (no caller is known). */
+s32 func_80082770(FighterState *this) {
+    return this->state;
 }
 
-/* Constructs an object of the class of vtable D_8006811C, which derives from func_8007F920's. */
-Unk8007F920 *func_8008277C(Unk8007F920 *this, s32 arg) {
-    func_8007F920(this, arg);
+/* Constructs a pose state (virtual table D_8006811C) with its FIGHTER_STATE_* id, as func_80080778 does. */
+FighterState *func_8008277C(FighterState *this, s32 state) {
+    FighterState_init(this, state);
     this->vtable = D_8006811C;
     return this;
 }
 
-/* Constructs an object of the class of vtable D_800680E4, which derives from func_8007F920's. */
-Unk8007F920 *func_800827B0(Unk8007F920 *this, s32 arg) {
-    func_8007F920(this, arg);
+/* Constructs a state of virtual table D_800680E4 with its FIGHTER_STATE_* id. */
+FighterState *func_800827B0(FighterState *this, s32 state) {
+    FighterState_init(this, state);
     this->vtable = D_800680E4;
     return this;
 }
 
+/* Does nothing (no caller is known). */
 void func_800827E4(void) {
 }
 
@@ -1436,20 +1428,20 @@ INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067D0C);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067D14);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067D54);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067D94);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067DD4);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067E0C);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_ATTACK_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_ATTACK_IDLE_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067E44);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067E7C);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067EB4);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067EEC);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067F24);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_GET_UP_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_DOWN_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_AIR_FLINCH_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_FLINCH_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067F5C);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067F94);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067FCC);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80068004);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_8006803C);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80068074);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_800680AC);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_FALL_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_JUMP_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_HELD_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_GROUND_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_INTRO_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_800680E4);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_8006811C);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80068154);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_VTABLE);

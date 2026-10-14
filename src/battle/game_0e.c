@@ -1,289 +1,280 @@
-/* The class of the constructor func_8007EEB8 (virtual table D_800656BC). */
+/* One side of the fight (BattleSide): its two forms, the one fighting, and the side's life, evolution gauge and
+ * stun, which both forms share. */
 
 #include "common.h"
 #include "battle/game_classes.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 
-INCLUDE_ASM("game/nonmatchings/game_0e", func_8007EEB8);
+INCLUDE_ASM("game/nonmatchings/game_0e", BattleSide_init);
 
-/* The object of func_8007EEB8 (virtual table D_800656BC, at 0x38 after its first fields as g++ places it): two
- * characters it owns, the first again at 8. */
-typedef struct Unk8007EEB8 {
-    /* 0x00 */ Unk80076F34 *chara;
-    /* 0x04 */ Unk80076F34 *other; /* may be chara itself */
-    /* 0x08 */ Unk80076F34 *unk8;
-    /* 0x0C */ u8 unkC[0x38 - 0xC];
-    /* 0x38 */ VtableEntry *vtable;
-} Unk8007EEB8;
-
-/* Takes its character out of its entity list, and the other one when it is not the same. */
-void func_8007EF4C(Unk8007EEB8 *this) {
-    listRemove(&this->chara->entity.link);
-    if (this->chara != this->other) {
-        listRemove(&this->other->entity.link);
+/* Takes the side's fighter out of its entity list, and its evolution when it has one. */
+void BattleSide_unlinkCharacters(BattleSide *this) {
+    listRemove(&this->fighter->entity.link);
+    if (this->fighter != this->evolution) {
+        listRemove(&this->evolution->entity.link);
     }
 }
 
-extern VtableEntry D_800656BC[];
+extern VtableEntry BATTLE_SIDE_VTABLE[];
 
-/* The destructor of func_8007EEB8's object: deletes its character, and the other one when it is not the same. */
-void func_8007EFC0(Unk8007EEB8 *this, s32 flags) {
-    this->vtable = D_800656BC;
-    entityDelete(&this->chara->entity);
+/* BattleSide's destructor: deletes the side's fighter, and its evolution when it has one. */
+void BattleSide_destroy(BattleSide *this, s32 flags) {
+    this->vtable = BATTLE_SIDE_VTABLE;
+    entityDelete(&this->fighter->entity);
     /* The match depends on this operand order (0 loads first). */
-    if (this->chara != this->other) {
-        entityDelete(&this->other->entity);
+    if (this->fighter != this->evolution) {
+        entityDelete(&this->evolution->entity);
     }
     if (flags & DESTROY_FREE) {
         operatorDelete(this);
     }
 }
 
-/* Unless 0x2C is set: when func_80077794 or func_800777BC holds for the character, adds half of amount to 0x24
- * (func_8007F1FC); takes amount off 0x20, down to 0. */
-void func_8007F068(Unk8007F184 *this, s32 amount) {
-    if (this->unk2C == 0) {
-        if (func_80077794(this->base.unk8) || func_800777BC(this->base.unk8)) {
-            func_8007F1FC(this, amount / 2);
+/* Unless frozen: takes amount off the life (down to 0) and, when the fighter can evolve (Fighter_canEvolve or
+ * func_800777BC), adds half of it to the gauge. */
+void BattleSide_takeDamage(BattleSide *this, s32 amount) {
+    if (this->frozen == 0) {
+        if (Fighter_canEvolve(this->current) || func_800777BC(this->current)) {
+            BattleSide_addGauge(this, amount / 2);
         }
         /* The match depends on amount taking the result (a new variable swaps the saved registers). */
-        amount = this->unk20 - amount;
+        amount = this->life - amount;
         if (amount < 0) {
             amount = 0;
         }
-        this->unk20 = amount;
+        this->life = amount;
     }
 }
 
-/* Adds amount to 0x20, kept between 0 and 0x1C. */
-void func_8007F0F4(Unk8007F184 *this, s32 amount) {
-    amount += this->unk20;
-    if (amount > this->unk1C) {
-        amount = this->unk1C;
+/* Adds amount to the life, kept between 0 and lifeMax. */
+void BattleSide_addLife(BattleSide *this, s32 amount) {
+    amount += this->life;
+    if (amount > this->lifeMax) {
+        amount = this->lifeMax;
     }
     if (amount < 0) {
         amount = 0;
     }
-    this->unk20 = amount;
+    this->life = amount;
 }
 
-/* Unless 0x2C is set, adds amount << 12 to 0x28; when that wraps around, 0x28 takes the table's unk14
+/* Unless frozen, adds amount << 12 to the stun count; when that wraps around, it takes the params' stunLimit
  * instead (the value func_8007F1C0 compares it with). */
-void func_8007F124(Unk8007F184 *this, s32 amount) {
+void func_8007F124(BattleSide *this, s32 amount) {
     s32 value;
 
-    if (this->unk2C == 0) {
-        value = this->unk28 + (amount << 12);
-        if (value < this->unk28) {
-            value = func_80077698(this->base.unk8)->unk14;
+    if (this->frozen == 0) {
+        value = this->stun + (amount << 12);
+        if (value < this->stun) {
+            value = Fighter_getParams(this->current)->stunLimit;
         }
-        this->unk28 = value;
+        this->stun = value;
     }
 }
 
-/* Copies field 0x14 of what func_80077698 returns for the character to 0x28. */
-void func_8007F184(Unk8007F184 *this) {
-    this->unk28 = func_80077698(this->base.unk8)->unk14;
+/* Fills the stun count up to the params' stunLimit. */
+void func_8007F184(BattleSide *this) {
+    this->stun = Fighter_getParams(this->current)->stunLimit;
 }
 
-/* Clears 0x28. */
-void func_8007F1B8(Unk8007F184 *this) {
-    this->unk28 = 0;
+/* Clears the stun count. */
+void func_8007F1B8(BattleSide *this) {
+    this->stun = 0;
 }
 
-/* Whether 0x28 has reached the table's unk14. */
-s32 func_8007F1C0(Unk8007F184 *this) {
-    return this->unk28 >= func_80077698(this->base.unk8)->unk14;
+/* Whether the stun count has reached the params' stunLimit. */
+s32 func_8007F1C0(BattleSide *this) {
+    return this->stun >= Fighter_getParams(this->current)->stunLimit;
 }
 
-/* Adds amount to 0x24, kept between 0 and 0x10000. */
-void func_8007F1FC(Unk8007F184 *this, s32 amount) {
-    amount += this->unk24;
+/* Adds amount to the evolution gauge, kept between 0 and 0x10000 (full). */
+void BattleSide_addGauge(BattleSide *this, s32 amount) {
+    amount += this->gauge;
     if (amount > 0x10000) {
         amount = 0x10000;
     }
     if (amount < 0) {
         amount = 0;
     }
-    this->unk24 = amount;
+    this->gauge = amount;
 }
 
-void func_8007F7F4(Unk8007F184 *this);
+void func_8007F7F4(BattleSide *this);
 
-/* Unless 0x2C is set: until func_8007F1C0 holds, takes 0x44 off 0x28 (down to 0); when bit 0 of the table's
- * first word is set and func_800777BC does not hold, takes 0x49 off 0x24 (down to 0), and once 0x24 is empty
- * calls func_8007F7F4 when func_8007AED0 holds for the character. */
-void func_8007F22C(Unk8007F184 *this) {
-    Unk80076F34 *chara;
+/* Each frame, unless frozen: the stun count wears off by 0x44 while it is under the params' stunLimit; when the
+ * fighter's params have FIGHTER_PARAM_EVOLVED and func_800777BC does not hold, the gauge drains by 0x49, and once
+ * it is empty and the fighter is not attacking, calls func_8007F7F4. */
+void BattleSide_tickGauges(BattleSide *this) {
+    Fighter *fighter;
     u16 bits;
 
-    if (this->unk2C == 0) {
-        chara = this->base.unk8;
-        bits = func_80077698(chara)->unk0;
+    if (this->frozen == 0) {
+        fighter = this->current;
+        bits = Fighter_getParams(fighter)->flags;
         if (!func_8007F1C0(this)) {
-            this->unk28 -= 0x44;
-            if (this->unk28 < 0) {
-                this->unk28 = 0;
+            this->stun -= 0x44;
+            if (this->stun < 0) {
+                this->stun = 0;
             }
         }
-        if ((bits & 1) && !func_800777BC(chara)) {
-            this->unk24 -= 0x49;
-            if (this->unk24 < 0) {
-                this->unk24 = 0;
+        if ((bits & FIGHTER_PARAM_EVOLVED) && !func_800777BC(fighter)) {
+            this->gauge -= 0x49;
+            if (this->gauge < 0) {
+                this->gauge = 0;
             }
-            if (this->unk24 <= 0 && func_8007AED0(chara)) {
+            if (this->gauge <= 0 && Fighter_isAttackIdle(fighter)) {
                 func_8007F7F4(this);
             }
         }
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0e", func_8007F300);
+INCLUDE_ASM("game/nonmatchings/game_0e", BattleSide_tick);
 
-/* Sets 0x2C: the amounts stop changing. */
-void func_8007F59C(Unk8007F184 *this) {
-    this->unk2C = 1;
+/* Freezes the side: its life, gauge and stun count stop changing. */
+void BattleSide_freeze(BattleSide *this) {
+    this->frozen = 1;
 }
 
-/* Whether 0x24 is above 0xFFFF, unless bit 0 of the first word of the character's table (by func_80077568) is
- * set, func_8007AED0 does not hold or func_800792B8 gives 11 to 16 or 19. */
-s32 func_8007F5A8(Unk8007F184 *this) {
-    Unk80077698 *tables = D_800656D4;
+/* Whether the side may evolve now: the gauge is full, the character's params lack FIGHTER_PARAM_EVOLVED, the
+ * fighter is not attacking, and it is not flinching, knocked down or out, getting up, dizzy or held. */
+s32 BattleSide_canEvolve(BattleSide *this) {
+    FighterParams *tables = FIGHTER_PARAMS;
     s32 state;
 
-    if (tables[func_80077568(this->base.unk8)].unk0 & 1) {
+    if (tables[Fighter_getCharacter(this->current)].flags & FIGHTER_PARAM_EVOLVED) {
         return 0;
     }
-    if (!func_8007AED0(this->base.unk8)) {
+    if (!Fighter_isAttackIdle(this->current)) {
         return 0;
     }
-    state = func_800792B8(this->base.unk8);
+    state = Fighter_getBodyStateId(this->current);
     /* The match depends on one if per state: an || chain is folded into a range test (11 to 16). */
-    if (state == 11) {
+    if (state == FIGHTER_STATE_FLINCH) {
         return 0;
     }
-    if (state == 12) {
+    if (state == FIGHTER_STATE_AIR_FLINCH) {
         return 0;
     }
-    if (state == 13) {
+    if (state == FIGHTER_STATE_KNOCKED_DOWN) {
         return 0;
     }
-    if (state == 14) {
+    if (state == FIGHTER_STATE_KNOCKED_OUT) {
         return 0;
     }
-    if (state == 15) {
+    if (state == FIGHTER_STATE_GET_UP) {
         return 0;
     }
-    if (state == 16) {
+    if (state == FIGHTER_STATE_DIZZY) {
         return 0;
     }
-    if (state == 19) {
+    if (state == FIGHTER_STATE_HELD) {
         return 0;
     }
-    return this->unk24 > 0xFFFF;
+    return this->gauge > 0xFFFF;
 }
 
-/* When func_800777BC holds for the character, whether 0x24 is above 0xFFFF; else whether it is not 0, when bit 0
- * of the first word of the character's table (by func_80077568) is set. */
-s32 func_8007F674(Unk8007F184 *this) {
-    Unk80077698 *tables = D_800656D4;
-    u16 bits = tables[func_80077568(this->base.unk8)].unk0;
+/* When func_800777BC holds for the fighter, whether the gauge is full; else, when the character's params have
+ * FIGHTER_PARAM_EVOLVED, whether the gauge is not empty. */
+s32 func_8007F674(BattleSide *this) {
+    FighterParams *tables = FIGHTER_PARAMS;
+    u16 bits = tables[Fighter_getCharacter(this->current)].flags;
     s32 result;
 
-    if (func_800777BC(this->base.unk8)) {
-        return this->unk24 > 0xFFFF;
+    if (func_800777BC(this->current)) {
+        return this->gauge > 0xFFFF;
     }
     /* The match depends on result starting at 0 (an if/else returns straight from $v0). */
     result = 0;
-    if (bits & 1) {
-        result = this->unk24 != 0;
+    if (bits & FIGHTER_PARAM_EVOLVED) {
+        result = this->gauge != 0;
     }
     return result;
 }
 
-/* Gives the character a new handle (entityRenewHandle) and sets 0x30. */
-void func_8007F6FC(Unk8007F6FC *this) {
-    entityRenewHandle(&this->base.unk8->entity);
+/* Asks for the evolution: gives the fighter a new handle (entityRenewHandle) and sets 0x30. */
+void func_8007F6FC(BattleSide *this) {
+    entityRenewHandle(&this->current->entity);
     this->unk30 = 1;
 }
 
-void func_8007F7A0(Unk8007F184 *this);
+void func_8007F7A0(BattleSide *this);
 
-/* When func_800777BC holds for the character and bit 1 of its table's first word is clear: func_8007F7A0, then
- * 30 at 0x10 and 3 at 0x18. */
-void func_8007F730(Unk8007F184 *this) {
-    Unk80076F34 *chara = this->base.unk8;
+/* When func_800777BC holds for the fighter and bit 1 of its params' flags is clear: func_8007F7A0, then 30 at 0x10
+ * and 3 at 0x18. */
+void func_8007F730(BattleSide *this) {
+    Fighter *fighter = this->current;
 
-    if (func_800777BC(chara) && !(func_80077698(chara)->unk0 & 2)) {
+    if (func_800777BC(fighter) && !(Fighter_getParams(fighter)->flags & 2)) {
         func_8007F7A0(this);
         this->unk10 = 30;
         this->unk18 = 3;
     }
 }
 
-/* Plays sound 0x800E and adds func_800C49E4's entity (0x48 bytes) for this one as a sibling of the character. */
-void func_8007F7A0(Unk8007F184 *this) {
+/* Plays sound 0x800E and adds TransformFlash_init's entity (0x48 bytes) for this side as a sibling of the fighter. */
+void func_8007F7A0(BattleSide *this) {
     soundControlPlaySound(&SOUND_CONTROL, 0x800E, 0);
-    entityAddSibling(&this->base.unk8->entity, &func_800C49E4(entityOperatorNew(0x48), &this->base)->entity);
+    entityAddSibling(&this->current->entity, &TransformFlash_init(entityOperatorNew(0x48), this)->entity);
 }
 
-/* Unless 0x14 is above 0: sets it to 16, plays sound 0x800F, adds func_800C4F74's entity (0x4A8 bytes) for this
- * one as a sibling of the character, renews the character's handle, calls func_80079B0C, func_80079B14 and
- * func_80079B1C with 30 on it, and clears 0x28 (func_8007F1B8). */
-void func_8007F7F4(Unk8007F184 *this) {
-    Unk80076F34 *chara;
+/* Unless swapDelay is still running: sets it to 16, plays sound 0x800F, adds func_800C4F74's entity (0x4A8 bytes)
+ * for this side as a sibling of the fighter, renews the fighter's handle, calls func_80079B0C, func_80079B14 and
+ * func_80079B1C with 30 on it, and clears the stun count (func_8007F1B8). */
+void func_8007F7F4(BattleSide *this) {
+    Fighter *fighter;
 
-    if (this->unk14 <= 0) {
-        chara = this->base.unk8;
-        this->unk14 = 16;
+    if (this->swapDelay <= 0) {
+        fighter = this->current;
+        this->swapDelay = 16;
         soundControlPlaySound(&SOUND_CONTROL, 0x800F, 0);
-        entityAddSibling(&chara->entity, &func_800C4F74(entityOperatorNew(0x4A8), &this->base)->entity);
-        entityRenewHandle(&chara->entity);
-        func_80079B0C(chara, 30);
-        func_80079B14(chara, 30);
-        func_80079B1C(chara, 30);
+        entityAddSibling(&fighter->entity, &func_800C4F74(entityOperatorNew(0x4A8), this)->entity);
+        entityRenewHandle(&fighter->entity);
+        func_80079B0C(fighter, 30);
+        func_80079B14(fighter, 30);
+        func_80079B1C(fighter, 30);
         func_8007F1B8(this);
     }
 }
 
-/* Switches the character at 8 to the other of the two (to the first when it was the second), calls
- * func_80079534 on the new one with the old one, and renews the old one's handle. */
-void func_8007F89C(Unk8007EEB8 *this) {
-    Unk80076F34 *previous = this->unk8;
-    Unk80076F34 *next = this->other;
+/* Swaps the fighting form for the other one (back to the first when it was the evolution); the new one takes over
+ * from the old one (Fighter_takeOverFrom), and the old one gets a new handle. */
+void BattleSide_swapCharacter(BattleSide *this) {
+    Fighter *previous = this->current;
+    Fighter *next = this->evolution;
 
     if (previous == next) {
-        next = this->chara;
+        next = this->fighter;
     }
-    this->unk8 = next;
-    func_80079534(next, previous);
+    this->current = next;
+    Fighter_takeOverFrom(next, previous);
     entityRenewHandle(&previous->entity);
 }
 
-/* Returns the character at 8; no caller found. */
-Unk80076F34 *func_8007F8E4(Unk8007F184 *this) {
-    return this->base.unk8;
+/* Returns the fighting form; no caller found. */
+Fighter *BattleSide_getCharacter(BattleSide *this) {
+    return this->current;
 }
 
-/* Returns 0x20; no caller found. */
-s32 func_8007F8F0(Unk8007F184 *this) {
-    return this->unk20;
+/* Returns the life; no caller found. */
+s32 BattleSide_getLife(BattleSide *this) {
+    return this->life;
 }
 
-/* Returns the most 0x20 can hold (0x1C); no caller found. */
-s32 func_8007F8FC(Unk8007F184 *this) {
-    return this->unk1C;
+/* Returns the most life the side can have; no caller found. */
+s32 BattleSide_getLifeMax(BattleSide *this) {
+    return this->lifeMax;
 }
 
-/* Returns 0x24; no caller found. */
-s32 func_8007F908(Unk8007F184 *this) {
-    return this->unk24;
+/* Returns the evolution gauge; no caller found. */
+s32 BattleSide_getGauge(BattleSide *this) {
+    return this->gauge;
 }
 
-/* Returns 0x28; no caller found. */
-s32 func_8007F914(Unk8007F184 *this) {
-    return this->unk28;
+/* Returns the stun count; no caller found. */
+s32 func_8007F914(BattleSide *this) {
+    return this->stun;
 }
 
-INCLUDE_RODATA("game/nonmatchings/game_0e", D_800656BC);
+INCLUDE_RODATA("game/nonmatchings/game_0e", BATTLE_SIDE_VTABLE);

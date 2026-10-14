@@ -143,11 +143,12 @@ $(BUILDDIR)/%_syms.ld: $(BUILDDIR)/bin/%.elf
 
 # An overlay links against the executable's symbols and its parent's, and
 # takes the rest of what it uses from splat's symbol files
-# (tools/link_imports.py) and, for the names another overlay gives its own
-# address in this version, from config/<version>/imports_<overlay>.txt
+# (tools/link_imports.py) and, for its own names of addresses in the overlays
+# it loads, from config/<version>/imports_<overlay>.txt (which its splat reads too)
 define OVERLAY_template
 $$(GENDIR)/$(1).ld: .EXTRA_PREREQS :=
 $$(GENDIR)/$(1).ld: $$(CONFIG_DIR)/$(1).yaml $$(CONFIG_DIR)/symbols.txt $$(CONFIG_DIR)/symbols_$(1).txt \
+		$$(wildcard $$(CONFIG_DIR)/imports_$(1).txt) \
 		$$(if $$(OVL_PARENT_$(1)),$$(CONFIG_DIR)/symbols_$$(OVL_PARENT_$(1)).txt) $$(VFS_UNPACKED)
 	$$(SPLAT) $$< --disassemble-all --make-full-disasm-for-code
 	tools/sjis_includes.sh $$(ASM_DIR)/$(1)
@@ -220,12 +221,14 @@ G0_OBJ := $(G0_UNITS:%=$(BUILDDIR)/%.o) $(foreach b,$(OVERLAYS),$(filter-out %.s
 $(G0_OBJ): CC1FLAGS := $(subst -G8,-G0,$(CC1FLAGS))
 $(G0_OBJ): MASPSXFLAGS := $(subst -G8,-G0,$(MASPSXFLAGS))
 
-# six fighters of the battle overlay were built without CSE following jumps:
-# their entity updates reload a count in the else block after `if (count > N)
-# delete;`, which -O2 gives only with -fno-cse-follow-jumps; every other
-# function of these units matches either way (fighter_05 and fighter_06, between
-# them, match either way too and have nothing that tells)
-NOFOLLOW_OBJ := $(foreach n,04 07 08 10 14 19,$(BUILDDIR)/src/battle/fighters/fighter_$(n).c.o)
+# six fighters of the battle overlay (factory ids 4, 7, 8, 10, 14 and 19) were
+# built without CSE following jumps: their entity updates reload a count in the
+# else block after `if (count > N) delete;`, which -O2 gives only with
+# -fno-cse-follow-jumps; every other function of these units matches either way
+# (ids 5 and 6, imperialdramon.c and imperialdramon_paladin_mode.c, match either
+# way too and have nothing that tells)
+NOFOLLOW_FIGHTERS := holydramon impmon beelzebumon omegamon saintgargomon v_mon
+NOFOLLOW_OBJ := $(foreach f,$(NOFOLLOW_FIGHTERS),$(BUILDDIR)/src/battle/fighters/$(f).c.o)
 $(NOFOLLOW_OBJ): CC1FLAGS += -fno-cse-follow-jumps
 
 # splat writes the game's Shift JIS text as UTF-8 (string_encoding), which

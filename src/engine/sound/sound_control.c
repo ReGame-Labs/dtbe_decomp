@@ -235,7 +235,7 @@ void soundControlStart(SoundControl *this) {
     SsSetTickMode(SS_TICKVSYNC);
     SsStart();
     setReverb(SS_REV_TYPE_STUDIO_A, 42, 42);
-    func_800479E0(SPU_ON);
+    SpuReserveReverbWorkArea(SPU_ON);
     sdf = loadFile("/sound/digimon.sdf");
     this->sdf = sdf;
     setSndDef(sdf);

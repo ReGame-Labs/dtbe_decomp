@@ -11,7 +11,7 @@ s32 saveDataIsValid(SaveData *this) {
     u8 digest[MD5_DIGEST_SIZE];
 
     saveDataGetMd5(this, digest);
-    return func_8003DF40(digest, this->md5, MD5_DIGEST_SIZE) == 0;
+    return memcmp(digest, this->md5, MD5_DIGEST_SIZE) == 0;
 }
 
 /* Stores the MD5 of the save data in it. */
@@ -35,10 +35,10 @@ void saveDataApplyOptions(SaveData *this) {
     displaySetTvPosition(CURRENT_DISPLAY, this->screenX, this->screenY);
     if (this->mono) {
         setXaMono();
-        func_80052A90();
+        SsSetMono();
     } else {
         setXaStereo();
-        func_80052AA0();
+        SsSetStereo();
     }
 }
 
@@ -52,7 +52,7 @@ void saveDataResetButtons(SaveData *this) {
         this->buttons[0][i] = index;
         this->buttons[1][i] = index;
     }
-    this->unkC = 0;
+    this->vibration = 0;
 }
 
 /* Sets the maps of both players from the slot indexes they gave the slots:

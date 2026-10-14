@@ -21,13 +21,13 @@ s32 setReverb(s32 type, s16 depthLeft, s16 depthRight) {
     if (type == SS_REV_TYPE_OFF) {
         SOUND_SYSTEM.reverbDelay = 0;
         SsUtReverbOff();
-        if (func_80047CF0(-1) == 1) {
-            func_800479E0(SPU_OFF);
+        if (SpuIsReverbWorkAreaReserved(SPU_CHECK) == 1) {
+            SpuReserveReverbWorkArea(SPU_OFF);
         }
         return 0;
     }
-    if (func_80047CF0(-2) == 1) {
-        func_800479E0(SPU_ON);
+    if (SpuIsReverbWorkAreaReserved(SPU_DIAG) == 1) {
+        SpuReserveReverbWorkArea(SPU_ON);
         SsUtReverbOn();
         SOUND_SYSTEM.reverbDelay = SND_REVERB_DEPTH_DELAY;
         SOUND_SYSTEM.reverbDepthLeft = depthLeft;
@@ -86,8 +86,8 @@ void startSoundSystem(void *memory, s16 sepMax, s16 seqMax) {
     nodePoolInit(&SOUND_SYSTEM.songPool, memory, sizeof(SndPlayingSong), songMax);
     SsSetTableSize((char *)SOUND_SYSTEM.songMemory + songMax * sizeof(SndPlayingSong), sepMax, seqMax);
     nodePoolInit(&SOUND_SYSTEM.effectPool, SOUND_SYSTEM.effectNodes, sizeof(SndPlayingEffect), SND_VOICE_MAX);
-    func_80038D44();
-    func_80052AB0(SND_VOICE_MAX);
+    initVoicePool();
+    SsSetReservedVoice(SND_VOICE_MAX);
     SsUtSetReverbType(SS_REV_TYPE_OFF);
     SsSetSerialAttr(SS_SERIAL_A, SS_MIX, SS_SON);
     attr.mask = SPU_COMMON_MVOLL | SPU_COMMON_MVOLR;
@@ -104,14 +104,14 @@ s32 getSongMemorySize(s16 sepMax, s16 seqMax) {
     return sepMax * songSize * seqMax;
 }
 
-/* Sets up the pool at 0x358: SND_VOICE_MAX nodes, numbered from 0. Nothing
- * in the executable takes a node from it. */
-void func_80038D44(void) {
+/* Sets up the voice pool: a node for each of the SND_VOICE_MAX voices,
+ * numbered from 0. Nothing in the executable takes a node from it. */
+void initVoicePool(void) {
     u32 i;
 
-    nodePoolInit(&SOUND_SYSTEM.unk358, SOUND_SYSTEM.unk370, sizeof(SndUnk370), SND_VOICE_MAX);
+    nodePoolInit(&SOUND_SYSTEM.voicePool, SOUND_SYSTEM.voiceNodes, sizeof(SndVoiceNode), SND_VOICE_MAX);
     for (i = 0; i < SND_VOICE_MAX; i++) {
-        SOUND_SYSTEM.unk370[i].index = i;
+        SOUND_SYSTEM.voiceNodes[i].index = i;
     }
 }
 
@@ -376,7 +376,7 @@ void freeEndedSongs(void) {
         if (!(song->flags & 1)) {
             def = &SOUND_SYSTEM.songs[song->song];
             sep = &SOUND_SYSTEM.seps[def->sep];
-            if (func_80049460(sep->id, def->seq) == 0) {
+            if (SsIsEos(sep->id, def->seq) == 0) {
                 nodePoolReleaseInline(&SOUND_SYSTEM.songPool, &song->link);
             }
         }
@@ -448,7 +448,7 @@ s16 openVabHead(u16 vabIndex, void *header) {
     if (vab->id >= 0) {
         return vab->id;
     }
-    id = func_80052F10(header, -1);
+    id = SsVabOpenHead(header, -1);
     if (id >= 0) {
         vab->id = id;
     }

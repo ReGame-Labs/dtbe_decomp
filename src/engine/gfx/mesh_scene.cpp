@@ -55,8 +55,9 @@ void meshSceneDestroy(MeshScene *meshScene, s32 flags) {
 }
 
 /* Loads the scene file at path: uploads its TIMs, relocates its TMD, builds
- * a Mesh per object in the scene's group, then sets up the nodes
- * (meshSceneInitNodes). It calls func_80076A00, in an overlay. Left in asm:
+ * a Mesh per object in the scene's group and a link per node (appended to
+ * COLLISION_LINKS, which it gets from getCollisionLinks, in an overlay, when the node
+ * has collision lines), then sets up the nodes (meshSceneInitNodes). Left in asm:
  * the inlined transformGetWorld copies a MATRIX as a block move (see "Block
  * moves" in TODO.md). */
 INCLUDE_ASM("main/nonmatchings/gfx/mesh_scene", meshSceneLoad);
@@ -102,32 +103,32 @@ s32 meshSceneGetNodeCount(MeshScene *meshScene) {
     return meshScene->nodeCount;
 }
 
-/* unk0 of the entry of a node, or 0 if it has none or is hidden. */
-s32 func_80031B4C(MeshScene *meshScene, s32 node) {
+/* The number of collision lines of a node, or 0 if it has none or is hidden. */
+s32 meshSceneGetCollisionCount(MeshScene *meshScene, s32 node) {
     MeshSceneFile *file = meshScene->file;
     s16 *nodes = file->nodes;
     s32 count = *nodes++;
     s16 *hidden = nodes + count * MESH_SCENE_NODE_HIDDEN;
-    MeshSceneEntry *entry = file->entries[nodes[node]];
+    MeshSceneCollision *collision = file->collisions[nodes[node]];
 
-    if (entry == NULL || hidden[node] != 0) {
+    if (collision == NULL || hidden[node] != 0) {
         return 0;
     }
-    return entry->unk0;
+    return collision->lineCount;
 }
 
-/* &unk4 of the entry of a node, or NULL if it has none or is hidden. */
-s32 *func_80031BB8(MeshScene *meshScene, s32 node) {
+/* The collision lines of a node, or NULL if it has none or is hidden. */
+s32 *meshSceneGetCollisionLines(MeshScene *meshScene, s32 node) {
     MeshSceneFile *file = meshScene->file;
     s16 *nodes = file->nodes;
     s32 count = *nodes++;
     s16 *hidden = nodes + count * MESH_SCENE_NODE_HIDDEN;
-    MeshSceneEntry *entry = file->entries[nodes[node]];
+    MeshSceneCollision *collision = file->collisions[nodes[node]];
 
-    if (entry == NULL || hidden[node] != 0) {
+    if (collision == NULL || hidden[node] != 0) {
         return NULL;
     }
-    return &entry->unk4;
+    return &collision->lines;
 }
 
 /* The mesh of a node. */
@@ -145,14 +146,14 @@ MATRIX *meshSceneGetLocalMatrix(MeshScene *meshScene, s32 node) {
  * moves" in TODO.md). */
 INCLUDE_ASM("main/nonmatchings/gfx/mesh_scene", meshSceneGetWorldMatrix);
 
-/* Hides a node, taking its link out of the list it is in. */
+/* Hides a node, moving its link, if it is in COLLISION_LINKS, to the back. */
 void meshSceneHideNode(MeshScene *meshScene, s32 node) {
     s16 *nodes;
     s32 count;
 
     meshScene->links[node].shown = 0;
     if (!listIsAlone(&meshScene->links[node].link)) {
-        func_80076A5C(&meshScene->links[node].link);
+        moveCollisionLinkToBack(&meshScene->links[node].link);
     }
     nodes = meshScene->file->nodes;
     count = *nodes++;
@@ -172,6 +173,5 @@ void meshSceneShowNode(MeshScene *meshScene, s32 node) {
     nodes[node] = 0;
 }
 
-/* a list that, in the executable, only this file's static constructor and
- * destructor touch */
-List D_8006437C;
+/* the links of the nodes that have collision lines (mesh_scene.h) */
+List COLLISION_LINKS;

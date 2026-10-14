@@ -127,3 +127,12 @@ D_800101B8 CHARACTER_EVOLUTIONS
 D_800102A8 DEMO_CHARACTERS
 D_8005FCBC CHARACTER_TRACKS
 D_8005FCD8 CHARACTER_SOUNDS
+
+# made of the two named calls
+func_800312D8 charaGetTmdObjectCount
+# FighterSetup.score: the fights add their round tallies to it, a continue and a new opponent clear it
+func_8001E3E4 gameStateGetPlayerScore
+
+# GameState's sides are the setup of a fight's sides (character, computer, tamer, colors, score, gauge): the type
+# was renamed Fighter -> FighterSetup in "Call GameState's sides FighterSetup". The name Fighter now belongs to the
+# battle overlay's fighter class (battle.txt), so that line can't be replayed and is gone.

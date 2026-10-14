@@ -13,10 +13,10 @@ void initEntityHeap(s32 size, void *base, HandleTable *handles) {
     ENTITY_HANDLES = handles;
 }
 
-/* Constructs an entity, alone in its list, with a handle. */
-Entity *entityInit(Entity *this, s32 unk10) {
+/* Constructs an entity of a kind (ENTITY_KIND_*), alone in its list, with a handle. */
+Entity *entityInit(Entity *this, s32 kind) {
     this->vtable = &ENTITY_VTABLE;
-    this->unk10 = unk10;
+    this->kind = kind;
     this->link.next = &this->link;
     this->link.prev = &this->link;
     this->handle = handleTableAdd(ENTITY_HANDLES, this);
@@ -33,9 +33,9 @@ void entityDestroy(Entity *this, s32 flags) {
     }
 }
 
-/* Returns the value an entity was constructed with. */
-s32 func_8002BD68(Entity *this) {
-    return this->unk10;
+/* Returns the kind an entity was constructed with (ENTITY_KIND_*). */
+s32 entityGetKind(Entity *this) {
+    return this->kind;
 }
 
 /* Returns the handle of an entity. */
@@ -130,14 +130,15 @@ void entityGroupDestroy(EntityGroup *this, s32 flags) {
     }
 }
 
-/* Moves both lists into a local list, then each entity back to the end of
- * the entities, calling its gather (virtual). The game's compiler read most fields of
+/* Ticks the group's entities, the pending ones last: moves both lists into a
+ * local list, then each entity back to the end of the entities, calling its
+ * tick (virtual). The game's compiler read most fields of
  * the lists at their offsets from the frame or from this, but each
  * `x->prev->next = ...` through a register holding the list's address, as
  * in entityGroupDestroy: gathered's fields are read directly here, list is
  * the address the loop keeps in a register, and head the one the closing
  * listRemove(&gathered) works through. */
-void entityGroupGather(EntityGroup *this, s32 arg) {
+void entityGroupTick(EntityGroup *this, s32 arg) {
     ListNode gathered;
     ListNode *list = &gathered;
     ListNode *head;
@@ -181,7 +182,7 @@ void entityGroupGather(EntityGroup *this, s32 arg) {
         node->prev = this->entities.prev;
         this->entities.prev->next = node;
         this->entities.prev = node;
-        entity->vtable->gather.func((u8 *)entity + entity->vtable->gather.delta, arg);
+        entity->vtable->tick.func((u8 *)entity + entity->vtable->tick.delta, arg);
     }
     /* listRemove(&gathered), in the access order the game's compiler used */
     head = &gathered;
@@ -191,8 +192,8 @@ void entityGroupGather(EntityGroup *this, s32 arg) {
     gathered.prev = head;
 }
 
-/* Updates the group's entities, stopping when the frame's primitive buffer is nearly full. */
-void entityGroupUpdate(EntityGroup *this, s32 arg) {
+/* Draws the group's entities, stopping when the frame's primitive buffer is nearly full. */
+void entityGroupDraw(EntityGroup *this, s32 arg) {
     Entity *entity;
     Entity *next;
 
@@ -200,7 +201,7 @@ void entityGroupUpdate(EntityGroup *this, s32 arg) {
     for (entity = (Entity *)this->entities.next; &entity->link != &this->entities && !isPrimBufferNearlyFull();
          entity = next) {
         next = (Entity *)entity->link.next;
-        entity->vtable->update.func((u8 *)entity + entity->vtable->update.delta, arg);
+        entity->vtable->draw.func((u8 *)entity + entity->vtable->draw.delta, arg);
     }
 }
 
@@ -246,12 +247,12 @@ s32 entityGroupGetCount(EntityGroup *this) {
     return count;
 }
 
-/* Does nothing (virtual gather of Entity). */
-void entityGather(void) {
+/* Does nothing (virtual tick of Entity). */
+void entityTick(void) {
 }
 
-/* Does nothing (virtual update of Entity). */
-void entityUpdate(void) {
+/* Does nothing (virtual draw of Entity). */
+void entityDraw(void) {
 }
 
 /* Adds an entity to the end of the group's pending list. */

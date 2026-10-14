@@ -1,0 +1,68 @@
+# The names of st03's own symbols: run with tools/rename.py --overlay st03 -f tools/renames/st03.txt
+
+# St03Hit: St02Hit with a word that, when set, gives the hit fighter a new func_800D80DC entity
+Unk800D885C St03Hit
+D_800D3CF4 ST03_HIT_VTABLE
+func_800D885C St03Hit_init
+func_800D4DE0 St03Hit_apply
+func_800D8828 St03Hit_destroy
+# St03MeshMover (StageMeshMover): its tick bobs its mesh along a sine
+D_800D3C4C ST03_MESH_MOVER_VTABLE
+func_800D5358 St03MeshMover_init
+func_800D53CC St03MeshMover_tick
+func_800D899C St03MeshMover_destroy
+# St03GroupDrawer: an entity whose draw draws the stage's Group at 0xD78 (func_800D48A4)
+Unk800D4D50 St03GroupDrawer
+D_800D3D14 ST03_GROUP_DRAWER_VTABLE
+func_800D4D50 St03GroupDrawer_init
+func_800D4D98 St03GroupDrawer_draw
+func_800D87E0 St03GroupDrawer_destroy
+func_800D8898 St03Hit_setKnockback
+# StageShrine: arena 3's stage (the vtable's overrides: startRound, tickScenery, drawWorld, createNodeEntity)
+Unk800D3E18 StageShrine
+D_800D3D64 STAGE_SHRINE_VTABLE
+func_800D3E18 StageShrine_init
+func_800D8718 StageShrine_destroy
+func_800D3F1C StageShrine_startRound
+func_800D4428 StageShrine_tickScenery
+func_800D4614 StageShrine_drawWorld
+func_800D4110 StageShrine_createNodeEntity
+func_800D48A4 st03_drawGroup
+D_800D39CC ST03_BOLT_POINTS
+D_800D3964 ST03_PALETTE_LOADS
+# St03PaletteLoad: twenty colours uploaded to VRAM each frame, one DR_LOAD per rectangle of ST03_PALETTE_LOADS
+Unk800D48D4 St03PaletteLoad
+D_800D3D3C ST03_PALETTE_LOAD_VTABLE
+func_800D48D4 St03PaletteLoad_init
+func_800D4928 St03PaletteLoad_tick
+func_800D4CAC St03PaletteLoad_draw
+func_800D8798 St03PaletteLoad_destroy
+# St03Lift: a mesh node moved by an offset while the stage's liftRaised is set; its own method (0x20) moves it
+Unk800D4EE8 St03Lift
+Unk800D4EE8Vtable St03LiftVtable
+D_800D3CC4 ST03_LIFT_VTABLE
+func_800D4EE8 St03Lift_init
+func_800D4F74 St03Lift_tick
+func_800D88B4 St03Lift_destroy
+func_800D500C St03Lift_moveOffset
+# St03LiftPart: an St03Lift with a part the fighters standing on it ride
+Unk800D5060 St03LiftPart
+D_800D3C94 ST03_LIFT_PART_VTABLE
+func_800D5060 St03LiftPart_init
+func_800D88FC St03LiftPart_destroy
+func_800D514C St03LiftPart_moveOffset
+func_800D5270 St03LiftPart_relink
+# St03DropBlock: a block that settles, drops when nothing is in the way, and is pushed by its riders' weights
+Unk800D5F58 St03DropBlock
+D_800D3BAC ST03_DROP_BLOCK_VTABLE
+func_800D5F58 St03DropBlock_init
+func_800D6150 St03DropBlock_tick
+func_800D6080 St03DropBlock_destroy
+func_800D65D4 St03DropBlock_push
+# St03JitterLine: a jittering line through up to 8 points (no vtable; the strike entity holds them)
+Unk800D8B8C St03JitterLine
+func_800D72C8 St03JitterLine_layOut
+func_800D6F30 St03JitterLine_move
+func_800D701C St03JitterLine_draw
+func_800D7418 St03JitterLine_setColor
+func_800D7458 St03JitterLine_fadeColor

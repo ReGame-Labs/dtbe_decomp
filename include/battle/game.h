@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "vtable.h"
+#include "engine/game/character.h"
 #include "engine/gfx/camera.h"
 #include "engine/gfx/look_at.h"
 #include "engine/gfx/mesh_scene.h"
@@ -15,153 +16,201 @@
 
 EXTERN_C_BEGIN
 
-/* The object func_8006ED20 constructs: it runs in a thread of its own,
- * keeps itself in D_800D377C, and sets up entity groups, cameras and sprites.
- * The stage overlays derive their classes from it (their constructors call
- * func_8006ED20 and then install their own virtual table at 0xD34). Its size
- * is not known; 0xD38 is the end of what is known. */
-typedef struct Unk8006ED20 {
+/* One fight: the rounds, both sides, the camera, the map and the pause menu. It runs its rounds in a thread
+ * of its own (Fight_run) and keeps itself in CURRENT_FIGHT. The stage overlays derive their classes from it
+ * (their constructors call Fight_init and then install their own virtual table at 0xD34). Its size is not
+ * known; 0xD38 is the end of what is known. */
+typedef struct Fight {
     /* 0x000 */ Thread thread;
     /* 0x00C */ u8 unkC[0x10 - 0xC];
-    /* 0x010 */ MeshScene *meshScene; /* the constructor creates it */
-    /* 0x014 */ u8 unk14[0x24 - 0x14];
-    /* 0x024 */ struct Unk80075000 *unk24[2]; /* by character index; func_80075000 constructs them */
-    /* 0x02C */ void *unk2C[2]; /* by side: their 0x8 is a character (func_80071460) */
-    /* 0x034 */ u8 unk34[0x3C - 0x34];
-    /* 0x03C */ EntityGroup unk3C;
-    /* 0x04C */ EntityGroup unk4C;
-    /* 0x05C */ EntityGroup unk5C;
-    /* 0x06C */ Group unk6C;
+    /* 0x010 */ MeshScene *meshScene; /* the map, map/mapNN.dmm */
+    /* 0x014 */ Chara *charas[4]; /* sides 0 and 1, then their evolved forms when EVOLUTION_LOADED */
+    /* 0x024 */ struct InputHistory *inputs[2]; /* by side */
+    /* 0x02C */ struct BattleSide *sides[2]; /* by side */
+    /* 0x034 */ struct Controller *controllers[2]; /* the computer players (slot 0x18), NULL for a pad */
+    /* 0x03C */ EntityGroup stageEntities; /* the map nodes' entities */
+    /* 0x04C */ EntityGroup entities; /* the fighters, their effects and the battle messages */
+    /* 0x05C */ EntityGroup unk5C; /* while it holds an entity, the fight waits (the evolution scene) */
+    /* 0x06C */ Group fighterGroup; /* the fighters' models */
     /* 0x0CC */ Group unkCC;
     /* 0x12C */ LookAt lookAt;
     /* 0x180 */ u8 unk180[0x1B0 - 0x180];
     /* 0x1B0 */ Camera camera;
     /* 0x1EC */ u8 unk1EC[0x228 - 0x1EC];
-    /* 0x228 */ ListNode unk228;
-    /* 0x230 */ ListNode unk230;
-    /* 0x238 */ ListNode unk238;
-    /* 0x240 */ s32 unk240[4]; /* the constructor clears the four */
-    /* 0x250 */ s32 unk250; /* the wins (0x240 by side) that end the fight (func_80071110) */
-    /* 0x254 */ s32 unk254; /* the rounds left, counted down by func_80071110 */
-    /* 0x258 */ s32 unk258; /* func_8006F1C4's argument */
+    /* 0x228 */ ListNode side1Shapes; /* the collision shapes of side 1's fighter */
+    /* 0x230 */ ListNode side0Shapes;
+    /* 0x238 */ ListNode stageShapes; /* the stage's and the items' */
+    /* 0x240 */ s32 wins[4]; /* the rounds won, by side; the constructor clears the four */
+    /* 0x250 */ s32 winsNeeded;
+    /* 0x254 */ s32 roundsLeft;
+    /* 0x258 */ s32 unk258; /* Fight_setUpAngle's argument */
     /* 0x25C */ u8 unk25C[0x2A4 - 0x25C];
-    /* 0x2A4 */ VECTOR unk2A4; /* (0, -0x1000, 0) through func_800769DC (func_8006F1C4) */
+    /* 0x2A4 */ VECTOR unk2A4; /* (0, -0x1000, 0) through setTerrainUp (func_8006F1C4) */
     /* 0x2B4 */ u8 unk2B4[0x2B8 - 0x2B4];
-    /* 0x2B8 */ s32 unk2B8; /* counted from 0x20 down to -6 (func_80071E10), or from 0 up to 0x26 (func_80071E60) */
-    /* 0x2BC */ u8 unk2BC[0x2C8 - 0x2BC];
-    /* 0x2C8 */ u32 unk2C8; /* flags */
+    /* 0x2B8 */ s32 wipe; /* the screen wipe: from 0x20 down to -6 (Fight_wipeIn), from 0 up to 0x26 (Fight_wipeOut) */
+    /* 0x2BC */ s32 pauseCursor; /* 0 continue, 1 quit */
+    /* 0x2C0 */ s32 pauseSide; /* the side that paused */
+    /* 0x2C4 */ s32 pauseButtons; /* its pressed buttons */
+    /* 0x2C8 */ u32 flags; /* FIGHT_FLAG_* */
     /* 0x2CC */ u8 unk2CC[0x314 - 0x2CC];
-    /* 0x314 */ s32 unk314;
+    /* 0x314 */ s32 arena; /* GAME_STATE.arena */
     /* 0x318 */ u8 unk318[0x31C - 0x318];
-    /* 0x31C */ Vec3 eye; /* func_80072088 copies it into lookAt.eye */
+    /* 0x31C */ Vec3 eye; /* Fight_updateCamera copies it into lookAt.eye */
     /* 0x328 */ u8 unk328[0x32C - 0x328];
-    /* 0x32C */ s32 unk32C; /* st01 sways it (func_800D5650) */
+    /* 0x32C */ s32 unk32C; /* st01 sways it (st01_tickFallEvent) */
     /* 0x330 */ u8 unk330[0x33C - 0x330];
-    /* 0x33C */ s32 unk33C; /* func_800700E4 sets 0x33C to 0x35C; 0x33C and 0x34C, 0x340 and 0x350 are read in pairs */
-    /* 0x340 */ s32 unk340;
+    /* 0x33C */ s32 boundLeft; /* the arena's bounds (Fight_setBounds), the stages' constants */
+    /* 0x340 */ s32 boundTop;
     /* 0x344 */ u8 unk344[0x34C - 0x344];
-    /* 0x34C */ s32 unk34C;
-    /* 0x350 */ s32 unk350;
-    /* 0x354 */ s32 unk354;
+    /* 0x34C */ s32 boundRight;
+    /* 0x350 */ s32 boundBottom; /* the floor: a fighter more than 0x1000 below it has fallen (Fight_isFallen) */
+    /* 0x354 */ s32 boundDepth;
     /* 0x358 */ u8 unk358[0x35C - 0x358];
-    /* 0x35C */ s32 unk35C;
+    /* 0x35C */ s32 unk35C; /* half the smaller span of the bounds */
     /* 0x360 */ MersenneTwister random;
-    /* 0xD24 */ s32 steps; /* func_80070C28 counts one per call */
-    /* 0xD28 */ s32 unkD28; /* 1 sends st08's stage to its end (func_800D3DF8) */
-    /* 0xD2C */ u32 unkD2C; /* flags: bit 0 makes func_80071014 sum func_80070F40's values 3 and 4 */
-    /* 0xD30 */ s32 unkD30; /* a character's side (0x21C) + 1 (func_800793A4); func_800794CC clears it;
-                             * st02 keeps its camera's state in it (func_800D4AC8) */
+    /* 0xD24 */ s32 steps; /* the round's frames, Fight_finishStep counts one per call */
+    /* 0xD28 */ s32 timeLeft; /* the round's frames left: 3000 at its start, 1 with no time limit; 1 sends st08's
+                               * stage to its end (st08_checkWinner) */
+    /* 0xD2C */ u32 modeFlags; /* FIGHT_MODE_* */
+    /* 0xD30 */ s32 cameraFocus; /* 0 both fighters, a side + 1 for its close-up (the evolution scene); st02 keeps
+                                  * its camera's state in it (StageTurn_updateCamera) */
     /* 0xD34 */ VtableEntry *vtable;
-} Unk8006ED20;
+} Fight;
 
-/* the object func_8006ED20 constructed, set by its constructor */
-extern Unk8006ED20 *D_800D377C;
+/* Fight.flags */
+#define FIGHT_FLAG_OVER 0x1         /* Fight_end: the main loop stops */
+#define FIGHT_FLAG_SLOW 0x2         /* slow motion after a knock-out: odd frames are skipped */
+#define FIGHT_FLAG_STOP_ROUND 0x8   /* Fight_stopRound: the round ends with ROUND_STOPPED */
+#define FIGHT_FLAG_ROUND_OVER 0x10  /* set after the round's messages */
+#define FIGHT_FLAG_FREEZE 0x20      /* the sides are not updated */
+#define FIGHT_FLAG_HOLD_CLOCK 0x40  /* the round's clock does not run */
+#define FIGHT_FLAG_LAST_ROUND 0x80  /* a side has the wins, or no round is left */
+#define FIGHT_FLAG_CONTINUE 0x100   /* Fight_showContinue */
+#define FIGHT_FLAG_QUIT 0x200       /* the pause menu's quit */
 
-/* The base of small objects with a virtual table at 4, which func_8007C084
- * constructs; the stage overlays derive some from it. */
-typedef struct Unk8007C084 {
-    /* 0x0 */ s32 unk0;
+/* Fight.modeFlags */
+#define FIGHT_MODE_BONUS 0x1 /* a bonus game's fight: BONUS_FLAT and BONUS_GAME_TIME, the clock always runs */
+
+/* Fight_getBonus's kinds, on a 0-10000 scale */
+#define BONUS_PERFECT 0   /* 10000 with full life */
+#define BONUS_LIFE 1      /* the life left */
+#define BONUS_TIME 2      /* the seconds left * 100 */
+#define BONUS_FLAT 3      /* 5000 */
+#define BONUS_GAME_TIME 4 /* BONUS_TIME's value, the bonus games' pair with BONUS_FLAT */
+
+/* the fight Fight_init constructed last */
+extern Fight *CURRENT_FIGHT;
+
+/* What makes the pad word of a side without a pad: its slot 0x08 gives the buttons for the side's fighter
+ * (Controller_getButtons). The computer player derives from it, and the bonus stages derive their own. */
+typedef struct Controller {
+    /* 0x0 */ struct BattleSide *side; /* the side it plays */
     /* 0x4 */ VtableEntry *vtable;
-} Unk8007C084;
+} Controller;
 
-/* A class with only a virtual table: D_80065164, an empty method of the
- * executable's and the destructor func_80076308. Many classes, in game.bin and
- * in the stages, derive from it. */
-typedef struct Unk80076308 {
+/* The owner of a collision shape, told of each touch: only a virtual table, COLLISION_OWNER_VTABLE, whose slot
+ * 0x08 (pure: an empty method of the executable's) collideShapes calls with the other shape, and the destructor
+ * CollisionOwner_destroy. Hit and many classes of the stages derive from it. */
+typedef struct CollisionOwner {
     /* 0x0 */ VtableEntry *vtable;
-} Unk80076308;
+} CollisionOwner;
 
-/* the virtual tables of Unk80076308 and Unk8007C084 */
-extern VtableEntry D_80065164[];
-extern VtableEntry D_800652AC[];
+/* the virtual tables of CollisionOwner and Controller */
+extern VtableEntry COLLISION_OWNER_VTABLE[];
+extern VtableEntry CONTROLLER_VTABLE[];
 
-/* The class func_800D02C8 constructs on func_8006ED20's (virtual table
- * D_8006E154); the stage classes of st07, st08 and st09 derive from it. */
-typedef struct Unk800D02C8 {
-    /* 0x000 */ Unk8006ED20 base;
-    /* 0xD38 */ u8 unkD38[0xD98 - 0xD38];
-    /* 0xD98 */ s16 unkD98[2]; /* by side: nonzero stops st09's func_800D5190 */
-    /* 0xD9C */ s16 unkD9C; /* func_800D0B80 sets 2 */
-    /* 0xDA0 */ u32 unkDA0; /* the handle of func_800D0B80's text entity (class 9) */
-    /* 0xDA4 */ u32 unkDA4; /* a sound's handle (stopSound) */
-} Unk800D02C8;
+/* BonusFight's result (BonusFight.result). */
+enum BonusResult {
+    BONUS_RESULT_PLAYING,      /* the game goes on */
+    BONUS_RESULT_WON,          /* BonusFight_endWithWinner */
+    BONUS_RESULT_DRAW,         /* BonusFight_endInDraw */
+    BONUS_RESULT_ENDING = 0xFE, /* the message is gone: endWait frames to go */
+    BONUS_RESULT_OVER = 0xFF
+};
 
-Unk8006ED20 *func_8006ED20(Unk8006ED20 *object);
-void func_8006F254(Unk8006ED20 *object, s32 flags);
+/* The bonus games' fight (BonusFight_init, virtual table BONUS_FIGHT_VTABLE): arenas 7 to 9, whose stage classes
+ * (st07, st08, st09) derive from it. The mode is the arena - 7; the stages fill nodes and the gauges' maxima, and
+ * end the game with BonusFight_endWithWinner or BonusFight_endInDraw. */
+typedef struct BonusFight {
+    /* 0x000 */ Fight base;
+    /* 0xD38 */ s32 nodes[8]; /* mesh scene nodes the stage's constructor picks (BonusFight_startRound's effects) */
+    /* 0xD58 */ VECTOR startPos[2]; /* by side: where the round starts */
+    /* 0xD78 */ VECTOR holdPos[2];  /* by side: where BonusFight_holdFighter keeps the fighter */
+    /* 0xD98 */ s16 holding[2]; /* by side: held until its clip ends (BonusFight_tick); stops st09's BonusThrower_throw */
+    /* 0xD9C */ u16 result;        /* BONUS_RESULT_* */
+    /* 0xD9E */ u16 resultFrames;  /* counted up to resultDelay before the result runs */
+    /* 0xDA0 */ u32 messageHandle; /* the handle of the result's battle message */
+    /* 0xDA4 */ u32 jingleHandle;  /* the win jingle (sound 0x6D, 0x6F or 0x71 by arena), stopped by slot 0x38 */
+    /* 0xDA8 */ MeshScene *meshScene; /* Fight_getMeshScene at the round's start; nodes are looked up in it */
+    /* 0xDAC */ u8 unkDAC[0xF2C - 0xDAC];
+    /* 0xF2C */ s16 gauges[2];  /* by side: the bars of modes 0 and 2, over gaugeMax (st07: frames a button is held) */
+    /* 0xF30 */ s16 counts[2];  /* by side: mode 1's (st08) count, printed "%03d" and drawn over countMax */
+    /* 0xF34 */ s16 gaugeMax;   /* 30 in st07 and st09, 15 in st08 */
+    /* 0xF36 */ s16 countMax;   /* 120 in st08 */
+    /* 0xF38 */ s16 markCounts[2]; /* by side: how many marks are set (BonusFight_addMark) */
+    /* 0xF3C */ s16 marks[2][10];  /* by side: mode 0's (st07) ten marks */
+    /* 0xF64 */ u16 scores[2]; /* by side: mode 2's (st09) score, printed "%06d"; the leader's palette pulses */
+    /* 0xF68 */ u16 resultDelay; /* frames before the result runs: 90 in st07, 120 in st08 */
+    /* 0xF6A */ u16 hudHidden;   /* the bonus HUD draws nothing while set */
+    /* 0xF6C */ u16 endWait;     /* 60 frames in BONUS_RESULT_ENDING */
+    /* 0xF6E */ u8 unkF6E[0xF70 - 0xF6E];
+} BonusFight;
 
-/* adds node at the end of the list an Unk8006ED20 keeps at 0x238 */
-void func_8006F064(Unk8006ED20 *object, ListNode *node);
+Fight *Fight_init(Fight *this);
+void Fight_destroy(Fight *this, s32 flags);
 
-/* puts an entity (when not NULL) into the entity group an Unk8006ED20 keeps at 0x4C; returns it */
-Entity *func_8006F0B4(Unk8006ED20 *object, Entity *entity);
+/* the fight's camera and its look-at */
+Camera *Fight_getCamera(Fight *this);
+LookAt *Fight_getLookAt(Fight *this);
 
-/* the camera of an Unk8006ED20 (at 0x1B0) and its LookAt (at 0x12C) */
-Camera *func_8006EF5C(Unk8006ED20 *object);
-LookAt *func_8006EF64(Unk8006ED20 *object);
+/* a random number from the fight's own generator */
+u32 Fight_random(Fight *this);
 
-/* the stage's random number generator */
-u32 func_8006F004(Unk8006ED20 *object);
+/* add a collision shape of side 1's fighter, of side 0's, of the stage (or an item) */
+void Fight_addSide1Shape(Fight *this, ListNode *node);
+void Fight_addSide0Shape(Fight *this, ListNode *node);
+void Fight_addStageShape(Fight *this, ListNode *node);
 
-/* add node at the end of the list at 0x228 and at 0x230 (func_8006F064: 0x238) */
-void func_8006F024(Unk8006ED20 *object, ListNode *node);
-void func_8006F044(Unk8006ED20 *object, ListNode *node);
+/* add an entity (when not NULL) to the stage entities, or to the entities; return it */
+Entity *Fight_addStageEntity(Fight *this, Entity *entity);
+Entity *Fight_addEntity(Fight *this, Entity *entity);
 
-/* puts an entity (when not NULL) into the entity group at 0x3C; returns it */
-Entity *func_8006F084(Unk8006ED20 *object, Entity *entity);
+s32 func_8006F144(Fight *this);
+s32 Fight_isRoundOver(Fight *this);
+s32 Fight_isContinueShown(Fight *this);
+MeshScene *Fight_getMeshScene(Fight *this);
 
-s32 func_8006F144(Unk8006ED20 *object);
-s32 func_8006F190(Unk8006ED20 *object);
-/* bit 8 of the flags at 0x2C8 */
-s32 func_8006F1A4(Unk8006ED20 *object);
-MeshScene *func_8006F1B8(Unk8006ED20 *object);
+/* the fighter of a side (0 or 1) */
+struct Fighter *Fight_getFighter(Fight *this, s32 side);
+void Fight_setBounds(Fight *this, s32 left, s32 right, s32 top, s32 bottom, s32 depth);
 
-/* the character of a side (0 or 1) */
-struct Unk80076F34 *func_800700C8(Unk8006ED20 *object, s32 side);
-void func_800700E4(Unk8006ED20 *object, s32 unk33C, s32 unk34C, s32 unk340, s32 unk350, s32 unk354);
-void func_80070140(Unk8006ED20 *object);
-void func_80070314(Unk8006ED20 *object);
-void func_80071F6C(void);
-/* the camera's update */
-void func_80072088(Unk8006ED20 *object);
+/* the virtual methods the stages override and call from theirs */
+void Fight_startRound(Fight *this);
+void Fight_tick(Fight *this);
+void Fight_tickScenery(void);
+void Fight_updateCamera(Fight *this);
+void Fight_drawWorld(void *this);
 
-/* whether the segment from from to to hits something, moving to to the hit */
-s32 func_80072F80(Vec3 *to, Vec3 *from);
+/* whether the segment from from to to hits the map, moving to to the hit */
+s32 castMapRay(Vec3 *to, Vec3 *from);
 
 /* integrates velocity by force over mass (divide16), setting move to the mean of the old and new velocity */
 void func_80079C1C(Vec3 *move, Vec3 *velocity, Vec3 *force, s32 mass);
 
-Unk800D02C8 *func_800D02C8(Unk800D02C8 *object);
-void func_800D02FC(Unk800D02C8 *object, s32 flags);
-/* its init and update (the stages call them from theirs) */
-void func_800D0364(Unk800D02C8 *object);
-void func_800D06D0(Unk800D02C8 *object);
-void func_800D0B80(Unk800D02C8 *object);
-Unk8007C084 *func_8007C084(Unk8007C084 *object, s32 unk0);
-void func_8007C09C(Unk8007C084 *object, s32 flags);
-
-/* a method of func_8006ED20's class (it sits in the stages' virtual tables
- * too): their overrides call it before their own part */
-void func_80072748(void *object);
+BonusFight *BonusFight_init(BonusFight *this);
+void BonusFight_destroy(BonusFight *this, s32 flags);
+/* its virtual slots, which the stages call from theirs */
+void BonusFight_startRound(BonusFight *this);
+void BonusFight_tick(BonusFight *this);
+void BonusFight_tickScenery(BonusFight *this);
+void BonusFight_prepareNextRound(BonusFight *this);
+/* the ends of a bonus game, and holding a side's fighter in place while its clip plays */
+void BonusFight_endWithWinner(BonusFight *this, struct Fighter *winner, struct Fighter *loser);
+void BonusFight_endInDraw(BonusFight *this);
+void BonusFight_holdFighter(BonusFight *this, s32 side);
+void BonusFight_addMark(BonusFight *this, s16 side);
+Controller *Controller_init(Controller *this, struct BattleSide *side);
+void Controller_destroy(Controller *this, s32 flags);
 
 EXTERN_C_END
 

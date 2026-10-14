@@ -1,1 +1,20 @@
 // st08.bin's own names (config/jp/st08.yaml)
+
+// the names tools/rename.py gave (tools/renames/), in address order
+EVOLUTION_CONTROLLER_VTABLE = 0x800D3874;
+STAGE_EVOLUTION_VTABLE = 0x800D3894;
+EvolutionController_init = 0x800D390C; // type:func
+EvolutionController_getButtons = 0x800D394C; // type:func
+StageEvolution_init = 0x800D3AA8; // type:func
+StageEvolution_destroy = 0x800D3B24; // type:func
+StageEvolution_startRound = 0x800D3B4C; // type:func
+StageEvolution_createController = 0x800D3BD8; // type:func
+st08_clearState = 0x800D3C0C; // type:func
+StageEvolution_tick = 0x800D3C1C; // type:func
+StageEvolution_tickScenery = 0x800D3DA0; // type:func
+st08_checkWinner = 0x800D3DF8; // type:func
+st08_readClut = 0x800D3FB4; // type:func
+st08_resetCounts = 0x800D40BC; // type:func
+st08_resetMeters = 0x800D47A4; // type:func
+st08_copyMeters = 0x800D47CC; // type:func
+EvolutionController_destroy = 0x800D47F0; // type:func

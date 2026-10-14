@@ -17,7 +17,7 @@ INCLUDE_ASM("main/nonmatchings/gfx/prim/build_line_g2", buildLineG2);
 INCLUDE_ASM("main/nonmatchings/gfx/prim/build_line_g2", buildPolyFT4);
 
 /* buildPolyFT4 between two DR_TWINs: the default texture window
- * (D_8006434C), the POLY_FT4, then the window tw (an empty command for NULL).
+ * (DEFAULT_TEX_WINDOW), the POLY_FT4, then the window tw (an empty command for NULL).
  * Compiled C, with the same differences as buildPolyFT4. */
 INCLUDE_ASM("main/nonmatchings/gfx/prim/build_line_g2", buildPolyFT4Windowed);
 

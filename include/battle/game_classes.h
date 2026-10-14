@@ -8,6 +8,8 @@
 #include "vtable.h"
 #include <libgpu.h>
 #include "battle/game.h"
+#include "engine/gfx/lights.h"
+#include "engine/gfx/mesh_scene.h"
 #include "engine/gfx/scene_graph.h"
 #include "engine/lib/list.h"
 #include "engine/math/vector.h"
@@ -16,270 +18,388 @@
 
 EXTERN_C_BEGIN
 
-/* A class that func_8007F920 constructs: a value, a zeroed word, and a
- * virtual table at 0xC. Its methods (0x8007F0F4-0x8007FB9C) work on the
- * Unk80076F34 at 8; those keep two of them, at 0x22C and 0x238. */
-typedef struct Unk8007F920 {
-    /* 0x0 */ s32 unk0;
-    /* 0x4 */ s32 unk4;
-    /* 0x8 */ struct Unk80076F34 *unk8;
+/* A state of a fighter (FighterState_init, virtual table FIGHTER_STATE_VTABLE): the fighter keeps two, its body
+ * state and its attack state (Fighter.bodyState / attackState), and switches one by running another state's
+ * constructor on the same memory. Slots: 0x08 tick (the fighter's tick), 0x10 jump, 0x18 drop, 0x20 attack (its
+ * handleInput), 0x28 hit (the hit applier, Fighter_takeHit). */
+typedef struct FighterState {
+    /* 0x0 */ s32 state;              /* FIGHTER_STATE_* */
+    /* 0x4 */ s32 frame;              /* handed to the fighter's slot of the state, then counted up */
+    /* 0x8 */ struct Fighter *fighter;
     /* 0xC */ VtableEntry *vtable;
-} Unk8007F920;
+} FighterState;
 
-/* An entry of the tables that func_80079B24 gives an Unk80076F34: something
- * and a count. */
-typedef struct Unk80079B24Entry {
-    /* 0x0 */ void *unk0;
+/* A face of a fighter (Fighter_setFaceTable gives the table, Fighter_setFace picks one): the frame buffer
+ * copies that draw it (FaceMove, in fighter.c) and their count. */
+typedef struct FaceEntry {
+    /* 0x0 */ void *moves;
     /* 0x4 */ s32 count;
-} Unk80079B24Entry;
+} FaceEntry;
 
-/* An entry of the table an Unk80076F34 points to at 0x220, as func_8007B470
- * reads it. */
-typedef struct Unk8007B470Entry {
-    /* 0x00 */ s32 unk0;
-    /* 0x04 */ s16 unk4; /* 0x4 and 0x6: a range of steps (func_800B63BC, lh in func_8007B470) */
-    /* 0x06 */ s16 unk6;
-    /* 0x08 */ s32 unk8[6];
-    /* 0x20 */ s32 unk20;
-} Unk8007B470Entry;
+/* An attack of a fighter's params, as Fighter_runAttack runs it. */
+typedef struct Attack {
+    /* 0x00 */ s32 parts;            /* the attack bits: the model parts that hit (Fighter_getPartMask) */
+    /* 0x04 */ s16 firstActiveFrame; /* the frames the parts hit in */
+    /* 0x06 */ s16 lastActiveFrame;
+    /* 0x08 */ s32 lungeX;           /* the impulse at its first frame, by the facing */
+    /* 0x0C */ s32 lungeY;
+    /* 0x10 */ s32 drag;             /* vx * drag >> 12 each frame */
+    /* 0x14 */ s32 cancelFrame;      /* the next attack may chain after it */
+    /* 0x18 */ s32 knockbackX;
+    /* 0x1C */ s32 knockbackY;
+    /* 0x20 */ s32 hitDamage;        /* the damage (HIT_DAMAGE_MASK) and the hit's flags */
+} Attack;
 
-/* The table an Unk80076F34 points to at 0x220 (func_80077698): a few words,
- * then entries 0x24 bytes apart (the code uses up to entries[8]). The callers
- * use entries 0 to 5 (0x3C to 0xF0) and func_8007B470 reads an entry up to
- * 0x20 only, so the entries are 0x24 bytes, not records of 0x48 at 0x60 and
- * 0xA8 (as func_80099AE8 and func_80092C2C alone would suggest). */
-typedef struct Unk80077698 {
-    /* 0x00 */ u16 unk0;                 /* bits, read with lhu */
-    /* 0x02 */ s16 unk2;                 /* a size; some callers add it to a y */
-    /* 0x04 */ s32 unk4;
-    /* 0x08 */ s32 unk8;
-    /* 0x0C */ s32 unkC;
-    /* 0x10 */ s32 unk10;
-    /* 0x14 */ u16 unk14; /* func_8007F184 reads it with lhu */
+/* A character's params, its row of FIGHTER_PARAMS (0x180 bytes; the code uses up to attacks[8]). */
+typedef struct FighterParams {
+    /* 0x00 */ u16 flags;      /* FIGHTER_PARAM_* */
+    /* 0x02 */ s16 height;     /* the point above the position; 3/4 of it is the radius */
+    /* 0x04 */ s32 mass;       /* 16.16, copied to Fighter.mass */
+    /* 0x08 */ s32 walkSpeed;
+    /* 0x0C */ s32 dashSpeed;
+    /* 0x10 */ s32 jumpSpeed;
+    /* 0x14 */ u16 stunLimit;  /* the side's stun count it takes to be dizzy */
     /* 0x16 */ u16 unk16;
-    /* 0x18 */ s32 unk18;
-    /* 0x1C */ u16 unk1C[16];               /* func_800788B4 reads one by index */
-    /* 0x3C */ Unk8007B470Entry entries[9];
-} Unk80077698;
+    /* 0x18 */ s32 airSideClip; /* the clip of Fighter_airSideAttack */
+    /* 0x1C */ u16 gaugeGains[16]; /* by MOVE_*: the evolution gauge a move gives when it hits */
+    /* 0x3C */ Attack attacks[9]; /* attack1-3, dash, up, crouch, air up, air side, air attack */
+} FighterParams;
 
-/* The tables of the characters, by func_80077568's index: the character's 0x220 (func_80077698) points to one. */
-extern Unk80077698 D_800656D4[];
+/* FighterParams.flags */
+#define FIGHTER_PARAM_EVOLVED 0x1 /* does not evolve: clear for exactly the ten characters that do */
 
-/* The objects of func_8007F184 and func_8007F6FC: classes derived from
- * Unk8007F920, not identified yet. The character keeps an Unk8007F184 at
- * 0x238: unless 0x2C is set, func_8007F068 takes an amount off 0x20 (down
- * to 0) and, in some of the character's states, adds half of it to 0x24. */
-typedef struct Unk8007F184 {
-    /* 0x00 */ Unk8007F920 base;
-    /* 0x10 */ s32 unk10;
-    /* 0x14 */ s32 unk14; /* func_8007F7F4 acts only when it is not above 0, and sets it to 16 */
-    /* 0x18 */ s32 unk18;
-    /* 0x1C */ s32 unk1C; /* the most 0x20 can hold */
-    /* 0x20 */ s32 unk20;
-    /* 0x24 */ s32 unk24; /* 0 to 0x10000 */
-    /* 0x28 */ s32 unk28;
-    /* 0x2C */ s32 unk2C; /* set by func_8007F59C: the amounts stop changing */
-} Unk8007F184;
+/* the params of the characters, by CHARACTER_* */
+extern FighterParams FIGHTER_PARAMS[];
 
-/* Something timed that an Unk80076F34 runs (two of them, at 0x464 and 0x478):
- * func_800C9790 counts unk4 down, clearing the whole when it reaches 0, and
- * switches on unk0 (1 to 6). */
-typedef struct Unk800774C0 {
-    /* 0x00 */ s32 unk0;
-    /* 0x04 */ s32 unk4;
-    /* 0x08 */ s32 unk8;
+/* One side of the fight (BattleSide_init, virtual table BATTLE_SIDE_VTABLE at 0x38; Fight.sides): its starting
+ * fighter, that fighter's evolution (itself when it has none), the one fighting, and what both forms share: the
+ * side's life, evolution gauge and stun (Fighter.battleSide). */
+typedef struct BattleSide {
+    /* 0x00 */ struct Fighter *fighter;   /* the starting form */
+    /* 0x04 */ struct Fighter *evolution; /* its evolution (CHARACTER_EVOLUTIONS), or fighter itself */
+    /* 0x08 */ struct Fighter *current;   /* the one fighting (BattleSide_swapCharacter) */
+    /* 0x0C */ s32 unkC;
+    /* 0x10 */ s32 unk10;                 /* 30 from func_8007F730 */
+    /* 0x14 */ s32 swapDelay;             /* frames until the forms swap (BattleSide_tick); func_8007F7F4 sets 16 */
+    /* 0x18 */ s32 unk18;                 /* 3 from func_8007F730 */
+    /* 0x1C */ s32 lifeMax;
+    /* 0x20 */ s32 life;                  /* the fighter is knocked out at 0 */
+    /* 0x24 */ s32 gauge;                 /* the evolution gauge, 0 to 0x10000 (full) */
+    /* 0x28 */ s32 stun;                  /* hits add to it, it wears off; at FighterParams.stunLimit, dizzy */
+    /* 0x2C */ s32 frozen;                /* set by BattleSide_freeze: life, gauge and stun stop changing */
+    /* 0x30 */ s32 unk30;                 /* set by func_8007F6FC (an evolution asked for), read by BattleSide_tick */
+    /* 0x34 */ s32 unk34;
+    /* 0x38 */ VtableEntry *vtable;
+} BattleSide;
+
+/* An effect a fighter runs for a time (two of them: the item effect at 0x464 and the one at 0x478):
+ * updateItemEffect counts the timer down, clearing the whole when it reaches 0, and switches on the kind. */
+typedef struct TimedEffect {
+    /* 0x00 */ s32 kind;  /* 1 to 6 (the items' effects) */
+    /* 0x04 */ s32 timer; /* frames */
+    /* 0x08 */ s32 power; /* the 1/256 damage scale of kinds 1 and 2 */
     /* 0x0C */ s32 unkC;
     /* 0x10 */ s32 unk10;
-} Unk800774C0;
+} TimedEffect;
 
-/* A node of the list whose head is D_8006437C, mesh_scene's global list
- * (func_80076A00 gives it; func_80076A0C moves a node to its front). func_80076474 rotates with the
- * matrix at 0xC of the node it picks. */
-typedef struct Unk80076A0C {
+/* A collision line of the mesh scene (MeshSceneLink.lines, 0x10 each; initTerrainLine builds one): two
+ * endpoints, then the line equation normalX * x + normalY * y + offset. */
+typedef struct TerrainLine {
+    /* 0x0 */ s16 x0;
+    /* 0x2 */ s16 y0;
+    /* 0x4 */ s16 x1;
+    /* 0x6 */ s16 y1;
+    /* 0x8 */ s16 normalX;
+    /* 0xA */ s16 normalY;
+    /* 0xC */ s32 offset;
+} TerrainLine;
+
+/* Where a segment crosses the collision lines of the shown COLLISION_LINKS (TerrainProbe_cast); the fighter
+ * keeps one for its floor (Fighter.floorProbe). */
+typedef struct TerrainProbe {
+    /* 0x00 */ TerrainLine line;  /* the line hit (castTerrainLink copies it) */
+    /* 0x10 */ s32 startDistance; /* the line distances of the two ends (getCrossingPoint) */
+    /* 0x14 */ s32 endDistance;
+    /* 0x18 */ VECTOR localStart; /* the ends in the link's space (vz cleared) */
+    /* 0x28 */ VECTOR localEnd;
+    /* 0x38 */ VECTOR localHit;   /* the crossing point */
+    /* 0x48 */ VECTOR start;      /* the segment, in world space */
+    /* 0x58 */ VECTOR end;
+    /* 0x68 */ VECTOR normal;     /* the hit line's, rotated by its link's matrix (func_80078254 dots it, vecDot12) */
+    /* 0x78 */ MeshSceneLink *link; /* the link of COLLISION_LINKS hit last */
+} TerrainProbe;
+
+/* the list of the mesh scene links that have collision lines (COLLISION_LINKS) */
+ListNode *getCollisionLinks(void);
+
+/* CollisionShape's flags */
+#define COLLISION_SHAPE_DISABLED 0x1 /* collideShapes skips it; the debug draw tints it */
+#define COLLISION_SHAPE_TOUCHED 0x2  /* collideShapes ORs in whether it touched another */
+
+/* A collision sphere (virtual table COLLISION_SPHERE_VTABLE): its first 0x34 bytes are the CollisionShape it
+ * derives from (the same fields), then a position and a radius; CollisionSphere_overlaps is its test. The hits
+ * that touch it (Hit_apply, and st02's St02Hit_apply, st00's StageHit_apply) add into its hit fields; the fighter
+ * keeps one as its collider (Fighter.collider, getHitFighter finds the entity of the hit). */
+typedef struct CollisionSphere {
     /* 0x00 */ ListNode link;
-    /* 0x08 */ s32 unk8;
-    /* 0x0C */ MATRIX *unkC;
-    /* 0x10 */ s32 unk10;
-    /* 0x14 */ s32 unk14; /* func_80076AAC sets 1 */
-} Unk80076A0C;
-
-/* The member at 0x260 of Unk80076F34, which func_80076444 constructs. */
-typedef struct Unk80076444 {
-    /* 0x00 */ u8 unk0[0x10];
-    /* 0x10 */ s32 unk10; /* func_800765B4 hands both to func_800765F0 */
-    /* 0x14 */ s32 unk14;
-    /* 0x18 */ u8 unk18[0x48 - 0x18];
-    /* 0x48 */ VECTOR unk48; /* func_80076474's a */
-    /* 0x58 */ VECTOR unk58; /* func_80076474's b */
-    /* 0x68 */ VECTOR unk68; /* func_80078254 takes vecDot12 of it */
-    /* 0x78 */ Unk80076A0C *unk78; /* the node of D_8006437C func_80076474 last picked */
-} Unk80076444;
-
-/* A class that func_80075EE4 constructs: a node of a circular list, the
- * object it belongs to, flags and a virtual table after them, which make the
- * class of D_80065184 (Unk800761AC) it derives from, then a vector and two
- * words of its own. func_8007BDF0 (and st02's func_800D54C0, st00's
- * func_800D99AC) add their owner's count, word and vector into the one
- * linked to theirs (func_80075B48); func_80078878 finds an entity at 0x14. */
-typedef struct Unk80075EE4 {
-    /* 0x00 */ ListNode node;
-    /* 0x08 */ void *owner; /* its second base: an Unk8007BD8C in game.bin, an UnkStageObject in st00 */
-    /* 0x0C */ u32 flags;
-    /* 0x10 */ s32 unk10;
-    /* 0x14 */ Entity *unk14; /* func_800ACA60 puts its entity here */
-    /* 0x18 */ u32 unk18; /* flags above bit 18, a count saturating at 0x3FFFF below */
-    /* 0x1C */ s32 unk1C;
-    /* 0x20 */ Vec3 unk20;
-    /* 0x2C */ s32 unk2C;
+    /* 0x08 */ void *owner;       /* its CollisionOwner: a Hit in game.bin, a StageHit in st00 */
+    /* 0x0C */ u32 flags;         /* COLLISION_SHAPE_* */
+    /* 0x10 */ s32 unk10;         /* the other's must be 0 for an overlap (a kind of shape?) */
+    /* 0x14 */ Entity *entity;    /* the entity it belongs to (CollisionShape_setEntity) */
+    /* 0x18 */ u32 hitDamage;     /* the damage of the hits added (HIT_DAMAGE_MASK, saturating) and their flags */
+    /* 0x1C */ s32 hitKind;       /* the sum of their kinds */
+    /* 0x20 */ Vec3 hitKnockback; /* the sum of their knockbacks */
+    /* 0x2C */ s32 hitKnockbackPad;
     /* 0x30 */ VtableEntry *vtable;
-    /* 0x34 */ Vec3 unk34;
+    /* 0x34 */ Vec3 position;
     /* 0x40 */ s32 unk40;
-    /* 0x44 */ s32 unk44;
-} Unk80075EE4;
+    /* 0x44 */ s32 radius;
+} CollisionSphere;
 
-/* The entity class that func_80076F34 constructs (virtual table D_8006530C),
- * which many classes derive from: 0x4A4 bytes, as the derived constructors'
- * first fields show; they put their own fields from 0x4A4 on. The fields are
- * the ones the C code and the small accessors use. */
-typedef struct Unk80076F34 {
+/* A move's pay when it hits (Fighter.rewards, by MOVE_*): score points to the side and evolution gauge. */
+typedef struct MoveReward {
+    /* 0x0 */ u16 score;
+    /* 0x2 */ u16 gauge;
+} MoveReward;
+
+/* The fighter of a side: the base class of the 24 fighters (virtual table FIGHTER_VTABLE, 0x4A4 bytes; the
+ * fighters put their own fields from 0x4A4 on). createFighter builds one by CHARACTER_*; a side that can evolve
+ * has two, the selected form and its evolution, which share the side object. */
+typedef struct Fighter {
     /* 0x000 */ Entity entity;
-    /* 0x018 */ u8 unk18[0x218 - 0x18];
-    /* 0x218 */ s32 unk218;                /* func_80077568; picks the row of D_80067AD4 (func_800776A4) */
-    /* 0x21C */ s32 unk21C;                /* func_80077574 */
-    /* 0x220 */ Unk80077698 *unk220;       /* func_80077698 */
-    /* 0x224 */ Unk80079B24Entry *unk224;  /* func_80079B24 */
-    /* 0x228 */ Unk8006ED20 *unk228;       /* func_80077580 */
-    /* 0x22C */ Unk8007F920 *unk22C;
-    /* 0x230 */ s32 unk230;
-    /* 0x234 */ struct Unk80075000 *unk234; /* its input (func_80078C28, func_800776C4) */
-    /* 0x238 */ Unk8007F184 *unk238;
+    /* 0x018 */ u8 bodyStateStorage[0x100];   /* the body state object, built in place (bodyState points here) */
+    /* 0x118 */ u8 attackStateStorage[0x100]; /* the attack state object, the same way */
+    /* 0x218 */ s32 character;                /* CHARACTER_*: its params, its tamer, its sounds */
+    /* 0x21C */ s32 side;                     /* 0 or 1: its pad port, its sound group, its VRAM half */
+    /* 0x220 */ FighterParams *params;
+    /* 0x224 */ FaceEntry *faceTable;
+    /* 0x228 */ Fight *fight;
+    /* 0x22C */ FighterState *bodyState;
+    /* 0x230 */ FighterState *attackState;
+    /* 0x234 */ struct InputHistory *input;
+    /* 0x238 */ BattleSide *battleSide;      /* the side object, shared by both forms of the side */
     /* 0x23C */ u8 unk23C[0x240 - 0x23C];
-    /* 0x240 */ Entity *unk240;            /* the entity of unk244 (func_8007ADCC) */
-    /* 0x244 */ u32 unk244;                /* the handle of the character the model is attached to, or 0 */
-    /* 0x248 */ u32 unk248;                /* the handle of the entity func_80079420 makes */
-    /* 0x24C */ u8 unk24C[0x250 - 0x24C];
-    /* 0x250 */ s32 unk250;                /* a clip of the model, or negative */
-    /* 0x254 */ s32 unk254;                /* another clip, or negative */
-    /* 0x258 */ s32 unk258;                /* 0x11 or 0x12 (func_80079268, func_8007925C) */
-    /* 0x25C */ s32 unk25C;                /* the handle of the sound func_800784F4 played */
-    /* 0x260 */ Unk80076444 unk260;
-    /* 0x2DC */ Unk80075EE4 unk2DC;        /* func_80079300 returns it */
-    /* 0x324 */ s32 unk324;
-    /* 0x328 */ s32 unk328;
-    /* 0x32C */ s32 unk32C;
-    /* 0x330 */ s32 unk330;
+    /* 0x240 */ Entity *holder;               /* the entity of holderHandle (Fighter_attachToPart) */
+    /* 0x244 */ u32 holderHandle;             /* the fighter the model is attached to (held), or 0 */
+    /* 0x248 */ u32 unk248;                   /* the handle of the entity func_80079420 makes */
+    /* 0x24C */ s32 clipBlendFrames;        /* the blend frames clip started with */
+    /* 0x250 */ s32 clip;                     /* the movement clip (FIGHTER_CLIP_*), or negative */
+    /* 0x254 */ s32 actionClip;               /* the one-shot clip played over it, or negative */
+    /* 0x258 */ s32 pendingPose;              /* FIGHTER_STATE_END_POSE or FIGHTER_STATE_WIN_POSE */
+    /* 0x25C */ s32 voiceHandle;              /* the sound Fighter_playVoice played */
+    /* 0x260 */ TerrainProbe floorProbe;       /* the map below the fighter */
+    /* 0x2DC */ CollisionSphere collider;         /* what the hits add into */
+    /* 0x324 */ s32 bodyBoxes;                /* Box[], the parts' boxes (Fighter_updateBoxes) */
+    /* 0x328 */ s32 bodyBoxCount;
+    /* 0x32C */ s32 attackBoxes;              /* Box[], the boxes of the parts that hit */
+    /* 0x330 */ s32 attackBoxCount;
     /* 0x334 */ s32 unk334;
     /* 0x338 */ s32 unk338;
     /* 0x33C */ s32 unk33C;
-    /* 0x340 */ s32 unk340;
+    /* 0x340 */ s32 comboHits;
     /* 0x344 */ u8 unk344[0x348 - 0x344];
-    /* 0x348 */ u16 unk348[13][2];         /* Unk8007BF74 counter pairs that func_800788B4 sets */
-    /* 0x37C */ u32 flags;
-    /* 0x380 */ s32 unk380;
-    /* 0x384 */ Vec3 position;             /* in 1/256ths (func_800775D8) */
+    /* 0x348 */ MoveReward rewards[13];       /* by MOVE_*, Fighter_setMoveReward */
+    /* 0x37C */ u32 flags;                    /* FIGHTER_FLAG_* */
+    /* 0x380 */ s32 airMovesUsed;             /* bits of the air moves made since the fighter left the ground */
+    /* 0x384 */ Vec3 position;                /* in 1/256ths */
     /* 0x390 */ u8 unk390[4];
-    /* 0x394 */ Vec3 unk394;               /* in 1/256ths too (func_8007760C) */
+    /* 0x394 */ Vec3 lastPosition;            /* before the last move (Fighter_move) */
     /* 0x3A0 */ u8 unk3A0[4];
-    /* 0x3A4 */ Vec3 unk3A4;
-    /* 0x3B0 */ s32 unk3B0;
-    /* 0x3B4 */ Vec3 unk3B4;               /* vx grows by the facing (func_80095008) */
-    /* 0x3C0 */ s32 unk3C0;
-    /* 0x3C4 */ s32 unk3C4;                /* a 16.16 scale (func_80095008) */
-    /* 0x3C8 */ VECTOR unk3C8;             /* func_800A1160 interpolates it (Unk800A0FF4) */
-    /* 0x3D8 */ s32 unk3D8;                /* with 0x3DC, 0x3E0: angles func_80078578 turns toward 0x3E8.. */
-    /* 0x3DC */ s32 unk3DC;
-    /* 0x3E0 */ s32 unk3E0;                /* an angle (func_800BBF00 turns toward it) */
+    /* 0x3A4 */ Vec3 velocity;                /* added to the position every step */
+    /* 0x3B0 */ s32 velocityPad;
+    /* 0x3B4 */ Vec3 force;                   /* force / mass is added to the velocity every step, then cleared */
+    /* 0x3C0 */ s32 forcePad;
+    /* 0x3C4 */ s32 mass;                     /* 16.16, the params' */
+    /* 0x3C8 */ VECTOR unk3C8;                /* func_800A1160 interpolates it (Patamon) */
+    /* 0x3D8 */ Vec3 rotation;                /* Fighter_updateRotation turns it toward targetRotation */
     /* 0x3E4 */ u8 unk3E4[0x3E8 - 0x3E4];
-    /* 0x3E8 */ s32 unk3E8;
-    /* 0x3EC */ s32 unk3EC; /* 0x401 or -0x401: func_80079E10 makes it the facing, 1 or -1 */
-    /* 0x3F0 */ s32 unk3F0;
-    /* 0x3F4 */ u8 unk3F4[0x3FC - 0x3F4];
-    /* 0x3FC */ Model *model;              /* func_800770AC makes it with modelInit */
-    /* 0x400 */ u8 unk400[0x440 - 0x400];
-    /* 0x440 */ s32 unk440;                /* func_8007768C */
-    /* 0x444 */ u8 unk444[0x448 - 0x444];
-    /* 0x448 */ u32 unk448;                /* bits: set with |= */
-    /* 0x44C */ s32 unk44C;                /* set with 0x450..0x45C by func_80084558, func_80084838 */
-    /* 0x450 */ s32 unk450;
-    /* 0x454 */ s32 unk454;
-    /* 0x458 */ s32 unk458;
-    /* 0x45C */ s32 unk45C;
-    /* 0x460 */ s32 unk460;
-    /* 0x464 */ Unk800774C0 unk464;        /* func_800C9790 runs it */
-    /* 0x478 */ Unk800774C0 unk478;        /* func_800C99B0 runs it */
+    /* 0x3E8 */ Vec3 targetRotation;          /* its vy is the facing: 0x401 right, -0x401 left */
+    /* 0x3F4 */ u8 unk3F4[0x3F8 - 0x3F4];
+    /* 0x3F8 */ Chara *chara;                 /* the model's files */
+    /* 0x3FC */ Model *model;                 /* Fighter_setUp makes it with modelInit */
+    /* 0x400 */ Lights lights;                /* the camera's (Fight_lightFighter) */
+    /* 0x440 */ s32 vramY;                    /* 0x100 for side 1: the VRAM half of its textures */
+    /* 0x444 */ s32 face;                     /* the FaceEntry to draw, ~it once drawn */
+    /* 0x448 */ u32 attackParts;              /* the model parts that hit now (Fighter_updateBoxes) */
+    /* 0x44C */ s32 hitDamage;                /* the hit the attack lands (Fighter_hitOpponent), the Attack's */
+    /* 0x450 */ s32 hitKind;
+    /* 0x454 */ Vec3 hitKnockback;
+    /* 0x460 */ s32 hitKnockbackPad;
+    /* 0x464 */ TimedEffect itemEffect;       /* updateItemEffect runs it */
+    /* 0x478 */ TimedEffect unk478;           /* func_800C99B0 runs it */
     /* 0x48C */ s32 unk48C;
     /* 0x490 */ u8 unk490[0x494 - 0x490];
-    /* 0x494 */ s32 unk494;                /* func_8007A12C sets it to 5 or clears it */
-    /* 0x498 */ s32 unk498;
+    /* 0x494 */ s32 unk494;                   /* func_8007A12C sets it to 5 or clears it */
+    /* 0x498 */ s32 invulnerableFrames;       /* after getting up or a respawn (Fighter_isInvulnerable) */
     /* 0x49C */ s32 unk49C;
-    /* 0x4A0 */ s32 unk4A0;                /* func_8009A35C sets it to 1 */
-} Unk80076F34;
+    /* 0x4A0 */ s32 unk4A0;                   /* MetalGarurumon_airSpecial1 sets it to 1 */
+} Fighter;
 
-/* adds delta to the 16.16 level of the object at 0x238, kept between 0 and 1.0 */
-void func_80077448(Unk80076F34 *this, s32 delta);
-/* the index at 0x218 */
-s32 func_80077568(Unk80076F34 *this);
+/* the damage bits of a hit word; its flags are above them (bits 27 and 28: the guards that do not block it) */
+#define HIT_DAMAGE_MASK 0x3FFFF
+
+/* Fighter.flags (the US build has one more bit above these two) */
+#define FIGHTER_FLAG_COMPUTER 0x1  /* GAME_STATE's side is the computer */
+#define FIGHTER_FLAG_ON_GROUND 0x4
+
+/* The states of a fighter: its body state and its attack state keep one each (Fighter_getBodyStateId,
+ * Fighter_getAttackStateId); each sets it and calls its slot of FIGHTER_VTABLE every frame. */
+enum FighterStateId {
+    FIGHTER_STATE_INTRO = 0,
+    FIGHTER_STATE_IDLE = 1,
+    FIGHTER_STATE_CROUCH = 2,
+    FIGHTER_STATE_JUMP = 3,
+    FIGHTER_STATE_FALL = 4,
+    FIGHTER_STATE_WALK_LEFT = 5,
+    FIGHTER_STATE_WALK_RIGHT = 6,
+    FIGHTER_STATE_DASH_LEFT = 7,
+    FIGHTER_STATE_DASH_RIGHT = 8,
+    FIGHTER_STATE_GUARD = 9,
+    FIGHTER_STATE_CROUCH_GUARD = 0xA,
+    FIGHTER_STATE_FLINCH = 0xB,
+    FIGHTER_STATE_AIR_FLINCH = 0xC,
+    FIGHTER_STATE_KNOCKED_DOWN = 0xD,
+    FIGHTER_STATE_KNOCKED_OUT = 0xE,
+    FIGHTER_STATE_GET_UP = 0xF,
+    FIGHTER_STATE_DIZZY = 0x10,
+    FIGHTER_STATE_END_POSE = 0x11,
+    FIGHTER_STATE_WIN_POSE = 0x12,
+    FIGHTER_STATE_HELD = 0x13,
+    FIGHTER_STATE_ATTACK1 = 0x14,
+    FIGHTER_STATE_ATTACK2 = 0x15,
+    FIGHTER_STATE_ATTACK3 = 0x16,
+    FIGHTER_STATE_UP_ATTACK = 0x17,
+    FIGHTER_STATE_THROW = 0x18,
+    FIGHTER_STATE_CROUCH_ATTACK = 0x19,
+    FIGHTER_STATE_DASH_ATTACK = 0x1A,
+    FIGHTER_STATE_AIR_UP_ATTACK = 0x1B,
+    FIGHTER_STATE_AIR_ATTACK = 0x1C, /* neutral and side */
+    FIGHTER_STATE_SPECIAL1 = 0x1D,
+    FIGHTER_STATE_AIR_SPECIAL1 = 0x1E,
+    FIGHTER_STATE_SPECIAL2 = 0x1F,
+    FIGHTER_STATE_AIR_SPECIAL2 = 0x20,
+    FIGHTER_STATE_SPECIAL3 = 0x21,
+    FIGHTER_STATE_AIR_SPECIAL3 = 0x22
+};
+
+/* The clips of a fighter's model, the same for every character (the slots play them). */
+enum FighterClip {
+    FIGHTER_CLIP_STAND = 0,
+    FIGHTER_CLIP_WALK = 1,
+    FIGHTER_CLIP_DASH = 2,
+    FIGHTER_CLIP_JUMP = 3,
+    FIGHTER_CLIP_FALL = 4,
+    FIGHTER_CLIP_ATTACK1 = 5,
+    FIGHTER_CLIP_ATTACK2 = 6,
+    FIGHTER_CLIP_ATTACK3 = 7,
+    FIGHTER_CLIP_DASH_ATTACK = 8,
+    FIGHTER_CLIP_AIR_ATTACK = 9,
+    FIGHTER_CLIP_AIR_UP_ATTACK = 0xA,
+    FIGHTER_CLIP_THROW = 0xB,
+    FIGHTER_CLIP_GUARD = 0xC,
+    FIGHTER_CLIP_FLINCH = 0xD,
+    FIGHTER_CLIP_AIR_FLINCH = 0xE,
+    FIGHTER_CLIP_KNOCKED_DOWN = 0x10,
+    FIGHTER_CLIP_DOWN = 0x11,
+    FIGHTER_CLIP_GET_UP = 0x12,
+    FIGHTER_CLIP_CROUCH = 0x13,
+    FIGHTER_CLIP_CROUCH_ATTACK = 0x14,
+    FIGHTER_CLIP_CROUCH_GUARD = 0x15,
+    FIGHTER_CLIP_SPECIAL1 = 0x16,
+    FIGHTER_CLIP_AIR_SPECIAL1 = 0x17,
+    FIGHTER_CLIP_SPECIAL2 = 0x18,
+    FIGHTER_CLIP_AIR_SPECIAL2 = 0x19,
+    FIGHTER_CLIP_SPECIAL3 = 0x1A,
+    FIGHTER_CLIP_AIR_SPECIAL3 = 0x1B,
+    FIGHTER_CLIP_WIN_POSE = 0x1C,
+    FIGHTER_CLIP_END_POSE = 0x1D,
+    FIGHTER_CLIP_INTRO = 0x1E,
+    FIGHTER_CLIP_UP_ATTACK = 0x1F
+};
+
+/* The moves that pay (Fighter.rewards, FighterParams.gaugeGains); the score each pays is in parentheses. */
+enum Move {
+    MOVE_ATTACK1 = 0,   /* (100) */
+    MOVE_ATTACK2 = 1,   /* (100) */
+    MOVE_ATTACK3 = 2,   /* (200) */
+    MOVE_THROW = 3,     /* (400) */
+    MOVE_UP = 4,        /* (200) */
+    MOVE_CROUCH = 5,    /* (100) */
+    MOVE_DASH = 6,      /* (300) */
+    MOVE_AIR_UP = 7,    /* (400) */
+    MOVE_AIR = 8,       /* (400) */
+    MOVE_AIR_SIDE = 9,  /* (400) */
+    MOVE_SPECIAL1 = 10, /* (100) */
+    MOVE_SPECIAL2 = 11, /* (1000) */
+    MOVE_SPECIAL3 = 12  /* (3000) */
+};
+
+/* adds delta to the side's 16.16 evolution gauge, kept between 0 and 1.0 */
+void Fighter_addGauge(Fighter *this, s32 delta);
+/* the fighter's CHARACTER_* */
+s32 Fighter_getCharacter(Fighter *this);
 /* sets the position (kept in 1/256ths) from whole units */
-void func_800775B0(Unk80076F34 *chara, Vec3 *position);
-/* writes the vector at 0x384, each component shifted down by 8 bits */
-Vec3 *func_800775D8(Unk80076F34 *chara, Vec3 *out);
-/* the character's table (at 0x220) */
-Unk80077698 *func_80077698(Unk80076F34 *this);
-/* whether the character stands on the given matrix */
-s32 func_8007814C(Unk80076F34 *chara, MATRIX *matrix);
-void func_80079350(Unk80076F34 *this);
-Vec3 *func_8007A650(Unk80076F34 *chara, Vec3 *out);
+void Fighter_setPosition(Fighter *fighter, Vec3 *position);
+/* the position in whole units */
+Vec3 *Fighter_getPosition(Fighter *fighter, Vec3 *out);
+/* the fighter's params */
+FighterParams *Fighter_getParams(Fighter *this);
+/* whether the fighter stands on the stage part that moves with matrix */
+s32 Fighter_isStandingOn(Fighter *fighter, MATRIX *matrix);
+void Fighter_requestEvolution(Fighter *this);
+Vec3 *func_8007A650(Fighter *chara, Vec3 *out);
 
-/* Entity classes that keep the Unk80076F34 they were created for, named
+/* Entity classes that keep the Fighter they were created for, named
  * after their constructors (the ones with the same layout share a struct). */
 typedef struct Unk800AFD78 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk80076F34 *unk18;
-    /* 0x1C */ Unk8006ED20 *unk1C;
+    /* 0x18 */ Fighter *chara;
+    /* 0x1C */ Fight *unk1C;
     /* 0x20 */ s32 unk20[4];
     /* 0x30 */ s32 unk30;
     /* 0x34 */ s32 unk34;
     /* 0x38 */ s32 unk38;
     /* 0x3C */ s32 unk3C[8];
     /* 0x5C */ s16 unk5C;
-    /* 0x5E */ s16 unk5E;
+    /* 0x5E */ s16 vramY; /* Fighter_getVramY of the character */
 } Unk800AFD78;
 
 /* The entity func_800B01AC constructs (virtual table D_8006B624); func_800B050C
- * constructs another class (D_8006B5FC) with the same fields. Their gathers move
+ * constructs another class (D_8006B5FC) with the same fields. Their updates move
  * 0x24 down by 0x120 for 24 (16) calls, then delete them. */
 typedef struct Unk800B01AC {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk80076F34 *unk18; /* the character (func_8007768C gives 0x3C) */
-    /* 0x1C */ Unk8006ED20 *unk1C;
+    /* 0x18 */ Fighter *chara;
+    /* 0x1C */ Fight *unk1C;
     /* 0x20 */ s32 unk20;
     /* 0x24 */ s32 unk24;
     /* 0x28 */ s32 unk28;
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30;
-    /* 0x34 */ s32 unk34; /* gathers so far */
+    /* 0x34 */ s32 ticks; /* updates so far */
     /* 0x38 */ s32 unk38;
-    /* 0x3C */ s16 unk3C;
+    /* 0x3C */ s16 vramY; /* Fighter_getVramY of the character */
 } Unk800B01AC;
 typedef Unk800B01AC Unk800B050C;
 
-typedef struct Unk800B73E8 {
+/* Terriermon's special move 1 effect; Seraphimon's special move 2 effect has the same layout. */
+typedef struct TerriermonSpecial1Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk80076F34 *unk18;
-    /* 0x1C */ Vec3 unk1C;
+    /* 0x18 */ Fighter *chara;
+    /* 0x1C */ Vec3 position; /* the character's (Fighter_getPosition), followed every update */
     /* 0x28 */ s32 unk28;
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30;
     /* 0x34 */ s32 unk34;
-    /* 0x38 */ s32 unk38;
+    /* 0x38 */ s32 ticks; /* updates so far */
     /* 0x3C */ s32 unk3C;
-    /* 0x40 */ s16 unk40;
-} Unk800B73E8;
-typedef Unk800B73E8 Unk800AED0C;
+    /* 0x40 */ s16 vramY; /* Fighter_getVramY of the character */
+} TerriermonSpecial1Effect;
+typedef TerriermonSpecial1Effect SeraphimonSpecial2Effect;
 
-/* The entity func_800C3CFC constructs at a position (0x54 bytes, virtual table D_8006D40C);
- * func_800CAEF0's class derives from it with no fields of its own, and the class func_8008E9B4 and
- * func_8008EA58 derive from it, which keeps the Unk80076F34 it was created for (func_8008DE84 spawns them). */
+/* The entity func_800C3CFC constructs at a position (0x54 bytes, virtual table D_8006D40C); func_800CAEF0's class
+ * derives from it with no fields of its own, and the class func_8008E9B4 and func_8008EA58 derive from it, which keeps
+ * the Fighter it was created for (Imperialdramon_special3Hold spawns them). */
 typedef struct Unk800C3CFC {
     /* 0x00 */ Entity entity;
     /* 0x18 */ VECTOR unk18; /* a random direction, normalized */
@@ -299,30 +419,30 @@ void func_800C3E64(Unk800C3CFC *this);
 
 typedef struct Unk8008E9B4 {
     /* 0x00 */ Unk800C3CFC base;
-    /* 0x54 */ Unk80076F34 *unk54;
+    /* 0x54 */ Fighter *unk54;
 } Unk8008E9B4;
 
-/* A text shown character by character: func_800CD140 copies the text (at most 0x40 characters, with
- * strlen and strncpy) and keeps its length; every character has an entry of its own, whose 0x4 and 0x6 it
- * sets to 0x20, its color to 0x80808080 and the rest to 0; the functions after it set one field of every
- * character. */
-typedef struct Unk800CD140Char {
-    /* 0x00 */ s16 unk0;
-    /* 0x02 */ s16 unk2;
-    /* 0x04 */ s16 unk4;
-    /* 0x06 */ s16 unk6;
-    /* 0x08 */ CVECTOR color; /* 0x80808080 at first */
-    /* 0x0C */ s32 unkC;
-    /* 0x10 */ s32 unk10;
-} Unk800CD140Char;
+/* A text drawn glyph by glyph (the battle's messages): hudTextSetText copies the text (at most 0x40 characters,
+ * with strlen and strncpy) and keeps its length; every character has an entry of its own, whose size it sets to
+ * 0x20, its color to 0x80808080 and the rest to 0; the hudTextSet functions set one field of every character (or
+ * of a range), and hudTextDraw draws them. */
+typedef struct HudTextChar {
+    /* 0x00 */ s16 dx; /* added to the character's place, scaled by the text's scale */
+    /* 0x02 */ s16 dy;
+    /* 0x04 */ s16 w; /* the glyph's size, 0x20 at first, scaled */
+    /* 0x06 */ s16 h;
+    /* 0x08 */ CVECTOR color; /* 0x80808080 at first; a cd of 0 draws nothing */
+    /* 0x0C */ s32 palette;   /* clut row 0x1E9 + palette */
+    /* 0x10 */ s32 unk10;     /* only func_800CD534 sets it */
+} HudTextChar;
 
-typedef struct Unk800CD140 {
-    /* 0x000 */ Unk800CD140Char chars[0x40];
+typedef struct HudText {
+    /* 0x000 */ HudTextChar chars[0x40];
     /* 0x500 */ char text[0x40];
     /* 0x540 */ s32 length;
-    /* 0x544 */ s32 unk544; /* the step between two characters (func_800CBB88 centres the text by it) */
-    /* 0x548 */ s32 unk548;
-} Unk800CD140;
+    /* 0x544 */ s32 step;  /* between two characters (BattleMessage_drawCentered centres the text by it) */
+    /* 0x548 */ s32 scale; /* 4.12 fixed point (0x1000 is 1): the offsets, sizes and step are multiplied by it */
+} HudText;
 
 /* An entity of game.bin that keeps copies of two 16-color palettes of VRAM (func_800D1F8C, func_800D23C4) */
 typedef struct Unk800D1F8C {
@@ -331,39 +451,41 @@ typedef struct Unk800D1F8C {
     /* 0x28 */ u16 cluts[2][16];
     /* 0x68 */ s16 unk68;
     /* 0x6A */ s16 unk6A;
-    /* 0x6C */ Unk8006ED20 *owner;
+    /* 0x6C */ Fight *owner;
 } Unk800D1F8C; /* size 0x70 */
 
-/* An entity of game.bin that spawns count particles of func_800C28B8 around pos, at random up to radius away
- * (func_800C6088, func_800C62EC, func_800C652C) */
-typedef struct Unk800C6088 {
+/* A particle emitter (func_800C6088, ParticleBurst_init, ParticleImplosion_init): spawns count particles of
+ * createParticle's kind around pos, up to spread away (count > 0: one a frame; < 0: all at once). */
+typedef struct ParticleEmitter {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 unk18;
+    /* 0x18 */ s32 kind;   /* createParticle's */
     /* 0x1C */ VECTOR pos;
-    /* 0x2C */ s32 radius;
-    /* 0x30 */ s32 unk30;
+    /* 0x2C */ s32 spread; /* the random speed (burst) or shell radius (implosion) */
+    /* 0x30 */ s32 size;
     /* 0x34 */ s32 count;
-    /* 0x38 */ s32 unk38;
-} Unk800C6088; /* size 0x3C */
+    /* 0x38 */ s32 color;
+} ParticleEmitter; /* size 0x3C */
 
-/* the constructors of Unk800C6088's two classes: count particles around pos; arg6 is a color (0x808080) */
-Unk800C6088 *func_800C6088(Unk800C6088 *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 arg6);
-Unk800C6088 *func_800C62EC(Unk800C6088 *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 arg6);
+/* the constructors of the emitters: count particles of kind around pos, up to spread away, with size and color */
+ParticleEmitter *func_800C6088(ParticleEmitter *this, s32 kind, Vec3 *pos, s32 spread, s32 size, s32 count, s32 color);
+ParticleEmitter *ParticleBurst_init(ParticleEmitter *this, s32 kind, Vec3 *pos, s32 spread, s32 size, s32 count,
+                                    s32 color);
 
-/* The member at 0x18 of Unk800C2F14: func_800C2CCC keeps the frame table (its first 4 halfwords are x, y, w, h)
- * and the 0x100 bit of the flags, then func_800C2D04 its corners; func_800C2E84 makes a PolyFT4Shape of it */
-typedef struct Unk800C2CCC {
-    /* 0x00 */ u16 *frame;
+/* A particle's sprite animation (Particle 0x18): spriteAnimInit keeps its row of PARTICLE_ANIMS and the 0x100 bit
+ * of the flags, spriteAnimRewind sets the first cell, spriteAnimStep the next one along the strip, and
+ * spriteAnimFillShape makes a PolyFT4Shape of it. */
+typedef struct SpriteAnim {
+    /* 0x00 */ u16 *anim;  /* u16[10]: x, y, cell w, cell h, strip width, cell count, step mask, 0, clut, tpage */
     /* 0x04 */ s16 flags;
-    /* 0x06 */ s16 unk6;
+    /* 0x06 */ s16 angle;
     /* 0x08 */ s32 size;   /* half the side of the square func_8009F120 draws */
     /* 0x0C */ u32 color;
     /* 0x10 */ VECTOR pos;
     /* 0x20 */ s16 left, top, right, bottom;
-} Unk800C2CCC; /* size 0x28 */
+} SpriteAnim; /* size 0x28 */
 
 /* The shape buildPolyFT4 projects (engine/gfx/prim/build_line_g2.h takes it as void *): four corners, a color
- * and the uv, clut and tpage words of the POLY_FT4; func_800C2E84 fills it from an Unk800C2CCC */
+ * and the uv, clut and tpage words of the POLY_FT4; spriteAnimFillShape fills it from an SpriteAnim */
 typedef struct PolyFT4Shape {
     /* 0x00 */ u32 flags;
     /* 0x04 */ SVECTOR *corners[4];
@@ -374,158 +496,154 @@ typedef struct PolyFT4Shape {
     /* 0x24 */ u16 uv3, pad26;
 } PolyFT4Shape; /* size 0x28 */
 
-/* The entity class of vtable D_8006D59C (func_800C2F14): a frame of a sprite moved by func_800C3078's vectors */
-typedef struct Unk800C2F14 {
+/* A sprite particle (Particle_init, virtual table PARTICLE_VTABLE): steps its animation, drifts by its velocity
+ * with 1/16 drag, and deletes itself after the animation's cells. */
+typedef struct Particle {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk800C2CCC sprite;
-    /* 0x40 */ s16 unk40;
+    /* 0x18 */ SpriteAnim sprite;
+    /* 0x40 */ s16 cell; /* the cells stepped (Particle_stepAnim) */
     /* 0x42 */ s16 unk42;
-    /* 0x44 */ Vec3 unk44;
-    /* 0x50 */ s32 unk50;
-    /* 0x54 */ s32 unk54;
-} Unk800C2F14; /* size 0x58 */
+    /* 0x44 */ Vec3 vel;
+    /* 0x50 */ s32 velPad;
+    /* 0x54 */ s32 age;
+} Particle; /* size 0x58 */
 
-/* A class derived from Unk800C2F14 that keeps its owner (func_8009F248, func_8009F4D4) */
+/* A class derived from Particle that keeps its owner (func_8009F248, func_8009F4D4) */
 typedef struct Unk8009F248 {
-    /* 0x00 */ Unk800C2F14 base;
-    /* 0x58 */ Unk80076F34 *owner;
+    /* 0x00 */ Particle base;
+    /* 0x58 */ Fighter *owner;
 } Unk8009F248; /* size 0x5C */
 
-/* classes that derive from Unk80076F34, named after their constructors */
-typedef struct Unk800870F0 {
-    /* 0x000 */ Unk80076F34 base;
+/* the fighters with fields of their own past Fighter's (src/battle/fighters/) */
+typedef struct Gabumon {
+    /* 0x000 */ Fighter base;
     /* 0x4A4 */ s32 unk4A4;
-} Unk800870F0;
+} Gabumon;
 
-typedef struct Unk800A0FF4 {
-    /* 0x000 */ Unk80076F34 base;
-    /* 0x4A4 */ s32 unk4A4;
+/* Patamon's class (CHARACTER_PATAMON). */
+typedef struct Patamon {
+    /* 0x000 */ Fighter base;
+    /* 0x4A4 */ s32 special1Active; /* set while the special move 1's hitbox lives (its constructor, destructor) */
     /* 0x4A8 */ u8 unk4A8[0x4B8 - 0x4A8];
     /* 0x4B8 */ s32 unk4B8; /* 0 to 0x1000: how far base.unk3C8 is from unk4CC to unk4DC */
     /* 0x4BC */ u8 unk4BC[0x4CC - 0x4BC];
     /* 0x4CC */ VECTOR unk4CC;
     /* 0x4DC */ VECTOR unk4DC;
-} Unk800A0FF4;
+} Patamon;
 
-typedef struct Unk800B45C0 {
-    /* 0x000 */ Unk80076F34 base;
+/* Tailmon's class (CHARACTER_TAILMON). */
+typedef struct Tailmon {
+    /* 0x000 */ Fighter base;
     /* 0x4A4 */ s16 unk4A4;
-} Unk800B45C0;
+} Tailmon;
 
-typedef struct Unk800B631C {
-    /* 0x000 */ Unk80076F34 base;
+/* Terriermon's class (CHARACTER_TERRIERMON): special2 counts 0x4A4 down between its hitboxes. */
+typedef struct Terriermon {
+    /* 0x000 */ Fighter base;
     /* 0x4A4 */ s32 unk4A4;
     /* 0x4A8 */ s32 unk4A8;
-} Unk800B631C;
+} Terriermon;
 
-/* The class func_800B9410 constructs (virtual table D_8006C71C): 0x4A4 is set once its entity of
- * func_800BAAA4 is out. */
-typedef struct Unk800B9410 {
-    /* 0x000 */ Unk80076F34 base;
-    /* 0x4A4 */ s16 unk4A4;
-} Unk800B9410;
-
-/* A class that func_800CB53C constructs: it derives from the class of
- * D_80065164 and keeps a word. */
-typedef struct Unk800CB53C {
-    /* 0x0 */ VtableEntry *vtable;
-    /* 0x4 */ s32 unk4;
-} Unk800CB53C;
+/* Wormmon's class (CHARACTER_WORMMON). */
+typedef struct Wormmon {
+    /* 0x000 */ Fighter base;
+    /* 0x4A4 */ s16 guardEffectActive; /* set by guard and crouchGuard with the effect, cleared by its destructor */
+} Wormmon;
 
 /* The parts that many entity classes share: a base class or member that
- * Unk8007BD8C starts, and a member Unk80075EE4. */
+ * Hit starts, and a member CollisionSphere. */
 
-/* A class that func_8007BD8C constructs (virtual table D_800652EC): a
- * virtual table, three arguments and a copied vector; func_8007BDF0 is its
- * first method. It derives from the class of D_80065164 (Unk80076308,
- * func_800762F4), which has nothing but the virtual table. Entities that
- * derive from it keep it at 0x18: the virtual tables of that base move
- * `this` back by 0x18 to reach them. */
-typedef struct Unk8007BD8C {
+/* The hit an attack part carries (virtual table HIT_VTABLE, Hit_init): its owner, its damage, the reaction it causes
+ * and a knockback; when its part touches a target, Hit_apply (slot 0x08) adds it into the target's collider. It derives
+ * from the class of COLLISION_OWNER_VTABLE (CollisionOwner, CollisionOwner_init), which has nothing but the virtual
+ * table. Entities that derive from it keep it at 0x18: the virtual tables of that base move `this` back by 0x18 to
+ * reach them. */
+typedef struct Hit {
     /* 0x00 */ VtableEntry *vtable;
-    /* 0x04 */ struct Unk80076F34 *chara; /* the spawners pass the Unk80076F34 that owns them */
-    /* 0x08 */ s32 unk8;
-    /* 0x0C */ s32 unkC;
-    /* 0x10 */ Vec3 unk10;
-} Unk8007BD8C;
+    /* 0x04 */ struct Fighter *owner; /* the spawners pass the Fighter that owns them */
+    /* 0x08 */ s32 damage;            /* HIT_DAMAGE_MASK, with flags above it */
+    /* 0x0C */ s32 kind;              /* the reaction (0-7) */
+    /* 0x10 */ Vec3 knockback;
+} Hit;
 
-/* the virtual table of Unk8007BD8C */
-extern VtableEntry D_800652EC[];
+/* the virtual table of Hit */
+extern VtableEntry HIT_VTABLE[];
 
-/* A class that func_8007BF20 constructs (virtual table D_800652CC) on
- * func_8007BD8C's: an Unk8007BD8C with flags; it clears their bits 0 and 1. */
-typedef struct Unk8007BF20 {
-    /* 0x00 */ Unk8007BD8C base;
+/* A Hit that records what it struck (virtual table TRACKED_HIT_VTABLE, TrackedHit_init clears the flags):
+ * flags bit 0 a fighter (ENTITY_KIND_FIGHTER), bit 1 a fighter's object (ENTITY_KIND_FIGHTER_OBJECT). */
+typedef struct TrackedHit {
+    /* 0x00 */ Hit base;
     /* 0x1C */ s32 unk1C;
     /* 0x20 */ u32 flags;
-} Unk8007BF20;
+} TrackedHit;
 
-/* A class kept in a list, with its virtual table at 0x30 (D_80065184), which
- * func_800761AC constructs; Unk80075EE4 (D_8006513C) derives from it. */
-typedef struct Unk800761AC {
+/* A shape of the fight's collision lists (virtual table COLLISION_SHAPE_VTABLE at 0x30, CollisionShape_init):
+ * collideShapes calls slot 0x08 (overlaps) of each pair, shapeListDraw slot 0x18 (draw). Its one subclass,
+ * CollisionSphere, spells the same fields out. */
+typedef struct CollisionShape {
     /* 0x00 */ ListNode link;
-    /* 0x08 */ void *unk8; /* func_80075EE4's fourth argument: the owner's second base */
-    /* 0x0C */ u32 unkC;   /* flags: the constructors clear bits 0 and 1 */
+    /* 0x08 */ void *owner;    /* its CollisionOwner: collideShapes calls its slot 0x08 with the other shape */
+    /* 0x0C */ u32 flags;      /* COLLISION_SHAPE_*: the constructors clear both */
     /* 0x10 */ s32 unk10;
-    /* 0x14 */ void *unk14; /* the owning entity (its constructor sets it) */
-    /* 0x18 */ u8 unk18[0x30 - 0x18];
+    /* 0x14 */ void *entity;   /* the entity it belongs to (CollisionShape_setEntity) */
+    /* 0x18 */ u8 unk18[0x30 - 0x18]; /* CollisionSphere's hit fields */
     /* 0x30 */ VtableEntry *vtable;
-} Unk800761AC;
+} CollisionShape;
 
-/* the virtual table of Unk800761AC, which the destructors that inline its
- * destructor install last; the one of Unk8007BD8C's base is D_80065164
+/* the virtual table of CollisionShape, which the destructors that inline its
+ * destructor install last; the one of Hit's base is COLLISION_OWNER_VTABLE
  * (battle/game.h) */
-extern VtableEntry D_80065184[];
+extern VtableEntry COLLISION_SHAPE_VTABLE[];
 
-/* Constructs an Unk80075EE4 at position (three words) in the list of owner, an object's second base. */
-Unk80075EE4 *func_80075EE4(Unk80075EE4 *this, Vec3 *position, s32 unk44, void *owner);
+/* Constructs a sphere of owner (a CollisionOwner) at position with radius. */
+CollisionSphere *CollisionSphere_init(CollisionSphere *this, Vec3 *position, s32 radius, void *owner);
 
-/* An entity that derives from Unk8007BD8C too and holds an Unk80075EE4. */
+/* An entity that derives from Hit too and holds a CollisionSphere. */
 typedef struct UnkPartsEntity38 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8007BD8C base;
+    /* 0x18 */ Hit base;
     /* 0x34 */ s32 unk34;
-    /* 0x38 */ Unk80075EE4 part;
+    /* 0x38 */ CollisionSphere part;
 } UnkPartsEntity38;
 
-/* The UnkPartsEntity38 class of vtables D_8006D760 and D_8006D740 (func_800C7024): it keeps the position and
- * the velocity it was made with, and the velocity's length at 0xAC. The classes of func_80087690 and
- * func_800B719C derive from it with no fields of their own known; func_80083108's adds 0xC0. */
-typedef struct Unk800C7024 {
+/* A projectile (Projectile_init, virtual tables PROJECTILE_VTABLE and PROJECTILE_HIT_VTABLE): an entity of kind
+ * 0x30000 with an attack and a hit part (UnkPartsEntity38) that flies by its velocity until it has gone its range.
+ * Nine fighter classes and the item shot derive from it (AgumonSpecial1Projectile_init's adds 0xC0). */
+typedef struct Projectile {
     /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Vec3 pos;
-    /* 0x8C */ s32 unk8C;
+    /* 0x80 */ Vec3 pos;      /* copied to the hit part every frame */
+    /* 0x8C */ s32 posPad;
     /* 0x90 */ Vec3 vel;
-    /* 0x9C */ s32 unk9C;
-    /* 0xA0 */ s32 unkA0;
-    /* 0xA4 */ s32 unkA4;
-    /* 0xA8 */ s32 unkA8;
-    /* 0xAC */ s32 speed;
-    /* 0xB0 */ s32 unkB0;
-    /* 0xB4 */ s32 unkB4;
-    /* 0xB8 */ s32 unkB8;
-    /* 0xBC */ s32 unkBC; /* func_8007768C of the owner */
-} Unk800C7024; /* size 0xC0 */
+    /* 0x9C */ s32 velPad;
+    /* 0xA0 */ s32 hitLevel;  /* bits 24-25 of the attack word: the burst it spawns (Projectile_getBurstKind) */
+    /* 0xA4 */ s32 radius;    /* copied to the hit part */
+    /* 0xA8 */ s32 maxRadius;
+    /* 0xAC */ s32 speed;     /* the velocity's length */
+    /* 0xB0 */ s32 distance;  /* gone so far (+= speed) */
+    /* 0xB4 */ s32 range;
+    /* 0xB8 */ s32 age;
+    /* 0xBC */ s32 unkBC; /* Fighter_getVramY of the owner */
+} Projectile; /* size 0xC0 */
 
-/* A class derived from Unk800C7024 (func_8009BE08, func_8009CE8C) */
-typedef struct Unk8009BE08 {
-    /* 0x00 */ Unk800C7024 base;
+/* MetalGarurumon's special move 2 projectile (a Projectile); its special move 3's func_8009CE8C derives from it. */
+typedef struct MetalGarurumonSpecial2Projectile {
+    /* 0x00 */ Projectile base;
     /* 0xC0 */ s32 unkC0;
     /* 0xC4 */ s32 unkC4;
-} Unk8009BE08;
+} MetalGarurumonSpecial2Projectile;
 
-/* An entity that holds an Unk8007BF20 and an Unk80075EE4. */
+/* An entity that holds a TrackedHit and a CollisionSphere. */
 typedef struct UnkPartsEntity3C {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8007BF20 unk18;
-    /* 0x3C */ Unk80075EE4 part;
+    /* 0x18 */ TrackedHit unk18;
+    /* 0x3C */ CollisionSphere part;
 } UnkPartsEntity3C;
 
 /* The class that func_80097FA0 constructs (vtable D_80069A7C): an
- * UnkPartsEntity3C with an Unk80076F34 and a vector it hands to what it creates. */
+ * UnkPartsEntity3C with a Fighter and a vector it hands to what it creates. */
 typedef struct Unk80097FA0 {
     /* 0x00 */ UnkPartsEntity3C parts;
-    /* 0x84 */ Unk80076F34 *unk84;
+    /* 0x84 */ Fighter *unk84;
     /* 0x88 */ s32 unk88;
     /* 0x8C */ Vec3 unk8C;
 } Unk80097FA0;
@@ -534,14 +652,14 @@ typedef struct Unk80097FA0 {
  * every frame and, after 12 frames, spawn two entities and delete themselves. */
 typedef struct Unk800ACA60 {
     /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Unk80076F34 *owner;
-    /* 0x84 */ Unk8006ED20 *unk84;
+    /* 0x80 */ Fighter *owner;
+    /* 0x84 */ Fight *unk84;
     /* 0x88 */ Vec3 pos;
     /* 0x94 */ s32 unk94;
     /* 0x98 */ Vec3 vel;
     /* 0xA4 */ s32 unkA4;
     /* 0xA8 */ s32 frames;
-    /* 0xAC */ s16 unkAC; /* func_8007768C of the owner */
+    /* 0xAC */ s16 vramY; /* Fighter_getVramY of the owner */
     /* 0xAE */ s16 unkAE;
 } Unk800ACA60;
 typedef Unk800ACA60 Unk800AC470;
@@ -550,11 +668,11 @@ typedef Unk800ACA60 Unk800AC470;
  * like Unk800ACA60 with more: the owner's position when made and some counters. */
 typedef struct Unk800AD050 {
     /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Unk80076F34 *owner;
-    /* 0x84 */ Unk8006ED20 *list; /* the part goes into one of its two lists (func_80077574 picks which) */
+    /* 0x80 */ Fighter *owner;
+    /* 0x84 */ Fight *list; /* the part goes into one of its two lists (Fighter_getSide picks which) */
     /* 0x88 */ Vec3 pos;
     /* 0x94 */ s32 unk94;
-    /* 0x98 */ Vec3 charaPosition; /* the owner's when made (func_800775D8) */
+    /* 0x98 */ Vec3 charaPosition; /* the owner's when made (Fighter_getPosition) */
     /* 0xA4 */ s32 unkA4;
     /* 0xA8 */ Vec3 vel;
     /* 0xB4 */ s32 unkB4;
@@ -563,185 +681,178 @@ typedef struct Unk800AD050 {
     /* 0xC0 */ s32 unkC0;
     /* 0xC4 */ s32 unkC4;
     /* 0xC8 */ s32 unkC8;
-    /* 0xCC */ s16 unkCC; /* func_8007768C of the owner */
+    /* 0xCC */ s16 vramY; /* Fighter_getVramY of the owner */
 } Unk800AD050;
 
-/* The class func_800C06D0 constructs (0xB0 bytes): it plays sound 0x111 and keeps the handle. */
-typedef struct Unk800C06D0 {
+/* Gokumon's special move 1 hitbox (0xB0 bytes): it plays sound 0x111 and keeps the handle. */
+typedef struct GokumonSpecial1Hitbox {
     /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Unk80076F34 *owner;
-    /* 0x84 */ VECTOR unk84; /* func_8007A4A4 of the owner's point 5 */
+    /* 0x80 */ Fighter *owner;
+    /* 0x84 */ VECTOR unk84; /* Fighter_getNodePosition of the owner's point 5 */
     /* 0x94 */ s32 unk94;
     /* 0x98 */ s32 unk98;
     /* 0x9C */ s32 unk9C;
     /* 0xA0 */ s32 unkA0;
     /* 0xA4 */ s32 unkA4;
     /* 0xA8 */ s32 unkA8;
-    /* 0xAC */ u32 sound;
-} Unk800C06D0;
+    /* 0xAC */ u32 soundHandle;
+} GokumonSpecial1Hitbox;
 
-/* The class func_800C0CC0 constructs (0x2AC bytes): it plays a sound and keeps the handle last. */
-typedef struct Unk800C0CC0 {
+/* Gokumon's special move 3 hitbox (0x2AC bytes): it plays a sound and keeps the handle last. */
+typedef struct GokumonSpecial3Hitbox {
     /* 0x000 */ UnkPartsEntity38 parts;
     /* 0x080 */ u8 unk80[0x280 - 0x80];
-    /* 0x280 */ Unk80076F34 *owner;
+    /* 0x280 */ Fighter *owner;
     /* 0x284 */ u8 unk284[0x2A8 - 0x284];
-    /* 0x2A8 */ u32 sound;
-} Unk800C0CC0;
+    /* 0x2A8 */ u32 soundHandle;
+} GokumonSpecial3Hitbox;
 
 /* the destructor of an entity class that others derive from */
-void func_800776D0(Entity *this, s32 flags);
+void Fighter_destroy(Entity *this, s32 flags);
 
-/* clears the timed thing at 0x464 */
-void func_800774A8(Unk80076F34 *this);
+/* ends the item's effect */
+void Fighter_clearItemEffect(Fighter *this);
 
-/* returns the object at 0x228 of `this`: the one whose entity group func_8007AD4C uses */
-Unk8006ED20 *func_80077580(Unk80076F34 *this);
+/* the fight the fighter is in: the one whose entities Fighter_addEntity adds to */
+Fight *Fighter_getScene(Fighter *this);
 
-/* returns the word at 0x440 of an Unk80076F34 */
-s32 func_8007768C(Unk80076F34 *this);
+/* the VRAM row of the fighter's textures */
+s32 Fighter_getVramY(Fighter *this);
 
-/* gives an Unk80076F34 a table (at 0x224) */
-void func_80079B24(Unk80076F34 *this, Unk80079B24Entry *table);
+/* gives a fighter its faces */
+void Fighter_setFaceTable(Fighter *this, FaceEntry *table);
 
-/* virtual functions of Unk80076F34, and functions of its that they call */
-s32 func_80077794(Unk80076F34 *this);
-void func_8007835C(Unk80076F34 *this, s32 arg);
-void func_80078804(Unk80076F34 *this, s32 arg);
-void func_8007881C(Unk80076F34 *this, s32 arg);
-/* Starts a clip of the model at 0x3FC (modelStartClip; a negative clip stops it):
+/* virtual functions of Fighter, and functions of its that they call */
+s32 Fighter_canEvolve(Fighter *this);
+void Fighter_accelerateTo(Fighter *this, s32 speed);
+void Fighter_faceLeft(Fighter *this, s32 now);
+void Fighter_faceRight(Fighter *this, s32 now);
+/* Plays a clip of the fighter's model over the movement clip (a negative clip stops the model):
  * plays < 0 takes the count from the character's .loop file (charaGetClipPlays). */
-void func_80079830(Unk80076F34 *this, s32 clip, s32 blendFrames, s32 frame, s32 plays);
-/* The same, with the play count of the .loop file; it keeps clip and
- * blendFrames at 0x250/0x24C, and starts the clip only when func_80079A0C allows it. */
-void func_800796F0(Unk80076F34 *this, s32 clip, s32 blendFrames, s32 frame);
-void func_80079AE4(Unk80076F34 *this);
-void func_8007A6FC(Unk80076F34 *this, s32 arg1, s32 arg2, s32 arg3);
-void func_8007B034(Unk80076F34 *this, s32 arg);
-void func_8007B0E0(Unk80076F34 *this, s32 arg);
-void func_8007B470(Unk80076F34 *this, s32 arg, Unk8007B470Entry *entry, s32 arg3);
-void func_8007B6A0(Unk80076F34 *this, s32 arg);
-void func_8007B70C(Unk80076F34 *this, s32 arg); /* the method at 0xA8 */
-void func_8007B784(Unk80076F34 *this, s32 arg); /* the method at 0xB0 */
-void func_8007B80C(Unk80076F34 *this, s32 arg); /* the method at 0xB8 */
-void func_8007B884(Unk80076F34 *this, s32 arg);
-void func_8007BAFC(Unk80076F34 *this, s32 arg);
-void func_8007BB64(Unk80076F34 *this, s32 arg);
-void func_8007BA98(Unk80076F34 *this, s32 arg);
-s32 func_80079E10(Unk80076F34 *this); /* the way the character faces: 1 or -1 */
-void func_8007B978(Unk80076F34 *this, s32 arg);
-void func_8007B9FC(Unk80076F34 *this, s32 step);
+void Fighter_playActionClip(Fighter *this, s32 clip, s32 blendFrames, s32 frame, s32 plays);
+/* Sets the movement clip (FIGHTER_CLIP_*), with the play count of the .loop file; it keeps clip and
+ * blendFrames, and starts the clip only when Fighter_isActionClipDone allows it. */
+void Fighter_setClip(Fighter *this, s32 clip, s32 blendFrames, s32 frame);
+void func_80079AE4(Fighter *this);
+void Fighter_spawnDust(Fighter *this, s32 dir, s32 arg2, s32 count);
+void Fighter_dashLeft(Fighter *this, s32 frame);
+void Fighter_dashRight(Fighter *this, s32 frame);
+void Fighter_runAttack(Fighter *this, s32 frame, Attack *attack, s32 kind);
+void Fighter_attack1(Fighter *this, s32 frame);
+void Fighter_attack2(Fighter *this, s32 frame);
+void Fighter_attack3(Fighter *this, s32 frame);
+void Fighter_upAttack(Fighter *this, s32 frame);
+void Fighter_dashAttack(Fighter *this, s32 frame);
+void Fighter_airUpAttack(Fighter *this, s32 frame);
+void Fighter_airSideAttack(Fighter *this, s32 frame);
+void Fighter_airAttack(Fighter *this, s32 frame);
+s32 Fighter_getFacing(Fighter *this); /* the way the character faces: 1 or -1 */
+void Fighter_throw(Fighter *this, s32 frame);
+void Fighter_special2(Fighter *this, s32 frame);
 
-/* returns the Unk80076F34 that func_80073218 gives for the object at 0x228 of `this` */
-Unk80076F34 *func_8007AEEC(Unk80076F34 *this);
+/* the fighter's opponent (Fight_getOpponent) */
+Fighter *Fighter_getOpponent(Fighter *this);
 
 /* gives the world position (in out) of node `node` of the character's model, moved by offset: it hands
  * both to matrixTransformVec */
-VECTOR *func_8007A4A4(Unk80076F34 *this, VECTOR *out, s32 node, VECTOR *offset);
+VECTOR *Fighter_getNodePosition(Fighter *this, VECTOR *out, s32 node, VECTOR *offset);
 
-/* play a sound of an Unk80076F34 and return its handle (the first also keeps it at 0x25C): they call
- * soundControlPlaySound and leave $v0 alone after the call, and func_800BFF28 keeps its next constant out
+/* play a sound of a fighter and return its handle (the first also keeps it as voiceHandle): they call
+ * soundControlPlaySound and leave $v0 alone after the call, and Gokumon_special3 keeps its next constant out
  * of $v0 (a call_value) */
-s32 func_800784F4(Unk80076F34 *this, s32 sound);
-s32 func_80078540(Unk80076F34 *this, s32 sound);
+s32 Fighter_playVoice(Fighter *this, s32 sound);
+s32 Fighter_playSound(Fighter *this, s32 sound);
 
-/* the constructor of the sprite member of Unk800C2F14, and the setup of its motion */
-Unk800C2CCC *func_800C2CCC(Unk800C2CCC *this, u16 *frame, s32 flags);
-void func_800C3078(Unk800C2F14 *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color);
-void func_800C3100(Unk800C2F14 *this, PolyFT4Shape *shape, SVECTOR *corners);
+/* the constructor of a particle's sprite animation, and the setup of its motion */
+SpriteAnim *spriteAnimInit(SpriteAnim *this, u16 *anim, s32 flags);
+void Particle_setMotion(Particle *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color);
+void Particle_buildShape(Particle *this, PolyFT4Shape *shape, SVECTOR *corners);
 
-/* the parts classes: their constructors, and the vector setter of Unk8007BD8C */
-Unk8007BD8C *func_8007BD8C(Unk8007BD8C *this, Unk80076F34 *chara, s32 unk8, Vec3 *unk10, s32 unkC);
-void func_8007BDD4(Unk8007BD8C *this, VECTOR *vec);
+/* the parts classes: their constructors, and the vector setter of Hit */
+Hit *Hit_init(Hit *this, Fighter *owner, s32 damage, Vec3 *knockback, s32 kind);
+void Hit_setKnockback(Hit *this, VECTOR *vec);
 
-/* the side of the character (0x21C): func_800BF37C picks GAME_STATE's fighter with it */
-s32 func_80077574(Unk80076F34 *this);
+/* the fighter's side: Gokumon_hasAltColor picks GAME_STATE's side setup with it */
+s32 Fighter_getSide(Fighter *this);
 void func_800A9998(Entity *this, s32 arg);
 
 /* the constructors the functions below call */
-Unk80076F34 *func_80076F34(Unk80076F34 *this);
-Unk8007F920 *func_800808EC(Unk8007F920 *this, s32 arg);
-Entity *func_80082EE8(Entity *this, Unk80076F34 *arg, Vec3 *vel, s32 arg3, s32 side);
-void func_800C72D8(Unk800C7024 *this, Unk80075EE4 *sum);
-struct Unk8008D21C *func_8008D21C(struct Unk8008D21C *this);
-Entity *func_800BD490(Entity *this, Unk80076F34 *arg);
-struct Unk800BDA50 *func_800BDA50(struct Unk800BDA50 *this, Unk80076F34 *owner, Vec3 *pos, s32 arg3, s32 arg4);
-Unk800C2F14 *func_800C2FBC(Unk800C2F14 *this, s32 frame, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags);
-Entity *func_800C3654(Entity *this, Vec3 *unk28, Vec3 *unk40, s32 unk20, u32 color, s32 unk18);
-/* An entry of the tables func_800C5680 takes (func_800C5B18 copies up to 4 of them, all but unk10). */
-typedef struct Unk800C5B18Entry {
-    /* 0x00 */ s32 unk0;
-    /* 0x04 */ Vec3 unk4;
-    /* 0x10 */ s32 unk10;
+Fighter *Fighter_init(Fighter *this);
+FighterState *FighterStateGround_init(FighterState *this, s32 arg);
+Entity *ThrowLaunch_init(Entity *this, Fighter *arg, Vec3 *vel, s32 arg3, s32 side);
+void Projectile_hit(Projectile *this, CollisionSphere *sum);
+struct Imperialdramon *Imperialdramon_init(struct Imperialdramon *this);
+Entity *func_800BD490(Entity *this, Fighter *arg);
+struct Unk800BDA50 *func_800BDA50(struct Unk800BDA50 *this, Fighter *owner, Vec3 *pos, s32 arg3, s32 arg4);
+Particle *Particle_initById(Particle *this, s32 anim, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags);
+Entity *Sparkle_init(Entity *this, Vec3 *unk28, Vec3 *unk40, s32 unk20, u32 color, s32 unk18);
+/* A point of the model a trail follows (Trail_init's table; Trail_setPoints copies up to 4, all but the pad): a
+ * model node and an offset from it (Fighter_getNodePosition), and its color. */
+typedef struct TrailPoint {
+    /* 0x00 */ s32 node;
+    /* 0x04 */ Vec3 offset;
+    /* 0x10 */ s32 offsetPad;
     /* 0x14 */ CVECTOR color;
-} Unk800C5B18Entry;
+} TrailPoint;
 
-Entity *func_800C5680(Entity *this, Unk80076F34 *arg, Unk800C5B18Entry *entries, s32 count, s32 arg4, s32 arg5);
+Entity *Trail_init(Entity *this, Fighter *arg, TrailPoint *entries, s32 count, s32 arg4, s32 arg5);
 extern VtableEntry D_8006C9DC[];
 extern EntityVtable D_8006C9FC;
-extern EntityVtable D_8006D4FC;
-extern EntityVtable D_8006D59C;
-extern VtableEntry D_8006D740[];
-extern EntityVtable D_8006D760;
-extern LoadingScreenVtable D_8006DF3C;
+extern EntityVtable HIT_SPARK_VTABLE;
+extern EntityVtable PARTICLE_VTABLE;
+extern VtableEntry PROJECTILE_HIT_VTABLE[];
+extern EntityVtable PROJECTILE_VTABLE;
+extern LoadingScreenVtable FIGHT_LOADING_SCREEN_VTABLE;
 
-/* A class derived from Unk8007F920 (func_8007F6FC), not identified yet. */
-typedef struct Unk8007F6FC {
-    /* 0x00 */ Unk8007F920 base;
-    /* 0x10 */ u8 unk10[0x30 - 0x10];
-    /* 0x30 */ s32 unk30;
-} Unk8007F6FC;
 
-void func_8007F6FC(Unk8007F6FC *this);
+void func_8007F6FC(BattleSide *this);
 
-/* The virtual table of Unk80076F34 (D_8006530C): Entity's four entries, then
- * the class's own methods, which its derived classes override. */
-typedef struct Unk80076F34Vtable {
-    /* 0x000 */ EntityVtable entity;
-    /* 0x020 */ VtableEntry unk20;
-    /* 0x028 */ VtableEntry unk28;
-    /* 0x030 */ VtableEntry unk30;
-    /* 0x038 */ VtableEntry unk38;
-    /* 0x040 */ VtableEntry unk40;
-    /* 0x048 */ VtableEntry unk48;
-    /* 0x050 */ VtableEntry unk50;
-    /* 0x058 */ VtableEntry unk58;
-    /* 0x060 */ VtableEntry unk60;
-    /* 0x068 */ VtableEntry unk68;
-    /* 0x070 */ VtableEntry unk70;
-    /* 0x078 */ VtableEntry unk78;
-    /* 0x080 */ VtableEntry unk80;
-    /* 0x088 */ VtableEntry unk88;
-    /* 0x090 */ VtableEntry unk90;
-    /* 0x098 */ VtableEntry unk98;
-    /* 0x0A0 */ VtableEntry unkA0;
-    /* 0x0A8 */ VtableEntry unkA8;
-    /* 0x0B0 */ VtableEntry unkB0;
-    /* 0x0B8 */ VtableEntry unkB8;
-    /* 0x0C0 */ VtableEntry unkC0;
-    /* 0x0C8 */ VtableEntry unkC8;
-    /* 0x0D0 */ VtableEntry unkD0;
-    /* 0x0D8 */ VtableEntry unkD8;
-    /* 0x0E0 */ VtableEntry unkE0;
-    /* 0x0E8 */ VtableEntry unkE8;
-    /* 0x0F0 */ VtableEntry unkF0;
-    /* 0x0F8 */ VtableEntry unkF8;
-    /* 0x100 */ VtableEntry unk100;
-    /* 0x108 */ VtableEntry unk108;
-    /* 0x110 */ VtableEntry unk110;
-    /* 0x118 */ VtableEntry unk118;
-    /* 0x120 */ VtableEntry unk120;
-    /* 0x128 */ VtableEntry unk128;
-    /* 0x130 */ VtableEntry unk130;
-    /* 0x138 */ VtableEntry unk138;
-} Unk80076F34Vtable;
+/* The virtual table of Fighter (FIGHTER_VTABLE): Entity's four entries, then the class's own methods, which the
+ * fighters override. From handleInput on, each slot is what its FIGHTER_STATE_* runs (and the clip it plays).
+ * The table ends with a zero entry at 0x120; only the classes of fighters 21 and 23 put methods of their own
+ * there (0x120 and 0x128), so their vtable types declare them. */
+typedef struct FighterVtable {
+    /* 0x000 */ EntityVtable entity; /* tick, draw, destroy */
+    /* 0x020 */ VtableEntry endMove;
+    /* 0x028 */ VtableEntry hitOpponent;
+    /* 0x030 */ VtableEntry handleInput;
+    /* 0x038 */ VtableEntry intro;
+    /* 0x040 */ VtableEntry getUp;
+    /* 0x048 */ VtableEntry walkLeft;
+    /* 0x050 */ VtableEntry walkRight;
+    /* 0x058 */ VtableEntry dashLeft;
+    /* 0x060 */ VtableEntry dashRight;
+    /* 0x068 */ VtableEntry jump;
+    /* 0x070 */ VtableEntry crouch;
+    /* 0x078 */ VtableEntry guard;
+    /* 0x080 */ VtableEntry crouchGuard;
+    /* 0x088 */ VtableEntry dizzy;
+    /* 0x090 */ VtableEntry flinch;
+    /* 0x098 */ VtableEntry airFlinch;
+    /* 0x0A0 */ VtableEntry attack1;
+    /* 0x0A8 */ VtableEntry attack2;
+    /* 0x0B0 */ VtableEntry attack3;
+    /* 0x0B8 */ VtableEntry upAttack;
+    /* 0x0C0 */ VtableEntry dashAttack;
+    /* 0x0C8 */ VtableEntry crouchAttack;
+    /* 0x0D0 */ VtableEntry throw;
+    /* 0x0D8 */ VtableEntry special1;
+    /* 0x0E0 */ VtableEntry special2;
+    /* 0x0E8 */ VtableEntry special3;
+    /* 0x0F0 */ VtableEntry airSpecial3;
+    /* 0x0F8 */ VtableEntry airAttack;
+    /* 0x100 */ VtableEntry airUpAttack;
+    /* 0x108 */ VtableEntry airSideAttack;
+    /* 0x110 */ VtableEntry airSpecial1;
+    /* 0x118 */ VtableEntry airSpecial2;
+} FighterVtable;
 
-/* An Unk80076F34's virtual table as its own class sees it. */
-#define UNK80076F34_VTABLE(object) ((Unk80076F34Vtable *)(object)->entity.vtable)
+/* A fighter's virtual table as the base class sees it. */
+#define GET_FIGHTER_VTABLE(object) ((FighterVtable *)(object)->entity.vtable)
 
-/* derived from func_80076F34's class, and the base of func_800C1924's */
-typedef struct Unk800BB034 {
-    /* 0x000 */ Unk80076F34 base;
+/* WarGreymon's class (CHARACTER_WARGREYMON), also the base of BlackWarGreymon's. */
+typedef struct WarGreymon {
+    /* 0x000 */ Fighter base;
     /* 0x4A4 */ s32 unk4A4;
     /* 0x4A8 */ s32 unk4A8;
     /* 0x4AC */ s32 unk4AC;
@@ -750,54 +861,63 @@ typedef struct Unk800BB034 {
     /* 0x4B8 */ s32 unk4B8;
     /* 0x4BC */ s32 unk4BC;
     /* 0x4C0 */ s32 unk4C0;
-} Unk800BB034;
+} WarGreymon;
 
-Unk800BB034 *func_800BB034(Unk800BB034 *this);
+WarGreymon *WarGreymon_init(WarGreymon *this);
 
-/* The entity func_800C49E4 constructs (virtual table D_8006D394) for a
- * character's state object, at the character's position. */
-typedef struct Unk800C49E4 {
+/* The flash of an evolution (TransformFlash_init, virtual table TRANSFORM_FLASH_VTABLE), for a side
+ * (func_8007F7A0) at its fighter's position: in three phases its height eases from the fighter's to its other
+ * form's (CHARA_OTHER_FORM), a burst follows, then it widens and fades. */
+typedef struct TransformFlash {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8007F920 *unk18;
-    /* 0x1C */ Vec3 position; /* the character's (func_800775D8) */
-} Unk800C49E4;
+    /* 0x18 */ BattleSide *side;
+    /* 0x1C */ Vec3 position; /* the fighter's (Fighter_getPosition) */
+    /* 0x28 */ s32 unk28;
+    /* 0x2C */ s32 height;       /* eases to targetHeight */
+    /* 0x30 */ s32 targetHeight; /* the other form's */
+    /* 0x34 */ s32 radius;
+    /* 0x38 */ s32 maxRadius;
+    /* 0x3C */ s32 alpha;
+    /* 0x40 */ s32 phase;        /* 0 to 2 */
+    /* 0x44 */ s32 frame;
+} TransformFlash; /* size 0x48 */
 
-/* The classes func_800AD5BC and func_800893BC construct (virtual tables
- * D_8006B314 and D_80068BAC for their base at 0x18); the methods of
- * D_8006BC34 and D_8006BAE4 (func_800B1FD4, func_800B427C) see the same part. */
+/* The classes func_800AD5BC and GuilmonSpecial2Hitbox_init construct (virtual tables D_8006B314 and
+ * GUILMON_SPECIAL2_HITBOX_HIT_VTABLE for their base at 0x18); StingmonSpecial2Hitbox_hit and
+ * StingmonAttack3Hitbox_hit see the same part. */
 typedef struct Unk800AD5BC {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8007BD8C unk18;
+    /* 0x18 */ Hit unk18;
     /* 0x34 */ u8 unk34[0x44 - 0x34];
     /* 0x44 */ u32 unk44;
 } Unk800AD5BC;
 
 typedef struct Unk800A9944 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8007BD8C unk18;
+    /* 0x18 */ Hit unk18;
     /* 0x34 */ u8 unk34[0x38 - 0x34];
-    /* 0x38 */ Unk80075EE4 unk38;
+    /* 0x38 */ CollisionSphere unk38;
     /* 0x80 */ u8 unk80[0xB4 - 0x80];
     /* 0xB4 */ s32 unkB4;
     /* 0xB8 */ u8 unkB8[0xD4 - 0xB8];
     /* 0xD4 */ u32 unkD4; /* a sound's handle (stopSound) */
 } Unk800A9944;
 
-/* func_800C7024 constructs an entity for chara at position, moving by
+/* Projectile_init constructs an entity for chara at position, moving by
  * velocity; the other four arguments are set by the derived classes. */
-Unk800C7024 *func_800C7024(Unk800C7024 *this, Unk80076F34 *chara, Vec3 *position, Vec3 *velocity, s32 unkA8, u32 unk14,
-                                s32 unkB4, s32 unk1C);
+Projectile *Projectile_init(Projectile *this, Fighter *chara, Vec3 *position, Vec3 *velocity, s32 unkA8, u32 unk14,
+                            s32 unkB4, s32 unk1C);
 
-/* Returns the entity at 0x14 of arg when func_8002BD68 gives 0x10000 for it, else NULL. */
-Entity *func_80078878(Unk80075EE4 *sum);
+/* Returns the entity at 0x14 of arg when entityGetKind gives 0x10000 for it, else NULL. */
+Entity *getHitFighter(CollisionSphere *sum);
 
 /* The entity class func_800BDA50 constructs for a character (virtual table D_8006C9FC; func_800C2264's
- * class, D_8006CFEC, derives from it): Unk8007BD8C at 0x18, a member of func_80075EE4's class at 0x38. */
+ * class, D_8006CFEC, derives from it): Hit at 0x18, a member of CollisionSphere_init's class at 0x38. */
 typedef struct Unk800BDA50 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8007BD8C unk18;
+    /* 0x18 */ Hit unk18;
     /* 0x34 */ u8 unk34[0x38 - 0x34];
-    /* 0x38 */ Unk80075EE4 unk38;
+    /* 0x38 */ CollisionSphere unk38;
     /* 0x80 */ s32 unk80; /* the character's entityGetHandle */
     /* 0x84 */ s32 unk84;
     /* 0x88 */ s32 unk88;
@@ -814,201 +934,219 @@ typedef struct Unk800BDA50 {
     /* 0xC4 */ s32 unkC4;
     /* 0xC8 */ s32 unkC8; /* func_800BDA50's fourth argument */
     /* 0xCC */ s32 unkCC;
-    /* 0xD0 */ s32 vramY; /* func_8007768C of the character */
+    /* 0xD0 */ s32 vramY; /* Fighter_getVramY of the character */
 } Unk800BDA50;
 Entity *func_800BE39C(Entity *this, s32 arg1, Vec3 *position, u32 arg3, s32 arg4, CVECTOR *arg5);
 
-Unk80076444 *func_80076444(Unk80076444 *this);
-s32 func_80076474(Unk80076444 *this, Vec3 *a, Vec3 *b);
+TerrainProbe *TerrainProbe_init(TerrainProbe *this);
+s32 TerrainProbe_cast(TerrainProbe *this, Vec3 *start, Vec3 *end);
 
-/* What func_80075000 constructs, one per character (Unk8006ED20.unk24): the
- * character's pad input, kept by func_8007504C every frame. */
-typedef struct Unk80075000 {
+/* A side's pad input, one per side (Fight.inputs): the buttons of the last 256 frames, kept by
+ * InputHistory_record every frame, and the back searches the fighter states read commands with. */
+typedef struct InputHistory {
     /* 0x000 */ u16 history[256]; /* the buttons held, frame by frame */
     /* 0x200 */ u16 held;
     /* 0x202 */ u16 pressed;  /* held now and not the frame before */
     /* 0x204 */ u16 released; /* held the frame before and not now */
     /* 0x206 */ u8 unk206[2];
     /* 0x208 */ s32 count;    /* the next entry of history, 0 to 255 */
-    /* 0x20C */ s32 unk20C;
-    /* 0x210 */ s32 unk210;
-    /* 0x214 */ u32 unk214;   /* PAD_LEFT | PAD_RIGHT or 0: the buttons func_80075574 swaps */
-} Unk80075000;
+    /* 0x20C */ s32 searchIndex;  /* the entry the next search starts at (InputHistory_startSearch) */
+    /* 0x210 */ s32 searchFrames; /* the frames it may still look back */
+    /* 0x214 */ u32 mirrorButtons; /* PAD_LEFT | PAD_RIGHT or 0: the buttons InputHistory_mirror swaps */
+} InputHistory;
 
-void func_80075034(Unk80075000 *this, s32 swap);
-/* the input of a character of the battle */
-Unk80075000 *func_80073260(Unk8006ED20 *this, s32 index);
-/* the last entry of history, through func_80075574 */
-u32 func_800750C4(Unk80075000 *this);
-/* the buttons pressed (0x202), through func_80075574 */
-u32 func_80075100(Unk80075000 *this);
-void func_8007BDF0(Unk8007BD8C *this, Unk80075EE4 *sum);
-struct Unk8007C17C *func_8007C17C(struct Unk8007C17C *this, s32 arg);
-void func_80078910(void *this, void *arg);
-void func_8006EF90(Unk8006ED20 *object, s32 index, s32 add);
-void func_80079B2C(Unk80076F34 *this, s32 arg);
+void InputHistory_setMirrored(InputHistory *this, s32 swap);
+/* the input history of a side */
+InputHistory *Fight_getInput(Fight *this, s32 side);
+/* the last entry of history, through InputHistory_mirror */
+u32 InputHistory_getHeld(InputHistory *this);
+/* the buttons pressed, through InputHistory_mirror */
+u32 InputHistory_getPressed(InputHistory *this);
+void Hit_apply(Hit *this, CollisionSphere *sum);
+struct ComputerController *ComputerController_init(struct ComputerController *this, struct BattleSide *side);
+void Fighter_handleInput(void *this, void *input);
+void Fight_addScore(Fight *object, s32 index, s32 add);
+void Fighter_setFace(Fighter *this, s32 face);
 /* this->unk334 = arg */
-void func_80079B0C(Unk80076F34 *this, s32 arg);
-void func_80079320(Unk80076F34 *this);
-void func_8007AE34(Unk80076F34 *this);
-s32 func_8007F5A8(Unk8007F184 *this);
-Unk8007F184 *func_8007758C(Unk80076F34 *this);
-void func_8007F1B8(Unk8007F184 *this);
-Unk8007F920 *func_800819E0(Unk8007F920 *this);
-void func_800C9790(Unk80076F34 *this);
-s32 func_800798F4(Unk80076F34 *this, s32 arg);
-s32 func_800778D0(Unk80076F34 *this, s32 arg);
-void func_800788B4(Unk80076F34 *this, s32 arg1, s32 arg2);
-void func_80078848(Unk80076F34 *this, void *arg);
-Unk80076F34 *func_80079CF4(Unk80076F34 *this, s32 index);
-void func_800C99B0(Unk80076F34 *this);
-/* this->unk22C and this->unk230 */
-Unk8007F920 *func_800792A0(Unk80076F34 *this);
-Unk80075000 *func_800776C4(Unk80076F34 *this); /* returns 0x234 */
-void func_8007B2C0(Unk80076F34 *this, s32 arg);
-void func_8007B2EC(Unk80076F34 *this, s32 arg);
-void func_8007F0F4(Unk8007F184 *this, s32 amount);
-void func_8007F1FC(Unk8007F184 *this, s32 amount);
-s32 func_8007FB9C(Unk8007F920 *this);
-void *func_800807F4(Unk8007F920 *this, s32 arg);
-ListNode *func_80075C64(ListNode *head, ListNode *node);
+void func_80079B0C(Fighter *this, s32 arg);
+void Fighter_stopActionClip(Fighter *this);
+void Fighter_detach(Fighter *this);
+s32 BattleSide_canEvolve(BattleSide *this);
+BattleSide *func_8007758C(Fighter *this);
+void func_8007F1B8(BattleSide *this);
+FighterState *FighterAttackIdle_init(FighterState *this);
+void updateItemEffect(Fighter *this);
+s32 Fighter_lacksClip(Fighter *this, s32 clip);
+s32 Fighter_tryUseAirMove(Fighter *this, s32 move);
+void Fighter_setMoveReward(Fighter *this, s32 move, s32 score);
+void Fighter_mirrorInput(Fighter *this, void *input);
+Fighter *Fighter_getOpponentInReach(Fighter *this, s32 index);
+void func_800C99B0(Fighter *this);
+/* the body state (the attack state: Fighter_getAttackState, in fighter.c) */
+FighterState *Fighter_getBodyState(Fighter *this);
+InputHistory *Fighter_getInput(Fighter *this);
+void Fighter_guard(Fighter *this, s32 frame);
+void Fighter_crouchGuard(Fighter *this, s32 frame);
+void BattleSide_addLife(BattleSide *this, s32 amount);
+void BattleSide_addGauge(BattleSide *this, s32 amount);
+s32 FighterState_getClip(FighterState *this);
+void *FighterStateHeld_init(FighterState *this, s32 arg);
+ListNode *listAppend(ListNode *head, ListNode *node);
 
-u32 func_8006F004(Unk8006ED20 *this);
+u32 Fight_random(Fight *this);
 
-void func_8006F024(Unk8006ED20 *this, ListNode *node);
+void Fight_addSide1Shape(Fight *this, ListNode *node);
 
-void func_8006F044(Unk8006ED20 *this, ListNode *node);
+void Fight_addSide0Shape(Fight *this, ListNode *node);
 
-Entity *func_8006F084(Unk8006ED20 *this, Entity *entity);
+Entity *Fight_addStageEntity(Fight *this, Entity *entity);
 
-Entity *func_8006F0B4(Unk8006ED20 *this, Entity *entity);
+Entity *Fight_addEntity(Fight *this, Entity *entity);
 
-EntityGroup *func_8006F0E4(Unk8006ED20 *this, Entity *entity);
+EntityGroup *func_8006F0E4(Fight *this, Entity *entity);
 
-s32 func_8006F104(Unk8006ED20 *this);
+s32 func_8006F104(Fight *this);
 
-s32 func_8006F190(Unk8006ED20 *this);
+s32 Fight_isRoundOver(Fight *this);
 
-Unk80076F34 *func_800700C8(Unk8006ED20 *this, s32 side);
+Fighter *Fight_getFighter(Fight *this, s32 side);
 
-void func_8007504C(Unk80075000 *this, u32 buttons);
-void func_8007F22C(Unk8007F184 *this);
+void InputHistory_record(InputHistory *this, u32 buttons);
+void BattleSide_tickGauges(BattleSide *this);
 
-void func_8007A158(Unk80076F34 *chara, Unk80076F34 *other);
+void func_8007A158(Fighter *chara, Fighter *other);
 
-void func_80079268(Unk80076F34 *chara);
-/* the constructor of the 0x59C-byte entity class Unk800CB7B0 (declared below) */
-Entity *func_800CB7B0(void *this, s32 arg1, s32 arg2);
+void func_80079268(Fighter *chara);
+/* The battle's messages (BattleMessage_init's kind): each indexes BATTLE_MESSAGE_LAYOUTS, _TICKS and _DRAWS. */
+enum BattleMessageKind {
+    BATTLE_MESSAGE_READY_FIGHT,    /* the round's call, READY? then FIGHT! */
+    BATTLE_MESSAGE_NEW_CHALLENGER, /* a second player joins */
+    BATTLE_MESSAGE_EVOLUTION,
+    BATTLE_MESSAGE_KO,
+    BATTLE_MESSAGE_YOU_WIN,
+    BATTLE_MESSAGE_YOU_LOSE,
+    BATTLE_MESSAGE_P1_WIN, /* P1_WIN + side: keep P2_WIN next to it */
+    BATTLE_MESSAGE_P2_WIN,
+    BATTLE_MESSAGE_TIME_UP,
+    BATTLE_MESSAGE_DRAW_GAME,
+    BATTLE_MESSAGE_DOUBLE_KO,
+    BATTLE_MESSAGE_GAME_OVER,
+    BATTLE_MESSAGE_DEMONSTRATION
+};
 
-Vec3 *func_800765B4(Unk80076444 *this, Vec3 *out);
+/* Constructs a battle message (a 0x59C-byte BattleMessage, hud.c) of a BATTLE_MESSAGE_* kind; character picks
+ * the EVOLUTION message's palette. */
+Entity *BattleMessage_init(void *this, s32 kind, s32 character);
 
-s32 func_80072F80(Vec3 *a, Vec3 *b);
+Vec3 *TerrainProbe_getHitPoint(TerrainProbe *this, Vec3 *out);
 
-void func_80073288(Unk8006ED20 *this);
+s32 castMapRay(Vec3 *to, Vec3 *from);
 
-void func_8007329C(Unk8006ED20 *this);
+void Fight_freezeFighters(Fight *this);
 
-void func_800732B0(Unk8006ED20 *this);
+void Fight_unfreezeFighters(Fight *this);
 
-MATRIX *func_80076598(Unk80076444 *this);
+void Fight_holdClock(Fight *this);
 
-void func_800773F4(Unk80076F34 *this, s32 arg);
+MATRIX *TerrainProbe_getMatrix(TerrainProbe *this);
 
-void func_80077424(Unk80076F34 *this, s32 arg);
+void Fighter_addScore(Fighter *this, s32 points);
 
-void func_80077448(Unk80076F34 *this, s32 arg);
+void Fighter_addHp(Fighter *this, s32 amount);
 
-void func_8007746C(Unk80076F34 *this);
+void Fighter_addGauge(Fighter *this, s32 amount);
 
-void func_800774C0(Unk80076F34 *this, s32 unk0, s32 unk4, s32 unk8);
+void Fighter_evolveIfReady(Fighter *this);
 
-void func_80077508(Unk80076F34 *this);
+void Fighter_startItemEffect(Fighter *this, s32 kind, s32 timer, s32 power);
 
-s32 func_80077598(Unk80076F34 *this);
+void func_80077508(Fighter *this);
 
-void func_800775B0(Unk80076F34 *chara, Vec3 *in);
+s32 Fighter_isComputer(Fighter *this);
 
-s32 func_800777BC(Unk80076F34 *this);
+void Fighter_setPosition(Fighter *chara, Vec3 *in);
 
-/* Bits of the flags at 0x37C, named after the functions that set them. The USA release has one more flag
+s32 func_800777BC(Fighter *this);
+
+/* Bits of Fighter.flags, named after the functions that set them. The USA release has one more flag
  * below them, so each is one bit higher there. */
 #if VERSION_JP
-#define UNK80076F34_FLAG_A78_BIT 4
-#define UNK80076F34_FLAG_AF8_BIT 5
-#define UNK80076F34_FLAG_AE4_BIT 6
+#define FIGHTER_FLAG_FROZEN_BIT 4
+#define FIGHTER_FLAG_80079AF8_BIT 5
+#define FIGHTER_FLAG_80079AE4_BIT 6
 #else
-#define UNK80076F34_FLAG_A78_BIT 5
-#define UNK80076F34_FLAG_AF8_BIT 6
-#define UNK80076F34_FLAG_AE4_BIT 7
+#define FIGHTER_FLAG_FROZEN_BIT 5
+#define FIGHTER_FLAG_80079AF8_BIT 6
+#define FIGHTER_FLAG_80079AE4_BIT 7
 #endif
 
-s32 func_800778BC(Unk80076F34 *this);
+s32 Fighter_isOnGround(Fighter *this);
 
-s32 func_8007AED0(Unk80076F34 *this);
+s32 Fighter_isAttackIdle(Fighter *this);
 
-s32 func_80078DE0(Unk80076F34 *this);
+s32 Fighter_isGuarding(Fighter *this);
 
-void *func_80079274(Unk80076F34 *this, s32 arg);
+void *Fighter_hold(Fighter *this, s32 arg);
 
-s32 func_800792B8(Unk80076F34 *this);
+s32 Fighter_getBodyStateId(Fighter *this);
 
-s32 func_800792DC(Unk80076F34 *this);
+s32 Fighter_getAttackStateId(Fighter *this);
 
-s32 func_80079A0C(Unk80076F34 *this);
+s32 Fighter_isActionClipDone(Fighter *this);
 
-s32 func_800799A0(Unk80076F34 *this);
+s32 Fighter_isClipDone(Fighter *this);
 
-Unk80076F34 *func_80073218(Unk8006ED20 *this, Unk80076F34 *chara);
-s32 func_80079D94(Unk80076F34 *this);
-s32 func_80079DD8(Unk80076F34 *this);
-Unk80076F34 *func_80079E50(Unk80076F34 *this, VECTOR *arg1, s32 arg2, s32 arg3);
+Fighter *Fight_getOpponent(Fight *this, Fighter *chara);
+s32 Fighter_isThrowable(Fighter *this);
+s32 func_80079DD8(Fighter *this);
+Fighter *func_80079E50(Fighter *this, VECTOR *arg1, s32 arg2, s32 arg3);
 
-s32 func_80079E2C(Unk80076F34 *this);
+s32 func_80079E2C(Fighter *this);
 
-void func_8007A0E4(Unk80076F34 *this, s32 arg);
+void Fighter_setAttackParts(Fighter *this, s32 parts);
 
-void func_8007A718(Unk80076F34 *this);
+void func_8007A718(Fighter *this);
 
-Vec3 *func_8007A650(Unk80076F34 *this, Vec3 *out);
+Vec3 *func_8007A650(Fighter *this, Vec3 *out);
 
-Vec3 *func_8007A69C(Unk80076F34 *this, Vec3 *out);
+Vec3 *Fighter_getOpponentPosition(Fighter *this, Vec3 *out);
 
-Vec3 *func_8007A6CC(Unk80076F34 *this, Vec3 *out);
+Vec3 *func_8007A6CC(Fighter *this, Vec3 *out);
 
-void func_8007AD4C(Unk80076F34 *this, Entity *entity);
-struct Unk800C5DF4;
-struct Unk800C5DF4 *func_800C5DF4(struct Unk800C5DF4 *this, s32 arg1, Vec3 *vec1, Vec3 *vec2, s32 arg4, s32 arg5,
-                                  s32 arg6);
-struct Unk800C32E0 *func_800C32E0(struct Unk800C32E0 *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color);
+void Fighter_addEntity(Fighter *this, Entity *entity);
+struct ParticleSpray;
+struct ParticleSpray *ParticleSpray_init(struct ParticleSpray *this, s32 kind, Vec3 *pos, Vec3 *vel, s32 size,
+                                         s32 count, s32 color);
+struct HitSpark *HitSpark_init(struct HitSpark *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color);
 
 extern EntityVtable D_8006D4D4;
 
-void func_8007B9C8(Unk80076F34 *this, s32 arg);
+void Fighter_special1(Fighter *this, s32 arg);
 
-void func_8007BA30(Unk80076F34 *this, s32 arg);
+void Fighter_special3(Fighter *this, s32 arg);
 
-void func_8007BA64(Unk80076F34 *this, s32 arg);
+void Fighter_airSpecial3(Fighter *this, s32 arg);
 
-void func_8007BBE8(Unk80076F34 *this, s32 arg);
+void Fighter_airSpecial1(Fighter *this, s32 arg);
 
-void func_8007BC1C(Unk80076F34 *this, s32 arg);
+void Fighter_airSpecial2(Fighter *this, s32 arg);
 
-void func_80078EF8(Unk80076F34 *this, u32 unk, Vec3 *velocity, s32 unk3);
+void Fighter_takeHit(Fighter *this, u32 unk, Vec3 *velocity, s32 unk3);
 
-void func_8007BDC8(Unk8007BD8C *this, s32 unk8, s32 unkC);
+void Hit_set(Hit *this, s32 damage, s32 kind);
 
-Unk8007BF20 *func_8007BF20(Unk8007BF20 *this, Unk80076F34 *chara, s32 unk8, Vec3 *unk10, s32 unkC);
+TrackedHit *TrackedHit_init(TrackedHit *this, Fighter *owner, s32 damage, Vec3 *knockback, s32 kind);
 
-Unk8007C084 *func_8007C084(Unk8007C084 *object, s32 unk0);
+Controller *Controller_init(Controller *this, struct BattleSide *side);
 
-void func_8007C09C(Unk8007C084 *this, s32 flags);
+void Controller_destroy(Controller *this, s32 flags);
 
-Unk80075EE4 *func_80075D44(ListNode *list, Vec3 *point, Vec3 *nearest);
+CollisionSphere *shapeListFindNearest(ListNode *list, Vec3 *point, Vec3 *nearest);
 
-Unk800C49E4 *func_800C49E4(Unk800C49E4 *this, Unk8007F920 *owner);
+TransformFlash *TransformFlash_init(TransformFlash *this, BattleSide *owner);
 
-/* The entity class func_800C4F74 constructs for an object of a character (0x4A8 bytes, virtual table
- * D_8006D36C). */
+/* The entity class func_800C4F74 constructs for a side (0x4A8 bytes, virtual table D_8006D36C; func_8007F7F4
+ * makes one when an evolved form's gauge runs out). */
 typedef struct Unk800C4F74 {
     /* 0x000 */ Entity entity;
     /* 0x018 */ u8 unk18[0x488 - 0x18];
@@ -1016,63 +1154,63 @@ typedef struct Unk800C4F74 {
     /* 0x48C */ u8 unk48C[0x4A8 - 0x48C];
 } Unk800C4F74;
 
-Unk800C4F74 *func_800C4F74(Unk800C4F74 *this, Unk8007F920 *owner);
-void func_80079B14(Unk80076F34 *this, s32 arg);
-void func_80079B1C(Unk80076F34 *this, s32 arg);
+Unk800C4F74 *func_800C4F74(Unk800C4F74 *this, BattleSide *owner);
+void func_80079B14(Fighter *this, s32 arg);
+void func_80079B1C(Fighter *this, s32 arg);
 
-void func_80079534(Unk80076F34 *this, Unk80076F34 *previous);
+void Fighter_takeOverFrom(Fighter *this, Fighter *previous);
 
-void func_8007516C(Unk80075000 *this, s32 frames);
-s32 func_800751A8(Unk80075000 *this, u32 buttons, s32 any);
-s32 func_80075454(Unk80075000 *this, u32 buttons, s32 count, s32 any);
-void func_800797B8(Unk80076F34 *this, s32 clip);
-s32 func_8007F1C0(Unk8007F184 *this);
+void InputHistory_startSearch(InputHistory *this, s32 frames);
+s32 InputHistory_findHeld(InputHistory *this, u32 buttons, s32 any);
+s32 InputHistory_findPresses(InputHistory *this, u32 buttons, s32 count, s32 any);
+void func_800797B8(Fighter *this, s32 clip);
+s32 func_8007F1C0(BattleSide *this);
 
-s32 func_80077848(Unk80076F34 *this);
-void func_8007A12C(Unk80076F34 *this, s32 arg);
+s32 Fighter_probeFloorBelow(Fighter *this);
+void func_8007A12C(Fighter *this, s32 arg);
 
-/* Creates an entity of func_80082EE8's class (0x34 bytes) with g++'s new, and hands it to func_8007AD4C: it
- * launches the Unk80076F34 of func_8007AEEC with vel. The match depends on this helper: its vel parameter keeps
+/* Creates an entity of ThrowLaunch_init's class (0x34 bytes) with g++'s new, and hands it to Fighter_addEntity: it
+ * launches the Fighter of Fighter_getOpponent with vel. The match depends on this helper: its vel parameter keeps
  * &vel in a saved register across allocEntityMemory. */
-static inline void newLaunch(Unk80076F34 *this, Vec3 *vel, s32 side) {
+static inline void newLaunch(Fighter *this, Vec3 *vel, s32 side) {
     Entity *child = allocEntityMemory(0x34);
 
     if (child != NULL) {
-        func_80082EE8(entityOperatorNewAt(0x34, child), this, vel, 0x808C2000, side);
+        ThrowLaunch_init(entityOperatorNewAt(0x34, child), this, vel, 0x808C2000, side);
     }
-    func_8007AD4C(this, child);
+    Fighter_addEntity(this, child);
 }
 
-void func_800C71DC(Unk800C7024 *this, s32 arg);
+void Projectile_tick(Projectile *this, s32 arg);
 
-Entity *func_800C75FC(Entity *target, Vec3 *arg1, s32 arg2);
-void func_800C77C8(Unk8006ED20 *this, void *arg1, s32 arg2);
+Entity *createHitSpark(Entity *target, Vec3 *arg1, s32 arg2);
+void createItemSpawner(Fight *this, void *arg1, s32 arg2);
 
-extern EntityVtable D_8006D574;
+extern EntityVtable SPIN_PARTICLE_VTABLE;
 
-/* The constructor of the grey particle class of vtable D_8006D574, which the game inlines (func_800C28B8,
- * func_800C811C; out-of-line copy func_800C691C): func_800C2FBC on frame, color 0x808080 and no flags. */
+/* The constructor of the grey particle class of vtable SPIN_PARTICLE_VTABLE, which the game inlines (createParticle,
+ * func_800C811C; out-of-line copy SpinParticle_initGrey): Particle_initById on frame, color 0x808080 and no flags. */
 static inline void func_8006D574_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
-    func_800C2FBC((Unk800C2F14 *)this, frame, pos, vel, size, 0x808080, 0);
-    this->vtable = &D_8006D574;
+    Particle_initById((Particle *)this, frame, pos, vel, size, 0x808080, 0);
+    this->vtable = &SPIN_PARTICLE_VTABLE;
 }
 
-/* The constructor of the entity class of vtable D_8006D4D4, which the game inlines: func_800C2FBC with frame 8,
- * no velocity (D_80010814), size 0x40, color 0xA0A0A0 and no flags. */
+/* The constructor of the entity class of vtable D_8006D4D4, which the game inlines: Particle_initById with frame 8,
+ * no velocity (ZERO_VECTOR), size 0x40, color 0xA0A0A0 and no flags. */
 static inline void func_8006D4D4_init(Entity *this, VECTOR *pos) {
-    func_800C2FBC((Unk800C2F14 *)this, 8, pos, &D_80010814, 0x40, 0xA0A0A0, 0);
+    Particle_initById((Particle *)this, 8, pos, &ZERO_VECTOR, 0x40, 0xA0A0A0, 0);
     this->vtable = &D_8006D4D4;
 }
 
-/* The character class func_8008D21C constructs (virtual table D_8006938C); func_80091A44's derives
- * from it. */
-typedef struct Unk8008D21C {
-    /* 0x000 */ Unk80076F34 base;
-    /* 0x4A4 */ u16 unk4A4;
-    /* 0x4A6 */ u16 unk4A6;
-    /* 0x4A8 */ u16 unk4A8;
-    /* 0x4AA */ u16 unk4AA;
-    /* 0x4AC */ u16 unk4AC; /* halfword stores in func_8008D2D0 and func_8008DE84 */
+/* Imperialdramon's class (CHARACTER_IMPERIALDRAMON); ImperialdramonPaladinMode's is the same class with its own
+ * vtable. The fields from 0x4A6 are the special move 3's hold (Imperialdramon_special3Hold). */
+typedef struct Imperialdramon {
+    /* 0x000 */ Fighter base;
+    /* 0x4A4 */ u16 unk4A4;          /* frame 0 of the hold clears it; while set the hold does not carry */
+    /* 0x4A6 */ u16 special3Parts;   /* the attack parts of the hold's current hit (Fighter_setAttackParts) */
+    /* 0x4A8 */ u16 holding;         /* set when the hold grabs the opponent (Fighter_hold) */
+    /* 0x4AA */ u16 hitPending;      /* set by the hold's hits, cleared once their sparks are spawned */
+    /* 0x4AC */ u16 special3Active;  /* set every frame of the hold; endMove lets the opponent go while it is set */
     /* 0x4AE */ s16 unk4AE;
     /* 0x4B0 */ s32 unk4B0;
     /* 0x4B4 */ s32 unk4B4;
@@ -1082,53 +1220,60 @@ typedef struct Unk8008D21C {
     /* 0x4C4 */ s32 unk4C4;
     /* 0x4C8 */ s32 unk4C8;
     /* 0x4CC */ s32 unk4CC;
-    /* 0x4D0 */ Vec3 unk4D0; /* func_8008DD50 hands it to func_80079C1C as the force */
+    /* 0x4D0 */ Vec3 carryForce;     /* func_8008DD50 hands it to func_80079C1C as the force */
     /* 0x4DC */ s32 unk4DC;
-    /* 0x4E0 */ Vec3 unk4E0; /* and this as the velocity */
+    /* 0x4E0 */ Vec3 carryVelocity;  /* and this as the velocity */
     /* 0x4EC */ s32 unk4EC;
-    /* 0x4F0 */ s32 unk4F0; /* the partner's x when func_8008DE84's step 0 runs */
-} Unk8008D21C;
+    /* 0x4F0 */ s32 opponentStartX;  /* the opponent's x at the hold's frame 0 */
+} Imperialdramon;
 
-void func_8008D27C(Entity *this, s32 flags);
-Unk800C2F14 *func_800C2F14(Unk800C2F14 *this, u16 *frame, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags);
+void Imperialdramon_destroy(Entity *this, s32 flags);
+Particle *Particle_init(Particle *this, u16 *anim, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags);
 
-void func_800C3134(Unk800C2F14 *this, s32 arg);
+void Particle_tick(Particle *this, s32 arg);
 
-void func_800C73A8(Unk800C7024 *this, s32 arg);
+void Projectile_spawnBurst(Projectile *this, s32 arg);
 
 extern VECTOR AXIS_Z;
 
-void func_800C7474(Unk800C7024 *this, Entity *target);
+void Projectile_spawnHitSpark(Projectile *this, Entity *target);
 
 void func_800A9428(Unk800A9944 *this, s32 flags);
 
-/* The entity func_800C5680 constructs for a character (virtual table D_8006D33C, 0x690 bytes): up to 4 entries of
- * a table copied at 0x30 (func_800C5B18). */
-typedef struct Unk800C5680 {
-    /* 0x000 */ Entity entity;
-    /* 0x018 */ Unk80076F34 *chara;
-    /* 0x01C */ s32 unk1C; /* -1 from func_800C5680 */
-    /* 0x020 */ s32 unk20; /* func_800C5680's fifth argument, at most 32; counted down once unk24 runs out */
-    /* 0x024 */ s32 unk24; /* func_800C5680's sixth argument, a timer counted down every frame (func_800C5778) */
-    /* 0x028 */ s32 unk28;
-    /* 0x02C */ s32 count; /* the entries in use */
-    /* 0x030 */ Unk800C5B18Entry entries[4];
-    /* 0x090 */ u8 unk90[0x690 - 0x90];
-} Unk800C5680; /* size 0x690 */
-void func_800C5778(Unk800C5680 *this, Unk80075EE4 *sum);
+/* A sample of a trail: where one of its points was, and its color then. */
+typedef struct TrailSample {
+    /* 0x0 */ s16 x, y, z, pad;
+    /* 0x8 */ CVECTOR color;
+} TrailSample; /* size 0xC */
 
-/* The entity func_800C32E0 constructs (virtual table D_8006D4FC): a sprite with frame 7 of D_8006D5C4, turned the
- * way of its direction. */
-typedef struct Unk800C32E0 {
+/* A fighter's motion trail (Trail_init, virtual table TRAIL_VTABLE, 0x690 bytes): while recordTimer runs it
+ * records up to 4 model points a frame into rings of 32 samples, their colors fading along it; then it shrinks
+ * and dies. */
+typedef struct Trail {
+    /* 0x000 */ Entity entity;
+    /* 0x018 */ Fighter *fighter;
+    /* 0x01C */ s32 head;        /* the ring index last recorded; -1 from Trail_init */
+    /* 0x020 */ s32 length;      /* the samples drawn, at most 32; counted down once recordTimer runs out */
+    /* 0x024 */ s32 recordTimer; /* counted down every frame (Trail_tick) */
+    /* 0x028 */ s32 validCount;  /* the samples recorded since the last jump (Trail_record) */
+    /* 0x02C */ s32 pointCount;  /* the points in use */
+    /* 0x030 */ TrailPoint points[4];
+    /* 0x090 */ TrailSample samples[4][32];
+} Trail; /* size 0x690 */
+void Trail_tick(Trail *this, CollisionSphere *sum);
+
+/* The entity HitSpark_init constructs (virtual table HIT_SPARK_VTABLE): a sprite with frame 7 of PARTICLE_ANIMS, turned
+ * the way of its direction. */
+typedef struct HitSpark {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk800C2CCC sprite;
-    /* 0x40 */ s32 unk40;
-    /* 0x44 */ s32 unk44;
-} Unk800C32E0; /* size 0x48 */
+    /* 0x18 */ SpriteAnim sprite;
+    /* 0x40 */ s32 targetSize; /* the size eases to it */
+    /* 0x44 */ s32 age;        /* deleted at 5 */
+} HitSpark; /* size 0x48 */
 
 Entity *func_800C391C(Entity *this, Vec3 *arg1, Vec3 *arg2, s32 arg3, s32 arg4);
 
-s32 func_800C7358(Unk800C7024 *this);
+s32 Projectile_getBurstKind(Projectile *this);
 
 EXTERN_C_END
 

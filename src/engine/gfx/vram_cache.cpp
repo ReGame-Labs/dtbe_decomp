@@ -19,12 +19,12 @@ Cache *cacheInit(Cache *cache, RECT *areas, s32 count, s32 cellWidth, s32 cellHe
 
     cache->vtable = &CACHE_VTABLE;
     for (i = 0; i < count; i++) {
-        pageCount += func_8002EB94(&areas[i], TPAGE_WSHIFT, TPAGE_HSHIFT);
+        pageCount += cacheCountCells(&areas[i], TPAGE_WSHIFT, TPAGE_HSHIFT);
     }
     RECT pages[pageCount];
     RECT *page = pages;
     for (i = 0; i < count; i++) {
-        page = func_8002EC00(page, areas++, TPAGE_WSHIFT, TPAGE_HSHIFT);
+        page = cacheSplitCells(page, areas++, TPAGE_WSHIFT, TPAGE_HSHIFT);
     }
     page = pages;
     u32 slotCount = 0;
@@ -220,7 +220,7 @@ CacheSlot *removeHighestSlot(CacheSlot **link) {
 
 /* rectCountCells again: the number of (1 << widthShift) x (1 << heightShift)
  * aligned cells that rect touches. */
-s32 func_8002EB94(RECT *rect, s32 widthShift, s32 heightShift) {
+s32 cacheCountCells(RECT *rect, s32 widthShift, s32 heightShift) {
     s32 cellWidth = 1 << widthShift;
     s32 cellHeight = 1 << heightShift;
     s32 cols = ((-cellWidth & (rect->x + rect->w + cellWidth - 1)) - (-cellWidth & rect->x)) >> widthShift;
@@ -232,7 +232,7 @@ s32 func_8002EB94(RECT *rect, s32 widthShift, s32 heightShift) {
 /* rectSplitCells again: splits rect at the
  * (1 << widthShift) x (1 << heightShift) aligned cells it touches, column by
  * column, into out; returns the end of what it wrote. */
-RECT *func_8002EC00(RECT *out, RECT *rect, s32 widthShift, s32 heightShift) {
+RECT *cacheSplitCells(RECT *out, RECT *rect, s32 widthShift, s32 heightShift) {
     s32 cellWidth = 1 << widthShift;
     s32 cellHeight = 1 << heightShift;
     s32 cols = ((-cellWidth & (rect->x + rect->w + cellWidth - 1)) - (-cellWidth & rect->x)) >> widthShift;

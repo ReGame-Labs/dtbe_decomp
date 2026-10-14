@@ -1,1 +1,37 @@
 // st09.bin's own names (config/jp/st09.yaml)
+
+// the names tools/rename.py gave (tools/renames/), in address order
+JEWEL_HUNT_CONTROLLER_VTABLE = 0x800D3904;
+BONUS_LANDING_MARK_VTABLE = 0x800D3924;
+BONUS_THROWER_VTABLE = 0x800D394C;
+ST09_THROW_VTABLE = 0x800D3974;
+STAGE_JEWEL_HUNT_VTABLE = 0x800D39EC;
+JewelHuntController_init = 0x800D3A64; // type:func
+JewelHuntController_getButtons = 0x800D3AB0; // type:func
+StageJewelHunt_init = 0x800D3D58; // type:func
+StageJewelHunt_createController = 0x800D4070; // type:func
+StageJewelHunt_destroy = 0x800D40A4; // type:func
+StageJewelHunt_startRound = 0x800D41E4; // type:func
+st09_clearFrames = 0x800D4268; // type:func
+StageJewelHunt_tickScenery = 0x800D4270; // type:func
+StageJewelHunt_tick = 0x800D43CC; // type:func
+StageJewelHunt_drawWorld = 0x800D4458; // type:func
+st09_resetCharge = 0x800D46D0; // type:func
+st09_createThrowers = 0x800D46EC; // type:func
+st09_updateCharge = 0x800D48A4; // type:func
+St09Throw_init = 0x800D4B78; // type:func
+St09Throw_destroy = 0x800D4CDC; // type:func
+St09Throw_tick = 0x800D4D30; // type:func
+St09Throw_draw = 0x800D4EC8; // type:func
+BonusThrower_init = 0x800D5068; // type:func
+BonusThrower_destroy = 0x800D5104; // type:func
+BonusThrower_tick = 0x800D5158; // type:func
+BonusThrower_throw = 0x800D5190; // type:func
+BonusThrower_place = 0x800D5410; // type:func
+BonusThrower_draw = 0x800D5550; // type:func
+Unk800D6360_getLocalMatrix = 0x800D6360; // type:func
+BonusLandingMark_init = 0x800D63D4; // type:func
+BonusLandingMark_destroy = 0x800D647C; // type:func
+BonusLandingMark_tick = 0x800D64D0; // type:func
+BonusLandingMark_draw = 0x800D6538; // type:func
+JewelHuntController_destroy = 0x800D6724; // type:func

@@ -1,0 +1,879 @@
+# src/battle/fighters/: the 24 fighters, run with --overlay game. Each file's class is the character of its
+# CHARACTER_* id: createFighter's switch builds fighter NN's class for id NN, and the per-character tamer table
+# (CHARACTER_TAMERS) agrees. A class's methods take FighterVtable's slot names (its vtable's entry for that
+# slot); the faces table is the one the constructor gives Fighter_setFaceTable. A fighter's own entity classes are
+# named <Character><Move><Kind>: the move whose method spawns them, and the kind by what they derive from
+# (Projectile, Particle; Hitbox: Entity + Hit + CollisionSphere; Effect: Entity only, it only draws). Their
+# methods: entity slots tick/draw/destroy, the Hit vtable's (X_HIT_VTABLE) slot 0x08 `hit`; spawners
+# <Character>_spawn<Class>: they only allocate, construct and Fighter_addEntity it.
+
+# agumon.c
+func_800827EC Agumon_init
+D_8006843C AGUMON_VTABLE
+D_800681DC AGUMON_FACES
+func_80083D4C Agumon_destroy
+func_80082830 Agumon_endMove
+func_80082850 Agumon_throw
+func_800829A0 Agumon_special1
+func_80082C10 Agumon_special2
+func_80082A30 Agumon_airSpecial1
+# the throw's launch of the held opponent (newLaunch, the throws of this file and gabumon.c)
+func_80082EE8 ThrowLaunch_init
+D_80068414 THROW_LAUNCH_VTABLE
+func_80082FF0 ThrowLaunch_tick
+func_80083D94 ThrowLaunch_destroy
+# special1 / airSpecial1 call func_80082AF8 at their frame 13 / 7: it fires the projectile and its burst; the
+# projectile's hit spawns the burst again
+func_80082AF8 Agumon_spawnSpecial1Projectile
+func_80083108 AgumonSpecial1Projectile_init
+Unk80083108 AgumonSpecial1Projectile
+D_800683EC AGUMON_SPECIAL1_PROJECTILE_VTABLE
+func_80083170 AgumonSpecial1Projectile_tick
+func_80083248 AgumonSpecial1Projectile_draw
+func_80083DDC AgumonSpecial1Projectile_destroy
+D_800683CC AGUMON_SPECIAL1_PROJECTILE_HIT_VTABLE
+func_800831C4 AgumonSpecial1Projectile_hit
+func_800833F8 AgumonSpecial1Effect_init
+Unk800833F8 AgumonSpecial1Effect
+D_800683A4 AGUMON_SPECIAL1_EFFECT_VTABLE
+func_80083488 AgumonSpecial1Effect_tick
+func_800834E4 AgumonSpecial1Effect_draw
+func_80083E7C AgumonSpecial1Effect_destroy
+# special2 spawns its effect at frames 1, 16 and 39 (func_80082E8C), and at frames 3, 16 and 35 sets hit 0, 1, 2
+# of D_80068334 (rows of 6 words: force x (by facing), y, the hit's damage and kind, knockback x (by facing), y)
+func_80082E8C Agumon_spawnSpecial2Effect
+func_80082DBC Agumon_startSpecial2Hit
+D_80068334 AGUMON_SPECIAL2_HITS
+func_80083700 AgumonSpecial2Effect_init
+Unk80083700 AgumonSpecial2Effect
+D_8006837C AGUMON_SPECIAL2_EFFECT_VTABLE
+func_80083790 AgumonSpecial2Effect_tick
+func_800838A8 AgumonSpecial2Effect_draw
+func_80083EC4 AgumonSpecial2Effect_destroy
+
+# dukemon.c
+func_80083F0C Dukemon_init
+D_80068784 DUKEMON_VTABLE
+Unk80083F0C Dukemon
+func_80083F48 Dukemon_destroy
+func_80083F9C Dukemon_endMove
+func_80083FA4 Dukemon_dashLeft
+func_80083FDC Dukemon_dashRight
+func_80084068 Dukemon_attack3
+func_80084014 Dukemon_dashAttack
+func_80084200 Dukemon_throw
+func_8008439C Dukemon_special1
+func_80084558 Dukemon_special2
+func_8008499C Dukemon_special3
+func_80084694 Dukemon_airUpAttack
+func_80084838 Dukemon_airSpecial2
+# the Trail spawners: special1 (frame 5) and airUpAttack spawn one, special2 / airSpecial2 two, attack3 two and a
+# sound; the others spawn the class named after them (special1 frames 6-13, special2 frame 0, special3)
+func_80084B4C Dukemon_spawnTrail
+func_80084D00 Dukemon_spawnSpecial2Trails
+func_80084FE8 Dukemon_spawnAttack3Trails
+func_80084C04 Dukemon_spawnSpecial1Effect
+func_80084C74 Dukemon_spawnSpecial2Effect
+func_80084F28 Dukemon_spawnSpecial3Hitbox
+func_8008514C DukemonSpecial1Effect_init
+D_8006875C DUKEMON_SPECIAL1_EFFECT_VTABLE
+func_80085314 DukemonSpecial1Effect_tick
+func_800854B4 DukemonSpecial1Effect_draw
+func_800852C0 DukemonSpecial1Effect_destroy
+func_800856D0 DukemonSpecial2Effect_init
+Unk800856D0 DukemonSpecial2Effect
+D_80068734 DUKEMON_SPECIAL2_EFFECT_VTABLE
+func_800857B4 DukemonSpecial2Effect_tick
+func_80085848 DukemonSpecial2Effect_draw
+func_80085760 DukemonSpecial2Effect_destroy
+func_800868EC DukemonSpecial3Hitbox_init
+D_800686BC DUKEMON_SPECIAL3_HITBOX_VTABLE
+func_80086B20 DukemonSpecial3Hitbox_tick
+func_80086E48 DukemonSpecial3Hitbox_draw
+func_80086A80 DukemonSpecial3Hitbox_destroy
+D_8006869C DUKEMON_SPECIAL3_HITBOX_HIT_VTABLE
+func_80086CB0 DukemonSpecial3Hitbox_hit
+
+# gabumon.c (special1 / airSpecial1 call func_80087400 at frame 14, special2 calls func_80087634)
+func_800870F0 Gabumon_init
+D_800689F4 GABUMON_VTABLE
+D_8006894C GABUMON_FACES
+Unk800870F0 Gabumon
+func_80088094 Gabumon_destroy
+func_80087138 Gabumon_endMove
+func_80087158 Gabumon_throw
+func_800872A8 Gabumon_special1
+func_80087498 Gabumon_special2
+func_80087338 Gabumon_airSpecial1
+func_80087400 Gabumon_spawnSpecial1Projectile
+func_80087634 Gabumon_spawnSpecial2Effect
+func_80087690 GabumonSpecial1Projectile_init
+D_800689CC GABUMON_SPECIAL1_PROJECTILE_VTABLE
+func_800876F4 GabumonSpecial1Projectile_draw
+func_800880DC GabumonSpecial1Projectile_destroy
+D_800689AC GABUMON_SPECIAL1_PROJECTILE_HIT_VTABLE
+func_8008787C GabumonSpecial2Effect_init
+Unk8008787C GabumonSpecial2Effect
+D_80068984 GABUMON_SPECIAL2_EFFECT_VTABLE
+func_8008790C GabumonSpecial2Effect_tick
+func_80087C5C GabumonSpecial2Effect_draw
+func_8008817C GabumonSpecial2Effect_destroy
+
+# guilmon.c (special1 / airSpecial1 call func_80088A64, special2 / airSpecial2 func_80088B1C)
+func_8008820C Guilmon_init
+D_80068C3C GUILMON_VTABLE
+D_80068B6C GUILMON_FACES
+func_80088250 Guilmon_destroy
+func_800882A4 Guilmon_attack2
+func_80088310 Guilmon_attack3
+func_8008837C Guilmon_throw
+func_800884FC Guilmon_special1
+func_80088578 Guilmon_special2
+func_8008876C Guilmon_airSpecial1
+func_80088898 Guilmon_airSpecial2
+func_80088A64 Guilmon_spawnSpecial1Hitbox
+func_80088B1C Guilmon_spawnSpecial2Hitbox
+func_80088C24 GuilmonSpecial1Hitbox_init
+Unk80088C24 GuilmonSpecial1Hitbox
+D_80068C14 GUILMON_SPECIAL1_HITBOX_VTABLE
+func_80088EE8 GuilmonSpecial1Hitbox_tick
+func_80089180 GuilmonSpecial1Hitbox_draw
+func_80088E48 GuilmonSpecial1Hitbox_destroy
+D_80068BF4 GUILMON_SPECIAL1_HITBOX_HIT_VTABLE
+func_800890A4 GuilmonSpecial1Hitbox_hit
+func_800893BC GuilmonSpecial2Hitbox_init
+D_80068BCC GUILMON_SPECIAL2_HITBOX_VTABLE
+func_80089670 GuilmonSpecial2Hitbox_tick
+func_800899B4 GuilmonSpecial2Hitbox_draw
+func_800895D0 GuilmonSpecial2Hitbox_destroy
+D_80068BAC GUILMON_SPECIAL2_HITBOX_HIT_VTABLE
+func_800899A0 GuilmonSpecial2Hitbox_hit
+
+# holydramon.c (special1 / airSpecial1: func_8008A44C at frame 1, func_8008A384 at 6; special2 / airSpecial2 call
+# func_8008A628 every frame with the facing's angle)
+func_80089FB8 Holydramon_init
+D_80068EDC HOLYDRAMON_VTABLE
+Unk80089FB8 Holydramon
+func_80089FF8 Holydramon_destroy
+func_8008A04C Holydramon_throw
+func_8008A218 Holydramon_special1
+func_8008A4A8 Holydramon_special2
+func_8008A730 Holydramon_special3
+func_8008A2B4 Holydramon_airSpecial1
+func_8008A560 Holydramon_airSpecial2
+func_8008A384 Holydramon_spawnSpecial1Hitbox
+func_8008A44C Holydramon_spawnSpecial1Effect
+func_8008A628 Holydramon_spawnSpecial2Hitbox
+func_8008A9BC HolydramonSpecial1Hitbox_init
+Unk8008A9BC HolydramonSpecial1Hitbox
+D_80068EB4 HOLYDRAMON_SPECIAL1_HITBOX_VTABLE
+func_8008AD20 HolydramonSpecial1Hitbox_tick
+func_8008ADC4 HolydramonSpecial1Hitbox_draw
+func_8008AB44 HolydramonSpecial1Hitbox_destroy
+D_80068E94 HOLYDRAMON_SPECIAL1_HITBOX_HIT_VTABLE
+func_8008ABE4 HolydramonSpecial1Hitbox_hit
+func_8008ABE4_newFlash HolydramonSpecial1Hitbox_newFlash
+func_8008ABE4_newBurst HolydramonSpecial1Hitbox_newBurst
+func_8008B124 HolydramonSpecial1Effect_init
+Unk8008B124 HolydramonSpecial1Effect
+D_80068E6C HOLYDRAMON_SPECIAL1_EFFECT_VTABLE
+func_8008B1F8 HolydramonSpecial1Effect_tick
+func_8008B25C HolydramonSpecial1Effect_draw
+func_8008B1A4 HolydramonSpecial1Effect_destroy
+func_8008C20C HolydramonSpecial2Hitbox_init
+Unk8008C20C HolydramonSpecial2Hitbox
+D_80068E44 HOLYDRAMON_SPECIAL2_HITBOX_VTABLE
+func_8008C620 HolydramonSpecial2Hitbox_tick
+func_8008C748 HolydramonSpecial2Hitbox_draw
+func_8008C3A0 HolydramonSpecial2Hitbox_destroy
+D_80068E24 HOLYDRAMON_SPECIAL2_HITBOX_HIT_VTABLE
+func_8008C440 HolydramonSpecial2Hitbox_hit
+
+# imperialdramon.c (special1 / airSpecial1: func_8008E5C4 at frame 0 (0 on the ground, 1 in the air),
+# func_8008E51C at 10; special2 calls func_8008E658 and func_8008E70C; special3 (and Paladin Mode's) run
+# func_8008DE84 each frame: it grabs the opponent (Fighter_hold) and carries it; attack1 / attack2 call
+# func_8008E900 at frames 7 / 8, the throw func_8008E48C (a HitSpark at the opponent))
+func_8008D21C Imperialdramon_init
+D_8006938C IMPERIALDRAMON_VTABLE
+Unk8008D21C Imperialdramon
+func_8008D27C Imperialdramon_destroy
+func_8008D2D0 Imperialdramon_endMove
+func_8008D584 Imperialdramon_attack1
+func_8008D650 Imperialdramon_attack2
+func_8008D694 Imperialdramon_attack3
+func_8008DCCC Imperialdramon_upAttack
+func_8008D31C Imperialdramon_dashAttack
+func_8008D368 Imperialdramon_throw
+func_8008D6E0 Imperialdramon_special1
+func_8008D788 Imperialdramon_special2
+func_8008D97C Imperialdramon_special3
+func_8008DB98 Imperialdramon_airUpAttack
+func_8008DC24 Imperialdramon_airSpecial1
+func_8008EAB4 ImperialdramonSpecial1Hitbox_init
+D_80069314 IMPERIALDRAMON_SPECIAL1_HITBOX_VTABLE
+func_8008EDB4 ImperialdramonSpecial1Hitbox_tick
+func_8008F038 ImperialdramonSpecial1Hitbox_draw
+func_8008ED14 ImperialdramonSpecial1Hitbox_destroy
+D_800692F4 IMPERIALDRAMON_SPECIAL1_HITBOX_HIT_VTABLE
+func_8008EFDC ImperialdramonSpecial1Hitbox_hit
+func_8008F474 ImperialdramonSpecial1Effect_init
+Unk8008F474 ImperialdramonSpecial1Effect
+D_800692CC IMPERIALDRAMON_SPECIAL1_EFFECT_VTABLE
+func_8008F6A0 ImperialdramonSpecial1Effect_tick
+func_8008F9F4 ImperialdramonSpecial1Effect_draw
+func_8008F64C ImperialdramonSpecial1Effect_destroy
+func_8008FD18 ImperialdramonSpecial2Hitbox_init
+D_800692A4 IMPERIALDRAMON_SPECIAL2_HITBOX_VTABLE
+func_8008FF90 ImperialdramonSpecial2Hitbox_tick
+func_8009013C ImperialdramonSpecial2Hitbox_draw
+func_8008FEF0 ImperialdramonSpecial2Hitbox_destroy
+D_80069284 IMPERIALDRAMON_SPECIAL2_HITBOX_HIT_VTABLE
+func_80090074 ImperialdramonSpecial2Hitbox_hit
+func_800902E0 ImperialdramonSpecial3Effect_init
+Unk800902E0 ImperialdramonSpecial3Effect
+D_8006925C IMPERIALDRAMON_SPECIAL3_EFFECT_VTABLE
+func_80090560 ImperialdramonSpecial3Effect_tick
+func_800908E8 ImperialdramonSpecial3Effect_draw
+func_8009050C ImperialdramonSpecial3Effect_destroy
+func_80090F04 ImperialdramonSpecial3Hitbox_init
+Unk80090F04 ImperialdramonSpecial3Hitbox
+D_80069234 IMPERIALDRAMON_SPECIAL3_HITBOX_VTABLE
+func_80091100 ImperialdramonSpecial3Hitbox_tick
+func_80091060 ImperialdramonSpecial3Hitbox_destroy
+D_80069214 IMPERIALDRAMON_SPECIAL3_HITBOX_HIT_VTABLE
+func_800911EC ImperialdramonSpecial3Hitbox_hit
+func_8008DE84 Imperialdramon_special3Hold
+func_8008DE84_release Imperialdramon_releaseHold
+func_8008E48C Imperialdramon_spawnThrowSpark
+func_8008E51C Imperialdramon_spawnSpecial1Hitbox
+func_8008E5C4 Imperialdramon_spawnSpecial1Effect
+func_8008E658 Imperialdramon_spawnSpecial2Hitbox
+func_8008E70C Imperialdramon_spawnSpecial2Trail
+func_8008E784 Imperialdramon_spawnSpecial3Effect
+func_8008E824 Imperialdramon_spawnSpecial3Hitbox
+func_8008E900 Imperialdramon_spawnAttackBurst
+
+# imperialdramon_paladin_mode.c (derives from Imperialdramon: its constructor calls Imperialdramon_init; intro
+# makes its effect at frame 1, special3 calls func_80091D4C and func_80091DE8)
+func_80091A44 ImperialdramonPaladinMode_init
+D_80069564 IMPERIALDRAMON_PALADIN_MODE_VTABLE
+func_80091A78 ImperialdramonPaladinMode_destroy
+func_80091ACC ImperialdramonPaladinMode_intro
+func_80091B3C ImperialdramonPaladinMode_special3
+func_80091E60 ImperialdramonPaladinModeSpecial3Hitbox_init
+D_8006953C IMPERIALDRAMON_PALADIN_MODE_SPECIAL3_HITBOX_VTABLE
+func_800920BC ImperialdramonPaladinModeSpecial3Hitbox_tick
+func_8009230C ImperialdramonPaladinModeSpecial3Hitbox_draw
+func_8009201C ImperialdramonPaladinModeSpecial3Hitbox_destroy
+D_8006951C IMPERIALDRAMON_PALADIN_MODE_SPECIAL3_HITBOX_HIT_VTABLE
+func_800921B4 ImperialdramonPaladinModeSpecial3Hitbox_hit
+func_800925AC ImperialdramonPaladinModeIntroEffect_init
+D_800694F4 IMPERIALDRAMON_PALADIN_MODE_INTRO_EFFECT_VTABLE
+func_800926F8 ImperialdramonPaladinModeIntroEffect_tick
+func_800927C8 ImperialdramonPaladinModeIntroEffect_draw
+func_800926A4 ImperialdramonPaladinModeIntroEffect_destroy
+func_80091D4C ImperialdramonPaladinMode_spawnSpecial3Hitbox
+func_80091DE8 ImperialdramonPaladinMode_spawnSpecial3Trail
+
+# impmon.c (the throw calls func_80092DCC; special1 / airSpecial1 call func_80092F58 at frames 10 / 14; special2
+# calls func_800931B0; the intro makes its effect at frame 15)
+func_80092A68 Impmon_init
+D_8006983C IMPMON_VTABLE
+D_800696DC IMPMON_FACES
+Unk80092A68 Impmon
+func_80092AB0 Impmon_destroy
+func_80092B90 Impmon_endMove
+func_80092B04 Impmon_handleInput
+func_80092BB0 Impmon_intro
+func_80092C2C Impmon_attack3
+func_80092CBC Impmon_throw
+func_80092E64 Impmon_special1
+func_80093018 Impmon_special2
+func_80092EBC Impmon_airSpecial1
+func_80093274 ImpmonThrowParticle_init
+D_80069814 IMPMON_THROW_PARTICLE_VTABLE
+func_800932F4 ImpmonThrowParticle_tick
+func_80093340 ImpmonThrowParticle_draw
+func_80094DC8 ImpmonThrowParticle_destroy
+func_80093460 ImpmonSpecial1Projectile_init
+Unk80093460 ImpmonSpecial1Projectile
+D_800697EC IMPMON_SPECIAL1_PROJECTILE_VTABLE
+func_80093514 ImpmonSpecial1Projectile_tick
+func_80093640 ImpmonSpecial1Projectile_draw
+func_80094E1C ImpmonSpecial1Projectile_destroy
+D_800697CC IMPMON_SPECIAL1_PROJECTILE_HIT_VTABLE
+func_800935E8 ImpmonSpecial1Projectile_hit
+func_80093AD8 ImpmonIntroEffect_init
+Unk80093AD8 ImpmonIntroEffect
+D_8006977C IMPMON_INTRO_EFFECT_VTABLE
+func_80093BB4 ImpmonIntroEffect_tick
+func_80093E30 ImpmonIntroEffect_draw
+func_80093B60 ImpmonIntroEffect_destroy
+func_8009401C ImpmonSpecial2Effect_init
+D_80069754 IMPMON_SPECIAL2_EFFECT_VTABLE
+func_80094130 ImpmonSpecial2Effect_tick
+func_800942D4 ImpmonSpecial2Effect_draw
+func_800940DC ImpmonSpecial2Effect_destroy
+func_80092DCC Impmon_spawnThrowParticle
+func_80092F58 Impmon_spawnSpecial1Projectile
+func_800931B0 Impmon_spawnSpecial2Effect
+
+# beelzebumon.c (the throw calls func_80095294; special1 / airSpecial1 call func_80095654; special2 calls
+# func_80095894 at frame 7 and func_80095928 20 times at 14; special3 calls func_80095D88)
+func_80094F10 Beelzebumon_init
+D_80069C04 BEELZEBUMON_VTABLE
+Unk80094F10 Beelzebumon
+func_80094F48 Beelzebumon_destroy
+func_80094FFC Beelzebumon_endMove
+func_80094F9C Beelzebumon_handleInput
+func_80095008 Beelzebumon_upAttack
+func_80095098 Beelzebumon_throw
+func_80095330 Beelzebumon_special1
+func_8009581C Beelzebumon_special2
+func_80095A70 Beelzebumon_special3
+func_80095480 Beelzebumon_airSpecial1
+func_80095F98 BeelzebumonThrowEffect_init
+Unk80095F98 BeelzebumonThrowEffect
+D_80069BDC BEELZEBUMON_THROW_EFFECT_VTABLE
+func_80096090 BeelzebumonThrowEffect_tick
+func_80096104 BeelzebumonThrowEffect_draw
+func_8009603C BeelzebumonThrowEffect_destroy
+func_800962B8 BeelzebumonSpecial1Projectile_init
+D_80069BB4 BEELZEBUMON_SPECIAL1_PROJECTILE_VTABLE
+func_80096360 BeelzebumonSpecial1Projectile_tick
+func_800965D8 BeelzebumonSpecial1Projectile_draw
+func_800998E0 BeelzebumonSpecial1Projectile_destroy
+D_80069B94 BEELZEBUMON_SPECIAL1_PROJECTILE_HIT_VTABLE
+func_80096538 BeelzebumonSpecial1Projectile_hit
+func_8009764C BeelzebumonSpecial2Hitbox_init
+D_80069ACC BEELZEBUMON_SPECIAL2_HITBOX_VTABLE
+func_80097824 BeelzebumonSpecial2Hitbox_tick
+func_80097A30 BeelzebumonSpecial2Hitbox_draw
+func_80097790 BeelzebumonSpecial2Hitbox_destroy
+func_80097D50 BeelzebumonSpecial2Particle_init
+Unk80097D50 BeelzebumonSpecial2Particle
+D_80069AA4 BEELZEBUMON_SPECIAL2_PARTICLE_VTABLE
+func_80097DAC BeelzebumonSpecial2Particle_tick
+func_80097E90 BeelzebumonSpecial2Particle_draw
+func_80099A28 BeelzebumonSpecial2Particle_destroy
+func_800995BC BeelzebumonSpecial3Effect_init
+Unk800995BC BeelzebumonSpecial3Effect
+D_800699DC BEELZEBUMON_SPECIAL3_EFFECT_VTABLE
+func_800996D4 BeelzebumonSpecial3Effect_tick
+func_800997D0 BeelzebumonSpecial3Effect_draw
+func_80099680 BeelzebumonSpecial3Effect_destroy
+Unk80096984 BeelzebumonSpecial1Projectile
+Unk80096984Slot BeelzebumonSpecial1ProjectileSlot
+func_80095294 Beelzebumon_spawnThrowEffect
+func_80095654 Beelzebumon_spawnSpecial1Projectile
+func_80095894 Beelzebumon_spawnSpecial2Hitbox
+func_80095928 Beelzebumon_spawnSpecial2Particle
+func_80095D88 Beelzebumon_spawnSpecial3Effect
+
+# metalgarurumon.c (airAttack / airSideAttack call func_80099D18 at frame 2; the throw carries the opponent
+# with func_80099F30 and hits it with func_8009A1B0 at frames 2, 15, 30; special2 / airSpecial2 call func_8009A764
+# at frame 19, the only direct constructor of func_8009BE08's class (special3's func_8009CE8C derives from it))
+func_80099A7C MetalGarurumon_init
+D_8006A2AC METALGARURUMON_VTABLE
+Unk80099A7C MetalGarurumon
+func_8009D874 MetalGarurumon_destroy
+func_80099AB8 MetalGarurumon_endMove
+func_80099AE8 MetalGarurumon_attack2
+func_80099B98 MetalGarurumon_dashAttack
+func_80099DC4 MetalGarurumon_throw
+func_8009A290 MetalGarurumon_special1
+func_8009A540 MetalGarurumon_special2
+func_8009A814 MetalGarurumon_special3
+func_80099CB0 MetalGarurumon_airAttack
+func_80099C48 MetalGarurumon_airSideAttack
+func_8009A35C MetalGarurumon_airSpecial1
+func_8009A644 MetalGarurumon_airSpecial2
+func_8009BE08 MetalGarurumonSpecial2Projectile_init
+Unk8009BE08 MetalGarurumonSpecial2Projectile
+D_8006A234 METALGARURUMON_SPECIAL2_PROJECTILE_VTABLE
+func_8009BE80 MetalGarurumonSpecial2Projectile_tick
+func_8009C048 MetalGarurumonSpecial2Projectile_draw
+func_8009D94C MetalGarurumonSpecial2Projectile_destroy
+D_8006A214 METALGARURUMON_SPECIAL2_PROJECTILE_HIT_VTABLE
+func_8009BF6C MetalGarurumonSpecial2Projectile_hit
+func_8009C294 MetalGarurumonSpecial3Hitbox_init
+D_8006A1EC METALGARURUMON_SPECIAL3_HITBOX_VTABLE
+func_8009C43C MetalGarurumonSpecial3Hitbox_tick
+func_8009C62C MetalGarurumonSpecial3Hitbox_draw
+func_8009D9EC MetalGarurumonSpecial3Hitbox_destroy
+D_8006A1CC METALGARURUMON_SPECIAL3_HITBOX_HIT_VTABLE
+func_8009C4EC MetalGarurumonSpecial3Hitbox_hit
+Unk8009C294 MetalGarurumonSpecial3Hitbox
+Unk8009C294Trail MetalGarurumonSpecial3HitboxTrail
+func_80099D18 MetalGarurumon_spawnAirAttackTrails
+func_80099F30 MetalGarurumon_carryOpponent
+func_8009A1B0 MetalGarurumon_throwHit
+func_8009A764 MetalGarurumon_spawnSpecial2Projectile
+
+# omegamon.c (special1 / airSpecial1 call func_8009E364 at frame 9; special2 calls func_8009E5EC)
+func_8009DBBC Omegamon_init
+D_8006A5C4 OMEGAMON_VTABLE
+Unk8009DBBC Omegamon
+func_8009DBF0 Omegamon_destroy
+func_8009DC44 Omegamon_endMove
+func_8009DC6C Omegamon_attack2
+func_8009DE10 Omegamon_attack3
+func_8009E050 Omegamon_throw
+func_8009E244 Omegamon_special1
+func_8009E4DC Omegamon_special2
+func_8009E6C4 Omegamon_special3
+func_8009E2B8 Omegamon_airSpecial1
+func_8009E8F8 OmegamonSpecial1Projectile_init
+Unk8009E8F8 OmegamonSpecial1Projectile
+D_8006A59C OMEGAMON_SPECIAL1_PROJECTILE_VTABLE
+func_8009E9BC OmegamonSpecial1Projectile_tick
+func_8009EB68 OmegamonSpecial1Projectile_draw
+func_800A0E58 OmegamonSpecial1Projectile_destroy
+D_8006A57C OMEGAMON_SPECIAL1_PROJECTILE_HIT_VTABLE
+func_8009EB20 OmegamonSpecial1Projectile_hit
+func_8009F76C OmegamonSpecial2Hitbox_init
+D_8006A4DC OMEGAMON_SPECIAL2_HITBOX_VTABLE
+func_8009F974 OmegamonSpecial2Hitbox_tick
+func_8009FC80 OmegamonSpecial2Hitbox_draw
+func_8009F8E0 OmegamonSpecial2Hitbox_destroy
+func_8009E364 Omegamon_spawnSpecial1Projectile
+func_8009E5EC Omegamon_spawnSpecial2Hitbox
+
+# patamon.c (special1 / airSpecial1 call func_800A1968, the hitbox's only spawner)
+func_800A0FF4 Patamon_init
+D_8006A7FC PATAMON_VTABLE
+D_8006A764 PATAMON_FACES
+Unk800A0FF4 Patamon
+func_800A103C Patamon_destroy
+func_800A1090 Patamon_endMove
+func_800A1098 Patamon_intro
+func_800A1210 Patamon_throw
+func_800A1818 Patamon_special1
+func_800A1A44 Patamon_special2
+func_800A18A4 Patamon_airSpecial1
+func_800A1E70 PatamonSpecial1Hitbox_init
+Unk800A1E70 PatamonSpecial1Hitbox
+D_8006A7D4 PATAMON_SPECIAL1_HITBOX_VTABLE
+func_800A209C PatamonSpecial1Hitbox_tick
+func_800A2244 PatamonSpecial1Hitbox_draw
+func_800A1FF4 PatamonSpecial1Hitbox_destroy
+func_800A1968 Patamon_spawnSpecial1Hitbox
+
+# renamon.c (special1 / airSpecial1 call func_800A38D8, the hitbox's only spawner, and func_800A3A40)
+func_800A2F98 Renamon_init
+D_8006AA64 RENAMON_VTABLE
+D_8006A974 RENAMON_FACES
+Unk800A2F98 Renamon
+func_800A5308 Renamon_destroy
+func_800A313C Renamon_endMove
+func_800A2FEC Renamon_handleInput
+func_800A3304 Renamon_throw
+func_800A34BC Renamon_special1
+func_800A3A9C Renamon_special2
+func_800A315C Renamon_airAttack
+func_800A35C8 Renamon_airSpecial1
+func_800A3E30 RenamonSpecial1Hitbox_init
+D_8006AA3C RENAMON_SPECIAL1_HITBOX_VTABLE
+func_800A3FB0 RenamonSpecial1Hitbox_tick
+func_800A4648 RenamonSpecial1Hitbox_draw
+func_800A5350 RenamonSpecial1Hitbox_destroy
+D_8006AA1C RENAMON_SPECIAL1_HITBOX_HIT_VTABLE
+func_800A444C RenamonSpecial1Hitbox_hit
+func_800A47F4 RenamonSpecial1Effect_init
+Unk800A47F4 RenamonSpecial1Effect
+D_8006A9F4 RENAMON_SPECIAL1_EFFECT_VTABLE
+func_800A4898 RenamonSpecial1Effect_tick
+func_800A4A08 RenamonSpecial1Effect_draw
+func_800A53F0 RenamonSpecial1Effect_destroy
+func_800A38D8 Renamon_spawnSpecial1Hitbox
+func_800A3A40 Renamon_spawnSpecial1Effect
+
+# sakuyamon.c (the attacks call func_800A56CC at their first frame, a Trail; special3 calls func_800A6194)
+func_800A54C8 Sakuyamon_init
+D_8006B06C SAKUYAMON_VTABLE
+Unk800A54C8 Sakuyamon
+func_800A9FBC Sakuyamon_destroy
+func_800A5518 Sakuyamon_endMove
+func_800A5548 Sakuyamon_attack1
+func_800A5588 Sakuyamon_attack2
+func_800A55C8 Sakuyamon_attack3
+func_800A5608 Sakuyamon_upAttack
+func_800A5648 Sakuyamon_dashAttack
+func_800A574C Sakuyamon_throw
+func_800A58F4 Sakuyamon_special1
+func_800A5D44 Sakuyamon_special2
+func_800A60B4 Sakuyamon_special3
+func_800A568C Sakuyamon_airUpAttack
+func_800A5EA0 Sakuyamon_airSpecial2
+func_800A8858 SakuyamonSpecial3Effect_init
+Unk800A8858 SakuyamonSpecial3Effect
+D_8006AEDC SAKUYAMON_SPECIAL3_EFFECT_VTABLE
+func_800A88D8 SakuyamonSpecial3Effect_tick
+func_800A8BE8 SakuyamonSpecial3Effect_draw
+func_800AA300 SakuyamonSpecial3Effect_destroy
+func_800A56CC Sakuyamon_spawnTrail
+func_800A6194 Sakuyamon_spawnSpecial3Effect
+
+# saintgargomon.c (CHARACTER_SAINTGARGOMON, createFighter case 14; vtable D_8006B4C4 slots by FighterVtable; the special1
+# hitbox D_8006B49C/D_8006B47C: constructed only by func_800AAB4C, which special1 and airSpecial1 call)
+func_800AA390 SaintGargomon_init
+D_8006B4C4 SAINTGARGOMON_VTABLE
+Unk800AA390 SaintGargomon
+func_800AA3C8 SaintGargomon_destroy
+func_800AA41C SaintGargomon_endMove
+func_800AA444 SaintGargomon_throw
+func_800AA9F0 SaintGargomon_special1
+func_800AA654 SaintGargomon_special2
+func_800AACC0 SaintGargomon_special3
+func_800AAA84 SaintGargomon_airSpecial1
+func_800AB630 SaintGargomonSpecial1Hitbox_init
+D_8006B49C SAINTGARGOMON_SPECIAL1_HITBOX_VTABLE
+func_800ABA24 SaintGargomonSpecial1Hitbox_tick
+func_800ABD08 SaintGargomonSpecial1Hitbox_draw
+func_800AB790 SaintGargomonSpecial1Hitbox_destroy
+D_8006B47C SAINTGARGOMON_SPECIAL1_HITBOX_HIT_VTABLE
+func_800AB9F4 SaintGargomonSpecial1Hitbox_hit
+func_800AAB4C SaintGargomon_spawnSpecial1Hitbox
+
+# seraphimon.c (CHARACTER_SERAPHIMON, createFighter case 15; vtable D_8006B754 slots by FighterVtable; own classes by
+# their only constructor calls: func_800AE16C (special1, airSpecial1) builds the special1 hitbox, func_800ADE90 and
+# func_800ADFD4 (special2, airSpecial2) the special2 hitboxes and effect; the effect shares Unk800B73E8's layout)
+func_800ADA44 Seraphimon_init
+D_8006B754 SERAPHIMON_VTABLE
+Unk800ADA44 Seraphimon
+func_800ADA7C Seraphimon_destroy
+func_800ADAD0 Seraphimon_endMove
+func_800ADAF8 Seraphimon_throw
+func_800AE030 Seraphimon_special1
+func_800ADCE8 Seraphimon_special2
+func_800AE244 Seraphimon_special3
+func_800AE0C4 Seraphimon_airSpecial1
+func_800ADDA0 Seraphimon_airSpecial2
+func_800AE588 SeraphimonSpecial2Hitbox_init
+Unk800AE588 SeraphimonSpecial2Hitbox
+D_8006B72C SERAPHIMON_SPECIAL2_HITBOX_VTABLE
+func_800AE890 SeraphimonSpecial2Hitbox_tick
+func_800AEAF0 SeraphimonSpecial2Hitbox_draw
+func_800AE734 SeraphimonSpecial2Hitbox_destroy
+D_8006B70C SERAPHIMON_SPECIAL2_HITBOX_HIT_VTABLE
+func_800AE7D4 SeraphimonSpecial2Hitbox_hit
+func_800AED0C SeraphimonSpecial2Effect_init
+Unk800AED0C SeraphimonSpecial2Effect
+D_8006B6E4 SERAPHIMON_SPECIAL2_EFFECT_VTABLE
+func_800AEDDC SeraphimonSpecial2Effect_tick
+func_800AEE48 SeraphimonSpecial2Effect_draw
+func_800AED88 SeraphimonSpecial2Effect_destroy
+func_800AF364 SeraphimonSpecial1Hitbox_init
+Unk800AF364 SeraphimonSpecial1Hitbox
+D_8006B694 SERAPHIMON_SPECIAL1_HITBOX_VTABLE
+func_800AF6F0 SeraphimonSpecial1Hitbox_tick
+func_800AF970 SeraphimonSpecial1Hitbox_draw
+func_800AF504 SeraphimonSpecial1Hitbox_destroy
+D_8006B674 SERAPHIMON_SPECIAL1_HITBOX_HIT_VTABLE
+func_800AF5A4 SeraphimonSpecial1Hitbox_hit
+func_800AE16C Seraphimon_spawnSpecial1Hitbox
+func_800ADE90 Seraphimon_spawnSpecial2Hitbox
+func_800ADFD4 Seraphimon_spawnSpecial2Effect
+
+# stingmon.c (CHARACTER_STINGMON, createFighter case 16; vtable D_8006BCA4 slots by FighterVtable; each own class is
+# named for the move whose spawner is its only constructor call: func_800B1518 (special1, airSpecial1), func_800B1618 and
+# func_800B16F0 (special2, airSpecial2), func_800B17B4 and func_800B1938 (special3), func_800B19CC (attack3))
+func_800B0854 Stingmon_init
+D_8006BCA4 STINGMON_VTABLE
+Unk800B0854 Stingmon
+func_800B088C Stingmon_destroy
+func_800B08E0 Stingmon_endMove
+func_800B09B0 Stingmon_attack3
+func_800B1220 Stingmon_upAttack
+func_800B08E8 Stingmon_dashAttack
+func_800B09F4 Stingmon_throw
+func_800B0B08 Stingmon_special1
+func_800B0B78 Stingmon_special2
+func_800B0CBC Stingmon_special3
+func_800B0DD8 Stingmon_airUpAttack
+func_800B0F48 Stingmon_airSpecial1
+func_800B1084 Stingmon_airSpecial2
+func_800B1AC0 StingmonSpecial2Hitbox_init
+Unk800B1AC0 StingmonSpecial2Hitbox
+D_8006BC54 STINGMON_SPECIAL2_HITBOX_VTABLE
+func_800B1D24 StingmonSpecial2Hitbox_tick
+func_800B2028 StingmonSpecial2Hitbox_draw
+func_800B1C84 StingmonSpecial2Hitbox_destroy
+D_8006BC34 STINGMON_SPECIAL2_HITBOX_HIT_VTABLE
+func_800B1FD4 StingmonSpecial2Hitbox_hit
+func_800B2240 StingmonSpecial2Effect_init
+Unk800B2240 StingmonSpecial2Effect
+D_8006BC0C STINGMON_SPECIAL2_EFFECT_VTABLE
+func_800B2340 StingmonSpecial2Effect_tick
+func_800B2414 StingmonSpecial2Effect_draw
+func_800B22EC StingmonSpecial2Effect_destroy
+func_800B29C4 StingmonSpecial1Projectile_init
+D_8006BBBC STINGMON_SPECIAL1_PROJECTILE_VTABLE
+func_800B2A7C StingmonSpecial1Projectile_tick
+func_800B2B40 StingmonSpecial1Projectile_draw
+func_800B4520 StingmonSpecial1Projectile_destroy
+D_8006BB9C STINGMON_SPECIAL1_PROJECTILE_HIT_VTABLE
+func_800B2E68 StingmonSpecial3Hitbox_init
+Unk800B2E68 StingmonSpecial3Hitbox
+D_8006BB74 STINGMON_SPECIAL3_HITBOX_VTABLE
+func_800B310C StingmonSpecial3Hitbox_tick
+func_800B36F8 StingmonSpecial3Hitbox_draw
+func_800B304C StingmonSpecial3Hitbox_destroy
+D_8006BB54 STINGMON_SPECIAL3_HITBOX_HIT_VTABLE
+func_800B33DC StingmonSpecial3Hitbox_hit
+func_800B3990 StingmonSpecial3Effect_init
+D_8006BB2C STINGMON_SPECIAL3_EFFECT_VTABLE
+func_800B3B14 StingmonSpecial3Effect_tick
+func_800B3CCC StingmonSpecial3Effect_draw
+func_800B3AC0 StingmonSpecial3Effect_destroy
+func_800B3F38 StingmonAttack3Hitbox_init
+D_8006BB04 STINGMON_ATTACK3_HITBOX_VTABLE
+func_800B412C StingmonAttack3Hitbox_tick
+func_800B42D0 StingmonAttack3Hitbox_draw
+func_800B408C StingmonAttack3Hitbox_destroy
+D_8006BAE4 STINGMON_ATTACK3_HITBOX_HIT_VTABLE
+func_800B427C StingmonAttack3Hitbox_hit
+func_800B1518 Stingmon_spawnSpecial1Projectile
+func_800B1618 Stingmon_spawnSpecial2Hitbox
+func_800B16F0 Stingmon_spawnSpecial2Effect
+func_800B17B4 Stingmon_spawnSpecial3Hitbox
+func_800B1938 Stingmon_spawnSpecial3Effect
+func_800B19CC Stingmon_spawnAttack3Hitbox
+
+# tailmon.c (CHARACTER_TAILMON, createFighter case 17; vtable D_8006BEE4 slots by FighterVtable, faces D_8006BE1C by
+# Fighter_setFaceTable; own classes by the move whose spawner is their only constructor call: func_800B4FA4 and
+# func_800B5060 (special1, airSpecial1), func_800B4F10 (special2))
+func_800B45C0 Tailmon_init
+D_8006BEE4 TAILMON_VTABLE
+D_8006BE1C TAILMON_FACES
+Unk800B45C0 Tailmon
+func_800B4608 Tailmon_destroy
+func_800B465C Tailmon_endMove
+func_800B4664 Tailmon_dashAttack
+func_800B46AC Tailmon_throw
+func_800B4898 Tailmon_special1
+func_800B491C Tailmon_special2
+func_800B4E28 Tailmon_airSpecial1
+func_800B50EC TailmonSpecial1Hitbox_init
+Unk800B50EC TailmonSpecial1Hitbox
+D_8006BEBC TAILMON_SPECIAL1_HITBOX_VTABLE
+func_800B53D0 TailmonSpecial1Hitbox_tick
+func_800B56EC TailmonSpecial1Hitbox_draw
+func_800B5320 TailmonSpecial1Hitbox_destroy
+D_8006BE9C TAILMON_SPECIAL1_HITBOX_HIT_VTABLE
+func_800B55EC TailmonSpecial1Hitbox_hit
+func_800B5920 TailmonSpecial1Effect_init
+Unk800B5920 TailmonSpecial1Effect
+D_8006BE74 TAILMON_SPECIAL1_EFFECT_VTABLE
+func_800B5A70 TailmonSpecial1Effect_tick
+func_800B5C90 TailmonSpecial1Effect_draw
+func_800B5A1C TailmonSpecial1Effect_destroy
+func_800B5F14 TailmonSpecial2Effect_init
+Unk800B5F14 TailmonSpecial2Effect
+D_8006BE4C TAILMON_SPECIAL2_EFFECT_VTABLE
+func_800B5FFC TailmonSpecial2Effect_tick
+func_800B6130 TailmonSpecial2Effect_draw
+func_800B5FA8 TailmonSpecial2Effect_destroy
+func_800B4FA4 Tailmon_spawnSpecial1Hitbox
+func_800B5060 Tailmon_spawnSpecial1Effect
+func_800B4F10 Tailmon_spawnSpecial2Effect
+
+# terriermon.c (CHARACTER_TERRIERMON, createFighter case 18; vtable D_8006C15C slots by FighterVtable, faces D_8006C05C
+# by Fighter_setFaceTable; own classes by the move that constructs them: special2/airSpecial2 the hitbox (inline) and,
+# through func_800B6D7C, the effect; special1/airSpecial1 through func_800B6868 and func_800B6910 the projectile and
+# effect; the special1 effect's layout is also Seraphimon's special2 effect)
+func_800B631C Terriermon_init
+D_8006C15C TERRIERMON_VTABLE
+D_8006C05C TERRIERMON_FACES
+Unk800B631C Terriermon
+func_800B6368 Terriermon_destroy
+func_800B63BC Terriermon_crouchAttack
+func_800B64E0 Terriermon_throw
+func_800B66FC Terriermon_special1
+func_800B696C Terriermon_special2
+func_800B6798 Terriermon_airSpecial1
+func_800B6B88 Terriermon_airSpecial2
+func_800B6DD8 TerriermonSpecial2Hitbox_init
+Unk800B6DD8 TerriermonSpecial2Hitbox
+D_8006C134 TERRIERMON_SPECIAL2_HITBOX_VTABLE
+func_800B7158 TerriermonSpecial2Hitbox_tick
+func_800B6F24 TerriermonSpecial2Hitbox_destroy
+D_8006C114 TERRIERMON_SPECIAL2_HITBOX_HIT_VTABLE
+func_800B6FC4 TerriermonSpecial2Hitbox_hit
+func_800B719C TerriermonSpecial1Projectile_init
+D_8006C0EC TERRIERMON_SPECIAL1_PROJECTILE_VTABLE
+func_800B7200 TerriermonSpecial1Projectile_draw
+func_800B7E3C TerriermonSpecial1Projectile_destroy
+D_8006C0CC TERRIERMON_SPECIAL1_PROJECTILE_HIT_VTABLE
+func_800B73E8 TerriermonSpecial1Effect_init
+Unk800B73E8 TerriermonSpecial1Effect
+D_8006C0A4 TERRIERMON_SPECIAL1_EFFECT_VTABLE
+func_800B74B8 TerriermonSpecial1Effect_tick
+func_800B7538 TerriermonSpecial1Effect_draw
+func_800B7464 TerriermonSpecial1Effect_destroy
+func_800B7820 TerriermonSpecial2Effect_init
+D_8006C07C TERRIERMON_SPECIAL2_EFFECT_VTABLE
+func_800B7A28 TerriermonSpecial2Effect_tick
+func_800B7BB0 TerriermonSpecial2Effect_draw
+func_800B79D4 TerriermonSpecial2Effect_destroy
+func_800B6868 Terriermon_spawnSpecial1Projectile
+func_800B6910 Terriermon_spawnSpecial1Effect
+func_800B6D7C Terriermon_spawnSpecial2Effect
+
+# v_mon.c (CHARACTER_V_MON, createFighter case 19; vtable D_8006C384 slots by FighterVtable, faces D_8006C324 by
+# Fighter_setFaceTable; the class is a plain Fighter; own classes by the move whose spawner is their only constructor
+# call: func_800B8AA8 (special1, airSpecial1), func_800B8B3C (special2))
+func_800B7EDC VMon_init
+D_8006C384 V_MON_VTABLE
+D_8006C324 V_MON_FACES
+func_800B7F20 VMon_destroy
+func_800B7F74 VMon_endMove
+func_800B7F80 VMon_attack1
+func_800B8030 VMon_attack2
+func_800B80E0 VMon_attack3
+func_800B82B8 VMon_throw
+func_800B8480 VMon_special1
+func_800B8814 VMon_special2
+func_800B8670 VMon_airSpecial1
+func_800B8BBC VMonSpecial1Effect_init
+Unk800B8BBC VMonSpecial1Effect
+D_8006C35C V_MON_SPECIAL1_EFFECT_VTABLE
+func_800B8CD4 VMonSpecial1Effect_tick
+func_800B8D5C VMonSpecial1Effect_draw
+func_800B8C80 VMonSpecial1Effect_destroy
+func_800B8FAC VMonSpecial2Effect_init
+Unk800B8FAC VMonSpecial2Effect
+D_8006C334 V_MON_SPECIAL2_EFFECT_VTABLE
+func_800B90E4 VMonSpecial2Effect_tick
+func_800B926C VMonSpecial2Effect_draw
+func_800B9090 VMonSpecial2Effect_destroy
+func_800B8AA8 VMon_spawnSpecial1Effect
+func_800B8B3C VMon_spawnSpecial2Effect
+
+# wormmon.c (CHARACTER_WORMMON, createFighter case 20; vtable D_8006C71C slots by FighterVtable, faces D_8006C4FC by
+# Fighter_setFaceTable; the guard effect is built by guard and crouchGuard; func_800B9F24 (special1, airSpecial1) is
+# the hitbox's only constructor call; func_800B9E58 (special2, airSpecial2) makes a Trail_init)
+func_800B9410 Wormmon_init
+D_8006C71C WORMMON_VTABLE
+D_8006C4FC WORMMON_FACES
+Unk800B9410 Wormmon
+func_800B9458 Wormmon_destroy
+func_800B94AC Wormmon_guard
+func_800B9528 Wormmon_crouchGuard
+func_800B9A64 Wormmon_upAttack
+func_800B95A4 Wormmon_throw
+func_800B972C Wormmon_special1
+func_800B979C Wormmon_special2
+func_800B99A8 Wormmon_airUpAttack
+func_800B9B18 Wormmon_airSpecial1
+func_800B9C48 Wormmon_airSpecial2
+func_800B9FF0 WormmonSpecial1Hitbox_init
+D_8006C6CC WORMMON_SPECIAL1_HITBOX_VTABLE
+func_800BA298 WormmonSpecial1Hitbox_tick
+func_800BA598 WormmonSpecial1Hitbox_draw
+func_800BA1F8 WormmonSpecial1Hitbox_destroy
+D_8006C6AC WORMMON_SPECIAL1_HITBOX_HIT_VTABLE
+func_800BA49C WormmonSpecial1Hitbox_hit
+func_800BAAA4 WormmonGuardEffect_init
+Unk800BAAA4 WormmonGuardEffect
+D_8006C684 WORMMON_GUARD_EFFECT_VTABLE
+func_800BAC64 WormmonGuardEffect_tick
+func_800BAE98 WormmonGuardEffect_draw
+func_800BAC08 WormmonGuardEffect_destroy
+func_800B9F24 Wormmon_spawnSpecial1Hitbox
+func_800B9E58 Wormmon_spawnSpecial2Trail
+
+# wargreymon.c (CHARACTER_WARGREYMON, createFighter case 21; vtable D_8006CB44 slots by FighterVtable (its own slots
+# 0x120/0x128 stay unnamed); throw builds the throw effect, special1 the special1 hitbox and effect; func_800BB2B8 makes
+# the trails of the six attacks that call it)
+func_800BB034 WarGreymon_init
+D_8006CB44 WARGREYMON_VTABLE
+Unk800BB034 WarGreymon
+func_800BED64 WarGreymon_destroy
+func_800BB08C WarGreymon_endMove
+func_800BB0AC WarGreymon_attack2
+func_800BB104 WarGreymon_attack3
+func_800BB15C WarGreymon_upAttack
+func_800BB1B0 WarGreymon_dashAttack
+func_800BB3CC WarGreymon_throw
+func_800BB9A4 WarGreymon_special1
+func_800BBD18 WarGreymon_special2
+func_800BC59C WarGreymon_special3
+func_800BC6F4 WarGreymon_airSpecial3
+func_800BB208 WarGreymon_airUpAttack
+func_800BB260 WarGreymon_airSideAttack
+func_800BBF00 WarGreymon_airSpecial2
+func_800BB78C WarGreymonThrowEffect_init
+Unk800BB78C WarGreymonThrowEffect
+D_8006CB1C WARGREYMON_THROW_EFFECT_VTABLE
+func_800BB850 WarGreymonThrowEffect_tick
+func_800BEDAC WarGreymonThrowEffect_destroy
+func_800BC870 WarGreymonSpecial1Hitbox_init
+D_8006CAF4 WARGREYMON_SPECIAL1_HITBOX_VTABLE
+func_800BC9DC WarGreymonSpecial1Hitbox_tick
+func_800BEDF4 WarGreymonSpecial1Hitbox_destroy
+D_8006CAD4 WARGREYMON_SPECIAL1_HITBOX_HIT_VTABLE
+func_800BCA70 WarGreymonSpecial1Hitbox_hit
+func_800BCE94 WarGreymonSpecial1Effect_init
+Unk800BCE94 WarGreymonSpecial1Effect
+D_8006CAAC WARGREYMON_SPECIAL1_EFFECT_VTABLE
+func_800BCFBC WarGreymonSpecial1Effect_tick
+func_800BD07C WarGreymonSpecial1Effect_draw
+func_800BEE94 WarGreymonSpecial1Effect_destroy
+func_800BB2B8 WarGreymon_spawnAttackTrails
+
+# blackwargreymon.c (CHARACTER_BLACKWARGREYMON, createFighter case 23; its class derives from WarGreymon's: vtable
+# D_8006D044 keeps eleven of WarGreymon's methods, which keep WarGreymon's names; only its own five are named here)
+func_800C1924 BlackWarGreymon_init
+D_8006D044 BLACKWARGREYMON_VTABLE
+Unk800C1924 BlackWarGreymon
+func_800C2754 BlackWarGreymon_destroy
+func_800C195C BlackWarGreymon_handleInput
+func_800C1988 BlackWarGreymon_intro
+func_800C1A8C BlackWarGreymon_throw
+func_800C1ED8 BlackWarGreymon_special3
+
+# gokumon.c (CHARACTER_GOKUMON, createFighter case 22; vtable D_8006CE4C slots by FighterVtable; special1 and
+# airSpecial1 call func_800BFB6C, the special1 hitbox's only constructor call; special3 and airSpecial3 call
+# func_800C0084, the special3 hitbox's, and func_800C0210, a ParticleBurst_init; func_800BF0E8 makes one Trail_init
+# and func_800BF238 three, colored by func_800BF3B8 (the attacks) or func_800BF3F0 (special1, airSpecial1, special2),
+# which pick an 0xBBGGRR word of D_8006CF74 / D_8006CF7C by func_800BF37C, the fighter's altColor)
+func_800BF0B4 Gokumon_init
+D_8006CE4C GOKUMON_VTABLE
+func_800C1840 Gokumon_destroy
+func_800BF428 Gokumon_attack1
+func_800BF47C Gokumon_attack2
+func_800BF4D4 Gokumon_attack3
+func_800BF554 Gokumon_upAttack
+func_800BF5A8 Gokumon_dashAttack
+func_800BF718 Gokumon_throw
+func_800BF9D0 Gokumon_special1
+func_800BFBC8 Gokumon_special2
+func_800BFF28 Gokumon_special3
+func_800BFFD0 Gokumon_airSpecial3
+func_800BF6BC Gokumon_airAttack
+func_800BF600 Gokumon_airUpAttack
+func_800BF660 Gokumon_airSideAttack
+func_800BFA98 Gokumon_airSpecial1
+func_800C06D0 GokumonSpecial1Hitbox_init
+Unk800C06D0 GokumonSpecial1Hitbox
+D_8006CDFC GOKUMON_SPECIAL1_HITBOX_VTABLE
+func_800C08CC GokumonSpecial1Hitbox_tick
+func_800C0A60 GokumonSpecial1Hitbox_draw
+func_800C0830 GokumonSpecial1Hitbox_destroy
+func_800C0CC0 GokumonSpecial3Hitbox_init
+Unk800C0CC0 GokumonSpecial3Hitbox
+D_8006CDD4 GOKUMON_SPECIAL3_HITBOX_VTABLE
+func_800C0FAC GokumonSpecial3Hitbox_tick
+func_800C14F0 GokumonSpecial3Hitbox_draw
+func_800C0F10 GokumonSpecial3Hitbox_destroy
+func_800BFB6C Gokumon_spawnSpecial1Hitbox
+func_800C0084 Gokumon_spawnSpecial3Hitbox
+func_800C0210 Gokumon_spawnSpecial3Burst
+func_800BF0E8 Gokumon_spawnTrail
+func_800BF238 Gokumon_spawnTrails
+func_800BF37C Gokumon_hasAltColor
+func_800BF3B8 Gokumon_getAttackTrailColor
+func_800BF3F0 Gokumon_getSpecialTrailColor
+D_8006CF74 GOKUMON_ATTACK_TRAIL_COLORS
+D_8006CF7C GOKUMON_SPECIAL_TRAIL_COLORS

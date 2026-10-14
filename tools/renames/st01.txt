@@ -1,0 +1,52 @@
+# The names of st01's own symbols: run with tools/rename.py --overlay st01 -f tools/renames/st01.txt
+
+# StageHit (stages.txt): a hit of the stage; its slot 0x08 adds its damage and knockback into the touched sphere
+D_800D3D24 STAGE_HIT_VTABLE
+func_800D5B80 StageHit_init
+func_800D5B98 StageHit_apply
+func_800D9F74 StageHit_destroy
+func_800D9FA8 StageHit_setKnockback
+
+# StageNature: STAGE_NAMES' "Nature" for arena 1 (game_main.c constructs it for GAME_STATE.arena 1, 0xFD8 bytes)
+Unk800D3DBC StageNature
+D_800D3D44 STAGE_NATURE_VTABLE
+func_800D3DBC StageNature_init
+func_800D3FF0 StageNature_destroy
+# its overrides of Fight's slots (STAGE_NATURE_VTABLE: 0x08, 0x10, 0x20, 0x40; the US one also 0x58 and 0x60)
+func_800D4060 StageNature_startRound
+func_800D4674 StageNature_tick
+func_800D46D0 StageNature_tickScenery
+func_800D48E8 StageNature_drawWorld
+func_800D49B0 StageNature_isFallen
+func_800D49C4 StageNature_updateCamera
+# the stage's own steps (their C and what they call: StoreImage, Fighter_getPosition, MoveImage + groupAddChild,
+# the fall event's states and sound, its group drawn through its own camera)
+func_800D4934 st01_clearState
+func_800D4D88 st01_readClut
+func_800D4E80 st01_saveFighterPositions
+func_800D500C st01_moveGroupNode
+func_800D54C8 st01_drawGroup
+func_800D5614 st01_stopFallEvent
+func_800D5650 st01_tickFallEvent
+func_800D58BC st01_spawnFallingObject
+# St01FallingObject: a copy of mesh node 9 with a StageHit and a collision sphere, falling (the fall event's)
+Unk800D5BA0 St01FallingObject
+D_800D3CFC ST01_FALLING_OBJECT_VTABLE
+func_800D5BA0 St01FallingObject_init
+func_800D5DB0 St01FallingObject_tick
+func_800D5CB0 St01FallingObject_destroy
+# St01Debris: a gray particle falling from a random place (init) or starting around a position (initAt)
+Unk800D7EC4 St01Debris
+D_800D3C0C ST01_DEBRIS_VTABLE
+func_800D7EC4 St01Debris_init
+func_800D7F98 St01Debris_initAt
+func_800D80DC St01Debris_tick
+func_800D8308 St01Debris_draw
+func_800D8088 St01Debris_destroy
+# St01PulseGrid: a 3 by 9 grid of points around a position, its level pulsing on a sine
+Unk800D7058 St01PulseGrid
+D_800D3CAC ST01_PULSE_GRID_VTABLE
+func_800D7058 St01PulseGrid_init
+func_800D7178 St01PulseGrid_tick
+func_800D71B8 St01PulseGrid_draw
+func_800D7124 St01PulseGrid_destroy

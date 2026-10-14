@@ -1,0 +1,33 @@
+# The names of st06's own symbols: run with tools/rename.py --overlay st06 -f tools/renames/st06.txt
+
+# StageBoss: arena 6's stage, whose arena moves along x (the vtable's overrides: startRound, tick, tickScenery,
+# drawWorld, createNodeEntity)
+Unk800D3C10 StageBoss
+D_800D3B8C STAGE_BOSS_VTABLE
+func_800D3C10 StageBoss_init
+func_800D3CD0 StageBoss_destroy
+func_800D3D40 StageBoss_startRound
+func_800D41BC StageBoss_tick
+func_800D4008 StageBoss_tickScenery
+func_800D433C StageBoss_drawWorld
+func_800D3ED8 StageBoss_createNodeEntity
+func_800D4434 st06_setLevel
+func_800D586C st06_getEye
+func_800D5874 st06_getScrollX
+D_800D397C ST06_SPIN_NODES
+# St06LevelEntry: an entity the stage keeps by handle, with the level it last gave it
+Unk800D43A4 St06LevelEntry
+# St06SpinGroup: the four St06Spinners of ST06_SPIN_NODES, by handle; its setLevel (0x20) scales them
+Unk800D4D8C St06SpinGroup
+D_800D3ACC ST06_SPIN_GROUP_VTABLE
+func_800D4D8C St06SpinGroup_init
+func_800D58C8 St06SpinGroup_tick
+func_800D58D0 St06SpinGroup_draw
+func_800D59AC St06SpinGroup_destroy
+func_800D4E64 St06SpinGroup_setLevel
+# St06Spinner: one mesh spun about a random axis, put at the stage's scroll x
+Unk800D4EC0 St06Spinner
+D_800D3AA4 ST06_SPINNER_VTABLE
+func_800D4EC0 St06Spinner_init
+func_800D4F9C St06Spinner_tick
+func_800D59F4 St06Spinner_destroy

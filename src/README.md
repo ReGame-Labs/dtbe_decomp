@@ -33,10 +33,10 @@ of `config/<version>/title.yaml` and `game.yaml`; each file's `.rodata` and
 | `ranking.c` | the ranking |
 | `name_entry.c` | the name entry, which the ranking and the options open |
 | `credits.c` | the credits |
-| `title_0a.c` | a character model class seen by a camera (boundary unproven) |
+| `title_chara.c` | the character model the character select and the guide show (boundary unproven) |
 | `option.cpp` | the options |
-| `title_0b.c` | a cache class with a heap block (boundary unproven) |
-| `title_0c.c` | a `Printer` class and a table (boundary unproven) |
+| `digifont.c` | a font of 24 by 24 glyphs cached in VRAM, unused in the title (boundary unproven) |
+| `zascii_printer.c` | the `Printer` that draws /zascii.tim's characters for the ranking and the name entry (boundary unproven) |
 
 `include/title/title_classes.h` has what several of them share.
 
@@ -50,7 +50,7 @@ of `config/<version>/title.yaml` and `game.yaml`; each file's `.rodata` and
 | `fighter.c` | the fighter factory and the fighters' base class |
 | `cpu_input.c` | the computer's input for a side without a pad |
 | `game_0e.c`, `game_0f.c` | classes not identified yet |
-| `fighters/fighter_<NN>.c` | the 24 fighters, one file each |
+| `fighters/<character>.c` | the 24 fighters, one file each, named after their `CHARACTER_*` id |
 | `game_0g.c`, `game_0h.c`, `game_0i.c` | entity classes the fighters derive from or create |
 | `hud.c` | the battle's messages: READY?, FIGHT!, YOU WIN! |
 | `battle_loading.c` | the battle's loading screen |

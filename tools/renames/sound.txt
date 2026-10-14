@@ -121,3 +121,7 @@ func_80039FD0 destroySoundEffectHandles
 # the debug menu's Select on a sound effect: plays it 3 times, 15 frames
 # apart, at halving volumes
 func_8001BEC8 soundControlPlayEcho
+
+# a pool of SND_VOICE_MAX nodes numbered 0..23, the SPU's voices, set up right before SsSetReservedVoice(SND_VOICE_MAX)
+SndUnk370 SndVoiceNode
+func_80038D44 initVoicePool

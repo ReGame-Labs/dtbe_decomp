@@ -1,5 +1,5 @@
-/* The battle scene (virtual table D_80064EC8): the sides' characters and input, the evolution, effect
- * and map files, and the continue or quit choice. */
+/* Fight (virtual table FIGHT_VTABLE), one fight: the sides' fighters and input, the evolution, effect and map
+ * files, the rounds, and the continue or quit choice. */
 
 #include "common.h"
 #include "battle/game_classes.h"
@@ -13,495 +13,494 @@
 #include "engine/text/text_printer.h"
 #include "engine/system/memory.h"
 
-void func_80071110(Unk8006ED20 *object);
-void func_80071460(Unk8006ED20 *this);
-void func_800715EC(Unk8006ED20 *this);
-s32 func_80071738(Unk8006ED20 *this);
-void func_80071894(Unk8006ED20 *this, s32 side);
-void func_80071A8C(Unk8006ED20 *this, s32 side);
-void func_80071B74(Unk8006ED20 *this);
-void func_80071BF8(Unk8006ED20 *this);
-void func_80071C9C(Unk8006ED20 *this);
-void func_80071E60(Unk8006ED20 *this);
-void func_80071EC0(Unk8006ED20 *this);
-void func_80071EF8(Unk8006ED20 *this);
+void Fight_run(Fight *object);
+void Fight_showContinue(Fight *this);
+void Fight_playIntro(Fight *this);
+s32 Fight_playRound(Fight *this);
+void func_80071894(Fight *this, s32 side);
+void func_80071A8C(Fight *this, s32 side);
+void Fight_playDoubleKnockOut(Fight *this);
+void Fight_playDraw(Fight *this);
+void Fight_playInterruption(Fight *this);
+void Fight_wipeOut(Fight *this);
+void Fight_end(Fight *this);
+void Fight_resetRound(Fight *this);
 
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064CC8);
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064CD8);
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064CE8);
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064CF8);
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064D08);
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064D18);
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064D28);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", LIGHT_DIRECTION_0);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", LIGHT_DIRECTION_1);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", LIGHT_DIRECTION_2);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", LIGHT_COLOR_0);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", LIGHT_COLOR_1);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", LIGHT_COLOR_2);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", BACK_COLOR);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006ED20);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_init);
 
-/* Returns the camera at 0x1B0. */
-Camera *func_8006EF5C(Unk8006ED20 *this) {
+/* Returns the fight's camera. */
+Camera *Fight_getCamera(Fight *this) {
     return &this->camera;
 }
 
-/* Returns the look-at at 0x12C. */
-LookAt *func_8006EF64(Unk8006ED20 *this) {
+/* Returns the camera's look-at. */
+LookAt *Fight_getLookAt(Fight *this) {
     return &this->lookAt;
 }
 
-/* Returns unk10 of GAME_STATE's fighter of side. */
-s32 func_8006EF6C(Unk8006ED20 *this, s32 side) {
-    return GAME_STATE.fighters[side].unk10;
+/* Returns the score of side. */
+s32 Fight_getScore(Fight *this, s32 side) {
+    return GAME_STATE.fighters[side].score;
 }
 
-/* Adds add to unk10 of GAME_STATE's fighter of side. */
-void func_8006EF90(Unk8006ED20 *this, s32 side, s32 add) {
-    GAME_STATE.fighters[side].unk10 += add;
+/* Adds add to the score of side. */
+void Fight_addScore(Fight *this, s32 side, s32 add) {
+    GAME_STATE.fighters[side].score += add;
 }
 
-/* Sets bit of GAME_STATE.save.unk18. */
-void func_8006EFC0(s16 bit) {
-    GAME_STATE.save.unk18 |= 1 << bit;
+/* Unlocks the bonus game of arena in the save data, for the main menu's bonus modes. */
+void unlockBonusGame(s16 arena) {
+    GAME_STATE.save.bonusGamesUnlocked |= ARENA_BIT(arena);
 }
 
-/* Returns the word index of the array at 0x240. */
-s32 func_8006EFE8(Unk8006ED20 *this, s32 index) {
-    return this->unk240[index];
+/* Returns the rounds side has won. */
+s32 Fight_getWins(Fight *this, s32 side) {
+    return this->wins[side];
 }
 
 /* Returns the vector at 0x2A4. */
-VECTOR *func_8006EFFC(Unk8006ED20 *this) {
+VECTOR *func_8006EFFC(Fight *this) {
     return &this->unk2A4;
 }
 
-/* Returns a random number from the object's own generator. */
-u32 func_8006F004(Unk8006ED20 *this) {
+/* Returns a random number from the fight's own generator. */
+u32 Fight_random(Fight *this) {
     return mersenneTwisterGenerate(&this->random);
 }
 
-/* Adds node at the end of the list at 0x228. */
-void func_8006F024(Unk8006ED20 *this, ListNode *node) {
-    func_80075C64(&this->unk228, node);
+/* Adds a collision shape of side 1's fighter. */
+void Fight_addSide1Shape(Fight *this, ListNode *node) {
+    listAppend(&this->side1Shapes, node);
 }
 
-/* Adds node at the end of the list at 0x230. */
-void func_8006F044(Unk8006ED20 *this, ListNode *node) {
-    func_80075C64(&this->unk230, node);
+/* Adds a collision shape of side 0's fighter. */
+void Fight_addSide0Shape(Fight *this, ListNode *node) {
+    listAppend(&this->side0Shapes, node);
 }
 
-/* Adds node at the end of the list at 0x238. */
-void func_8006F064(Unk8006ED20 *this, ListNode *node) {
-    func_80075C64(&this->unk238, node);
+/* Adds a collision shape of the stage's (or an item's). */
+void Fight_addStageShape(Fight *this, ListNode *node) {
+    listAppend(&this->stageShapes, node);
 }
 
-/* Adds entity, if there is one, to the group at 0x3C; returns it. */
-Entity *func_8006F084(Unk8006ED20 *this, Entity *entity) {
+/* Adds a stage entity, if there is one; returns it. */
+Entity *Fight_addStageEntity(Fight *this, Entity *entity) {
     if (entity != NULL) {
-        entityGroupAppend(&this->unk3C, entity);
+        entityGroupAppend(&this->stageEntities, entity);
     }
     return entity;
 }
 
-/* Adds entity, if there is one, to the group at 0x4C; returns it. */
-Entity *func_8006F0B4(Unk8006ED20 *this, Entity *entity) {
+/* Adds an entity (a fighter, an effect, a message), if there is one; returns it. */
+Entity *Fight_addEntity(Fight *this, Entity *entity) {
     if (entity != NULL) {
-        entityGroupAppend(&this->unk4C, entity);
+        entityGroupAppend(&this->entities, entity);
     }
     return entity;
 }
 
 /* Adds an entity to the group at 0x5C; returns the group. */
-EntityGroup *func_8006F0E4(Unk8006ED20 *this, Entity *entity) {
+EntityGroup *func_8006F0E4(Fight *this, Entity *entity) {
     return entityGroupAppend(&this->unk5C, entity);
 }
 
 /* Whether the group at 0x5C holds any entity. */
-s32 func_8006F104(Unk8006ED20 *this) {
+s32 func_8006F104(Fight *this) {
     return entityGroupGetCount(&this->unk5C) != 0;
 }
 
-/* Sets bit 2 of the flags at 0x2C8 to flag. */
-void func_8006F124(Unk8006ED20 *this, s32 flag) {
-    this->unk2C8 = (this->unk2C8 & ~4) | ((flag & 1) << 2);
+/* Sets bit 2 of the flags to flag (set when a round ends). */
+void func_8006F124(Fight *this, s32 flag) {
+    this->flags = (this->flags & ~4) | ((flag & 1) << 2);
 }
 
-/* Whether bit 2 of the flags at 0x2C8 is set or the group at 0x5C holds any entity (func_8006F104). */
-s32 func_8006F144(Unk8006ED20 *this) {
-    return ((this->unk2C8 >> 2) & 1) || func_8006F104(this);
+/* Whether bit 2 of the flags is set or the group at 0x5C holds any entity (func_8006F104). */
+s32 func_8006F144(Fight *this) {
+    return ((this->flags >> 2) & 1) || func_8006F104(this);
 }
 
-/* Returns bit 4 of the flags at 0x2C8. */
-s32 func_8006F190(Unk8006ED20 *this) {
-    return (this->unk2C8 >> 4) & 1;
+/* Whether the round is over (FIGHT_FLAG_ROUND_OVER). */
+s32 Fight_isRoundOver(Fight *this) {
+    return (this->flags >> 4) & 1;
 }
 
-/* Returns bit 8 of the flags at 0x2C8. */
-s32 func_8006F1A4(Unk8006ED20 *this) {
-    return (this->unk2C8 >> 8) & 1;
+/* Whether the continue prompt is up (FIGHT_FLAG_CONTINUE). */
+s32 Fight_isContinueShown(Fight *this) {
+    return (this->flags >> 8) & 1;
 }
 
-/* Returns the mesh scene. */
-MeshScene *func_8006F1B8(Unk8006ED20 *this) {
+/* Returns the map's mesh scene. */
+MeshScene *Fight_getMeshScene(Fight *this) {
     return this->meshScene;
 }
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006F1C4);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006F254);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_destroy);
 
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064D38);
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006F414);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006F57C);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_loadTamerTim);
 
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064D9C);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006F690);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_loadCharacterEffectTim);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006F780);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_load);
 
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064DDC);
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064DE4);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006FAF4);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_createSides);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006FEB0);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_destroySides);
 
-/* The method at 0x50 of Unk8006ED20's virtual table, which the stages override: (this, index, meshScene) gives
- * the entity of node index of the mesh scene, or NULL. */
-typedef Entity *(*Unk8006ED20NodeEntity)();
+/* Fight_createNodeEntity, the method at 0x50 of Fight's virtual table, which the stages override:
+ * (this, index, meshScene) gives the entity of node index of the map, or NULL. */
+typedef Entity *(*FightNodeEntityFunc)();
 
-/* Creates the entities of the nodes of the mesh scene (the method at 0x50) and adds them to the group at 0x3C. */
-void func_8006FFD4(Unk8006ED20 *this) {
+/* Creates the entities of the map's nodes (Fight_createNodeEntity) and adds them to the stage entities. */
+void Fight_createNodeEntities(Fight *this) {
     s32 count = meshSceneGetNodeCount(this->meshScene);
     s32 i;
     Entity *entity;
 
     for (i = 0; i < count; i++) {
-        entity = ((Unk8006ED20NodeEntity)this->vtable[10].func)((u8 *)this + this->vtable[10].delta, i,
+        entity = ((FightNodeEntityFunc)this->vtable[10].func)((u8 *)this + this->vtable[10].delta, i,
                                                                  this->meshScene);
         if (entity != NULL) {
-            entityGroupAppend(&this->unk3C, entity);
+            entityGroupAppend(&this->stageEntities, entity);
         }
     }
 }
 
-/* Creates the entity of node index of the mesh scene (the method at 0x50); NULL for an index out of range. */
-Entity *func_8007005C(Unk8006ED20 *this, s32 index) {
+/* Creates the entity of the map's node index (Fight_createNodeEntity); NULL for an index out of range. */
+Entity *Fight_createNodeEntityAt(Fight *this, s32 index) {
     if (index < meshSceneGetNodeCount(this->meshScene) && index >= 0) {
-        return ((Unk8006ED20NodeEntity)this->vtable[10].func)((u8 *)this + this->vtable[10].delta, index,
+        return ((FightNodeEntityFunc)this->vtable[10].func)((u8 *)this + this->vtable[10].delta, index,
                                                                this->meshScene);
     }
     return NULL;
 }
 
-/* Returns 0. */
-s32 func_800700C0(void) {
+/* The map nodes' entities: none in the base class. */
+s32 Fight_createNodeEntity(void) {
     return 0;
 }
 
-/* An object Unk8006ED20 keeps at 0x2C by side (typed void * in game.h): its character at 0x8. */
-typedef struct Unk800700C8 {
-    /* 0x0 */ u8 unk0[8];
-    /* 0x8 */ Unk80076F34 *chara;
-} Unk800700C8;
-
-/* Returns the character of side. */
-Unk80076F34 *func_800700C8(Unk8006ED20 *this, s32 side) {
-    return ((Unk800700C8 *)this->unk2C[side])->chara;
+/* Returns the fighter of side. */
+Fighter *Fight_getFighter(Fight *this, s32 side) {
+    return this->sides[side]->current;
 }
 
-/* Sets the words at 0x33C to 0x354 (the stages pass their own), and 0x35C to half the smaller of unk34C - unk33C
- * and 4/3 of unk350 - unk340. */
-void func_800700E4(Unk8006ED20 *this, s32 unk33C, s32 unk34C, s32 unk340, s32 unk350, s32 unk354) {
-    s32 size = ((unk350 - unk340) << 2) / 3;
+/* Sets the arena's bounds (the stages pass their own), and 0x35C to half the smaller of the width and 4/3 of
+ * the height. */
+void Fight_setBounds(Fight *this, s32 left, s32 right, s32 top, s32 bottom, s32 depth) {
+    s32 size = ((bottom - top) << 2) / 3;
 
-    this->unk33C = unk33C;
-    this->unk340 = unk340;
-    this->unk34C = unk34C;
-    this->unk350 = unk350;
-    this->unk354 = unk354;
-    if (unk34C - unk33C < size) {
-        size = unk34C - unk33C;
+    this->boundLeft = left;
+    this->boundTop = top;
+    this->boundRight = right;
+    this->boundBottom = bottom;
+    this->boundDepth = depth;
+    if (right - left < size) {
+        size = right - left;
     }
     this->unk35C = size >> 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80070140);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_startRound);
 
-/* Creates the object of a virtual table slot that the stages override with their own (0x6C bytes here). */
-void *func_800702E0(void *this, s32 unk, s32 arg) {
-    return func_8007C17C(operatorNew(0x6C), arg);
+/* Creates the computer player of a side without a pad, for its side object; the bonus stages make their own. */
+void *Fight_createController(void *this, s32 side, BattleSide *battleSide) {
+    return ComputerController_init(operatorNew(0x6C), battleSide);
 }
-void func_80070C28(Unk8006ED20 *this);
-void func_800703BC(Unk8006ED20 *this);
+void Fight_finishStep(Fight *this);
+void Fight_updateSides(Fight *this);
 
-/* A step of the object's thread: switches to it, then gathers the group at 0x5C (with no input for both characters)
- * while it holds any entity, else runs func_800703BC and gathers the group at 0x3C. */
-void func_80070314(Unk8006ED20 *this) {
+/* A frame of the fight: switches to its thread for one frame, then ticks the group at 0x5C (with no input for
+ * either side) while it holds any entity, else updates the sides and ticks the stage entities. */
+void Fight_tick(Fight *this) {
     threadSwitchTo(&this->thread, 0);
     if (func_8006F104(this)) {
-        entityGroupGather(&this->unk5C, (s32)this);
-        func_8007504C(this->unk24[0], 0);
-        func_8007504C(this->unk24[1], 0);
-        func_80070C28(this);
+        entityGroupTick(&this->unk5C, (s32)this);
+        InputHistory_record(this->inputs[0], 0);
+        InputHistory_record(this->inputs[1], 0);
+        Fight_finishStep(this);
     } else {
-        func_800703BC(this);
-        entityGroupGather(&this->unk3C, (s32)this);
-        func_80070C28(this);
+        Fight_updateSides(this);
+        entityGroupTick(&this->stageEntities, (s32)this);
+        Fight_finishStep(this);
     }
 }
 
-/* The entry of the thread of func_8006ED20's object. */
-void func_8007039C(s32 unused, Unk8006ED20 *object) {
-    func_80071110(object);
+/* The entry of the fight's thread. */
+void runFightThread(s32 unused, Fight *fight) {
+    Fight_run(fight);
 }
 
-void func_80070474(Unk8006ED20 *this);
-void func_800708C4(Unk8006ED20 *this);
-void func_800708F4(Unk8006ED20 *this);
-void func_800706A4(Unk8006ED20 *this);
+void Fight_readInputs(Fight *this);
+void func_800708C4(Fight *this);
+void func_800708F4(Fight *this);
+void Fight_catchFalls(Fight *this);
 
-/* Runs func_80070474, gathers the group at 0x4C, and with bits 4 and 5 of the flags at 0x2C8 clear, updates both
- * sides' objects (0x2C) around it; runs func_800706A4 unless bit 8 is set. */
-void func_800703BC(Unk8006ED20 *this) {
+/* Reads the inputs and ticks the entities; unless the round is over or the fighters are frozen
+ * (FIGHT_FLAG_FREEZE), ticks both sides before and pushes and hits after; catches falls unless the continue
+ * prompt is up. */
+void Fight_updateSides(Fight *this) {
     s32 skipSides;
 
-    func_80070474(this);
-    skipSides = func_8006F190(this) || ((this->unk2C8 >> 5) & 1);
+    Fight_readInputs(this);
+    skipSides = Fight_isRoundOver(this) || ((this->flags >> 5) & 1);
     if (!skipSides) {
-        func_8007F22C(this->unk2C[0]);
-        func_8007F22C(this->unk2C[1]);
+        BattleSide_tickGauges(this->sides[0]);
+        BattleSide_tickGauges(this->sides[1]);
     }
-    entityGroupGather(&this->unk4C, (s32)this);
+    entityGroupTick(&this->entities, (s32)this);
     if (!skipSides) {
         func_800708C4(this);
         func_800708F4(this);
     }
-    if (!func_8006F1A4(this)) {
-        func_800706A4(this);
+    if (!Fight_isContinueShown(this)) {
+        Fight_catchFalls(this);
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80070474);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_readInputs);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_800706A4);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_catchFalls);
 
-/* Method 0x58 of the virtual table: whether position is more than 0x1000 below unk350 (y grows downwards). */
-s32 func_80070824(Unk8006ED20 *this, Vec3 *position) {
-    return this->unk350 + 0x1000 < position->vy;
+/* Whether position has fallen more than 0x1000 below the floor (y grows downwards). */
+s32 Fight_isFallen(Fight *this, Vec3 *position) {
+    return this->boundBottom + 0x1000 < position->vy;
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80070838);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_respawnFighter);
 
-/* Runs func_8007A158 on the characters of both sides. */
-void func_800708C4(Unk8006ED20 *this) {
-    func_8007A158(((Unk800700C8 *)this->unk2C[0])->chara, ((Unk800700C8 *)this->unk2C[1])->chara);
+/* Runs func_8007A158 on both sides' fighters. */
+void func_800708C4(Fight *this) {
+    func_8007A158(this->sides[0]->current, this->sides[1]->current);
 }
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_800708F4);
 
-void func_80072F2C(Unk8006ED20 *this);
+void Fight_applyView(Fight *this);
 
-/* Counts the step, runs the method at 0x60 of the virtual table, then func_80072F2C. */
-void func_80070C28(Unk8006ED20 *this) {
+/* Counts the step, updates the camera (Fight_updateCamera), then applies its view. */
+void Fight_finishStep(Fight *this) {
     this->steps++;
     this->vtable[12].func((u8 *)this + this->vtable[12].delta);
-    func_80072F2C(this);
+    Fight_applyView(this);
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80070C74);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_getRoundResult);
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_80070DBC);
 
-/* A value of side by kind, on a 0-10000 scale: 0 is 10000 when 0x20 of its object at 0x2C is full, 1 that
- * fill as a share, 2 and 4 the count at 0xD28 / 30 * 100, 3 a flat 5000. */
-s32 func_80070F40(Unk8006ED20 *this, s32 side, s32 kind) {
-    Unk8007F184 *object = this->unk2C[side];
-    s32 value = object->unk20;
-    s32 most = object->unk1C;
+/* The bonus of side by kind (BONUS_*) after a won round, on a 0-10000 scale. */
+s32 Fight_getBonus(Fight *this, s32 side, s32 kind) {
+    BattleSide *battleSide = this->sides[side];
+    s32 life = battleSide->life;
+    s32 lifeMax = battleSide->lifeMax;
 
     switch (kind) {
-    case 0:
-        return (value == most) ? 10000 : 0;
-    case 1:
-        return value * 10000 / most;
-    case 2:
-    case 4:
-        return this->unkD28 / 30 * 100;
-    case 3:
+    case BONUS_PERFECT:
+        return (life == lifeMax) ? 10000 : 0;
+    case BONUS_LIFE:
+        return life * 10000 / lifeMax;
+    case BONUS_TIME:
+    case BONUS_GAME_TIME:
+        return this->timeLeft / 30 * 100;
+    case BONUS_FLAT:
         return 5000;
     }
     return 0;
 }
 
-/* The sum of func_80070F40's values 0 to 2 for side, or of 3 and 4 with bit 0 of the flags at 0xD2C set. */
-s32 func_80071014(Unk8006ED20 *this, s32 side) {
+/* The bonus of side after a won round: perfect, life and time, or in a bonus game flat and time. */
+s32 Fight_computeBonus(Fight *this, s32 side) {
     s32 sum;
 
-    if (!(this->unkD2C & 1)) {
-        sum = func_80070F40(this, side, 0);
-        sum += func_80070F40(this, side, 1);
-        sum += func_80070F40(this, side, 2);
+    if (!(this->modeFlags & FIGHT_MODE_BONUS)) {
+        sum = Fight_getBonus(this, side, BONUS_PERFECT);
+        sum += Fight_getBonus(this, side, BONUS_LIFE);
+        sum += Fight_getBonus(this, side, BONUS_TIME);
     } else {
-        sum = func_80070F40(this, side, 3);
-        sum += func_80070F40(this, side, 4);
+        sum = Fight_getBonus(this, side, BONUS_FLAT);
+        sum += Fight_getBonus(this, side, BONUS_GAME_TIME);
     }
     return sum;
 }
 
-/* Switches back from the object's thread frames times (once at least). */
-void func_800710B8(Unk8006ED20 *this, s32 frames) {
+/* Waits frames frames (once at least) in the fight's thread. */
+void Fight_waitFrames(Fight *this, s32 frames) {
     do {
         threadSwitchBack(&this->thread, 0);
     } while (--frames > 0);
 }
 
-/* Sets bit 3 of the flags at 0x2C8. */
-void func_800710FC(Unk8006ED20 *this) {
-    this->unk2C8 |= 8;
+/* Ends the round with ROUND_STOPPED (the stages call it). */
+void Fight_stopRound(Fight *this) {
+    this->flags |= FIGHT_FLAG_STOP_ROUND;
 }
 
-/* The object's thread: plays rounds (func_800715EC, then func_80071738 gives how the round ended) until a side
- * has the wins at 0x250 or the rounds at 0x254 run out (bit 7 of the flags at 0x2C8). A round won by a side
- * counts in 0x240, sets GAME_STATE's winner, adds the computer's win to its rounds not won and plays the other
- * side's sound. Then func_80071460 unless the run is over, and func_80071EC0. */
-void func_80071110(Unk8006ED20 *this) {
+/* The fight's thread: plays rounds (Fight_playIntro, then Fight_playRound gives how the round ended) until a side
+ * has the wins needed or no round is left. A round won by a side counts in its wins, sets GAME_STATE's winner,
+ * adds the computer's win to its rounds not won and plays the other side's sound. Then Fight_showContinue unless
+ * the run is over, and Fight_end. */
+void Fight_run(Fight *this) {
     s32 side;
     s32 result;
     s32 over;
-    Unk80076F34 *other;
+    Fighter *other;
 
     for (;;) {
         side = -1;
         GAME_STATE.winner = side;
-        func_800715EC(this);
-        result = func_80071738(this);
+        Fight_playIntro(this);
+        result = Fight_playRound(this);
         if (GAME_STATE.demo) {
-            func_80071EC0(this);
+            Fight_end(this);
         }
-        this->vtable[6].func((u8 *)this + this->vtable[6].delta);
-        if (this->unkD2C & 1) {
-            func_80071EC0(this);
+        this->vtable[6].func((u8 *)this + this->vtable[6].delta); /* Fight_endRound */
+        if (this->modeFlags & FIGHT_MODE_BONUS) {
+            Fight_end(this);
         }
         soundControlFadeOut(&SOUND_CONTROL, 90);
         switch (result) {
-        case 0:
-            func_80071EC0(this);
+        case ROUND_STOPPED:
+            Fight_end(this);
             break;
-        case 1:
+        case ROUND_WON_SIDE_0:
             side = 0;
             GAME_STATE.winner = side;
-            this->unk240[side]++;
+            this->wins[side]++;
             break;
-        case 2:
+        case ROUND_WON_SIDE_1:
             side = 1;
             GAME_STATE.winner = side;
-            this->unk240[side]++;
+            this->wins[side]++;
             break;
-        case 3:
+        case ROUND_DRAW:
             GAME_STATE.roundsNotWon++;
-            func_80071BF8(this);
+            Fight_playDraw(this);
             break;
-        case 4:
+        case ROUND_DOUBLE_KO:
             GAME_STATE.roundsNotWon++;
-            func_80071B74(this);
+            Fight_playDoubleKnockOut(this);
             break;
-        case 5:
-        case 6:
-            func_80071C9C(this);
+        case ROUND_CHALLENGER:
+        case ROUND_SECRET_OPPONENT:
+            Fight_playInterruption(this);
             break;
-        case 7:
-            func_80071EC0(this);
+        case ROUND_QUIT:
+            Fight_end(this);
             break;
         }
-        over = --this->unk254 == 0 || this->unk240[0] >= this->unk250 || this->unk240[1] >= this->unk250;
-        this->unk2C8 = (this->unk2C8 & ~0x80) | (over << 7);
+        over = --this->roundsLeft == 0 || this->wins[0] >= this->winsNeeded || this->wins[1] >= this->winsNeeded;
+        this->flags = (this->flags & ~FIGHT_FLAG_LAST_ROUND) | (over << 7);
         if (side >= 0) {
-            GAME_STATE.winnerCharacter = func_80077568(((Unk800700C8 *)this->unk2C[side])->chara);
+            GAME_STATE.winnerCharacter = Fighter_getCharacter(this->sides[side]->current);
             GAME_STATE.roundsNotWon += GAME_STATE.fighters[side].computer;
-            other = ((Unk800700C8 *)this->unk2C[side ^ 1])->chara;
-            if (this->unkD28 > 0) {
-                soundControlPlayEcho(&SOUND_CONTROL, gameStateGetSound(&GAME_STATE, func_80077568(other)));
+            other = this->sides[side ^ 1]->current;
+            if (this->timeLeft > 0) {
+                soundControlPlayEcho(&SOUND_CONTROL, gameStateGetSound(&GAME_STATE, Fighter_getCharacter(other)));
                 func_80071894(this, side);
             } else {
-                soundControlPlaySound(&SOUND_CONTROL, gameStateGetSound(&GAME_STATE, func_80077568(other)), 0);
+                soundControlPlaySound(&SOUND_CONTROL, gameStateGetSound(&GAME_STATE, Fighter_getCharacter(other)), 0);
                 func_80071A8C(this, side);
             }
-            func_8006EF90(this, side, func_80071014(this, side));
+            Fight_addScore(this, side, Fight_computeBonus(this, side));
         }
-        if ((this->unk2C8 >> 7) & 1) {
+        if ((this->flags >> 7) & 1) {
             break;
         }
-        this->vtable[7].func((u8 *)this + this->vtable[7].delta);
-        func_80071E60(this);
-        func_80071EF8(this);
+        this->vtable[7].func((u8 *)this + this->vtable[7].delta); /* Fight_prepareNextRound */
+        Fight_wipeOut(this);
+        Fight_resetRound(this);
     }
     if (!gameStateIsOutsideRun(&GAME_STATE) && !gameStateHasPlayerWon(&GAME_STATE)) {
-        func_80071460(this);
+        Fight_showContinue(this);
     }
-    func_80071EC0(this);
+    Fight_end(this);
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071460);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_showContinue);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_800715EC);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_playIntro);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071738);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_playRound);
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071894);
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071A8C);
-s32 func_80071D38(Unk8006ED20 *this, Entity *entity, s32 port);
+s32 Fight_waitEntity(Fight *this, Entity *entity, s32 port);
 
-/* Plays sounds 0x8009 and 0x42, then adds an entity of func_800CB7B0's class (10) and waits for it
- * (func_80071D38). */
-void func_80071B74(Unk8006ED20 *this) {
+/* A double KO: plays sounds 0x8009 and 0x42, then shows the DOUBLE KO message and waits for it (Fight_waitEntity). */
+void Fight_playDoubleKnockOut(Fight *this) {
     soundControlPlaySound(&SOUND_CONTROL, 0x8009, 0);
     soundControlPlaySound(&SOUND_CONTROL, 0x42, 0);
-    func_80071D38(this, func_8006F0B4(this, func_800CB7B0(entityOperatorNew(0x59C), 10, 0)), -1);
+    Fight_waitEntity(
+        this, Fight_addEntity(this, BattleMessage_init(entityOperatorNew(0x59C), BATTLE_MESSAGE_DOUBLE_KO, 0)), -1);
 }
 
-/* func_80071B74 with class 9, after func_80079268 on both sides' characters. */
-void func_80071BF8(Unk8006ED20 *this) {
-    Unk80076F34 *chara0;
-    Unk80076F34 *chara1;
+/* A draw: as Fight_playDoubleKnockOut but with the DRAW GAME message, after func_80079268 on both sides' fighters. */
+void Fight_playDraw(Fight *this) {
+    Fighter *fighter0;
+    Fighter *fighter1;
 
     soundControlPlaySound(&SOUND_CONTROL, 0x8009, 0);
     soundControlPlaySound(&SOUND_CONTROL, 0x42, 0);
-    /* The match depends on reading both characters before the calls. */
-    chara0 = ((Unk800700C8 *)this->unk2C[0])->chara;
-    chara1 = ((Unk800700C8 *)this->unk2C[1])->chara;
-    func_80079268(chara0);
-    func_80079268(chara1);
-    func_80071D38(this, func_8006F0B4(this, func_800CB7B0(entityOperatorNew(0x59C), 9, 0)), -1);
+    /* The match depends on reading both fighters before the calls. */
+    fighter0 = this->sides[0]->current;
+    fighter1 = this->sides[1]->current;
+    func_80079268(fighter0);
+    func_80079268(fighter1);
+    Fight_waitEntity(
+        this, Fight_addEntity(this, BattleMessage_init(entityOperatorNew(0x59C), BATTLE_MESSAGE_DRAW_GAME, 0)), -1);
 }
 
-/* Stops the music and plays sound 0x8007, then func_80071BF8 with class 1, and ends with func_80071EC0. */
-void func_80071C9C(Unk8006ED20 *this) {
-    Unk80076F34 *chara0;
-    Unk80076F34 *chara1;
+/* A challenger or the secret opponent came in: stops the music, plays sound 0x8007 and the NEW CHALLENGER message
+ * as Fight_playDraw does, and ends the fight. */
+void Fight_playInterruption(Fight *this) {
+    Fighter *fighter0;
+    Fighter *fighter1;
 
     stopMusic();
     soundControlPlaySound(&SOUND_CONTROL, 0x8007, 0);
-    chara0 = ((Unk800700C8 *)this->unk2C[0])->chara;
-    chara1 = ((Unk800700C8 *)this->unk2C[1])->chara;
-    func_80079268(chara0);
-    func_80079268(chara1);
-    func_80071D38(this, func_8006F0B4(this, func_800CB7B0(entityOperatorNew(0x59C), 1, 0)), -1);
-    func_80071EC0(this);
+    fighter0 = this->sides[0]->current;
+    fighter1 = this->sides[1]->current;
+    func_80079268(fighter0);
+    func_80079268(fighter1);
+    Fight_waitEntity(
+        this,
+        Fight_addEntity(this, BattleMessage_init(entityOperatorNew(0x59C), BATTLE_MESSAGE_NEW_CHALLENGER, 0)),
+        -1);
+    Fight_end(this);
 }
 
-s32 func_80071D7C(Unk8006ED20 *this, u32 handle, s32 port);
+s32 Fight_waitHandle(Fight *this, u32 handle, s32 port);
 
-/* func_80071D7C for the entity's handle: waits until it is gone or the port presses 0x800. */
-s32 func_80071D38(Unk8006ED20 *this, Entity *entity, s32 port) {
-    return func_80071D7C(this, entityGetHandle(entity), port);
+/* Fight_waitHandle for the entity's handle: waits until it is gone or the port presses Start (0x800). */
+s32 Fight_waitEntity(Fight *this, Entity *entity, s32 port) {
+    return Fight_waitHandle(this, entityGetHandle(entity), port);
 }
 
 /* Waits, a frame at a time, until the entity of handle is gone: returns 0 then. With a port (>= 0), a press of
- * 0x800 on it destroys the entity and returns 1. */
-s32 func_80071D7C(Unk8006ED20 *this, u32 handle, s32 port) {
+ * Start (0x800) on it skips: destroys the entity and returns 1. */
+s32 Fight_waitHandle(Fight *this, u32 handle, s32 port) {
     while (getEntityByHandle(handle) != NULL) {
-        func_800710B8(this, 0);
+        Fight_waitFrames(this, 0);
         if (port >= 0 && (padManagerGetPressed(PAD_MANAGER_INSTANCE, port) & 0x800)) {
             destroyEntityByHandle(handle);
             return 1;
@@ -510,58 +509,61 @@ s32 func_80071D7C(Unk8006ED20 *this, u32 handle, s32 port) {
     return 0;
 }
 
-/* Counts unk2B8 down from 0x20 by 2 a frame, until it is under -4. */
-void func_80071E10(Unk8006ED20 *this) {
-    this->unk2B8 = 0x20;
+/* Wipes the screen in: the wipe from 0x20 down by 2 a frame, until it is under -4. */
+void Fight_wipeIn(Fight *this) {
+    this->wipe = 0x20;
     do {
-        func_800710B8(this, 0);
-        this->unk2B8 -= 2;
-    } while (this->unk2B8 >= -4);
+        Fight_waitFrames(this, 0);
+        this->wipe -= 2;
+    } while (this->wipe >= -4);
 }
 
-/* Counts unk2B8 up from 0 by 2 a frame, until it is over 0x24, then fades the screen to level 0 at once. */
-void func_80071E60(Unk8006ED20 *this) {
-    this->unk2B8 = 0;
+/* Wipes the screen out: the wipe from 0 up by 2 a frame, until it is over 0x24, then fades the screen to level 0
+ * at once. */
+void Fight_wipeOut(Fight *this) {
+    this->wipe = 0;
     do {
-        func_800710B8(this, 0);
-        this->unk2B8 += 2;
-    } while (this->unk2B8 < 0x25);
+        Fight_waitFrames(this, 0);
+        this->wipe += 2;
+    } while (this->wipe < 0x25);
     fadeControlFadeTo(&FADE_CONTROL, 0, 0);
 }
 
-/* func_80071E60, then sets bit 0 of the flags at 0x2C8 and only switches frames: the thread never returns. */
-void func_80071EC0(Unk8006ED20 *this) {
-    func_80071E60(this);
-    this->unk2C8 |= 1;
+/* Ends the fight: wipes out, tells the main loop (FIGHT_FLAG_OVER) and only waits frames from then on: the thread
+ * never returns. */
+void Fight_end(Fight *this) {
+    Fight_wipeOut(this);
+    this->flags |= FIGHT_FLAG_OVER;
     for (;;) {
-        func_800710B8(this, 0);
+        Fight_waitFrames(this, 0);
     }
 }
 
-void func_8006FEB0(Unk8006ED20 *this);
-void func_8006FAF4(Unk8006ED20 *this);
+void Fight_destroySides(Fight *this);
+void Fight_createSides(Fight *this);
 
-/* Runs func_8006FEB0, func_8006FAF4 and the method at 0x8 of the virtual table, waits for the CD, then plays the
- * arena's music from where it was. */
-void func_80071EF8(Unk8006ED20 *this) {
-    func_8006FEB0(this);
-    func_8006FAF4(this);
+/* Sets up the next round: builds the sides again and starts the round (Fight_startRound), waits for the CD, then
+ * plays the arena's music from where it was. */
+void Fight_resetRound(Fight *this) {
+    Fight_destroySides(this);
+    Fight_createSides(this);
     this->vtable[1].func((u8 *)this + this->vtable[1].delta);
     syncCdfs(0);
     seekMusicTrack(gameStateGetArena(&GAME_STATE), 0);
     soundControlResumeMusic(&SOUND_CONTROL);
 }
 
-void func_80071F6C(void) {
+/* The stage's own part of a frame: nothing in the base class. */
+void Fight_tickScenery(void) {
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071F74);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_updatePauseMenu);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80072088);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_updateCamera);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80072680);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_draw);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80072748);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_drawWorld);
 
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064E28);
 
@@ -571,7 +573,7 @@ INCLUDE_ASM("game/nonmatchings/battle_scene", func_8007293C);
 
 /* Draws rect less a pixel of width and height, subtracting color from the screen (semi-transparent, in a texture
  * page of abr 2). */
-void func_80072ADC(u_long *ot, RECT *rect, u32 color) {
+void drawDarkRect(u_long *ot, RECT *rect, u32 color) {
     /* to set the color and code, and copy the position, a word at a time */
     TileWords *tile = (TileWords *)allocTile();
 
@@ -583,119 +585,123 @@ void func_80072ADC(u_long *ot, RECT *rect, u32 color) {
     AddPrim(ot, allocDrTpage(getTPage(0, 2, 960, 256)));
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80072B74);
+INCLUDE_ASM("game/nonmatchings/battle_scene", drawRectFrame);
 
 /* Prints text of length characters (8 pixels each) centered on the 320-pixel screen, at y. */
-void func_80072C6C(Printer *printer, u8 *text, s32 length, s32 y) {
+void printCentered(Printer *printer, u8 *text, s32 length, s32 y) {
     printer->x = (0x140 - (length << 3)) >> 1;
     printer->y = y;
     printerPrint(printer, text);
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80072CA0);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_drawPauseMenu);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80072E20);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_drawWipe);
 
 /* Sets the camera's view from the look-at and marks the world matrices of the groups and the mesh scene out of
  * date. */
-void func_80072F2C(Unk8006ED20 *this) {
+void Fight_applyView(Fight *this) {
     MATRIX view;
 
     lookAtGetView(&this->lookAt, &view);
     cameraSetView(&this->camera, &view);
     groupInvalidate(&this->unkCC);
-    groupInvalidate(&this->unk6C);
+    groupInvalidate(&this->fighterGroup);
     groupInvalidate(&this->meshScene->group);
 }
 
-/* Picks a node of D_8006437C for b and a (func_80076474) with a temporary Unk80076444; when it picks one, writes
- * a through it (func_800765B4) and returns 1. */
-s32 func_80072F80(Vec3 *a, Vec3 *b) {
-    Unk80076444 picker;
+/* Whether the segment from from to to hits the map's collision lines (TerrainProbe_cast with a temporary
+ * TerrainProbe); when it does, moves to to the hit (TerrainProbe_getHitPoint) and returns 1. */
+s32 castMapRay(Vec3 *to, Vec3 *from) {
+    TerrainProbe probe;
 
-    func_80076444(&picker);
-    if (func_80076474(&picker, b, a)) {
-        func_800765B4(&picker, a);
+    TerrainProbe_init(&probe);
+    if (TerrainProbe_cast(&probe, from, to)) {
+        TerrainProbe_getHitPoint(&probe, to);
         return 1;
     }
     return 0;
 }
 
-/* Picks a node of D_8006437C for the two vectors (func_80076474) with a temporary Unk80076444. */
-void func_80072FE0(Vec3 *a, Vec3 *b) {
-    Unk80076444 picker;
+/* Casts the segment from start to end at the collision lines with a temporary TerrainProbe, dropping the result
+ * (TerrainProbe_cast still moves the link it hits to the front of COLLISION_LINKS). */
+void func_80072FE0(Vec3 *start, Vec3 *end) {
+    TerrainProbe probe;
 
-    func_80076444(&picker);
-    func_80076474(&picker, a, b);
+    TerrainProbe_init(&probe);
+    TerrainProbe_cast(&probe, start, end);
 }
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_80073024);
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_80073130);
 
-/* Returns the character of the other side than chara's (func_80077574). */
-Unk80076F34 *func_80073218(Unk8006ED20 *this, Unk80076F34 *chara) {
-    if (func_80077574(chara) == 0) {
-        return ((Unk800700C8 *)this->unk2C[1])->chara;
+/* Returns the fighter of the other side than fighter's. */
+Fighter *Fight_getOpponent(Fight *this, Fighter *fighter) {
+    if (Fighter_getSide(fighter) == 0) {
+        return this->sides[1]->current;
     }
-    return ((Unk800700C8 *)this->unk2C[0])->chara;
+    return this->sides[0]->current;
 }
 
-/* Returns the func_80075000 object of the character index. */
-struct Unk80075000 *func_80073260(Unk8006ED20 *this, s32 index) {
-    return this->unk24[index];
+/* Returns the input history of side. */
+struct InputHistory *Fight_getInput(Fight *this, s32 side) {
+    return this->inputs[side];
 }
 
-/* Returns the object at 0x2C of side; no caller found. */
-void *func_80073274(Unk8006ED20 *this, s32 side) {
-    return this->unk2C[side];
+/* Returns the side object of side; no caller found. */
+void *Fight_getSide(Fight *this, s32 side) {
+    return this->sides[side];
 }
 
-/* Sets bit 5 of the flags at 0x2C8. */
-void func_80073288(Unk8006ED20 *this) {
-    this->unk2C8 |= 0x20;
+/* Stops updating the sides. */
+void Fight_freezeFighters(Fight *this) {
+    this->flags |= FIGHT_FLAG_FREEZE;
 }
 
-/* Clears bit 5 of the flags at 0x2C8. */
-void func_8007329C(Unk8006ED20 *this) {
-    this->unk2C8 &= ~0x20;
+/* Updates the sides again. */
+void Fight_unfreezeFighters(Fight *this) {
+    this->flags &= ~FIGHT_FLAG_FREEZE;
 }
 
-/* Sets bit 6 of the flags at 0x2C8. */
-void func_800732B0(Unk8006ED20 *this) {
-    this->unk2C8 |= 0x40;
+/* Stops the round's clock. */
+void Fight_holdClock(Fight *this) {
+    this->flags |= FIGHT_FLAG_HOLD_CLOCK;
 }
 
-/* Clears bit 6 of the flags at 0x2C8. */
-void func_800732C4(Unk8006ED20 *this) {
-    this->unk2C8 &= ~0x40;
+/* Runs the round's clock again. */
+void Fight_releaseClock(Fight *this) {
+    this->flags &= ~FIGHT_FLAG_HOLD_CLOCK;
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_800732D8);
+INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_lightFighter);
 
-void func_8007338C(void) {
+/* Right after every round: nothing in the base class. */
+void Fight_endRound(void) {
 }
 
-void func_80073394(void) {
+/* Before the next round's wipe-out, when another round follows: nothing in the base class (the stages stop
+ * their looping sounds). */
+void Fight_prepareNextRound(void) {
 }
 
-/* Returns the word at 0x314 (no caller). */
-s32 func_8007339C(Unk8006ED20 *this) {
-    return this->unk314;
+/* Returns the arena (no caller). */
+s32 Fight_getArena(Fight *this) {
+    return this->arena;
 }
 
 /* Returns the word at 0x258 (no caller). */
-s32 func_800733A8(Unk8006ED20 *this) {
+s32 func_800733A8(Fight *this) {
     return this->unk258;
 }
 
-/* Returns the object func_8006ED20 constructed. */
-Unk8006ED20 *func_800733B4(void) {
-    return D_800D377C;
+/* Returns the fight Fight_init constructed last. */
+Fight *getCurrentFight(void) {
+    return CURRENT_FIGHT;
 }
 
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064EC8);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", FIGHT_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064F40);
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064F44);
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064FA4);
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064FF4);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", ARENA_START_POSITIONS);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", ARENA_RESPAWN_POSITIONS);

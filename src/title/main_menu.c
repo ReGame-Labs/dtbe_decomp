@@ -13,33 +13,39 @@
 #include "engine/gfx/sprite.h"
 #include "title/title_classes.h"
 
-/* A task with a thread, a StepperGroup and a sprite, named after its destructor. */
-typedef struct Unk8006A62C {
+/* The main menu's task (mainMenuTaskInit, virtual table MAIN_MENU_TASK_VTABLE): its thread runs the
+ * StepperGroup of the items until one closes it; the update draws the background, the items, the arrows,
+ * the rails and the banners. */
+typedef struct MainMenuTask {
     /* 0x00 */ Task task;
     /* 0x20 */ Thread thread;
-    /* 0x2C */ u8 steppers[0x44]; /* a StepperGroup */
-    /* 0x70 */ Sprite sprite;
-} Unk8006A62C;
+    /* 0x2C */ u8 items[0x44]; /* a StepperGroup */
+    /* 0x70 */ Sprite background;
+    /* 0x88 */ s32 frame;
+    /* 0x8C */ s16 leftX;  /* of the left arrow and rail, in 1/16 pixels: slides in after 0x10 frames */
+    /* 0x8E */ s16 rightX;
+} MainMenuTask;
 
-extern TaskVtable D_8006471C;
+extern TaskVtable MAIN_MENU_TASK_VTABLE;
 
 /* Stepper's virtual table, which C reaches by its g++ name */
 extern VtableEntry STEPPER_VTABLE[] __asm__("_vt.7Stepper");
 
-/* The title's Stepper class of virtual table D_800646BC (func_8006A11C), as C
- * sees it: a Stepper's list node, and its virtual table pointer at 0x1C. */
-typedef struct Unk8006A11C {
+/* An item of the main menu (virtual table MAIN_MENU_ITEM_VTABLE), a Stepper as C sees it: a Stepper's list
+ * node, and its virtual table pointer at 0x1C. Its label slides up into place; once confirmed it flashes,
+ * then closes the menu with its index, the menu's choice. */
+typedef struct MainMenuItem {
     /* 0x00 */ ListNode link;
     /* 0x08 */ void *group;
     /* 0x0C */ s32 index; /* among the children of its group */
     /* 0x10 */ u8 unk10[0x1C - 0x10];
     /* 0x1C */ VtableEntry *vtable;
-    /* 0x20 */ s32 unk20; /* func_8006A11C's first argument */
-    /* 0x24 */ s32 unk24;
-    /* 0x28 */ s32 unk28; /* 0x2000 from func_8006A11C */
-    /* 0x2C */ s32 unk2C;
-    /* 0x30 */ s32 unk30; /* func_8006A11C's second argument */
-} Unk8006A11C;
+    /* 0x20 */ TitleImage *label;
+    /* 0x24 */ s32 flashPhase; /* runs once the item is confirmed */
+    /* 0x28 */ s32 y;          /* in 1/16 pixels, from 0x2000 up to its place */
+    /* 0x2C */ s32 frame;      /* the items start to move one after the other */
+    /* 0x30 */ s32 locked;     /* a "???" item, which refuses the confirm */
+} MainMenuItem;
 
 /* Stepper's constructor, as C sees it */
 void *stepperInit(void *this, s32 value);
@@ -48,23 +54,23 @@ void *stepperInit(void *this, s32 value);
 void stepperCloseGroup(void *this, s32 value);
 
 /* the count of the main menu's items (mainMenuTaskInit counts its StepperGroup's children) */
-extern s32 D_8007B33C;
+extern s32 MAIN_MENU_ITEM_COUNT;
 
-extern VtableEntry D_800646BC[];
+extern VtableEntry MAIN_MENU_ITEM_VTABLE[];
 
 /* Spreads the menu's items over 180 units from 0x8F: the place of item index. */
-s32 func_80069944(s32 index) {
-    return index * 180 / (D_8007B33C - 1) + 0x8F;
+s32 getMainMenuItemY(s32 index) {
+    return index * 180 / (MAIN_MENU_ITEM_COUNT - 1) + 0x8F;
 }
 
 /* Draws the image at (x, y) as a SPRT with its texture page, semi-transparent when semiTrans is set. */
-SprtColorWords *func_80069980(u_long *ot, s32 x, s32 y, Unk80073390Image *image, s32 semiTrans) {
+SprtColorWords *mainMenuDrawImage(u_long *ot, s32 x, s32 y, TitleImage *image, s32 semiTrans) {
     DR_TPAGE *tpage = allocDrTpage(image->tpage);
     SprtColorWords *sprt = (SprtColorWords *)allocSprt();
 
     sprt->xy = (y << 16) | (x & 0xFFFF);
-    sprt->uvClut = image->uvClut;
-    sprt->wh = image->wh;
+    sprt->uvClut = image->uvClut.word;
+    sprt->wh = image->wh.word;
     if (semiTrans == 0) {
         SetSemiTrans(sprt, 0);
     } else {
@@ -77,23 +83,12 @@ SprtColorWords *func_80069980(u_long *ot, s32 x, s32 y, Unk80073390Image *image,
 
 INCLUDE_ASM("title/nonmatchings/main_menu", func_80069A58);
 
-/* An image in VRAM (D_80064768): its texture page, its corner in the page, its CLUT and its size. */
-typedef struct Unk80069CFC {
-    /* 0x0 */ u16 tpage;
-    /* 0x2 */ u8 unk2[2];
-    /* 0x4 */ u8 u;
-    /* 0x5 */ u8 v;
-    /* 0x6 */ u16 clut;
-    /* 0x8 */ s16 w;
-    /* 0xA */ s16 h;
-} Unk80069CFC;
-
 /* Draws the image at (x, y) as a POLY_FT4, mirrored left to right when notMirrored is 0. */
-void func_80069CFC(u_long *ot, s32 x, s32 y, Unk80069CFC *image, s32 notMirrored) {
-    s32 u = image->u;
-    s32 v = image->v;
-    s32 w = image->w;
-    s16 h = image->h - 1;
+void mainMenuDrawImageQuad(u_long *ot, s32 x, s32 y, TitleImage *image, s32 notMirrored) {
+    s32 u = image->uvClut.part.u;
+    s32 v = image->uvClut.part.v;
+    s32 w = image->wh.part.w;
+    s16 h = image->wh.part.h - 1;
     POLY_FT4 *poly = allocPolyFT4();
 
     if (notMirrored == 0) {
@@ -123,7 +118,7 @@ void func_80069CFC(u_long *ot, s32 x, s32 y, Unk80069CFC *image, s32 notMirrored
     poly->y2 = h + y;
     poly->x3 = w + x;
     poly->y3 = h + y;
-    poly->clut = image->clut;
+    poly->clut = image->uvClut.part.clut;
     SetSemiTrans(poly, 0);
     poly->tpage = image->tpage;
     poly->r0 = 0x80;
@@ -132,13 +127,13 @@ void func_80069CFC(u_long *ot, s32 x, s32 y, Unk80069CFC *image, s32 notMirrored
     AddPrim(ot, poly);
 }
 
-/* Draws the image's shadow at (x, y): func_80069CFC's quad, half bright and semi-transparent, with the CLUT
- * 0x40 further and texture page 0x58. */
-void func_80069E4C(u_long *ot, s32 x, s32 y, Unk80069CFC *image, s32 notMirrored) {
-    s32 u = image->u;
-    s32 v = image->v;
-    s32 w = image->w;
-    s16 h = image->h - 1;
+/* Draws the image's shadow at (x, y): mainMenuDrawImageQuad's quad, half bright and semi-transparent, with
+ * the CLUT 0x40 further and texture page 0x58. */
+void mainMenuDrawImageShadow(u_long *ot, s32 x, s32 y, TitleImage *image, s32 notMirrored) {
+    s32 u = image->uvClut.part.u;
+    s32 v = image->uvClut.part.v;
+    s32 w = image->wh.part.w;
+    s16 h = image->wh.part.h - 1;
     POLY_FT4 *poly = allocPolyFT4();
 
     if (notMirrored == 0) {
@@ -168,7 +163,7 @@ void func_80069E4C(u_long *ot, s32 x, s32 y, Unk80069CFC *image, s32 notMirrored
     poly->y2 = h + y;
     poly->x3 = w + x;
     poly->y3 = h + y;
-    poly->clut = image->clut + 0x40;
+    poly->clut = image->uvClut.part.clut + 0x40;
     SetSemiTrans(poly, 1);
     poly->tpage = 0x58;
     poly->r0 = 0x40;
@@ -177,86 +172,87 @@ void func_80069E4C(u_long *ot, s32 x, s32 y, Unk80069CFC *image, s32 notMirrored
     AddPrim(ot, poly);
 }
 
-INCLUDE_ASM("title/nonmatchings/main_menu", func_80069FA0);
+INCLUDE_ASM("title/nonmatchings/main_menu", mainMenuDrawBanners);
 
-/* Entry 0x1C of D_800646BC: plays sound 0xF. */
-void func_8006A0B4(void) {
-    soundControlPlaySound(&SOUND_CONTROL, 0xF, 0);
+/* The focus method (entry 0x18) of MAIN_MENU_ITEM_VTABLE: plays the cursor sound. */
+void MainMenuItem_focus(void) {
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CURSOR, 0);
 }
 
-/* The cancel method (entry 0x10) of D_800646BC: refused (-1) when own is set, else plays sound 0x11
+/* The cancel method (entry 0x10) of MAIN_MENU_ITEM_VTABLE: refused (-1) when own is set, else plays the back sound
  * and accepts. */
-s32 func_8006A0E0(Unk8006A11C *this, s32 arg, s32 held, s32 own) {
+s32 MainMenuItem_cancel(MainMenuItem *this, s32 arg, s32 held, s32 own) {
     if (own != 0) {
         return -1;
     }
-    soundControlPlaySound(&SOUND_CONTROL, 0x11, 0);
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_BACK, 0);
     return 0;
 }
 
-/* Constructs the title's Stepper of virtual table D_800646BC with its two values (0x20 and 0x30). */
-Unk8006A11C *func_8006A11C(Unk8006A11C *this, s32 arg1, s32 arg2) {
+/* Constructs a main menu item showing label, locked or not, below the screen. */
+MainMenuItem *MainMenuItem_init(MainMenuItem *this, TitleImage *label, s32 locked) {
     stepperInit(this, 0);
-    this->vtable = D_800646BC;
-    /* The match depends on storing arg2 first (its shorter life gives it s1). */
-    this->unk30 = arg2;
-    this->unk20 = arg1;
-    this->unk24 = 0;
-    this->unk28 = 0x2000;
-    this->unk2C = 0;
+    this->vtable = MAIN_MENU_ITEM_VTABLE;
+    /* The match depends on storing locked first (its shorter life gives it s1). */
+    this->locked = locked;
+    this->label = label;
+    this->flashPhase = 0;
+    this->y = 0x2000;
+    this->frame = 0;
     return this;
 }
 
-/* The confirm method (entry 0x8) of D_800646BC: accepts silently when own is set; else refuses (-1) with
- * sound 0x12 the item whose 0x30 is 1, and accepts any other with sound 0x10. */
-s32 func_8006A184(Unk8006A11C *this, s32 arg, s32 held, s32 own) {
+/* The confirm method (entry 0x8) of MAIN_MENU_ITEM_VTABLE: accepts silently when own is set; else refuses
+ * (-1) a locked item with the refusal sound, and accepts any other with the confirm sound. */
+s32 MainMenuItem_confirm(MainMenuItem *this, s32 arg, s32 held, s32 own) {
     if (own != 0) {
         return 0;
     }
-    if (this->unk30 == 1) {
-        soundControlPlaySound(&SOUND_CONTROL, 0x12, 0);
+    if (this->locked == 1) {
+        soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_REFUSE, 0);
         return -1;
     }
-    soundControlPlaySound(&SOUND_CONTROL, 0x10, 0);
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CONFIRM, 0);
     return 0;
 }
 
-/* The input method (entry 0x38) of D_800646BC: advances 0x24 by 0x180 a frame and closes the group with its
- * index once it reaches 0x5A00. */
-s32 func_8006A1E4(Unk8006A11C *this) {
-    this->unk24 += 0x180;
-    if (this->unk24 >= 0x5A00) {
+/* The input method (entry 0x38) of MAIN_MENU_ITEM_VTABLE: advances the flash by 0x180 a frame and closes
+ * the group with the item's index once it reaches 0x5A00. */
+s32 MainMenuItem_input(MainMenuItem *this) {
+    this->flashPhase += 0x180;
+    if (this->flashPhase >= 0x5A00) {
         stepperCloseGroup(this, this->index);
     }
     return 1;
 }
 
-INCLUDE_ASM("title/nonmatchings/main_menu", func_8006A224);
+INCLUDE_ASM("title/nonmatchings/main_menu", MainMenuItem_draw);
 
-/* Whether any of the save data's bits 0x380 of unk18 is set. */
-s32 func_8006A348(void) {
-    return (GAME_STATE.save.unk18 & 0x380) != 0;
+/* Whether a bonus game is unlocked (SaveData.bonusGamesUnlocked): else the two mini game items are locked "???"
+ * ones. */
+s32 hasBonusGame(void) {
+    return (GAME_STATE.save.bonusGamesUnlocked & BONUS_GAME_ARENA_BITS) != 0;
 }
 
 INCLUDE_ASM("title/nonmatchings/main_menu", mainMenuTaskInit);
 
-/* The destructor of Unk8006A62C (task vtable D_8006471C): fades the screen in, then destroys the sprite,
- * the steppers, the thread and the task. */
-void func_8006A62C(Unk8006A62C *this, s32 flags) {
-    this->task.vtable = &D_8006471C;
+/* The destructor of MainMenuTask (task vtable MAIN_MENU_TASK_VTABLE): fades the screen in, then destroys the
+ * background, the items, the thread and the task. */
+void MainMenuTask_destroy(MainMenuTask *this, s32 flags) {
+    this->task.vtable = &MAIN_MENU_TASK_VTABLE;
     fadeControlFadeIn(&FADE_CONTROL, 0);
-    spriteDestroy(&this->sprite, DESTROY_BASES);
-    stepperGroupDestroy(this->steppers, DESTROY_BASES);
+    spriteDestroy(&this->background, DESTROY_BASES);
+    stepperGroupDestroy(this->items, DESTROY_BASES);
     threadDestroy(&this->thread, DESTROY_BASES);
     taskDestroy(&this->task, flags);
 }
 
-INCLUDE_ASM("title/nonmatchings/main_menu", func_8006A6A4);
+INCLUDE_ASM("title/nonmatchings/main_menu", MainMenuTask_run);
 
-INCLUDE_ASM("title/nonmatchings/main_menu", func_8006A7EC);
+INCLUDE_ASM("title/nonmatchings/main_menu", MainMenuTask_update);
 
-/* Unk8006A11C's destructor: Stepper's, inlined (it takes the stepper out of its group's list). */
-void func_8006AAA0(Unk8006A11C *this, s32 flags) {
+/* MainMenuItem's destructor: Stepper's, inlined (it takes the stepper out of its group's list). */
+void MainMenuItem_destroy(MainMenuItem *this, s32 flags) {
     this->vtable = STEPPER_VTABLE;
     listRemove(&this->link);
     if (flags & DESTROY_FREE) {
@@ -264,13 +260,13 @@ void func_8006AAA0(Unk8006A11C *this, s32 flags) {
     }
 }
 
-INCLUDE_RODATA("title/nonmatchings/main_menu", D_80064694);
-INCLUDE_RODATA("title/nonmatchings/main_menu", D_8006469C);
-INCLUDE_RODATA("title/nonmatchings/main_menu", D_800646A4);
-INCLUDE_RODATA("title/nonmatchings/main_menu", D_800646BC);
-INCLUDE_RODATA("title/nonmatchings/main_menu", D_8006471C);
-INCLUDE_RODATA("title/nonmatchings/main_menu", D_80064744);
-INCLUDE_RODATA("title/nonmatchings/main_menu", D_80064768);
-INCLUDE_RODATA("title/nonmatchings/main_menu", D_80064780);
+INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_BACKGROUND_CLUT_RECT);
+INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_BACKGROUND_RECT);
+INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_BACKGROUND_TIM);
+INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_ITEM_VTABLE);
+INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_TASK_VTABLE);
+INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_BUTTONS);
+INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_SIDE_IMAGES);
+INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_LABELS);
 INCLUDE_RODATA("title/nonmatchings/main_menu", D_800647BC);
-INCLUDE_RODATA("title/nonmatchings/main_menu", D_800647D4);
+INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_DECOR_IMAGES);

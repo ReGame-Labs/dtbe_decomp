@@ -35,7 +35,7 @@ typedef struct SystemContext {
     /* 0x0C */ s32 unkC;
     /* 0x10 */ struct GameState *gameState;
     /* 0x14 */ MersenneTwister *random;
-    /* 0x18 */ s32 unk18;
+    /* 0x18 */ s32 sceneResult; /* cleared before a scene starts, what it leaves for the sequencer */
     /* 0x1C */ s32 resetDisabled; /* the buttons that end the running task do nothing */
     /* 0x20 */ u32 flags; /* a bit by SYSTEM_FLAG_* */
     /* 0x24 */ s32 vsyncTime; /* the frame's, from displayWaitFrame */
@@ -213,10 +213,6 @@ public:
 #endif /* __cplusplus */
 
 EXTERN_C_BEGIN
-
-/* 14 zero words: systemXaDraw takes the first as the number of XA tracks;
- * the rest is unknown */
-extern s32 D_8005F870[14];
 
 extern struct SystemContext SYSTEM_CONTEXT; /* what the tasks are given */
 

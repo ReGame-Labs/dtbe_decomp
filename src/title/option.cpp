@@ -7,6 +7,7 @@
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/sound/sound_control.h"
 #include "engine/game/game_state.h"
+#include "engine/game/sequencer.h"
 #include "engine/task/entity.h"
 #include "engine/text/font.h"
 #include "engine/pad/pad.h"
@@ -17,123 +18,124 @@
 
 EXTERN_C_BEGIN
 /* name_entry.c's (ranking.c declares them too) */
-void func_80074318(Unk80074220 *entry);
-void func_800744BC(Unk80074220 *entry);
-void func_8007460C(Unk80074220 *entry);
-Unk80074220 *func_80074130(Unk80074220 *entry, s32 grid, s32 maxLength);
+void NameEntry_open(NameEntry *entry);
+void NameEntry_update(NameEntry *entry);
+void NameEntry_draw(NameEntry *entry);
+NameEntry *NameEntry_init(NameEntry *entry, s32 mode, s32 maxLength);
 /* name_entry.c defines these two without a parameter, but the options pass them the entry */
-void func_8007434C(Unk80074220 *entry);
-void func_80074388(Unk80074220 *entry);
+void loadZasciiTim(NameEntry *entry);
+void loadInputTim(NameEntry *entry);
 
-/* the image Unk80079254's draw puts right of the menu's title row */
-extern Unk80073390Image D_80066AA4;
+/* the image OptionButtonMenu's draw puts right of the menu's title row */
+extern TitleImage OPTION_BUTTON_MENU_TITLE;
 EXTERN_C_END
 
 /* The x of the menu row index: 45, or 35 on every other row. */
-s32 func_80077690(s32 index) {
-    return 0x2D - ((index + D_8007B32C) & 1) * 10;
+s32 getOptionRowX(s32 index) {
+    return 0x2D - ((index + OPTION_ROW_OFFSET) & 1) * 10;
 }
 
 /* The y of the menu row index: 17 pixels a row, from 51. */
-s32 func_800776BC(s32 index) {
-    return (index + D_8007B32C) * 17 + 0x33;
+s32 getOptionRowY(s32 index) {
+    return (index + OPTION_ROW_OFFSET) * 17 + 0x33;
 }
 
-/* The same as func_80073390. */
-SprtColorWords *func_800776DC(u_long *ot, s32 x, s32 y, Unk80073390Image *image) {
+/* The same as drawImage. */
+SprtColorWords *optionDrawImage(u_long *ot, s32 x, s32 y, TitleImage *image) {
     SprtColorWords *sprt = (SprtColorWords *)allocSprt();
 
     sprt->xy = (y << 16) | (x & 0xFFFF);
-    sprt->uvClut = image->uvClut;
-    sprt->wh = image->wh;
+    sprt->uvClut = image->uvClut.word;
+    sprt->wh = image->wh.word;
     AddPrim(ot, sprt);
     AddPrim(ot, allocDrTpage(image->tpage));
     return sprt;
 }
 
-/* func_800776DC's 16 by 16 version: draws cell index of image (u moved by 16 per cell) at (x, y). */
-SprtColorWords *func_80077778(u_long *ot, s32 x, s32 y, Unk80073390Image *image, s32 index) {
+/* optionDrawImage's 16 by 16 version: draws cell index of image (u moved by 16 per cell) at (x, y). */
+SprtColorWords *optionDrawImageCell(u_long *ot, s32 x, s32 y, TitleImage *image, s32 index) {
     SprtColorWords *sprt = (SprtColorWords *)allocSprt16();
 
     sprt->xy = (y << 16) | (x & 0xFFFF);
-    sprt->uvClut = image->uvClut + (index << 4);
+    sprt->uvClut = image->uvClut.word + (index << 4);
     AddPrim(ot, sprt);
     AddPrim(ot, allocDrTpage(image->tpage));
     return sprt;
 }
 
-/* Steps the value up, playing sound 0x13 when it moved, then func_8007799C. */
-void Unk80077AC8::stepUp(s32 arg, s32 held, u32 buttons) {
+/* Steps the value up, playing the step sound when it moved, then applies it. */
+void OptionItem::stepUp(s32 arg, s32 held, u32 buttons) {
     if (stepperStepUpClamp() == 0) {
-        soundControlPlaySound(&SOUND_CONTROL, 0x13, 0);
+        soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_STEP, 0);
     }
-    func_8007799C();
+    apply();
 }
 
-/* Steps the value down, playing sound 0x13 when it moved (and shaking pad 1 on row 6), then func_8007799C. */
-void Unk80077AC8::stepDown(s32 arg, s32 held, u32 buttons) {
+/* Steps the value down, playing the step sound when it moved (and shaking pad 1 on the vibration row, which
+ * turns it on), then applies it. */
+void OptionItem::stepDown(s32 arg, s32 held, u32 buttons) {
     if (stepperStepDownClamp() == 0) {
-        soundControlPlaySound(&SOUND_CONTROL, 0x13, 0);
-        if (this->index == 6) {
+        soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_STEP, 0);
+        if (this->index == BUTTON_MENU_ROW_VIBRATION) {
             /* The match depends on this local: written in the call, the constants take other registers. */
             PadManager *padManager = PAD_MANAGER_INSTANCE;
 
             padManagerStartVibration(padManager, 0, 0, 0xFF, 0xFF, 0xA, 0);
         }
     }
-    func_8007799C();
+    apply();
 }
 
 /* Reads the option of the item's row from the save data into the value. */
-void Unk80077AC8::refresh(s32 arg) {
+void OptionItem::refresh(s32 arg) {
     switch (index) {
-    case 0:
+    case OPTION_ROW_LEVEL:
         value = GAME_STATE.save.level;
         return;
-    case 1:
+    case OPTION_ROW_SOUND:
         value = GAME_STATE.save.mono;
         return;
     case 2:
         value = GAME_STATE.save.unk8;
         return;
     case 3:
-        value = GAME_STATE.save.unk4 == 0;
+        value = GAME_STATE.save.autoSave == 0;
         return;
-    case 6:
-        value = GAME_STATE.save.unkC == 0;
+    case BUTTON_MENU_ROW_VIBRATION:
+        value = GAME_STATE.save.vibration == 0;
         return;
     }
 }
 
 /* Writes the value into the option of the item's row in the save data, then applies the options. */
-void Unk80077AC8::func_8007799C() {
+void OptionItem::apply() {
     switch (index) {
-    case 0:
+    case OPTION_ROW_LEVEL:
         GAME_STATE.save.level = value;
         break;
-    case 1:
+    case OPTION_ROW_SOUND:
         GAME_STATE.save.mono = value == 1;
         break;
     case 2:
         GAME_STATE.save.unk8 = value == 1;
         break;
     case 3:
-        GAME_STATE.save.unk4 = value == 0;
+        GAME_STATE.save.autoSave = value == 0;
         break;
-    case 6:
-        GAME_STATE.save.unkC = value == 0;
+    case BUTTON_MENU_ROW_VIBRATION:
+        GAME_STATE.save.vibration = value == 0;
         break;
     }
     saveDataApplyOptions(&GAME_STATE.save);
 }
 
-/* Plays sound 0xF. */
-void Unk80077AC8::focus(s32 arg) {
-    soundControlPlaySound(&SOUND_CONTROL, 0xF, 0);
+/* Plays the cursor sound. */
+void OptionItem::focus(s32 arg) {
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CURSOR, 0);
 }
 
 /* Accepts, unless own is set. */
-s32 Unk80077AC8::cancel(s32 arg, s32 held, s32 own) {
+s32 OptionItem::cancel(s32 arg, s32 held, s32 own) {
     if (own != 0) {
         return -1;
     }
@@ -141,24 +143,24 @@ s32 Unk80077AC8::cancel(s32 arg, s32 held, s32 own) {
 }
 
 /* Constructs an item drawing image, not blinking. */
-Unk80077AC8::Unk80077AC8(Unk80073390Image *image) {
+OptionItem::OptionItem(TitleImage *image) {
     this->image = image;
     this->blink = 0;
 }
 
-/* Plays sound 0x10 unless own is set; always accepts. */
-s32 Unk80077AC8::confirm(s32 arg, s32 held, s32 own) {
-    /* The match depends on the early return, func_8006A0E0's shape: the return label it leaves keeps
+/* Plays the confirm sound unless own is set; always accepts. */
+s32 OptionItem::confirm(s32 arg, s32 held, s32 own) {
+    /* The match depends on the early return, MainMenuItem_cancel's shape: the return label it leaves keeps
      * the final v0 = 0 out of the epilogue's load delay slot. */
     if (own != 0) {
         return 0;
     }
-    soundControlPlaySound(&SOUND_CONTROL, 0x10, 0);
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CONFIRM, 0);
     return 0;
 }
 
 /* Moves the blink on; always takes the input. */
-s32 Unk80077AC8::input(s32 arg, s32 held, u32 buttons) {
+s32 OptionItem::input(s32 arg, s32 held, u32 buttons) {
     this->blink += 0x20;
     return 1;
 }
@@ -170,7 +172,7 @@ static inline s16 getCosInline(s32 angle) {
 }
 
 /* The item's brightness: 128 while it is current, 64 otherwise, swung by 1/128 of the blink's cosine. */
-s32 Unk80077AC8::func_80077C44(s32 isCurrent) {
+s32 OptionItem::getBrightness(s32 isCurrent) {
     s32 swing = getCosInline(this->blink) >> 7;
 
     /* The match depends on testing !isCurrent: it keeps the 128 return on the fall-through path. */
@@ -180,51 +182,51 @@ s32 Unk80077AC8::func_80077C44(s32 isCurrent) {
     return swing + 0x80;
 }
 
-/* Draws the item's image at its row, its brightness from func_80077C44; an inactive item stops blinking.
- * Stepper's draw passes the ordering table as arg. */
-void Unk80077AC8::draw(s32 arg, s32 isCurrent, s32 active) {
+/* Draws the item's image at its row, its brightness from getBrightness; an inactive item stops blinking.
+ * Stepper's draw passes the ordering table as ot. */
+void OptionItem::draw(s32 ot, s32 isCurrent, s32 active) {
     s32 index = this->index;
-    SPRT *sprt = (SPRT *)func_800776DC((u_long *)arg, func_80077690(index), func_800776BC(index), this->image);
+    SPRT *sprt = (SPRT *)optionDrawImage((u_long *)ot, getOptionRowX(index), getOptionRowY(index), this->image);
     s32 brightness;
 
     if (!active) {
         this->blink = 0;
     }
-    brightness = func_80077C44(isCurrent);
+    brightness = getBrightness(isCurrent);
     setRGB0(sprt, brightness, brightness, brightness);
 }
 
 /* Constructs an item drawing image, and one of the count images for its value. */
-Unk80077D20::Unk80077D20(Unk80073390Image *image, Unk80073390Image **images, s32 count) : Unk80077AC8(image) {
+OptionChoiceItem::OptionChoiceItem(TitleImage *image, TitleImage **images, s32 count) : OptionItem(image) {
     this->max = count - 1;
     this->images = images;
 }
 
-/* Draws Unk80077AC8's, then the image of the value 128 pixels right of it, as bright. */
-void Unk80077D20::draw(s32 arg, s32 isCurrent, s32 active) {
-    Unk80073390Image **image;
+/* Draws OptionItem's, then the image of the value 128 pixels right of it, as bright. */
+void OptionChoiceItem::draw(s32 ot, s32 isCurrent, s32 active) {
+    TitleImage **image;
     s32 index;
     SPRT *sprt;
     s32 brightness;
 
-    Unk80077AC8::draw(arg, isCurrent, active);
+    OptionItem::draw(ot, isCurrent, active);
     image = &this->images[this->value];
     index = this->index;
-    sprt = (SPRT *)func_800776DC((u_long *)arg, func_80077690(index) + 0x80, func_800776BC(index), *image);
-    brightness = func_80077C44(isCurrent);
+    sprt = (SPRT *)optionDrawImage((u_long *)ot, getOptionRowX(index) + 0x80, getOptionRowY(index), *image);
+    brightness = getBrightness(isCurrent);
     setRGB0(sprt, brightness, brightness, brightness);
 }
 
 /* Constructs an item drawing image that starts a memory card task in mode, with no task yet.
  * The match depends on mode being a const member set by the initializer: g++ marks that store unchanging,
  * so it may alias the epilogue's register reloads and stays above them. */
-Unk80077F28::Unk80077F28(Unk80073390Image *image, s32 mode) : Unk80077AC8(image), mode(mode) {
+OptionMemoryCardItem::OptionMemoryCardItem(TitleImage *image, s32 mode) : OptionItem(image), mode(mode) {
     this->task = NULL;
     this->taskHandle = 0;
 }
 
 /* Starts the memory card task in mode, unless the one it started still runs. */
-s32 Unk80077F28::confirm(s32 arg, s32 held, s32 own) {
+s32 OptionMemoryCardItem::confirm(s32 arg, s32 held, s32 own) {
     Task *task;
 
     if (handleTableGet(TASK_HANDLES, this->taskHandle) != NULL) {
@@ -237,56 +239,56 @@ s32 Unk80077F28::confirm(s32 arg, s32 held, s32 own) {
     return 0;
 }
 
-/* Unk80077AC8's; keeps the input while the memory card task runs, then forgets the task (and opens the
- * group again in mode 0). */
-s32 Unk80077F28::input(s32 arg, s32 held, u32 buttons) {
-    Unk80077AC8::input(arg, held, buttons);
+/* OptionItem's; keeps the input while the memory card task runs, then forgets the task (and opens the
+ * group again after a load). */
+s32 OptionMemoryCardItem::input(s32 arg, s32 held, u32 buttons) {
+    OptionItem::input(arg, held, buttons);
     if (handleTableGet(TASK_HANDLES, this->taskHandle) != NULL) {
         return 1;
     }
     this->task = NULL;
     this->taskHandle = 0;
-    if (this->mode == 0) {
+    if (this->mode == MEMORY_CARD_OPTION_LOAD) {
         stepperGetGroup()->stepperGroupOpen(0);
     }
     return 0;
 }
 
 /* Does nothing. */
-s32 Unk80077F28::cancel(s32 arg, s32 held, s32 own) {
+s32 OptionMemoryCardItem::cancel(s32 arg, s32 held, s32 own) {
     return -1;
 }
 
 /* Kills the memory card task it started, if it still runs. */
-Unk80077F28::~Unk80077F28() {
+OptionMemoryCardItem::~OptionMemoryCardItem() {
     killTaskByHandle(this->taskHandle);
 }
 
 /* Constructs an item drawing image, reading the screen position of the save data (refresh, which the
  * constructor calls directly and passes the item itself: a1 is this). */
-Unk800782D8::Unk800782D8(Unk80073390Image *image) : Unk80077AC8(image) {
+OptionScreenItem::OptionScreenItem(TitleImage *image) : OptionItem(image) {
     refresh((s32)this);
 }
 
 /* Reads the screen position of the save data, as shown and as kept. The match depends on the assignment
  * chains, which store their right-hand field first. */
-void Unk800782D8::refresh(s32 arg) {
+void OptionScreenItem::refresh(s32 arg) {
     this->keptX = this->screenX = GAME_STATE.save.screenX;
     this->keptY = this->screenY = GAME_STATE.save.screenY;
 }
 
-/* Puts the kept screen position back, into the save data too, applies it and plays sound 0x11. */
-s32 Unk800782D8::cancel(s32 arg, s32 held, s32 own) {
+/* Puts the kept screen position back, into the save data too, applies it and plays the back sound. */
+s32 OptionScreenItem::cancel(s32 arg, s32 held, s32 own) {
     GAME_STATE.save.screenX = this->screenX = this->keptX;
     GAME_STATE.save.screenY = this->screenY = this->keptY;
     saveDataApplyOptions(&GAME_STATE.save);
-    soundControlPlaySound(&SOUND_CONTROL, 0x11, 0);
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_BACK, 0);
     return 0;
 }
 
-/* Plays sound 0x10 and starts moving the screen; own keeps the position moved to and stops. */
-s32 Unk800782D8::confirm(s32 arg, s32 held, s32 own) {
-    soundControlPlaySound(&SOUND_CONTROL, 0x10, 0);
+/* Plays the confirm sound and starts moving the screen; own keeps the position moved to and stops. */
+s32 OptionScreenItem::confirm(s32 arg, s32 held, s32 own) {
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CONFIRM, 0);
     if (own != 0) {
         this->moving = 0;
         this->keptX = this->screenX;
@@ -297,63 +299,63 @@ s32 Unk800782D8::confirm(s32 arg, s32 held, s32 own) {
     return 0;
 }
 
-INCLUDE_ASM("title/nonmatchings/option", func_8007850C);
+INCLUDE_ASM("title/nonmatchings/option", OptionScreenItem_input);
 
-INCLUDE_RODATA("title/nonmatchings/option", D_80066600);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_SCREEN_LINES);
 
-INCLUDE_ASM("title/nonmatchings/option", func_80078628);
+INCLUDE_ASM("title/nonmatchings/option", OptionScreenItem_draw);
 
 /* Constructs an item drawing image, with a name entry on the second character grid whose maxLength goes
  * from 5 to 6, and loads the entry's images ("/zascii.tim", "/title/input.tim"). */
-Unk800786E4::Unk800786E4(Unk80073390Image *image) : Unk80077AC8(image) {
-    func_80074130(&this->entry, 1, 5);
+OptionCodeItem::OptionCodeItem(TitleImage *image) : OptionItem(image) {
+    NameEntry_init(&this->entry, NAME_ENTRY_MODE_CODE, 5);
     this->entry.maxLength = 6;
-    func_8007434C(&this->entry);
-    func_80074388(&this->entry);
+    loadZasciiTim(&this->entry);
+    loadInputTim(&this->entry);
 }
 
-/* Plays sound 0x10 and opens the name entry, which the group then draws alone. */
-s32 Unk800786E4::confirm(s32 arg, s32 held, s32 own) {
+/* Plays the confirm sound and opens the name entry, which the group then draws alone. */
+s32 OptionCodeItem::confirm(s32 arg, s32 held, s32 own) {
     if (own != 0) {
         return -1;
     }
-    soundControlPlaySound(&SOUND_CONTROL, 0x10, 0);
-    func_80074318(&this->entry);
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CONFIRM, 0);
+    NameEntry_open(&this->entry);
     stepperSetGroupCurrentOnly(0);
     return 0;
 }
 
 /* Runs the name entry while it is open; once it closed, the group draws all its items again. */
-s32 Unk800786E4::input(s32 arg, s32 held, u32 buttons) {
+s32 OptionCodeItem::input(s32 arg, s32 held, u32 buttons) {
     if (this->entry.active) {
-        func_800744BC(&this->entry);
-        func_8007460C(&this->entry);
+        NameEntry_update(&this->entry);
+        NameEntry_draw(&this->entry);
         return 1;
     }
     stepperSetGroupCurrentOnly(1);
     return 0;
 }
 
-/* Draws Unk80077AC8's. */
-void Unk800786E4::draw(s32 arg, s32 isCurrent, s32 active) {
-    Unk80077AC8::draw(arg, isCurrent, active);
+/* Draws OptionItem's. */
+void OptionCodeItem::draw(s32 ot, s32 isCurrent, s32 active) {
+    OptionItem::draw(ot, isCurrent, active);
 }
 
 /* Constructs an item drawing image. */
-Unk80078914::Unk80078914(Unk80073390Image *image) : Unk80077AC8(image) {
+OptionResetButtonsItem::OptionResetButtonsItem(TitleImage *image) : OptionItem(image) {
 }
 
 /* Constructs an item drawing image. */
-Unk80078A4C::Unk80078A4C(Unk80073390Image *image) : Unk80077AC8(image) {
+OptionButtonItem::OptionButtonItem(TitleImage *image) : OptionItem(image) {
 }
 
-/* Plays sound 0x10; starts changing the two players' button slots of this row, or, with own, stores them in
+/* Plays the confirm sound; starts changing the two players' button slots of this row, or, with own, stores them in
  * the save data and opens the group again. */
-s32 Unk80078A4C::confirm(s32 arg, s32 held, s32 own) {
+s32 OptionButtonItem::confirm(s32 arg, s32 held, s32 own) {
     SaveData *save = &GAME_STATE.save;
     s32 slot = this->index;
 
-    soundControlPlaySound(&SOUND_CONTROL, 0x10, 0);
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CONFIRM, 0);
     if (own != 0) {
         saveDataSetButtonSlot(save, 0, slot, this->slots[0]);
         saveDataSetButtonSlot(save, 1, slot, this->slots[1]);
@@ -367,17 +369,17 @@ s32 Unk80078A4C::confirm(s32 arg, s32 held, s32 own) {
     return 0;
 }
 
-/* With own, reads the slots again (refresh) and plays sound 0x11. */
-s32 Unk80078A4C::cancel(s32 arg, s32 held, s32 own) {
+/* With own, reads the slots again (refresh) and plays the back sound. */
+s32 OptionButtonItem::cancel(s32 arg, s32 held, s32 own) {
     if (own != 0) {
         refresh(0);
-        soundControlPlaySound(&SOUND_CONTROL, 0x11, 0);
+        soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_BACK, 0);
     }
     return 0;
 }
 
 /* Reads the two players' button slots of this row from the save data. */
-void Unk80078A4C::refresh(s32 arg) {
+void OptionButtonItem::refresh(s32 arg) {
     SaveData *save = &GAME_STATE.save;
     s32 slot = this->index;
 
@@ -385,132 +387,133 @@ void Unk80078A4C::refresh(s32 arg) {
     this->slots[1] = saveDataGetButtonSlot(save, 1, slot);
 }
 
-INCLUDE_ASM("title/nonmatchings/option", func_80078D20);
+INCLUDE_ASM("title/nonmatchings/option", OptionButtonItem_input);
 
-INCLUDE_ASM("title/nonmatchings/option", func_80078E3C);
+INCLUDE_ASM("title/nonmatchings/option", OptionButtonItem_draw);
 
-INCLUDE_ASM("title/nonmatchings/option", func_80078F5C);
+INCLUDE_ASM("title/nonmatchings/option", OptionButtonMenu_init);
 
-Unk80079254::~Unk80079254() {
+OptionButtonMenu::~OptionButtonMenu() {
 }
 
-/* Starts the menu from row 1 from now on; plays sound 0x10 and opens the group, drawn alone, unless own. */
-s32 Unk80079254::confirm(s32 arg, s32 held, s32 own) {
-    D_8007B32C = 1;
+/* Starts the menu from row 1 from now on; plays the confirm sound and opens the group, drawn alone, unless own. */
+s32 OptionButtonMenu::confirm(s32 arg, s32 held, s32 own) {
+    OPTION_ROW_OFFSET = 1;
     if (own != 0) {
         return 0;
     }
-    soundControlPlaySound(&SOUND_CONTROL, 0x10, 0);
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CONFIRM, 0);
     stepperSetGroupCurrentOnly(0);
     stepperGetGroup()->stepperGroupOpen(0);
     return 0;
 }
 
 /* StepperGroup's. */
-s32 Unk80079254::input(s32 arg, s32 held, u32 buttons) {
+s32 OptionButtonMenu::input(s32 arg, s32 held, u32 buttons) {
     return StepperGroup::input(arg, held, buttons);
 }
 
-/* While open, StepperGroup's and D_80066AA4 at full brightness right of the title row (index -1); else
- * Unk80077AC8's, not blinking. */
-void Unk80079254::draw(s32 arg, s32 isCurrent, s32 active) {
+/* While open, StepperGroup's and OPTION_BUTTON_MENU_TITLE at full brightness right of the title row
+ * (index -1); else OptionItem's, not blinking. */
+void OptionButtonMenu::draw(s32 ot, s32 isCurrent, s32 active) {
     SPRT *sprt;
 
     if (!active) {
-        Unk80077AC8::draw(arg, isCurrent, 0);
+        OptionItem::draw(ot, isCurrent, 0);
     } else {
-        StepperGroup::draw(arg, isCurrent, active);
-        sprt = (SPRT *)func_800776DC((u_long *)arg, func_80077690(-1) + 0x84, func_800776BC(-1), &D_80066AA4);
+        StepperGroup::draw(ot, isCurrent, active);
+        sprt = (SPRT *)optionDrawImage((u_long *)ot, getOptionRowX(-1) + 0x84, getOptionRowY(-1),
+                                       &OPTION_BUTTON_MENU_TITLE);
         setRGB0(sprt, 0x80, 0x80, 0x80);
     }
 }
 
 INCLUDE_ASM("title/nonmatchings/option", optionTaskInit);
 
-/* Fades the screen in and destroys the members; the thread, the StepperGroup and the sprite are C
+/* Fades the screen in and destroys the members; the thread, the menu's StepperGroup and the sprite are C
  * structs here, so their destructors are called by hand. */
-Unk800797D8::~Unk800797D8() {
+OptionTask::~OptionTask() {
     fadeControlFadeIn(&FADE_CONTROL, 0);
-    spriteDestroy(&this->sprite, DESTROY_BASES);
-    stepperGroupDestroy(this->steppers, DESTROY_BASES);
+    spriteDestroy(&this->background, DESTROY_BASES);
+    stepperGroupDestroy(this->menu, DESTROY_BASES);
     threadDestroy(&this->thread, DESTROY_BASES);
 }
 
-INCLUDE_ASM("title/nonmatchings/option", func_80079850);
+INCLUDE_ASM("title/nonmatchings/option", OptionTask_run);
 
-INCLUDE_ASM("title/nonmatchings/option", func_80079978);
+INCLUDE_ASM("title/nonmatchings/option", OptionTask_update);
 
-Unk80077D20::~Unk80077D20() {
+OptionChoiceItem::~OptionChoiceItem() {
 }
 
-Unk800782D8::~Unk800782D8() {
+OptionScreenItem::~OptionScreenItem() {
 }
 
 /* The name entry is a C struct here (name_entry.c is C), so its destructor is called by hand, where g++
  * calls a member's. */
-Unk800786E4::~Unk800786E4() {
-    func_80074220(&this->entry, DESTROY_BASES);
+OptionCodeItem::~OptionCodeItem() {
+    NameEntry_destroy(&this->entry, DESTROY_BASES);
 }
 
-Unk80078914::~Unk80078914() {
+OptionResetButtonsItem::~OptionResetButtonsItem() {
 }
 
-Unk80078A4C::~Unk80078A4C() {
+OptionButtonItem::~OptionButtonItem() {
 }
 
-Unk80077AC8::~Unk80077AC8() {
+OptionItem::~OptionItem() {
 }
 
 /* Does nothing. */
-s32 Unk80077D20::confirm(s32 arg, s32 held, s32 own) {
+s32 OptionChoiceItem::confirm(s32 arg, s32 held, s32 own) {
     return -1;
 }
 
 /* Does nothing. */
-s32 Unk800786E4::cancel(s32 arg, s32 held, s32 own) {
+s32 OptionCodeItem::cancel(s32 arg, s32 held, s32 own) {
     return -1;
 }
 
-/* Plays sound 0x10, puts the save data's buttons back to the defaults and opens the item's group. */
-s32 Unk80078914::confirm(s32 arg, s32 held, s32 own) {
-    soundControlPlaySound(&SOUND_CONTROL, 0x10, 0);
+/* Plays the confirm sound, puts the save data's buttons back to the defaults and opens the item's group. */
+s32 OptionResetButtonsItem::confirm(s32 arg, s32 held, s32 own) {
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CONFIRM, 0);
     saveDataResetButtons(&GAME_STATE.save);
     stepperGetGroup()->stepperGroupOpen(0);
     return -1;
 }
 
 /* StepperGroup's; a menu that was cancelled starts again from the first row. */
-s32 Unk80079254::cancel(s32 arg, s32 held, s32 own) {
+s32 OptionButtonMenu::cancel(s32 arg, s32 held, s32 own) {
     s32 result = StepperGroup::cancel(arg, held, own);
 
     if (result == 0) {
-        D_8007B32C = 0;
+        OPTION_ROW_OFFSET = 0;
     }
     return result;
 }
 
 /* StepperGroup's. */
-void Unk80079254::refresh(s32 arg) {
+void OptionButtonMenu::refresh(s32 arg) {
     StepperGroup::refresh(arg);
 }
 
-INCLUDE_RODATA("title/nonmatchings/option", D_8006663C);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066644);
-INCLUDE_RODATA("title/nonmatchings/option", D_8006664C);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_BACKGROUND_CLUT_RECT);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_BACKGROUND_PIXEL_RECT);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_BACKGROUND_TIM);
 INCLUDE_RODATA("title/nonmatchings/option", D_80066660);
 INCLUDE_RODATA("title/nonmatchings/option", D_80066668);
-INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80079254.7Stepper);
-INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80078A4C.7Stepper);
-INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80078914.7Stepper);
-INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk800786E4.7Stepper);
-INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk800782D8.7Stepper);
-INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80077F28.7Stepper);
-INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80077D20.7Stepper);
-INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk80077AC8.7Stepper);
-INCLUDE_RODATA("title/nonmatchings/option", _vt.11Unk800797D8);
-INCLUDE_RODATA("title/nonmatchings/option", D_8006699C);
-INCLUDE_RODATA("title/nonmatchings/option", D_800669A8);
-INCLUDE_RODATA("title/nonmatchings/option", D_800669C0);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.16OptionButtonMenu.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.16OptionButtonItem.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.22OptionResetButtonsItem.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.14OptionCodeItem.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.16OptionScreenItem.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.20OptionMemoryCardItem.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.16OptionChoiceItem.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.10OptionItem.7Stepper);
+INCLUDE_RODATA("title/nonmatchings/option", _vt.10OptionTask);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_MENU_BUTTONS);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_HEADER_IMAGES);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_ROW_IMAGES);
 INCLUDE_RODATA("title/nonmatchings/option", D_80066A2C);
 INCLUDE_RODATA("title/nonmatchings/option", D_80066A38);
 INCLUDE_RODATA("title/nonmatchings/option", D_80066A44);
@@ -518,13 +521,13 @@ INCLUDE_RODATA("title/nonmatchings/option", D_80066A50);
 INCLUDE_RODATA("title/nonmatchings/option", D_80066A5C);
 INCLUDE_RODATA("title/nonmatchings/option", D_80066A68);
 INCLUDE_RODATA("title/nonmatchings/option", D_80066A74);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066A80);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066A8C);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066AA4);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066AB0);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066AC8);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066B34);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066B40);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_IMAGE_ON);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_IMAGE_OFF);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_BUTTON_MENU_TITLE);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_BUTTON_MENU_IMAGES);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_BUTTON_ICONS);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_LEVEL_IMAGES);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_SOUND_IMAGES);
 INCLUDE_RODATA("title/nonmatchings/option", D_80066B48);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066B50);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066B58);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_ON_OFF_IMAGES);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_VIBRATION_IMAGES);
