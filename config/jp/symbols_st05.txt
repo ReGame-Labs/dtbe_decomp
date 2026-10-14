@@ -1,1 +1,37 @@
 // st05.bin's own names (config/jp/st05.yaml)
+
+// the names tools/rename.py gave (tools/renames/), in address order
+ST05_SHARD_VTABLE = 0x800D3B44;
+ST05_FADE_VTABLE = 0x800D3B6C;
+ST05_EMBER_VTABLE = 0x800D3BBC;
+ST05_HIT_VTABLE = 0x800D3C0C;
+STAGE_VOLCANO_VTABLE = 0x800D3C2C;
+StageVolcano_init = 0x800D3CEC; // type:func
+StageVolcano_destroy = 0x800D3FC0; // type:func
+StageVolcano_startRound = 0x800D40CC; // type:func
+StageVolcano_tickScenery = 0x800D4210; // type:func
+StageVolcano_tick = 0x800D44CC; // type:func
+st05_clampFighterX = 0x800D4570; // type:func
+StageVolcano_isFallen = 0x800D47D4; // type:func
+StageVolcano_drawWorld = 0x800D47E8; // type:func
+StageVolcano_lightFighter = 0x800D4814; // type:func
+StageVolcano_updateCamera = 0x800D4A10; // type:func
+st05_startSound = 0x800D5364; // type:func
+st05_stopSound = 0x800D53A8; // type:func
+St05Ember_init = 0x800D5968; // type:func
+St05Ember_tick = 0x800D5A90; // type:func
+St05Ember_draw = 0x800D5BD4; // type:func
+St05Hit_apply = 0x800D621C; // type:func
+St05Fade_init = 0x800D627C; // type:func
+St05Fade_tick = 0x800D6308; // type:func
+St05Fade_draw = 0x800D6388; // type:func
+St05Shard_init = 0x800D64FC; // type:func
+St05Shard_tick = 0x800D6584; // type:func
+St05Shard_draw = 0x800D65F8; // type:func
+st05_getRiseBoost = 0x800D6A08; // type:func
+St05Hit_destroy = 0x800D6A14; // type:func
+St05Hit_init = 0x800D6A48; // type:func
+St05Hit_setCenter = 0x800D6A60; // type:func
+St05Ember_destroy = 0x800D6A7C; // type:func
+St05Fade_destroy = 0x800D6B4C; // type:func
+St05Shard_destroy = 0x800D6B94; // type:func

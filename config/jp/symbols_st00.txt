@@ -1,1 +1,43 @@
 // st00.bin's own names (config/jp/st00.yaml)
+
+// the names tools/rename.py gave (tools/renames/), in address order
+ST00_SLIDING_SPRITES_VTABLE = 0x800D3924;
+ST00_CROSSING_SPRITES_VTABLE = 0x800D394C;
+ST00_COLOR_QUAD_VTABLE = 0x800D3974;
+ST00_SIGNAL_QUADS_VTABLE = 0x800D399C;
+ST00_GROUP_DRAWER_VTABLE = 0x800D3AB4;
+STAGE_HIT_VTABLE = 0x800D3ADC;
+STAGE_MACHINE_VTABLE = 0x800D3AFC;
+StageMachine_init = 0x800D3B74; // type:func
+StageMachine_destroy = 0x800D3C34; // type:func
+st00_resetRound = 0x800D3CA8; // type:func
+st00_readClut = 0x800D4074; // type:func
+StageMachine_startRound = 0x800D4198; // type:func
+StageMachine_tickScenery = 0x800D4A70; // type:func
+StageMachine_prepareNextRound = 0x800D4AE8; // type:func
+st00_createGroupDrawer = 0x800D4B0C; // type:func
+st00_turnAngle = 0x800D704C; // type:func
+St00GroupDrawer_init = 0x800D7978; // type:func
+St00GroupDrawer_destroy = 0x800D79D0; // type:func
+St00GroupDrawer_draw = 0x800D7A24; // type:func
+St00SignalQuads_init = 0x800D8930; // type:func
+St00SignalQuads_destroy = 0x800D8A04; // type:func
+St00SignalQuads_tick = 0x800D8A58; // type:func
+St00SignalQuads_draw = 0x800D8AB4; // type:func
+St00ColorQuad_init = 0x800D8C0C; // type:func
+St00ColorQuad_destroy = 0x800D8CA0; // type:func
+St00ColorQuad_tick = 0x800D8CF4; // type:func
+St00ColorQuad_draw = 0x800D8D48; // type:func
+St00CrossingSprites_init = 0x800D8ED4; // type:func
+St00CrossingSprites_destroy = 0x800D8FB4; // type:func
+St00CrossingSprites_tick = 0x800D9008; // type:func
+St00CrossingSprites_draw = 0x800D932C; // type:func
+St00SlidingSprites_init = 0x800D950C; // type:func
+St00SlidingSprites_destroy = 0x800D95C0; // type:func
+St00SlidingSprites_tick = 0x800D9614; // type:func
+St00SlidingSprites_draw = 0x800D977C; // type:func
+StageHit_init = 0x800D9970; // type:func
+StageHit_apply = 0x800D99AC; // type:func
+StageHit_destroy = 0x800DA14C; // type:func
+StageHit_setKnockback = 0x800DA180; // type:func
+StageHit_setDamage = 0x800DA19C; // type:func

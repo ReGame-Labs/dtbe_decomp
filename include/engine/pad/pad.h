@@ -4,6 +4,7 @@
 /* The pads: both ports' buttons and analog sticks, held buttons repeating, rumble. */
 
 #include "common.h"
+#include <libetc.h>
 
 EXTERN_C_BEGIN
 
@@ -12,6 +13,15 @@ EXTERN_C_BEGIN
 #define PAD_RIGHT 0x2000
 #define PAD_DOWN 0x4000
 #define PAD_LEFT 0x8000
+
+/* The buttons that confirm and cancel in the menus: circle and cross in Japan, cross and triangle in the US. */
+#if VERSION_JP
+#define PAD_CONFIRM PADRright
+#define PAD_CANCEL PADRdown
+#else
+#define PAD_CONFIRM PADRdown
+#define PAD_CANCEL PADRup
+#endif
 
 /* The terminal ids of the controllers (PadInfoMode's, and the high nibble of
  * a pad's second received byte), as the hardware numbers them */

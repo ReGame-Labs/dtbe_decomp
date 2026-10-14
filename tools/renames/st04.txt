@@ -1,0 +1,43 @@
+# The names of st04's own symbols: run with tools/rename.py --overlay st04 -f tools/renames/st04.txt
+
+# StageHit (stages.txt): a hit of the stage; its slot 0x08 adds its damage and knockback into the touched sphere
+D_800D3914 STAGE_HIT_VTABLE
+func_800D848C StageHit_init
+func_800D84C8 StageHit_apply
+func_800D8938 StageHit_destroy
+func_800D896C StageHit_setKnockback
+# StageIceberg: arena 4's stage (the vtable's overrides: startRound, tickScenery)
+Unk800D3AC4 StageIceberg
+D_800D3A4C STAGE_ICEBERG_VTABLE
+func_800D3AC4 StageIceberg_init
+func_800D3AFC StageIceberg_destroy
+func_800D3B24 StageIceberg_startRound
+func_800D3CB8 StageIceberg_tickScenery
+func_800D3DA0 st04_copyTexturesB
+func_800D3E20 st04_copyTexturesA
+func_800D3EA4 st04_scrollTexture
+func_800D40BC st04_readClut
+func_800D4198 st04_clearPlunged
+func_800D41A4 st04_checkPlunge
+func_800D4280 st04_clearLiftBack
+func_800D49D0 st04_tickLiftBack
+# St04Plunge: made for a side when its fighter goes below the water (y 0): sprites at the fighter's x and z
+D_800D3984 ST04_PLUNGE_VTABLE
+func_800D72D8 St04Plunge_init
+func_800D74AC St04Plunge_tick
+func_800D770C St04Plunge_draw
+func_800D7458 St04Plunge_destroy
+# St04SideSquare: a square around a side's fighter, which follows him
+Unk800D6F9C St04SideSquare
+D_800D39AC ST04_SIDE_SQUARE_VTABLE
+func_800D6F9C St04SideSquare_init
+func_800D70D8 St04SideSquare_tick
+func_800D71D0 St04SideSquare_draw
+func_800D7084 St04SideSquare_destroy
+# St04Glow: semi-transparent Gouraud quads with a pulsing level
+Unk800D7F70 St04Glow
+D_800D3934 ST04_GLOW_VTABLE
+func_800D7F70 St04Glow_init
+func_800D811C St04Glow_tick
+func_800D8158 St04Glow_draw
+func_800D80C8 St04Glow_destroy

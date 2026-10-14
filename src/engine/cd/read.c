@@ -304,17 +304,17 @@ void receiveShiftedReadSector(u8 intr, u8 *result) {
     if (--CDFS_READ.sectors != 0) {
         switch (CDFS_READ.sectorIndex++) {
             case 0:
-                func_80046930(CDFS_HEAD_BUFFER, CD_SECTOR_WORDS);
+                DsGetSector(CDFS_HEAD_BUFFER, CD_SECTOR_WORDS);
                 break;
             case 1:
                 /* the word before the shifted body goes to the unused
                  * start of the head's buffer (finishShiftedRead moves it) */
-                func_80046930(CDFS_HEAD_BUFFER, 1);
-                func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS - 1);
+                DsGetSector(CDFS_HEAD_BUFFER, 1);
+                DsGetSector(CDFS_READ.dst, CD_SECTOR_WORDS - 1);
                 CDFS_READ.dst += CD_SECTOR_SIZE - 4;
                 break;
             default:
-                func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
+                DsGetSector(CDFS_READ.dst, CD_SECTOR_WORDS);
                 CDFS_READ.dst += CD_SECTOR_SIZE;
                 break;
         }
@@ -322,9 +322,9 @@ void receiveShiftedReadSector(u8 intr, u8 *result) {
     }
     DsDataCallback(receiveCdfsLastSector);
     if (CDFS_READ.tailSize == 0) {
-        func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
+        DsGetSector(CDFS_READ.dst, CD_SECTOR_WORDS);
     } else {
-        func_80046930(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
+        DsGetSector(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
     }
     DsEndReadySystem();
 }
@@ -552,7 +552,7 @@ void receiveWholeReadSector(u8 intr, u8 *result) {
     if (--CDFS_READ.sectors == 0) {
         DsDataCallback(receiveCdfsLastSector);
     }
-    func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
+    DsGetSector(CDFS_READ.dst, CD_SECTOR_WORDS);
     if (CDFS_READ.sectors == 0) {
         DsEndReadySystem();
         return;
@@ -567,12 +567,12 @@ void receiveTailReadSector(u8 intr, u8 *result) {
         return;
     }
     if (--CDFS_READ.sectors != 0) {
-        func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
+        DsGetSector(CDFS_READ.dst, CD_SECTOR_WORDS);
         CDFS_READ.dst += CD_SECTOR_SIZE;
         return;
     }
     DsDataCallback(receiveCdfsLastSector);
-    func_80046930(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
+    DsGetSector(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
     DsEndReadySystem();
 }
 
@@ -590,18 +590,18 @@ void receiveHeadReadSector(u8 intr, u8 *result) {
     }
     if (--CDFS_READ.sectors != 0) {
         if (++CDFS_READ.sectorIndex == 1) {
-            func_80046930(CDFS_HEAD_BUFFER, CD_SECTOR_WORDS);
+            DsGetSector(CDFS_HEAD_BUFFER, CD_SECTOR_WORDS);
             return;
         }
-        func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
+        DsGetSector(CDFS_READ.dst, CD_SECTOR_WORDS);
         CDFS_READ.dst += CD_SECTOR_SIZE;
         return;
     }
     DsDataCallback(receiveCdfsLastSector);
     if (CDFS_READ.tailSize == 0) {
-        func_80046930(CDFS_READ.dst, CD_SECTOR_WORDS);
+        DsGetSector(CDFS_READ.dst, CD_SECTOR_WORDS);
     } else {
-        func_80046930(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
+        DsGetSector(CDFS_TAIL_BUFFER, (CDFS_READ.tailSize + 3) / 4);
     }
     DsEndReadySystem();
 }
@@ -626,7 +626,7 @@ void receiveSmallReadSector(u8 intr, u8 *result) {
         return;
     }
     DsDataCallback(receiveCdfsLastSector);
-    func_80046930(CDFS_HEAD_BUFFER, CD_SECTOR_WORDS);
+    DsGetSector(CDFS_HEAD_BUFFER, CD_SECTOR_WORDS);
     DsEndReadySystem();
 }
 

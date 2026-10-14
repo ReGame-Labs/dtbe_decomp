@@ -1,0 +1,46 @@
+# The names of st05's own symbols: run with tools/rename.py --overlay st05 -f tools/renames/st05.txt
+
+# St05Hit: StageHit's layout, but its slot 0x08 pushes the touched sphere away from its point (the vector)
+D_800D3C0C ST05_HIT_VTABLE
+func_800D6A48 St05Hit_init
+func_800D621C St05Hit_apply
+func_800D6A14 St05Hit_destroy
+func_800D6A60 St05Hit_setCenter
+# StageVolcano: arena 5's stage (the vtable's overrides: startRound, tick, tickScenery, lightFighter, drawWorld,
+# isFallen, updateCamera)
+Unk800D3CEC StageVolcano
+D_800D3C2C STAGE_VOLCANO_VTABLE
+func_800D3CEC StageVolcano_init
+func_800D3FC0 StageVolcano_destroy
+func_800D40CC StageVolcano_startRound
+func_800D44CC StageVolcano_tick
+func_800D4210 StageVolcano_tickScenery
+func_800D4814 StageVolcano_lightFighter
+func_800D47E8 StageVolcano_drawWorld
+func_800D47D4 StageVolcano_isFallen
+func_800D4A10 StageVolcano_updateCamera
+func_800D4570 st05_clampFighterX
+func_800D5364 st05_startSound
+func_800D53A8 st05_stopSound
+func_800D6A08 st05_getRiseBoost
+# St05Ember: a rising particle that keeps its last four positions, drawn as a line strip
+Unk800D5968 St05Ember
+D_800D3BBC ST05_EMBER_VTABLE
+func_800D5968 St05Ember_init
+func_800D5A90 St05Ember_tick
+func_800D5BD4 St05Ember_draw
+func_800D6A7C St05Ember_destroy
+# St05Fade: a quad whose size closes toward its target while its alpha falls
+Unk800D627C St05Fade
+D_800D3B6C ST05_FADE_VTABLE
+func_800D627C St05Fade_init
+func_800D6308 St05Fade_tick
+func_800D6388 St05Fade_draw
+func_800D6B4C St05Fade_destroy
+# St05Shard: a Gouraud triangle that slows down while its alpha falls
+Unk800D64FC St05Shard
+D_800D3B44 ST05_SHARD_VTABLE
+func_800D64FC St05Shard_init
+func_800D6584 St05Shard_tick
+func_800D65F8 St05Shard_draw
+func_800D6B94 St05Shard_destroy

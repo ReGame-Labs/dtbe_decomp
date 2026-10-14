@@ -1,0 +1,66 @@
+# The names of st02's own symbols: run with tools/rename.py --overlay st02 -f tools/renames/st02.txt
+
+# St02Hit: Hit's layout without the owner (damage, kind, knockback); its slot 0x08 is Hit_apply on those fields
+Unk800D82AC St02Hit
+D_800D3FE4 ST02_HIT_VTABLE
+func_800D82AC St02Hit_init
+func_800D54C0 St02Hit_apply
+func_800D8278 St02Hit_destroy
+func_800D82E0 St02Hit_setKnockback
+# St02MeshMover (StageMeshMover): its tick turns its mesh about z, counting the turns
+D_800D3F4C ST02_MESH_MOVER_VTABLE
+func_800D680C St02MeshMover_init
+func_800D68D4 St02MeshMover_tick
+func_800D6880 St02MeshMover_destroy
+# St02MeshDrawer (stages.txt): its draw draws one mesh node of the scenery
+D_800D3E84 ST02_MESH_DRAWER_VTABLE
+func_800D7FC0 St02MeshDrawer_init
+func_800D8018 St02MeshDrawer_draw
+func_800D8470 St02MeshDrawer_destroy
+# StageTurn: arena 2's stage, whose arena turns (the vtable's overrides: startRound, tick, tickScenery,
+# createNodeEntity, isFallen, updateCamera)
+Unk800D41E0 StageTurn
+D_800D402C STAGE_TURN_VTABLE
+func_800D41E0 StageTurn_init
+func_800D8210 StageTurn_destroy
+func_800D4218 StageTurn_startRound
+func_800D49E8 StageTurn_tick
+func_800D45C0 StageTurn_tickScenery
+func_800D43DC StageTurn_createNodeEntity
+func_800D4AB4 StageTurn_isFallen
+func_800D4AC8 StageTurn_updateCamera
+func_800D4164 st02_turnPoints
+func_800D4CC0 st02_startCameraSwing
+func_800D4CE0 st02_printText
+func_800D4D30 st02_printTextAt
+func_800D4DA0 st02_closeTerminal
+func_800D4F0C st02_placeFighters
+D_800D4114 ST02_POINTS
+# St02Block: a block of the scenery, which hides its node and comes back ("block -c%02d" / "block -r%02d")
+Unk800D6044 St02Block
+D_800D3F74 ST02_BLOCK_VTABLE
+func_800D6044 St02Block_init
+func_800D6100 St02Block_tick
+func_800D63A4 St02Block_draw
+func_800D82FC St02Block_destroy
+# St02Terminal: the text terminal on mesh 15 (a queue of characters moved into a 12 by 16 grid)
+Unk800D6B7C St02Terminal
+D_800D3EFC ST02_TERMINAL_VTABLE
+func_800D6B7C St02Terminal_init
+func_800D6BDC St02Terminal_tick
+func_800D7024 St02Terminal_draw
+func_800D838C St02Terminal_destroy
+func_800D6C8C St02Terminal_putNextChar
+func_800D6DEC St02Terminal_clearQueue
+func_800D6E10 St02Terminal_clearGrid
+func_800D6E5C St02Terminal_clearRow
+func_800D6E84 St02Terminal_moveCursor
+func_800D6F34 St02Terminal_print
+func_800D6F88 St02Terminal_printAt
+# St02Screen: node 15's quads, scrolling at four angles
+Unk800D7800 St02Screen
+D_800D3EAC ST02_SCREEN_VTABLE
+func_800D7800 St02Screen_init
+func_800D7888 St02Screen_tick
+func_800D78B0 St02Screen_draw
+func_800D8428 St02Screen_destroy

@@ -1,1 +1,38 @@
 // st01.bin's own names (config/jp/st01.yaml)
+
+// the names tools/rename.py gave (tools/renames/), in address order
+ST01_DEBRIS_VTABLE = 0x800D3C0C;
+ST01_PULSE_GRID_VTABLE = 0x800D3CAC;
+ST01_FALLING_OBJECT_VTABLE = 0x800D3CFC;
+STAGE_HIT_VTABLE = 0x800D3D24;
+STAGE_NATURE_VTABLE = 0x800D3D44;
+StageNature_init = 0x800D3DBC; // type:func
+StageNature_destroy = 0x800D3FF0; // type:func
+StageNature_startRound = 0x800D4060; // type:func
+StageNature_tick = 0x800D4674; // type:func
+StageNature_tickScenery = 0x800D46D0; // type:func
+StageNature_drawWorld = 0x800D48E8; // type:func
+st01_clearState = 0x800D4934; // type:func
+st01_readClut = 0x800D4D88; // type:func
+st01_saveFighterPositions = 0x800D4E80; // type:func
+st01_moveGroupNode = 0x800D500C; // type:func
+st01_drawGroup = 0x800D54C8; // type:func
+st01_stopFallEvent = 0x800D5614; // type:func
+st01_tickFallEvent = 0x800D5650; // type:func
+st01_spawnFallingObject = 0x800D58BC; // type:func
+StageHit_init = 0x800D5B80; // type:func
+StageHit_apply = 0x800D5B98; // type:func
+St01FallingObject_init = 0x800D5BA0; // type:func
+St01FallingObject_destroy = 0x800D5CB0; // type:func
+St01FallingObject_tick = 0x800D5DB0; // type:func
+St01PulseGrid_init = 0x800D7058; // type:func
+St01PulseGrid_destroy = 0x800D7124; // type:func
+St01PulseGrid_tick = 0x800D7178; // type:func
+St01PulseGrid_draw = 0x800D71B8; // type:func
+St01Debris_init = 0x800D7EC4; // type:func
+St01Debris_initAt = 0x800D7F98; // type:func
+St01Debris_destroy = 0x800D8088; // type:func
+St01Debris_tick = 0x800D80DC; // type:func
+St01Debris_draw = 0x800D8308; // type:func
+StageHit_destroy = 0x800D9F74; // type:func
+StageHit_setKnockback = 0x800D9FA8; // type:func

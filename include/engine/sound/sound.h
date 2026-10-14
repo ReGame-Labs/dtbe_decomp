@@ -122,12 +122,12 @@ typedef struct {
 /* frames from turning reverb on to setting its depth: 3 seconds */
 #define SND_REVERB_DEPTH_DELAY 180
 
-/* a node of the pool at SoundSystem 0x358 */
+/* a node of the voice pool: a voice of the SPU */
 typedef struct {
     /* 0x0 */ LinkNode link;
-    /* 0x8 */ u8 index; /* its place in the pool */
+    /* 0x8 */ u8 index; /* its place in the pool, the voice */
     /* 0x9 */ u8 unk9[3];
-} SndUnk370;
+} SndVoiceNode;
 
 /* the sound system */
 typedef struct SoundSystem {
@@ -150,9 +150,9 @@ typedef struct SoundSystem {
     /* 0x352 */ s16 reverbDepthRight;
     /* 0x354 */ s16 reverbDelay; /* frames until the depth is set */
     /* 0x356 */ u16 reverbStart; /* VSync count when the delay began */
-    /* 0x358 */ NodePool unk358;
+    /* 0x358 */ NodePool voicePool;
     /* 0x36C */ s32 unk36C;
-    /* 0x370 */ SndUnk370 unk370[SND_VOICE_MAX];
+    /* 0x370 */ SndVoiceNode voiceNodes[SND_VOICE_MAX];
     /* 0x490 */ s16 pausedPitch[SND_VOICE_MAX];
     /* 0x4C0 */ SpuVolume pausedVolume[SND_VOICE_MAX];
     /* 0x520 */ u8 nextGroup; /* the group of the next effect, when not 0 */
@@ -170,7 +170,7 @@ u16 getSoundEffectCount(void);
 u16 getSongCount(void);
 void startSoundSystem(void *memory, s16 sepMax, s16 seqMax);
 s32 getSongMemorySize(s16 sepMax, s16 seqMax);
-void func_80038D44(void);
+void initVoicePool(void);
 s32 setSndDef(SndDef *def);
 void updateSoundEffects(void);
 void updateSongFades(void);

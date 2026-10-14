@@ -17,3 +17,17 @@ guideLogoTaskInit = 0x80071F28; // type:func
 rankingTaskInit = 0x8007360C; // type:func
 creditsTaskInit = 0x80076504; // type:func
 optionTaskInit = 0x800794E0; // type:func
+
+// the "test" overlay's (not on the disc), named after the system menu
+// commands that start them
+hanamasuTestTaskInit = 0x80065AE4; // type:func
+iwanagaTestTaskInit = 0x80066084; // type:func
+teradaTestTaskInit = 0x80066F74; // type:func
+shohyamaTestTaskInit = 0x800673A4; // type:func
+modelViewTaskInit = 0x800681A4; // type:func
+mapViewTaskInit = 0x8006A43C; // type:func
+
+// the functions of game_0c that main calls on the list of the mesh scene links
+// that have collision lines (COLLISION_LINKS, include/overlay.h)
+getCollisionLinks = 0x80076A00; // type:func
+moveCollisionLinkToBack = 0x80076A5C; // type:func

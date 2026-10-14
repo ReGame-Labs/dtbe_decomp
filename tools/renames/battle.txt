@@ -1,0 +1,866 @@
+# src/battle/ (game.bin, the battle overlay's core): names from the code, its strings, its calls and callers.
+# Run with --overlay game: game.bin shares addresses with title.bin, and the stages (which link to game.bin)
+# take these names in their code too.
+
+# battle_scene.c: Fight, the object of one fight (the rounds, both sides, the camera, the map, the pause menu);
+# the stages derive from it. The engine calls game.bin's task the fight (createFightTask, FIGHT_RESULT_*), and
+# Fight_run is its thread, which plays rounds until a side has the wins. Slots of FIGHT_VTABLE by their callers:
+# 0x08 before every round, 0x10 every frame, 0x20 every frame before it, 0x48 while paused (the menu's texts),
+# 0x50 per map node (Fight_createNodeEntities), 0x60 every step (lerps the look-at), 0x68 the destructor.
+Unk8006ED20 Fight
+func_8006ED20 Fight_init
+func_80070140 Fight_startRound
+func_80070314 Fight_tick
+func_800702E0 Fight_createController
+func_80071F6C Fight_tickScenery
+func_800732D8 Fight_lightFighter
+func_8007338C Fight_endRound
+func_80073394 Fight_prepareNextRound
+func_80072748 Fight_drawWorld
+func_80072CA0 Fight_drawPauseMenu
+func_800700C0 Fight_createNodeEntity
+func_80070824 Fight_isFallen
+func_80072088 Fight_updateCamera
+func_8006F254 Fight_destroy
+# accessors and lists: what each returns or appends to
+func_8006EF5C Fight_getCamera
+func_8006EF64 Fight_getLookAt
+func_8006EF6C Fight_getScore
+func_8006EF90 Fight_addScore
+func_8006EFE8 Fight_getWins
+func_8006F004 Fight_random
+func_8006F024 Fight_addSide1Shape
+func_8006F044 Fight_addSide0Shape
+func_8006F064 Fight_addStageShape
+func_8006F084 Fight_addStageEntity
+func_8006F0B4 Fight_addEntity
+func_8006F190 Fight_isRoundOver
+func_8006F1A4 Fight_isContinueShown
+func_8006F1B8 Fight_getMeshScene
+# loading and sides: the paths each formats ("evolution/%s_%dp%s.tim", "effect/mon_efc%02d.tim",
+# "map/map%02d.dmm") and the constructors each calls
+func_8006F57C Fight_loadTamerTim
+func_8006F690 Fight_loadCharacterEffectTim
+func_8006F780 Fight_load
+func_8006FAF4 Fight_createSides
+func_8006FEB0 Fight_destroySides
+func_8006FFD4 Fight_createNodeEntities
+func_8007005C Fight_createNodeEntityAt
+func_800700C8 Fight_getFighter
+func_800700E4 Fight_setBounds
+func_8007039C runFightThread
+func_800703BC Fight_updateSides
+func_80070474 Fight_readInputs
+func_800706A4 Fight_catchFalls
+func_80070838 Fight_respawnFighter
+func_80070C28 Fight_finishStep
+# rounds: the ROUND_* results, the bonus kinds, the thread's waits and wipes
+func_80070C74 Fight_getRoundResult
+func_80070F40 Fight_getBonus
+func_80071014 Fight_computeBonus
+func_800710B8 Fight_waitFrames
+func_800710FC Fight_stopRound
+func_80071110 Fight_run
+func_80071460 Fight_showContinue
+func_800715EC Fight_playIntro
+func_80071738 Fight_playRound
+func_80071B74 Fight_playDoubleKnockOut
+func_80071BF8 Fight_playDraw
+func_80071C9C Fight_playInterruption
+func_80071D38 Fight_waitEntity
+func_80071D7C Fight_waitHandle
+func_80071E10 Fight_wipeIn
+func_80071E60 Fight_wipeOut
+func_80071EC0 Fight_end
+func_80071EF8 Fight_resetRound
+func_80071F74 Fight_updatePauseMenu
+# drawing and the rest
+func_80072680 Fight_draw
+func_80072ADC drawDarkRect
+func_80072B74 drawRectFrame
+func_80072C6C printCentered
+func_80072E20 Fight_drawWipe
+func_80072F2C Fight_applyView
+func_80072F80 castMapRay
+func_80073218 Fight_getOpponent
+func_80073260 Fight_getInput
+func_80073274 Fight_getSide
+func_80073288 Fight_freezeFighters
+func_8007329C Fight_unfreezeFighters
+func_800732B0 Fight_holdClock
+func_800732C4 Fight_releaseClock
+func_8007339C Fight_getArena
+func_800733B4 getCurrentFight
+# data: the constructor's table and light setters (cameraSetLightDirection0..2, LightColor0..2, BackColor),
+# the start/respawn tables indexed by the arena, the paths and the pause menu's texts (つづける / やめる)
+D_800D377C CURRENT_FIGHT
+D_80064EC8 FIGHT_VTABLE
+D_80064FA4 ARENA_START_POSITIONS
+D_80064FF4 ARENA_RESPAWN_POSITIONS
+D_80064CC8 LIGHT_DIRECTION_0
+D_80064CD8 LIGHT_DIRECTION_1
+D_80064CE8 LIGHT_DIRECTION_2
+D_80064CF8 LIGHT_COLOR_0
+D_80064D08 LIGHT_COLOR_1
+D_80064D18 LIGHT_COLOR_2
+D_80064D28 BACK_COLOR
+D_80064D80 PATH_EVOLUTION_TIM_FORMAT
+D_80064DA0 PATH_MON_EFFECT_TIM_FORMAT
+D_80064DB8 PATH_EFFECT_TIM
+D_80064DCC PATH_MAP_FORMAT
+D_80064EB0 STR_PAUSE_CONTINUE
+D_80064EBC STR_PAUSE_QUIT
+D_800D3778 EVOLUTION_LOADED
+# the partners' names by character ("taichi", "takato"...; Fight_loadTamerTim formats the evolution TIM with them)
+D_800D32B8 CHARACTER_TAMERS
+
+# game_main.c: the task gameMainTaskInit builds ("game main process"): its thread loads a stage overlay
+# ("/bin/st%02d.bin") per fight, steps it a frame at a time and turns the round's result into the scene's.
+# The update (slot 0x10) is the shared one that calls slot 0x20, so it is named per class as in title.bin.
+Unk8006E2EC GameMainTask
+func_8006E23C GameMainTask_destroy
+func_8006ECEC GameMainTask_update
+func_8006E2EC GameMainTask_tick
+func_8006E310 runGameMainThread
+func_8006E330 GameMainTask_run
+func_8006E600 GameMainTask_showLoading
+func_8006E660 GameMainTask_startFight
+func_8006E948 GameMainTask_pickSounds
+func_8006EA64 GameMainTask_stepFight
+func_8006EBB0 drawLoadingIcon
+func_8006ECA4 onCdIdle
+D_80064434 GAME_MAIN_TASK_VTABLE
+D_80064464 ARENA_SOUND_IDS
+D_80064478 CHARACTER_SOUND_IDS
+D_800644A8 LOADING_ICON_PALETTE
+D_800644C8 LOADING_ICON_FRAMES
+D_800D32B4 LOADING_ICON_FRAME
+D_800643E4 STR_GAME_MAIN_PROCESS
+D_800643F8 PATH_STAGE_FORMAT
+
+# battle_loading.c: the loading screen of a fight ("system/load%02d.tim", "system/bonus%02d.tim"), the
+# executable's LoadingScreen with its own table
+Unk800D0204 FightLoadingScreen
+func_800D0294 FightLoadingScreen_init
+func_800D00C8 FightLoadingScreen_load
+func_800D0204 FightLoadingScreen_draw
+D_8006DF3C FIGHT_LOADING_SCREEN_VTABLE
+D_8006DF0C PATH_BONUS_LOADING_FORMAT
+D_8006DF24 PATH_LOADING_FORMAT
+
+# game_0b.c: the input history of a side, 256 frames of held buttons and their back searches (the command
+# reading of the fighter states); Fight_init makes one per side and Fight_readInputs records into it
+Unk80075000 InputHistory
+func_80075000 InputHistory_init
+func_80075034 InputHistory_setMirrored
+func_8007504C InputHistory_record
+func_80075090 InputHistory_clear
+func_800750C4 InputHistory_getHeld
+func_80075100 InputHistory_getPressed
+func_80075124 InputHistory_getReleased
+func_80075148 InputHistory_getAgo
+func_8007516C InputHistory_startSearch
+func_800751A8 InputHistory_findHeld
+func_8007527C InputHistory_findHeldStrict
+func_80075454 InputHistory_findPresses
+func_80075574 InputHistory_mirror
+func_8007559C getButtonGroup
+func_800755B4 matchButtons
+# game_0b.c: the boxes the fighters hit with (min and max of eight corners) and the collision shape lists
+Unk80075764 Box
+func_800755D4 boxOverlaps
+func_80075674 boxFindOverlap
+func_800756E4 boxesFindOverlap
+func_80075764 boxSetCorners
+func_80075784 boxFitCorners
+func_80075AE0 boxGetMatrix
+func_80075B48 collideShapes
+func_80075C64 listAppend
+func_80075C94 shapeListsCollide
+func_80075CEC shapeListCollide
+func_80075D44 shapeListFindNearest
+func_80075E7C shapeListDraw
+
+# fighter.c's tail and cpu_input.c: what makes a side's pad word. Controller is the base (its slot 0x08 gives
+# the buttons for the side's fighter, Fight_readInputs records them); the computer player derives from it
+# (cpu_input.c, "the computer's input"), and the bonus stages derive their own
+Unk8007C084 Controller
+func_8007C084 Controller_init
+func_8007C09C Controller_destroy
+func_8007C0D0 Controller_getButtons
+Unk8007C17C ComputerController
+func_8007C17C ComputerController_init
+func_8007C1EC ComputerController_getButtons
+func_8007EE98 ComputerController_destroy
+func_8007EDD8 ComputerController_findNearestShape
+func_8007EE80 addTowardButton
+D_8006569C COMPUTER_CONTROLLER_VTABLE
+D_800652AC CONTROLLER_VTABLE
+
+# fighter.c: the base class of the 24 fighters (vtable D_8006530C, entityInit with ENTITY_KIND_FIGHTER);
+# createFighter's switch on the CHARACTER_* id builds them. The slots are the fighter's actions: each fighter
+# state (game_0f) calls one every frame with its frame count, sets its FIGHTER_STATE_* and plays its
+# FIGHTER_CLIP_* (the slot names follow those pairs); 0x08/0x10 are the entity's tick and draw.
+Unk80076F34 Fighter
+Unk80076F34Vtable FighterVtable
+UNK80076F34_VTABLE GET_FIGHTER_VTABLE
+Unk80077698 FighterParams
+Unk8007B470Entry Attack
+Unk800774C0 TimedEffect
+Unk80079B24Entry FaceEntry
+Unk8007A9FCItem FaceMove
+Unk8007BD8C Hit
+Unk8007BF20 TrackedHit
+Unk8007BF74 MoveReward
+func_80076CB4 createFighter
+func_80076F34 Fighter_init
+func_800770AC Fighter_setUp
+func_8007720C Fighter_prepare
+func_800773F4 Fighter_addScore
+func_80077424 Fighter_addHp
+func_80077448 Fighter_addGauge
+func_8007746C Fighter_evolveIfReady
+func_800774A8 Fighter_clearItemEffect
+func_800774C0 Fighter_startItemEffect
+func_800774D8 Fighter_tickItemEffect
+func_80077568 Fighter_getCharacter
+func_80077574 Fighter_getSide
+func_80077580 Fighter_getScene
+func_80077598 Fighter_isComputer
+func_800775A4 Fighter_getModel
+func_800775B0 Fighter_setPosition
+func_800775D8 Fighter_getPosition
+func_8007760C Fighter_getLastPosition
+func_80077640 Fighter_getNextPosition
+func_8007768C Fighter_getVramY
+func_80077698 Fighter_getParams
+func_800776A4 Fighter_getPartMap
+func_800776C4 Fighter_getInput
+func_800776D0 Fighter_destroy
+func_80077794 Fighter_canEvolve
+func_800777D0 Fighter_addModelTo
+func_800777F8 Fighter_removeModel
+func_80077848 Fighter_probeFloorBelow
+func_800778BC Fighter_isOnGround
+func_800778D0 Fighter_tryUseAirMove
+func_800778FC Fighter_tick
+func_80077B20 Fighter_updateModel
+func_80077C70 Fighter_updateFace
+func_80077CD4 Fighter_applyPose
+func_80077E2C Fighter_updatePhysics
+func_8007814C Fighter_isStandingOn
+func_8007819C Fighter_checkGround
+func_8007835C Fighter_accelerateTo
+func_80078418 Fighter_getFriction
+func_80078478 Fighter_hasFloorAhead
+func_800784F4 Fighter_playVoice
+func_80078540 Fighter_playSound
+func_80078578 Fighter_updateRotation
+func_80078660 Fighter_updateTransform
+func_80078804 Fighter_faceLeft
+func_8007881C Fighter_faceRight
+func_80078848 Fighter_mirrorInput
+func_80078878 getHitFighter
+func_800788B4 Fighter_setMoveReward
+func_80078910 Fighter_handleInput
+func_80078C28 Fighter_setInput
+func_80078C5C Fighter_vibratePad
+func_80078D64 Fighter_isInvulnerable
+func_80078DE0 Fighter_isGuarding
+func_80078E08 Fighter_blocks
+func_80078E6C Fighter_scaleDamage
+func_80078EF8 Fighter_takeHit
+func_8007925C Fighter_requestWinPose
+func_80079274 Fighter_hold
+func_800792A0 Fighter_getBodyState
+func_800792AC Fighter_getAttackState
+func_800792B8 Fighter_getBodyStateId
+func_800792DC Fighter_getAttackStateId
+func_80079300 Fighter_resetCollider
+func_80079320 Fighter_stopActionClip
+func_80079350 Fighter_requestEvolution
+func_800793A4 Fighter_beginEvolutionScene
+func_800794CC Fighter_endEvolutionScene
+func_80079534 Fighter_takeOverFrom
+func_800796F0 Fighter_setClip
+func_80079830 Fighter_playActionClip
+func_800798F4 Fighter_lacksClip
+func_80079950 Fighter_isModelStopped
+func_800799A0 Fighter_isClipDone
+func_80079A0C Fighter_isActionClipDone
+func_80079A78 Fighter_freeze
+func_80079B24 Fighter_setFaceTable
+func_80079B2C Fighter_setFace
+func_80079B4C Fighter_move
+func_80079BD8 Fighter_applyImpulse
+func_80079CF4 Fighter_getOpponentInReach
+func_80079D94 Fighter_isThrowable
+func_80079E10 Fighter_getFacing
+func_8007A044 Fighter_getPartMask
+func_8007A0B4 Fighter_addAttackParts
+func_8007A0E4 Fighter_setAttackParts
+func_8007A10C Fighter_getComboHits
+func_8007A118 Fighter_countComboHit
+func_8007A4A4 Fighter_getNodePosition
+func_8007A598 Fighter_getNodesMidpoint
+func_8007A69C Fighter_getOpponentPosition
+func_8007A6FC Fighter_spawnDust
+func_8007A7DC Fighter_spawnHitSpark
+func_8007A874 Fighter_spawnGuardFlash
+func_8007A9B0 Fighter_spawnContactEffect
+func_8007A9FC Fighter_draw
+func_8007AAE4 Fighter_updateBoxes
+func_8007ACC4 Fighter_getBodyBoxes
+func_8007ACD0 Fighter_getBodyBoxCount
+func_8007ACDC Fighter_getAttackBoxes
+func_8007ACE8 Fighter_getAttackBoxCount
+func_8007AD4C Fighter_addEntity
+func_8007AD70 Fighter_attachTo
+func_8007ADCC Fighter_attachToPart
+func_8007AE34 Fighter_detach
+func_8007AED0 Fighter_isAttackIdle
+func_8007AEEC Fighter_getOpponent
+func_8007B470 Fighter_runAttack
+# the virtual methods, by slot (the state handlers take the frame in the state)
+func_8007C104 Fighter_endMove
+func_8007BC50 Fighter_hitOpponent
+func_8007C10C Fighter_intro
+func_8007AF14 Fighter_getUp
+func_8007AF40 Fighter_walkLeft
+func_8007AFBC Fighter_walkRight
+func_8007B034 Fighter_dashLeft
+func_8007B0E0 Fighter_dashRight
+func_8007B18C Fighter_jump
+func_8007B298 Fighter_crouch
+func_8007B2C0 Fighter_guard
+func_8007B2EC Fighter_crouchGuard
+func_8007B318 Fighter_dizzy
+func_8007B41C Fighter_flinch
+func_8007B448 Fighter_airFlinch
+func_8007B6A0 Fighter_attack1
+func_8007B70C Fighter_attack2
+func_8007B784 Fighter_attack3
+func_8007B80C Fighter_upAttack
+func_8007B884 Fighter_dashAttack
+func_8007B90C Fighter_crouchAttack
+func_8007B978 Fighter_throw
+func_8007B9C8 Fighter_special1
+func_8007B9FC Fighter_special2
+func_8007BA30 Fighter_special3
+func_8007BA64 Fighter_airSpecial3
+func_8007BA98 Fighter_airAttack
+func_8007BAFC Fighter_airUpAttack
+func_8007BB64 Fighter_airSideAttack
+func_8007BBE8 Fighter_airSpecial1
+func_8007BC1C Fighter_airSpecial2
+# the hit an attack carries into the struck collider (slot 0x08 adds it), the one that records what it struck
+# (a fighter, or an entity of ENTITY_KIND_FIGHTER_OBJECT), and a move's score and gauge pay
+func_8007BD8C Hit_init
+func_8007BDC8 Hit_set
+func_8007BDD4 Hit_setKnockback
+func_8007BDF0 Hit_apply
+func_8007C114 Hit_destroy
+func_8007BE78 TrackedHit_apply
+func_8007BF00 TrackedHit_hitFighter
+func_8007BF20 TrackedHit_init
+func_8007C148 TrackedHit_destroy
+func_8007BF74 MoveReward_init
+func_8007BF84 MoveReward_set
+func_8007BF90 MoveReward_scale
+func_8007BFE0 MoveReward_give
+func_8007C028 MoveReward_giveGauge
+# data: the tables by character (0x180-byte rows; bit 0 of the flags is clear exactly for the ten that
+# evolve) and by arena (16.16, picked by Fighter_prepare)
+D_8006530C FIGHTER_VTABLE
+D_800652EC HIT_VTABLE
+D_800652CC TRACKED_HIT_VTABLE
+D_800656D4 FIGHTER_PARAMS
+D_80065278 FIGHTER_ATTACK_VOICES
+D_800D3318 ARENA_FRICTIONS
+D_800D3340 ARENA_GRIPS
+D_800D3790 ARENA_FRICTION
+D_800D3794 ARENA_GRIP
+# the fighter's flag bits named after the type's old name: Fighter_freeze sets the first; the other two keep
+# the address of the function that sets them
+UNK80076F34_FLAG_A78_BIT FIGHTER_FLAG_FROZEN_BIT
+UNK80076F34_FLAG_AF8_BIT FIGHTER_FLAG_80079AF8_BIT
+UNK80076F34_FLAG_AE4_BIT FIGHTER_FLAG_80079AE4_BIT
+
+# game_0c.c: the collision shapes the fight tests against each other (collideShapes calls slot 0x08 of each
+# pair, shapeListDraw slot 0x18), their one subclass, a sphere (position 0x34, radius 0x44: func_80075F58
+# compares their distance with the sum of the radii, func_80075FE4 draws a circle of that radius there), and
+# the interface of their owners (slot 0x08 is called with the other shape when two touch)
+Unk800761AC CollisionShape
+Unk80075EE4 CollisionSphere
+Unk80076308 CollisionOwner
+D_800650F4 COLLISION_SPHERE_OUTLINE
+D_8006513C COLLISION_SPHERE_VTABLE
+D_80065184 COLLISION_SHAPE_VTABLE
+D_80065164 COLLISION_OWNER_VTABLE
+func_80075EE4 CollisionSphere_init
+func_80075F58 CollisionSphere_overlaps
+func_80075FE4 CollisionSphere_draw
+func_800761AC CollisionShape_init
+func_8007621C CollisionShape_destroy
+func_80076210 CollisionShape_getEntity
+func_8007627C CollisionShape_setEntity
+func_80076274 CollisionShape_setOwner
+func_80076284 CollisionShape_setDisabled
+func_800762A0 CollisionShape_isDisabled
+func_800762AC CollisionShape_isTouched
+func_800762C0 CollisionShape_clearTouched
+func_800762F4 CollisionOwner_init
+func_80076308 CollisionOwner_destroy
+func_8007633C CollisionSphere_destroy
+func_80076394 CollisionSphere_initDisabled
+func_800763F4 CollisionSphere_getPosition
+func_80076414 CollisionSphere_setPosition
+func_80076430 CollisionSphere_setRadius
+func_80076438 CollisionSphere_getRadius
+# game_0c.c: the probe that finds where a segment crosses the collision lines of the shown COLLISION_LINKS
+# (func_80076474 walks them, func_800766B4 tests one link's lines in its space and swaps the line it hits to the
+# front; the fighter keeps one at 0x260 for its floor), and the line helpers (a line is two endpoints, then
+# normalX * x + normalY * y + offset)
+Unk80076444 TerrainProbe
+Unk8007691C TerrainLine
+func_80076444 TerrainProbe_init
+func_80076474 TerrainProbe_cast
+func_80076584 TerrainProbe_getLink
+func_80076598 TerrainProbe_getMatrix
+func_800765AC TerrainProbe_getNormal
+func_800765B4 TerrainProbe_getHitPoint
+func_800765F0 getCrossingPoint
+func_800766B4 castTerrainLink
+func_80076888 getTerrainLineDot
+func_800768B8 getTerrainLineDistance
+func_800768F0 isInTerrainLineSpan
+func_8007691C isInTerrainLineSpanXY
+func_80076958 swapTerrainLines
+func_800769DC setTerrainUp
+D_800D3780 TERRAIN_UP
+# func_80076AAC registers a link's lines at the front of COLLISION_LINKS (the stages call it after building
+# their lines with func_80076AF4): named after the engine's collision link functions
+func_80076AAC addCollisionLink
+func_80076AF4 initTerrainLine
+func_80076C74 turnAngleToward
+
+# game_0e.c: one side of the fight (0x3C bytes, vtable at 0x38; the fight builds two from the four characters
+# and stores each into both its characters' 0x238): the starting form, its evolution (CHARACTER_EVOLUTIONS, or
+# itself), the one fighting at 0x8 (func_8007F89C swaps it), and the side's life (0x20, clamped to 0x1C), gauge
+# (0x24, 0 to 0x10000) and a freeze flag (0x2C) its setters test. game_classes.h's Unk8007F184 / Unk8007F6FC,
+# game_0e's Unk8007EEB8 and battle_scene's Unk800700C8 are views of it, merged by hand into this name.
+Unk8007F184 BattleSide
+D_800656BC BATTLE_SIDE_VTABLE
+func_8007EEB8 BattleSide_init
+func_8007EF4C BattleSide_unlinkCharacters
+func_8007EFC0 BattleSide_destroy
+func_8007F068 BattleSide_takeDamage
+func_8007F0F4 BattleSide_addLife
+func_8007F1FC BattleSide_addGauge
+func_8007F22C BattleSide_tickGauges
+func_8007F300 BattleSide_tick
+func_8007F59C BattleSide_freeze
+func_8007F5A8 BattleSide_canEvolve
+func_8007F89C BattleSide_swapCharacter
+func_8007F8E4 BattleSide_getCharacter
+func_8007F8F0 BattleSide_getLife
+func_8007F8FC BattleSide_getLifeMax
+func_8007F908 BattleSide_getGauge
+# game_0f.c: the fighter's two state objects (Fighter.bodyState and attackState), rebuilt in place by each
+# state's constructor: a FIGHTER_STATE_* at 0x0, the frame at 0x4 (handed to the fighter's slot, then counted
+# up), the fighter at 0x8, the vtable at 0xC (0x08 tick, 0x10 jump, 0x18 drop, 0x20 attack, 0x28 hit, from the
+# fighter's tick and handleInput and the hit applier). The subclasses are named after the states they run.
+# "Action" state of the list -> "attack" state, as the fighter's own accessors call it.
+Unk8007F920 FighterState
+Unk800805DC FighterStateIntro
+Unk800807F4 FighterStateHeld
+Unk80080C5C FighterStateJump
+Unk80080EBC FighterStateFall
+Unk80081438 FighterStateFlinch
+Unk800815C4 FighterStateAirFlinch
+Unk800816B4 FighterStateDown
+D_80068154 FIGHTER_STATE_VTABLE
+D_80068074 FIGHTER_STATE_GROUND_VTABLE
+D_800680AC FIGHTER_STATE_INTRO_VTABLE
+D_80068004 FIGHTER_STATE_JUMP_VTABLE
+D_80067FCC FIGHTER_STATE_FALL_VTABLE
+D_80067F24 FIGHTER_STATE_FLINCH_VTABLE
+D_80067EEC FIGHTER_STATE_AIR_FLINCH_VTABLE
+D_80067EB4 FIGHTER_STATE_DOWN_VTABLE
+D_80067E7C FIGHTER_STATE_GET_UP_VTABLE
+D_8006803C FIGHTER_STATE_HELD_VTABLE
+D_80067E0C FIGHTER_ATTACK_IDLE_VTABLE
+D_80067DD4 FIGHTER_STATE_ATTACK_VTABLE
+func_8007F920 FighterState_init
+func_80082740 FighterState_tick
+func_80082748 FighterState_jump
+func_80082750 FighterState_drop
+func_80082758 FighterState_attack
+func_80082760 FighterState_hit
+func_80080510 FighterState_hitUnlessGuarded
+func_8007F93C FighterState_getBodyState
+func_8007F950 FighterState_getAttackState
+func_8007F964 FighterState_isAttackIdle
+func_8007F9AC FighterState_isGuardHeld
+func_8007F9DC FighterState_updateGuard
+func_8007FAC0 FighterState_isDownHeld
+func_8007FAF0 FighterState_updateCrouch
+func_8007FB9C FighterState_getClip
+func_8007FC2C FighterState_playClip
+func_8007FC7C FighterState_isClipDone
+func_8008046C readSideTap
+func_800805DC FighterStateIntro_init
+func_80080670 FighterStateIntro_tick
+func_800808EC FighterStateGround_init
+func_80080968 FighterStateGround_tick
+func_80080ADC FighterStateGround_jump
+func_80080B4C FighterStateGround_drop
+func_80080BA8 FighterStateGround_initCrouch
+func_80081384 FighterStateGround_initGuard
+func_800813F8 FighterStateGround_initCrouchGuard
+func_80080BF0 FighterStateJump_init
+func_80080CA0 FighterStateJump_tick
+func_80080E68 FighterStateJump_jump
+func_80080EBC FighterStateFall_init
+func_80080F1C FighterStateFall_tick
+func_800807F4 FighterStateHeld_init
+func_80080874 FighterStateHeld_tick
+func_80081438 FighterStateFlinch_init
+func_80081528 FighterStateFlinch_tick
+func_800815C4 FighterStateAirFlinch_init
+func_80081618 FighterStateAirFlinch_tick
+func_800816B4 FighterStateDown_init
+func_80081734 FighterStateDown_tick
+func_800817B4 FighterStateGetUp_init
+func_800817F4 FighterStateGetUp_tick
+func_800819E0 FighterAttackIdle_init
+func_80081A54 FighterAttackIdle_attack
+func_80080590 FighterAttackIdle_hit
+func_8008209C FighterStateAttack_init
+func_80082158 FighterStateAttack_tick
+func_800822CC FighterStateAttack_attack
+func_80082270 FighterStateAttack_hit
+
+# game_0g.c: the battle's sprite effects. Each class is an entity (tick 0x08, draw 0x10, destructor 0x18) named by
+# what its tick and draw do: Particle steps a cell strip of PARTICLE_ANIMS and drifts with 1/16 drag; SpinParticle
+# turns and grows; HitSpark eases to its size in 5 frames; Sparkle fades its HSV value over 16 frames; CutIn slides
+# the side's VRAM image in with SpeedLines; TransformFlash eases the fighter's height to its other form's
+# (CHARA_OTHER_FORM); Trail records model points into 32-sample rings; the emitters spawn createParticle kinds.
+Unk800C2CCC SpriteAnim
+Unk800C2F14 Particle
+Unk800C32E0 HitSpark
+Unk800C3654 Sparkle
+Unk800C4204 CutIn
+Unk800C4860 SpeedLine
+Unk800C49E4 TransformFlash
+Unk800C5680 Trail
+Unk800C5B18Entry TrailPoint
+Unk800C5DF4 ParticleSpray
+Unk800C6088 ParticleEmitter
+func_800C28B8 createParticle
+func_800C2CCC spriteAnimInit
+func_800C2D04 spriteAnimRewind
+func_800C2D58 spriteAnimStep
+func_800C2DF4 spriteAnimBuildShape
+func_800C2E84 spriteAnimFillShape
+func_800C2F14 Particle_init
+func_800C2FBC Particle_initById
+func_800C6820 Particle_initStill
+func_800C3078 Particle_setMotion
+func_800C30C4 Particle_stepAnim
+func_800C3100 Particle_buildShape
+func_800C3134 Particle_tick
+func_800C3238 Particle_draw
+func_800C67CC Particle_destroy
+func_800C68D4 SpinParticle_init
+func_800C691C SpinParticle_initGrey
+func_800C32A4 SpinParticle_tick
+func_800C6880 SpinParticle_destroy
+func_800C32E0 HitSpark_init
+func_800C339C HitSpark_tick
+func_800C347C HitSpark_draw
+func_800C6AC8 HitSpark_destroy
+func_800C3654 Sparkle_init
+func_800C374C Sparkle_tick
+func_800C384C Sparkle_draw
+func_800C6BC0 Sparkle_destroy
+func_800C4204 CutIn_init
+func_800C42D0 CutIn_tick
+func_800C4480 CutIn_draw
+func_800C6D4C CutIn_destroy
+func_800C4860 SpeedLine_init
+func_800C48D8 SpeedLine_tick
+func_800C4940 SpeedLine_draw
+func_800C6DA4 SpeedLine_destroy
+func_800C49E4 TransformFlash_init
+func_800C4ADC TransformFlash_tick
+func_800C4DD4 TransformFlash_draw
+func_800C6DEC TransformFlash_destroy
+func_800C4CD8 TransformFlash_spawnFlare
+func_800C4D40 TransformFlash_spawnBurst
+func_800C5680 Trail_init
+func_800C5778 Trail_tick
+func_800C5BD4 Trail_draw
+func_800C5C4C Trail_drawStrips
+func_800C6E7C Trail_destroy
+func_800C5834 Trail_record
+func_800C59D4 Trail_fadeColors
+func_800C5B18 Trail_setPoints
+func_800C5B84 Trail_setColors
+func_800C5DF4 ParticleSpray_init
+func_800C5EB4 ParticleSpray_tick
+func_800C6F04 ParticleSpray_destroy
+func_800C62EC ParticleBurst_init
+func_800C6398 ParticleBurst_tick
+func_800C6F94 ParticleBurst_destroy
+func_800C652C ParticleImplosion_init
+func_800C65D8 ParticleImplosion_tick
+func_800C6FDC ParticleImplosion_destroy
+D_8006D5C4 PARTICLE_ANIMS
+D_8006D1AC HIT_SPARK_CORNERS
+D_8006D1EC CUTIN_CLUT_RECTS
+D_8006D1FC CUTIN_IMAGE_RECTS
+D_8006D6C8 CHARA_OTHER_FORM
+D_8006D59C PARTICLE_VTABLE
+D_8006D574 SPIN_PARTICLE_VTABLE
+D_8006D4FC HIT_SPARK_VTABLE
+D_8006D4AC SPARKLE_VTABLE
+D_8006D3E4 CUTIN_VTABLE
+D_8006D3BC SPEED_LINE_VTABLE
+D_8006D394 TRANSFORM_FLASH_VTABLE
+D_8006D33C TRAIL_VTABLE
+D_8006D314 PARTICLE_SPRAY_VTABLE
+D_8006D2C4 PARTICLE_BURST_VTABLE
+D_8006D29C PARTICLE_IMPLOSION_VTABLE
+# game_0h.c: Projectile, the entity kind 0x30000 that flies by its velocity with an attack part (UnkPartsEntity38)
+# until its range runs out; nine fighter classes and the item shot derive from it; its hit spawns a ParticleBurst
+# by hit level and a HitSpark between the target and itself.
+Unk800C7024 Projectile
+func_800C7024 Projectile_init
+func_800C71DC Projectile_tick
+func_800C77B4 Projectile_draw
+func_800C7714 Projectile_destroy
+func_800C72D8 Projectile_hit
+func_800C7358 Projectile_getBurstKind
+func_800C73A8 Projectile_spawnBurst
+func_800C7474 Projectile_spawnHitSpark
+func_800C75FC createHitSpark
+D_8006D760 PROJECTILE_VTABLE
+D_8006D740 PROJECTILE_HIT_VTABLE
+# game_0i.c: the stage's ItemSpawner keeps one slot of ITEM_SLOTS per spawn point (stage data, -1 ends) and spawns
+# an Item there every 90 frames; touching an Item gives its kind's effect to the fighter (Item_giveTo: score, gauge,
+# the 0x464 timed effect, the popup and icon on the HUD). The listener at Item 0x60 forwards hits to slot 0x20.
+Unk800C82CC ItemSpawner
+Unk800C82CCEntry ItemSpawnPoint
+Unk800C82CCSlot ItemSlot
+Unk800C82CCTable ItemSlots
+Unk800C90FC Item
+Unk800C8778 ItemHitListener
+Unk800CA430 ItemPopup
+Unk800CA768 ItemEffectIcon
+Unk800CAF2C ItemShot
+Unk800C7844Pool ItemKindPool
+func_800C77BC getItemSlots
+func_800C77C8 createItemSpawner
+func_800C7844 resolveItemKind
+func_800C7924 createItem
+func_800C7B30 showItemPopup
+func_800C7B9C showItemEffectIcon
+func_800C7D14 throwSparkles
+func_800C7F14 getAngleTo
+func_800C7F48 fireItemShot
+func_800C8008 fireItemShots
+func_800C82CC ItemSpawner_init
+func_800C83D4 ItemSpawner_tick
+func_800C8380 ItemSpawner_destroy
+func_800C84C8 ItemSpawner_countSpawnPoints
+func_800C85C4 ItemSpawner_spawnItem
+func_800C86E4 ItemSpawner_removeItem
+func_800C8718 rotNclip3
+func_800C8778 Item_init
+func_800C89B4 Item_tick
+func_800C90FC Item_draw
+func_800C8920 Item_destroy
+func_800C8E30 Item_touch
+func_800C8DFC Item_callTouch
+func_800C8F04 getToucherKind
+func_800C9034 Item_syncSlot
+func_800C9080 Item_setSlotFlags
+func_800C90C0 Item_clearSlotFlags
+func_800C94C4 Item_giveTo
+func_800C9790 updateItemEffect
+func_800CB53C ItemHitListener_init
+func_800C8754 ItemHitListener_onHit
+func_800CB508 ItemHitListener_destroy
+func_800CA430 ItemPopup_init
+func_800CA4FC ItemPopup_tick
+func_800CA5AC ItemPopup_draw
+func_800CA4A8 ItemPopup_destroy
+func_800CA768 ItemEffectIcon_init
+func_800CA84C ItemEffectIcon_tick
+func_800CA920 ItemEffectIcon_draw
+func_800CA7F8 ItemEffectIcon_destroy
+func_800CAF2C ItemShot_init
+func_800CAFC4 ItemShot_tick
+func_800CB0B0 ItemShot_draw
+func_800CB010 ItemShot_hit
+func_800CB6BC ItemShot_destroy
+func_800CB25C ItemShot_throwPiece
+D_800D3798 ITEM_SLOTS
+D_8006D7C8 ITEM_KIND_POOLS
+D_8006DBC8 ITEM_SHOT_ATTACKS
+D_8006D940 ITEM_SHOT_PIECE_ANIMS
+D_8006DBA0 ITEM_SPAWNER_VTABLE
+D_8006DB50 ITEM_VTABLE
+D_8006DB80 ITEM_HIT_LISTENER_VTABLE
+D_8006DA68 ITEM_POPUP_VTABLE
+D_8006DA40 ITEM_EFFECT_ICON_VTABLE
+D_8006D9C8 ITEM_SHOT_VTABLE
+D_8006D9A8 ITEM_SHOT_HIT_VTABLE
+
+# hud.c: the message kinds 0-12 index BATTLE_MESSAGE_LAYOUTS (step, width, text), _TICKS and _DRAWS; callers match
+# each kind's text (battle_scene 1/9/10, game_0k 9); the slots 0x08/0x10 run the kind's tick/draw member
+Unk800CB7B0 BattleMessage
+func_800CB7B0 BattleMessage_init
+func_800CB988 BattleMessage_tick
+func_800CBA04 BattleMessage_draw
+func_800CFFB4 BattleMessage_destroy
+func_800CBBD4 BattleMessage_tickReadyFight
+func_800CBA80 BattleMessage_tickTypeOut
+func_800CBE90 BattleMessage_tickEvolution
+func_800CBFF0 BattleMessage_tickKo
+func_800CC3E4 BattleMessage_tickYouWin
+func_800CC6DC BattleMessage_tickYouLose
+func_800CC750 BattleMessage_tickPlayerWin
+func_800CC93C BattleMessage_tickTimeUp
+func_800CCC0C BattleMessage_tickDrawGame
+func_800CCE18 BattleMessage_tickGameOver
+func_800CD0F4 BattleMessage_tickDemonstration
+func_800CBB88 BattleMessage_drawCentered
+func_800CBAE0 BattleMessage_drawTyped
+func_800CBE4C BattleMessage_drawNewChallenger
+func_800CBF6C BattleMessage_drawEvolution
+func_800CC230 BattleMessage_drawKo
+func_800CCA90 BattleMessage_drawTimeUp
+func_800CD068 BattleMessage_drawGameOver
+D_8006DDBC BATTLE_MESSAGE_VTABLE
+D_8006DEA4 BATTLE_MESSAGE_LAYOUTS
+D_800D36A4 BATTLE_MESSAGE_TICKS
+D_800D370C BATTLE_MESSAGE_DRAWS
+D_8006DDE4 EVOLUTION_MESSAGE_PALETTES
+# hud.c: a text drawn glyph by glyph; hudTextSetText copies it (strlen + strncpy, 0x40 at most), the setters fill
+# one field of every glyph, hudTextDraw draws them (0x548 is the 4.12 scale of offsets, sizes and step)
+Unk800CD140 HudText
+Unk800CD140Char HudTextChar
+func_800CD140 hudTextSetText
+func_800CD210 hudTextSetOffsets
+func_800CD248 hudTextSetOffsetRange
+func_800CD29C hudTextArrangeOnCircle
+func_800CD324 hudTextSetPalettes
+func_800CD358 hudTextSetPaletteRange
+func_800CD3A8 hudTextSetSize
+func_800CD3E0 hudTextSetSizes
+func_800CD418 hudTextSetSizeRange
+func_800CD46C hudTextSetScale
+func_800CD474 hudTextSetGray
+func_800CD4B0 hudTextSetOpacity
+func_800CD4E4 hudTextSetOpacityRange
+func_800CD56C hudTextDraw
+# hud.c: the 32x32 font (A-Z, '.'-':', '!', '?', '_'); GAME OVER's letters break into triangle shards
+func_800CF460 getFontGlyphUv
+func_800CF528 drawGlyphAtCursor
+func_800CF6F0 drawGlyph
+func_800CF994 spawnGlyphShards
+func_800CF0A0 drawSemiTransSprite
+func_800CFB3C GlyphShard_init
+func_800CFD10 GlyphShard_tick
+func_800CFE48 GlyphShard_draw
+func_800D0044 GlyphShard_destroy
+D_8006DD44 GLYPH_SHARD_VTABLE
+# hud.c: the continue screen draws "CONTINUE?" and a countdown, START sets GAME_STATE.continued, at 0 GAME OVER
+Unk800CD6D4 ContinuePrompt
+func_800CD6D4 ContinuePrompt_init
+func_800CD754 ContinuePrompt_tick
+func_800CD8C8 ContinuePrompt_draw
+func_800CFFFC ContinuePrompt_destroy
+D_8006DD94 CONTINUE_PROMPT_VTABLE
+# hud.c: after a human side wins a round, the bonuses (Fight_getBonus) are counted 100 a frame into the score
+Unk800CDA20 ScoreTally
+func_800CDA20 ScoreTally_init
+func_800CDBD4 ScoreTally_tick
+func_800CDFEC ScoreTally_draw
+func_800CDB78 ScoreTally_destroy
+func_800CDF14 ScoreTally_skipOnPress
+func_800CDFBC ScoreTally_addAll
+D_8006DD6C SCORE_TALLY_VTABLE
+# hud.c: the messages' strings, read by BATTLE_MESSAGE_LAYOUTS and the ticks (each version's label of the same text)
+D_8006DBD4 STR_READY
+D_8006DBDC STR_FIGHT
+D_8006DC60 STR_CONTINUE
+D_8006DDFC STR_READY_FIGHT
+D_8006DDEC STR_READY_FIGHT
+D_8006DE0C STR_NEW_CHALLENGER
+D_8006DE60 STR_2P_WIN
+D_8006DE54 STR_2P_WIN
+D_8006DE68 STR_TIME_UP
+D_8006DE5C STR_TIME_UP
+D_8006DE70 STR_DRAW_GAME
+D_8006DE64 STR_DRAW_GAME
+D_8006DE7C STR_DOUBLE_KO
+D_8006DE88 STR_GAME_OVER
+D_8006DE94 STR_DEMONSTRATION
+D_8006DE84 STR_DEMONSTRATION
+# side_hud.c: a side's bottom HUD, made twice by Fight; its tick reads the BattleSide's life and gauge, the score,
+# the wins and the combo hits; its draw calls the left or the mirrored right layout
+Unk800733C4 SideHud
+Unk800735E8 SideGauge
+Unk80073684 HitCounter
+func_800733C4 SideHud_init
+func_800734AC SideHud_tick
+func_80073A44 SideHud_draw
+func_80074FAC SideHud_destroy
+func_80073AC0 SideHud_drawLeft
+func_80073BB4 SideHud_drawRight
+func_80073FB8 SideHud_drawTimer
+func_800740F0 SideHud_drawScore
+func_80074250 SideHud_drawHealthGauge
+func_80074528 SideHud_drawEvolutionGauge
+func_80073ED4 SideHud_drawRoundWins
+func_800735E8 sideGaugeInit
+func_800735FC sideGaugeUpdate
+func_80073684 hitCounterClear
+func_80073694 hitCounterTick
+func_800736D8 hitCounterSet
+func_80073708 hitCounterDraw
+D_800650CC SIDE_HUD_VTABLE
+D_80065044 SIDE_HUD_DECIMAL_PLACES
+D_8006DCC0 SCORE_TALLY_DECIMAL_PLACES
+
+# game_0k.c: the bonus games' fight (arenas 7-9, st07-st09 derive): its 0x08 slot calls Fight_startRound and sets
+# the time by arena - 7, its 0x10 calls Fight_tick then refills both sides' health, 0x38 stops the win jingle
+Unk800D02C8 BonusFight
+func_800D02C8 BonusFight_init
+func_800D02FC BonusFight_destroy
+func_800D0364 BonusFight_startRound
+func_800D0504 BonusFight_tick
+func_800D06D0 BonusFight_tickScenery
+func_800D07FC BonusFight_prepareNextRound
+func_800D0820 BonusFight_endWithWinner
+func_800D0B80 BonusFight_endInDraw
+func_800D0ABC BonusFight_holdFighter
+func_800D0CF8 BonusFight_spawnModeHud
+func_800D0F1C BonusFight_spawnTimer
+func_800D0C50 BonusFight_addMark
+func_800D098C bonusShowWinner
+D_8006E154 BONUS_FIGHT_VTABLE
+# game_0k.c: the bonus game's seconds left, sprintf "%02d" of the fight's time / 30 (made by BonusFight_spawnTimer)
+func_800D27E0 BonusTimer_init
+func_800D287C BonusTimer_draw
+func_800D2828 BonusTimer_destroy
+D_8006E0DC BONUS_TIMER_VTABLE
+D_8006DFCC STR_FORMAT_6D
+D_8006DFD4 STR_FORMAT_3D
+D_8006DFDC STR_FORMAT_2D
+# battle_scene.c: sets an arena's bit of the save's bonusGamesUnlocked; BonusFight_endWithWinner passes the fight's
+# arena when a bonus game ends with a winner (the main menu's bonus items and the select scene's pick read the bits)
+func_8006EFC0 unlockBonusGame

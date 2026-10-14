@@ -17,44 +17,45 @@
 #include "psyq.h"
 #include "strings.h"
 
-extern u8 D_8007B250[];
-extern u8 D_8007B280[];
-extern u8 D_800663F8[];
-extern u8 D_800663FC[];
+/* the grids' rows of two-byte cells */
+extern u8 *NAME_GRID[];
+extern u8 *CODE_GRID[];
+extern u8 STR_NAME_CURSOR[];
+extern u8 STR_EMPTY_NAME[];
 
-void func_80074248(Unk80074220 *this);
-void func_800743C4(Unk80074220 *this, u8 *grid);
-u8 *func_800748A0(Unk80074220 *this);
-void func_80074938(Unk80074220 *this);
-void func_80074AA8(Unk80074220 *this);
-s32 func_80074E28(Unk80074220 *this);
-s32 func_80074F68(Unk80074220 *this);
-void func_80075238(Unk80074220 *this, u_long *ot);
-void func_80075304(Unk80074220 *this, u_long *ot);
-void func_8007588C(Unk80074220 *this, u_long *ot);
-void func_80075A54(Unk80074220 *this, u_long *ot, s32 grid);
-void func_80075B14(Unk80074220 *this, u_long *ot, s32 arg);
-void func_80075DF8(Unk80074220 *this, u_long *ot);
-void func_80075EC8(Unk80074220 *this, u_long *ot, s32 x0, s32 y0, s32 x1, s32 y1, s32 r, s32 g, s32 b);
-s32 func_80076220(Unk800764BC *this, u8 *name, s32 arg);
-s32 func_80076298(Unk800764BC *this);
-void func_80076310(Unk800764F4 *entry, u8 *digest);
-void func_80076380(Unk800764BC *this);
-Unk800764F4 *func_800764BC(Unk800764BC *this);
-s32 func_800764F4(Unk800764F4 *a, Unk800764F4 *b);
+void NameEntry_reset(NameEntry *this);
+void NameEntry_setGrid(NameEntry *this, u8 **grid);
+u8 *NameEntry_getName(NameEntry *this);
+void NameEntry_readPad(NameEntry *this);
+void NameEntry_scrollToCursor(NameEntry *this);
+s32 NameEntry_readCell(NameEntry *this);
+s32 NameEntry_input(NameEntry *this);
+void NameEntry_drawName(NameEntry *this, u_long *ot);
+void NameEntry_drawGrid(NameEntry *this, u_long *ot);
+void NameEntry_drawBackground(NameEntry *this, u_long *ot);
+void NameEntry_drawTitle(NameEntry *this, u_long *ot, s32 mode);
+void NameEntry_drawMessage(NameEntry *this, u_long *ot, s32 message);
+void NameEntry_drawHighlight(NameEntry *this, u_long *ot);
+void NameEntry_drawLine(NameEntry *this, u_long *ot, s32 x0, s32 y0, s32 x1, s32 y1, s32 r, s32 g, s32 b);
+s32 RankingTable_fillPending(RankingTable *this, u8 *name, s32 character);
+s32 RankingTable_check(RankingTable *this);
+void computeRecordDigest(RankingRecord *entry, u8 *digest);
+void RankingTable_reset(RankingTable *this);
+RankingRecord *RankingTable_sort(RankingTable *this);
+s32 compareRankingRecords(RankingRecord *a, RankingRecord *b);
 
-/* The name entry's constructor: the character grid (D_8007B250 when unk8 is 0, else D_8007B280), the
- * window and the cursor's bounds, how far the grid scrolls, then a reset (func_80074248). */
-Unk80074220 *func_80074130(Unk80074220 *this, s32 grid, s32 maxLength) {
+/* The name entry's constructor: the character grid of mode (NAME_GRID for a name, CODE_GRID for a code),
+ * the window and the cursor's bounds, how far the grid scrolls, then a reset (NameEntry_reset). */
+NameEntry *NameEntry_init(NameEntry *this, s32 mode, s32 maxLength) {
     this->port = 0;
-    this->unk8 = grid;
+    this->mode = mode;
     this->maxLength = maxLength;
     this->moveToY = 0;
     this->moveToX = 0;
-    if (grid == 0) {
-        func_800743C4(this, D_8007B250);
+    if (mode == NAME_ENTRY_MODE_NAME) {
+        NameEntry_setGrid(this, NAME_GRID);
     } else {
-        func_800743C4(this, D_8007B280);
+        NameEntry_setGrid(this, CODE_GRID);
     }
     this->windowX = 0x20;
     this->windowY = 0x50;
@@ -72,35 +73,35 @@ Unk80074220 *func_80074130(Unk80074220 *this, s32 grid, s32 maxLength) {
     if (this->maxScrollY < 0) {
         this->maxScrollY = 0;
     }
-    func_80074248(this);
+    NameEntry_reset(this);
     return this;
 }
 
-/* Unk80074220's destructor: frees it when asked, nothing else. */
-void func_80074220(Unk80074220 *this, s32 flags) {
+/* NameEntry's destructor: frees it when asked, nothing else. */
+void NameEntry_destroy(NameEntry *this, s32 flags) {
     if (flags & DESTROY_FREE) {
         operatorDelete(this);
     }
 }
 
 /* Resets the entry: an empty name, the cursor in the middle of the window, the grid unscrolled. */
-void func_80074248(Unk80074220 *this) {
+void NameEntry_reset(NameEntry *this) {
     s32 halfW = this->windowW >> 1;
 
-    this->unk3C = 10;
-    this->unk90 = 0x400;
+    this->padDelay = 10;
+    this->speed = 0x400;
     this->active = 0;
     this->finished = 0;
     this->position = 0;
     this->name[0] = 0;
-    this->unk38 = 0;
-    this->unk4C = 0;
-    this->unk48 = 0;
-    this->unk44 = 0;
+    this->closeDelay = 0;
+    this->messageTime = 0;
+    this->message = 0;
+    this->closingFrames = 0;
     this->frame = 0;
-    this->unk68 = 0;
-    this->unk64 = 0;
-    this->unk60 = 0;
+    this->rank = 0;
+    this->character = 0;
+    this->score = 0;
     this->port = 0;
     this->repeated = 0;
     this->held = 0;
@@ -115,23 +116,23 @@ void func_80074248(Unk80074220 *this) {
     this->moveTime = 0;
     this->cursorX = this->windowX + halfW;
     this->cursorY = this->windowY + (this->windowH >> 1);
-    func_80074AA8(this);
-    this->unk88 = func_80074E28(this);
+    NameEntry_scrollToCursor(this);
+    this->lastCell = NameEntry_readCell(this);
 }
 
-/* Opens the entry: resets it (func_80074248) and makes it active. */
-void func_80074318(Unk80074220 *this) {
-    func_80074248(this);
+/* Opens the entry: resets it (NameEntry_reset) and makes it active. */
+void NameEntry_open(NameEntry *this) {
+    NameEntry_reset(this);
     this->active = 1;
 }
 
 /* Closes the entry: it is no longer updated nor drawn. */
-void func_80074344(Unk80074220 *this) {
+void NameEntry_close(NameEntry *this) {
     this->active = 0;
 }
 
 /* Loads "/zascii.tim", uploads its TIMs to VRAM and frees it. */
-void func_8007434C(void) {
+void loadZasciiTim(void) {
     u32 *file = loadFile("/zascii.tim");
 
     uploadTims(file);
@@ -139,18 +140,18 @@ void func_8007434C(void) {
 }
 
 /* Loads "/title/input.tim", uploads its TIMs to VRAM and frees it. */
-void func_80074388(void) {
+void loadInputTim(void) {
     u32 *file = loadFile("/title/input.tim");
 
     uploadTims(file);
     mainHeapFree(file);
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_800743C4);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_setGrid);
 
-/* The entry's update: fades in on its first frame, waits unk3C frames before reading the pad, closes
- * 11 frames after func_80074F68 confirms the name (fading out, then in again). */
-void func_800744BC(Unk80074220 *this) {
+/* The entry's update: fades in on its first frame, waits padDelay frames before reading the pad, closes
+ * 11 frames after NameEntry_input confirms the name (fading out, then in again). */
+void NameEntry_update(NameEntry *this) {
     if (this->active == 0) {
         return;
     }
@@ -158,41 +159,41 @@ void func_800744BC(Unk80074220 *this) {
         fadeControlFadeOut(&FADE_CONTROL, 0);
         fadeControlFadeIn(&FADE_CONTROL, 10);
     }
-    if (this->unk3C == 0) {
-        func_80074938(this);
+    if (this->padDelay == 0) {
+        NameEntry_readPad(this);
     } else {
-        this->unk3C--;
+        this->padDelay--;
         this->repeated = 0;
         this->held = 0;
     }
     if (this->finished == 0) {
-        if (func_80074F68(this)) {
-            this->unk38 = 1;
-            this->unk3C = 99;
+        if (NameEntry_input(this)) {
+            this->closeDelay = 1;
+            this->padDelay = 99;
         }
     }
-    if (this->unk38 != 0) {
-        if (--this->unk38 == 0) {
+    if (this->closeDelay != 0) {
+        if (--this->closeDelay == 0) {
             this->finished = 1;
-            this->unk44 = 0;
+            this->closingFrames = 0;
             fadeControlFadeOut(&FADE_CONTROL, 10);
         }
     }
     if (this->finished != 0) {
-        if (++this->unk44 >= 11) {
+        if (++this->closingFrames >= 11) {
             this->active = 0;
             fadeControlFadeIn(&FADE_CONTROL, 10);
         }
     }
-    if (this->unk4C != 0) {
-        this->unk4C--;
+    if (this->messageTime != 0) {
+        this->messageTime--;
     }
     this->frame++;
 }
 
-/* The entry's draw: the grid's parts (func_80075B14 while unk4C runs), the name, a green line across
+/* The entry's draw: the grid's parts (NameEntry_drawMessage while messageTime runs), the name, a green line across
  * the window at the cursor's height and one down it at the cursor's x. */
-void func_8007460C(Unk80074220 *this) {
+void NameEntry_draw(NameEntry *this) {
     u_long *ot;
     s32 x, y, w, h;
     s32 right, bottom;
@@ -201,38 +202,39 @@ void func_8007460C(Unk80074220 *this) {
         return;
     }
     ot = FRAME_OT.firstDrawn + 5;
-    if (this->unk4C != 0) {
-        func_80075B14(this, ot, this->unk48);
+    if (this->messageTime != 0) {
+        NameEntry_drawMessage(this, ot, this->message);
     }
-    func_80075DF8(this, ot);
-    func_80075238(this, ot);
-    func_80075A54(this, ot, this->unk8);
-    func_8007588C(this, ot);
+    NameEntry_drawHighlight(this, ot);
+    NameEntry_drawName(this, ot);
+    NameEntry_drawTitle(this, ot, this->mode);
+    NameEntry_drawBackground(this, ot);
     x = this->windowX;
     y = this->windowY;
     w = this->windowW;
     h = this->windowH;
     right = x + w;
     bottom = y + h;
-    func_80075EC8(this, ot, x, this->cursorY, right, this->cursorY, 0x20, 0xA0, 0x20);
-    func_80075EC8(this, ot, this->cursorX, y, this->cursorX, bottom, 0x20, 0xA0, 0x20);
-    func_80075304(this, ot);
+    NameEntry_drawLine(this, ot, x, this->cursorY, right, this->cursorY, 0x20, 0xA0, 0x20);
+    NameEntry_drawLine(this, ot, this->cursorX, y, this->cursorX, bottom, 0x20, 0xA0, 0x20);
+    NameEntry_drawGrid(this, ot);
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80074740);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_openForScore);
 
-/* Stores the name (D_800663FC when it is empty) and unk64 in the table's pending record (func_80076220). */
-void func_800747F8(Unk80074220 *this, Unk800764BC *table) {
-    u8 *name = func_800748A0(this);
+/* Stores the name (STR_EMPTY_NAME when it is empty) and the character in the table's pending record
+ * (RankingTable_fillPending). */
+void NameEntry_storeRecord(NameEntry *this, RankingTable *table) {
+    u8 *name = NameEntry_getName(this);
 
     if (*name == 0) {
-        name = D_800663FC;
+        name = STR_EMPTY_NAME;
     }
-    func_80076220(table, name, this->unk64);
+    RankingTable_fillPending(table, name, this->character);
 }
 
 /* Sets the name to a string of two-byte characters, the position after its last one. */
-void func_8007484C(Unk80074220 *this, u8 *name) {
+void NameEntry_setName(NameEntry *this, u8 *name) {
     u8 *dst;
 
     this->position = 0;
@@ -250,12 +252,12 @@ void func_8007484C(Unk80074220 *this, u8 *name) {
 }
 
 /* Returns the name. */
-u8 *func_800748A0(Unk80074220 *this) {
+u8 *NameEntry_getName(NameEntry *this) {
     return this->name;
 }
 
 /* Writes the two-byte character code at the position, which moves on unless it is the last. */
-void func_800748A8(Unk80074220 *this, s32 code) {
+void NameEntry_enterChar(NameEntry *this, s32 code) {
     u8 *p = this->name;
 
     /* The match depends on stepping p from the name: &name[position * 2] adds the base last. */
@@ -269,7 +271,7 @@ void func_800748A8(Unk80074220 *this, s32 code) {
 }
 
 /* Erases a character: the one before the position, or the last one when it is filled. */
-void func_800748F0(Unk80074220 *this) {
+void NameEntry_eraseChar(NameEntry *this) {
     s32 position = this->position;
     u8 *p = this->name;
 
@@ -285,26 +287,26 @@ void func_800748F0(Unk80074220 *this) {
 }
 
 /* Reads the entry's pad: the buttons held and repeated. */
-void func_80074938(Unk80074220 *this) {
+void NameEntry_readPad(NameEntry *this) {
     PadManager *padManager = PAD_MANAGER_INSTANCE;
 
     this->held = padManagerGetHeld(padManager, this->port);
     this->repeated = padManagerGetRepeated(padManager, this->port);
 }
 
-INCLUDE_RODATA("title/nonmatchings/name_entry", D_800663F0);
+INCLUDE_RODATA("title/nonmatchings/name_entry", NAME_ENTRY_CODE_CHARACTERS);
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80074988);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_tryCode);
 
-/* Sets unk48 and the countdown unk4C. */
-void func_80074A9C(Unk80074220 *this, s32 arg, s32 count) {
-    this->unk48 = arg;
-    this->unk4C = count;
+/* Shows input.tim's message for count frames. */
+void NameEntry_showMessage(NameEntry *this, s32 message, s32 count) {
+    this->message = message;
+    this->messageTime = count;
 }
 
 /* Keeps the cursor inside the bounds: within 0x50 (x) or 0x28 (y) of an edge the grid scrolls instead,
  * as far as it goes; then clamps the scroll and the cursor. */
-void func_80074AA8(Unk80074220 *this) {
+void NameEntry_scrollToCursor(NameEntry *this) {
     s32 edge;
 
     edge = this->boundsX + 0x50;
@@ -361,14 +363,14 @@ void func_80074AA8(Unk80074220 *this) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80074C7C);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_snapCursor);
 
 /* Starts a move of the cursor from the middle of its cell (20 pixels a cell) and holds the pad 22 frames. */
-void func_80074D44(Unk80074220 *this) {
+void NameEntry_moveCursorToEnd(NameEntry *this) {
     s32 column = this->column;
     s32 row;
 
-    this->unk3C = 22;
+    this->padDelay = 22;
     this->moveTime = 0x1000;
     this->moveFromX = column * 20 + 10;
     this->moveLastX = column * 20 + 10;
@@ -379,7 +381,7 @@ void func_80074D44(Unk80074220 *this) {
 
 /* Steps the cursor's move: moveTime falls by 0x155 a frame, and the cursor goes by what the point between
  * moveTo and moveFrom moved since the last frame. */
-void func_80074D90(Unk80074220 *this) {
+void NameEntry_stepCursorMove(NameEntry *this) {
     s32 t;
     s32 x, y;
     s32 dx, dy;
@@ -403,21 +405,21 @@ void func_80074D90(Unk80074220 *this) {
     this->moveLastY = y;
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80074E28);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_readCell);
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80074F68);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_input);
 
-INCLUDE_RODATA("title/nonmatchings/name_entry", D_800663F8);
-INCLUDE_RODATA("title/nonmatchings/name_entry", D_800663FC);
+INCLUDE_RODATA("title/nonmatchings/name_entry", STR_NAME_CURSOR);
+INCLUDE_RODATA("title/nonmatchings/name_entry", STR_EMPTY_NAME);
 
-/* Prints the name in grey, centred on x 0xA0 at y 0x2F, and every other 8 frames D_800663F8 (the cursor)
+/* Prints the name in grey, centred on x 0xA0 at y 0x2F, and every other 8 frames STR_NAME_CURSOR (the cursor)
  * under the position. */
-void func_80075238(Unk80074220 *this, u_long *ot) {
-    Unk8007B0A0 printer;
+void NameEntry_drawName(NameEntry *this, u_long *ot) {
+    ZasciiPrinter printer;
     PrinterVtable *vtable;
     s32 left;
 
-    func_8007B0A0(&printer, ot);
+    ZasciiPrinter_init(&printer, ot);
     vtable = printer.printer.vtable;
     vtable->setColor.func((u8 *)&printer + vtable->setColor.delta, 0x606060);
     printer.printer.y = 0x2F;
@@ -427,18 +429,18 @@ void func_80075238(Unk80074220 *this, u_long *ot) {
     if (this->frame & 8) {
         printer.printer.y = 0x30;
         printer.printer.x = (this->position << 4) + left;
-        printerPrint(&printer.printer, D_800663F8);
+        printerPrint(&printer.printer, STR_NAME_CURSOR);
     }
     printerDestroy(&printer.printer, 2);
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80075304);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawGrid);
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_8007560C);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawButton);
 
 /* Tiles the window with the grid's background, 64 pixels a tile (texels (0x80, 0x20) to (0xBF, 0x5F) of
  * page 12, clut 0x3C28), offset by half the scroll. */
-void func_800756F0(Unk80074220 *this, u_long *ot) {
+void NameEntry_drawGridBackground(NameEntry *this, u_long *ot) {
     s32 windowX = this->windowX;
     s32 halfScrollX = this->scrollX >> 1;
     s32 left = windowX - halfScrollX % 64;
@@ -479,15 +481,16 @@ void func_800756F0(Unk80074220 *this, u_long *ot) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_8007588C);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawBackground);
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80075A54);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawTitle);
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80075B14);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawMessage);
 
 /* Draws in ot a POLY_FT4 of the texels (0xC0, 0x35) to (0xCF, 0x44) of page 12, clut 0x3C68, w and h to each
- * side of (x, y), all its corners of the gray shade (func_80075DF8 passes its object as this, unused). */
-void func_80075C18(void *this, u_long *ot, s32 x, s32 y, s32 w, s32 h, s32 shade) {
+ * side of (x, y), all its corners of the gray shade (NameEntry_drawHighlight passes its object as this,
+ * unused). */
+void NameEntry_drawCharHighlight(void *this, u_long *ot, s32 x, s32 y, s32 w, s32 h, s32 shade) {
     POLY_FT4 *poly = allocPolyFT4();
     s32 left, top;
 
@@ -522,8 +525,9 @@ void func_80075C18(void *this, u_long *ot, s32 x, s32 y, s32 w, s32 h, s32 shade
 }
 
 /* Draws in ot a POLY_FT4 of the texels (0xC0, 0x20) to (0xFF, 0x34) of page 12, clut 0x3CA8, w and h to each
- * side of (x, y), all its corners of the gray shade (func_80075DF8 passes its object as this, unused). */
-void func_80075D08(void *this, u_long *ot, s32 x, s32 y, s32 w, s32 h, s32 shade) {
+ * side of (x, y), all its corners of the gray shade (NameEntry_drawHighlight passes its object as this,
+ * unused). */
+void NameEntry_drawButtonHighlight(void *this, u_long *ot, s32 x, s32 y, s32 w, s32 h, s32 shade) {
     POLY_FT4 *poly = allocPolyFT4();
     s32 left, top;
 
@@ -557,10 +561,10 @@ void func_80075D08(void *this, u_long *ot, s32 x, s32 y, s32 w, s32 h, s32 shade
     AddPrim(ot, poly);
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80075DF8);
+INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawHighlight);
 
 /* Draws in ot a semi-transparent line from (x0, y0) to (x1, y1) of the colour (r, g, b). */
-void func_80075EC8(Unk80074220 *this, u_long *ot, s32 x0, s32 y0, s32 x1, s32 y1, s32 r, s32 g, s32 b) {
+void NameEntry_drawLine(NameEntry *this, u_long *ot, s32 x0, s32 y0, s32 x1, s32 y1, s32 r, s32 g, s32 b) {
     LINE_F2 *line = allocLineF2();
 
     line->x0 = x0;
@@ -575,39 +579,39 @@ void func_80075EC8(Unk80074220 *this, u_long *ot, s32 x0, s32 y0, s32 x1, s32 y1
 }
 
 /* Returns whether the entry is active (no caller in the game). */
-s32 func_80075F74(Unk80074220 *this) {
+s32 NameEntry_isActive(NameEntry *this) {
     return this->active;
 }
 
 /* Returns whether the name was confirmed (no caller in the game). */
-s32 func_80075F80(Unk80074220 *this) {
+s32 NameEntry_isFinished(NameEntry *this) {
     return this->finished;
 }
 
-/* Returns unk68 (no caller in the game). */
-s32 func_80075F8C(Unk80074220 *this) {
-    return this->unk68;
+/* Returns the rank the score took (no caller in the game). */
+s32 NameEntry_getRank(NameEntry *this) {
+    return this->rank;
 }
 
-/* Returns which character grid the entry shows (no caller in the game). */
-s32 func_80075F98(Unk80074220 *this) {
-    return this->unk8;
+/* Returns the entry's mode, NAME_ENTRY_MODE_* (no caller in the game). */
+s32 NameEntry_getMode(NameEntry *this) {
+    return this->mode;
 }
 
 /* Sets the name's maximum length (no caller in the game). */
-void func_80075FA4(Unk80074220 *this, s32 maxLength) {
+void NameEntry_setMaxLength(NameEntry *this, s32 maxLength) {
     this->maxLength = maxLength;
 }
 
-/* The table's constructor over count records of 0x40 bytes: resets them (func_80076380) when a digest
- * does not match (func_80076298), then links them in their order. */
-Unk800764BC *func_80075FAC(Unk800764BC *this, Unk800764F4 *entries, u32 count) {
+/* The table's constructor over count records of 0x40 bytes: resets them (RankingTable_reset) when a digest
+ * does not match (RankingTable_check), then links them in their order. */
+RankingTable *RankingTable_init(RankingTable *this, RankingRecord *entries, u32 count) {
     this->entries = entries;
     this->head = entries;
     this->count = count;
     this->pending = NULL;
-    if (func_80076298(this) == -1) {
-        func_80076380(this);
+    if (RankingTable_check(this) == -1) {
+        RankingTable_reset(this);
     }
     /* The match depends on the u32 count: its countdown tests against -1. */
     while (count--) {
@@ -618,16 +622,16 @@ Unk800764BC *func_80075FAC(Unk800764BC *this, Unk800764F4 *entries, u32 count) {
     return this;
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80076040);
+INCLUDE_ASM("title/nonmatchings/name_entry", RankingTable_destroy);
 
-/* Sorts the records (func_800764BC) and starts the cursor at the first. */
-void func_80076138(Unk800764BC *this) {
-    this->cursor = func_800764BC(this);
+/* Sorts the records (RankingTable_sort) and starts the cursor at the first. */
+void RankingTable_first(RankingTable *this) {
+    this->cursor = RankingTable_sort(this);
 }
 
 /* Steps the cursor to the next record and returns it (NULL at the end). */
-Unk800764F4 *func_80076160(Unk800764BC *this) {
-    Unk800764F4 *entry = this->cursor;
+RankingRecord *RankingTable_next(RankingTable *this) {
+    RankingRecord *entry = this->cursor;
 
     if (entry == NULL) {
         return NULL;
@@ -637,18 +641,18 @@ Unk800764F4 *func_80076160(Unk800764BC *this) {
     return entry;
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_8007618C);
+INCLUDE_ASM("title/nonmatchings/name_entry", RankingTable_insertScore);
 
-/* Fills the pending record with a name (when it is shorter than 0x24 bytes) and unk8, and returns 0;
+/* Fills the pending record with a name (when it is shorter than 0x24 bytes) and character, and returns 0;
  * -1 when no record is pending or the name is too long. */
-s32 func_80076220(Unk800764BC *this, u8 *name, s32 arg) {
-    Unk800764F4 *entry = this->pending;
+s32 RankingTable_fillPending(RankingTable *this, u8 *name, s32 character) {
+    RankingRecord *entry = this->pending;
 
     if (entry != NULL) {
         /* The match depends on taking the name's address before the stores. */
         u8 *dst = entry->name;
 
-        entry->unk8 = arg;
+        entry->character = character;
         entry->name[0] = 0;
         if (strlen(name) < 0x24) {
             strcpy(dst, name);
@@ -660,15 +664,15 @@ s32 func_80076220(Unk800764BC *this, u8 *name, s32 arg) {
 }
 
 /* Checks every record against its digest: 0 when all match, else -1. */
-s32 func_80076298(Unk800764BC *this) {
+s32 RankingTable_check(RankingTable *this) {
     u32 count = this->count;
-    Unk800764F4 *entry = this->entries;
+    RankingRecord *entry = this->entries;
     u8 digest[0x10];
 
     /* The match depends on the u32 count: its countdown tests against -1. */
     while (count--) {
-        func_80076310(entry, digest);
-        if (func_8003DF40(digest, entry->digest, 0x10) != 0) {
+        computeRecordDigest(entry, digest);
+        if (memcmp(digest, entry->digest, 0x10) != 0) {
             return -1;
         }
         entry++;
@@ -676,25 +680,25 @@ s32 func_80076298(Unk800764BC *this) {
     return 0;
 }
 
-/* Computes the MD5 digest of a record's unk4, unk8 and name. */
-void func_80076310(Unk800764F4 *entry, u8 *digest) {
+/* Computes the MD5 digest of a record's score, character and name. */
+void computeRecordDigest(RankingRecord *entry, u8 *digest) {
     Md5 md5;
 
     md5Init(&md5);
-    MD5Update(&md5, (u8 *)&entry->unk4, 4);
-    MD5Update(&md5, (u8 *)&entry->unk8, 4);
+    MD5Update(&md5, (u8 *)&entry->score, 4);
+    MD5Update(&md5, (u8 *)&entry->character, 4);
     MD5Update(&md5, entry->name, 0x24);
     MD5Final(&md5, digest);
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", func_80076380);
+INCLUDE_ASM("title/nonmatchings/name_entry", RankingTable_reset);
 
-/* Sorts the records, largest unk4 first (func_800764F4), and returns the first. */
-Unk800764F4 *func_800764BC(Unk800764BC *this) {
-    return this->head = (Unk800764F4 *)linkNodeSort((LinkNode *)this->head, (LinkCompare)func_800764F4);
+/* Sorts the records, largest score first (compareRankingRecords), and returns the first. */
+RankingRecord *RankingTable_sort(RankingTable *this) {
+    return this->head = (RankingRecord *)linkNodeSort((LinkNode *)this->head, (LinkCompare)compareRankingRecords);
 }
 
-/* Orders the nodes by their word at 4, largest first. */
-s32 func_800764F4(Unk800764F4 *a, Unk800764F4 *b) {
-    return b->unk4 - a->unk4;
+/* Orders the records by score, largest first. */
+s32 compareRankingRecords(RankingRecord *a, RankingRecord *b) {
+    return b->score - a->score;
 }

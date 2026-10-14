@@ -29,6 +29,15 @@ EXTERN_C_BEGIN
 /* the endless random fights of the debug menu's "BATTLE AGEING SEQUENCER" */
 #define SEQUENCER_RANDOM_FIGHTS 10
 
+/* the main menu's result (createMainMenuTask): the item picked, in its order;
+ * another goes back to the title */
+#define MAIN_MENU_CHOICE_VS_COMPUTER 0
+#define MAIN_MENU_CHOICE_VERSUS 1
+#define MAIN_MENU_CHOICE_VERSUS_COMPUTER 2
+#define MAIN_MENU_CHOICE_BONUS_VS_COMPUTER 3
+#define MAIN_MENU_CHOICE_BONUS_VERSUS 4
+#define MAIN_MENU_CHOICE_OPTIONS 5
+
 /* The task that runs the game's scenes one after the other, on a thread of
  * its own. */
 typedef struct AppSequencer {
@@ -51,8 +60,11 @@ typedef struct AppSequencer {
  * joined in; below 0, the scene was left */
 #define CHARACTER_SELECT_CHALLENGE 1
 
-/* the modes of the memory card scene (memoryCardTaskInit) that load or save
- * without asking first, as modes 0 and 1 do */
+/* the modes of the memory card scene (memoryCardTaskInit): the options' load
+ * asks "Load data?" first, the sequencer's load at boot asks nothing; both
+ * saves ask "Save data?" */
+#define MEMORY_CARD_OPTION_LOAD 0
+#define MEMORY_CARD_OPTION_SAVE 1
 #define MEMORY_CARD_LOAD 2
 #define MEMORY_CARD_SAVE 3
 

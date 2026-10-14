@@ -1,0 +1,25 @@
+# The names of st08's own symbols: run with tools/rename.py --overlay st08 -f tools/renames/st08.txt
+
+# EvolutionController: the stage's computer player, derived from Controller (made by its createController slot); its
+# slot 0x08 gives the side's buttons (Controller_getButtons)
+Unk800D390C EvolutionController
+D_800D3874 EVOLUTION_CONTROLLER_VTABLE
+func_800D390C EvolutionController_init
+func_800D394C EvolutionController_getButtons
+func_800D47F0 EvolutionController_destroy
+# StageEvolution: bonus game 1's stage, a button-mash race (the vtable's overrides: startRound, tick,
+# createController, tickScenery)
+Unk800D3AA8 StageEvolution
+D_800D3894 STAGE_EVOLUTION_VTABLE
+func_800D3AA8 StageEvolution_init
+func_800D3B24 StageEvolution_destroy
+func_800D3B4C StageEvolution_startRound
+func_800D3C1C StageEvolution_tick
+func_800D3BD8 StageEvolution_createController
+func_800D3DA0 StageEvolution_tickScenery
+func_800D3C0C st08_clearState
+func_800D3DF8 st08_checkWinner
+func_800D3FB4 st08_readClut
+func_800D40BC st08_resetCounts
+func_800D47A4 st08_resetMeters
+func_800D47CC st08_copyMeters

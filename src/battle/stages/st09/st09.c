@@ -9,34 +9,34 @@
 #include "engine/system/memory.h"
 #include "engine/sound/sound_control.h"
 
-/* The class func_800D3A64 constructs (virtual table D_800D3904), derived from Unk8007C084. */
-typedef struct Unk800D3A64 {
-    /* 0x00 */ Unk8007C084 base;
+/* The stage's computer player (StageJewelHunt_createController), derived from Controller. */
+typedef struct JewelHuntController {
+    /* 0x00 */ Controller base;
     /* 0x08 */ s32 unk8;
     /* 0x0C */ s32 unkC;
     /* 0x10 */ s32 unk10;
     /* 0x14 */ s32 unk14;
     /* 0x18 */ s32 unk18;
     /* 0x1C */ s32 unk1C;
-} Unk800D3A64;
+} JewelHuntController;
 
-/* the constructor func_800D46EC calls, and what that constructor calls last */
-UnkStageQuad *func_800D5068(UnkStageQuad *this, Unk8006ED20 *owner, s32 index);
-void func_800D5410(UnkStageQuad *this);
-void func_800D5190(UnkStageQuad *this);
+/* the constructor st09_createThrowers calls, and what that constructor calls last */
+BonusThrower *BonusThrower_init(BonusThrower *this, Fight *owner, s32 side);
+void BonusThrower_place(BonusThrower *this);
+void BonusThrower_throw(BonusThrower *this);
 
 /* the virtual tables the functions below install, and the data they read */
-extern EntityVtable D_800D3924;
-extern EntityVtable D_800D394C;
-extern EntityVtable D_800D3974;
+extern EntityVtable BONUS_LANDING_MARK_VTABLE;
+extern EntityVtable BONUS_THROWER_VTABLE;
+extern EntityVtable ST09_THROW_VTABLE;
 extern EntityVtable D_800D39C4;
 
-extern VtableEntry D_800D3904[];
+extern VtableEntry JEWEL_HUNT_CONTROLLER_VTABLE[];
 
-/* Constructs an Unk800D3A64 with unk0 (passed to Unk8007C084's constructor); its own fields 0. */
-Unk800D3A64 *func_800D3A64(Unk800D3A64 *this, s32 unk0) {
-    func_8007C084(&this->base, unk0);
-    this->base.vtable = D_800D3904;
+/* Constructs the stage's computer player for side (StageJewelHunt_createController): Controller's, its own fields 0. */
+JewelHuntController *JewelHuntController_init(JewelHuntController *this, BattleSide *side) {
+    Controller_init(&this->base, side);
+    this->base.vtable = JEWEL_HUNT_CONTROLLER_VTABLE;
     this->unk8 = 0;
     this->unkC = 0;
     this->unk10 = 0;
@@ -46,230 +46,223 @@ Unk800D3A64 *func_800D3A64(Unk800D3A64 *this, s32 unk0) {
     return this;
 }
 
-/* The stage's class, derived from func_800D02C8's; func_800D3D58 constructs it. */
-typedef struct Unk800D3D58 {
-    /* 0x0000 */ Unk800D02C8 base;
-    /* 0x0DA8 */ u8 unkDA8[0xF2C - 0xDA8];
-    /* 0x0F2C */ s16 unkF2C[2]; /* unk15A2 again, each frame (func_800D48A4) */
-    /* 0x0F30 */ u8 unkF30[0xF34 - 0xF30];
-    /* 0x0F34 */ s16 unkF34;
-    /* 0x0F36 */ u8 unkF36[0xF6A - 0xF36];
-    /* 0x0F6A */ u16 unkF6A;
-    /* 0x0F6C */ u8 unkF6C[0x103C - 0xF6C];
-    /* 0x103C */ s16 unk103C; /* counts the stage's updates (func_800D4270 adds 1) */
+/* Bonus game 2's stage (StageJewelHunt_init, virtual table STAGE_JEWEL_HUNT_VTABLE), derived from BonusFight: each
+ * side holds its button to charge a throw at the mesh objects that appear; it owns a camera of its own. */
+typedef struct StageJewelHunt {
+    /* 0x0000 */ BonusFight base;
+    /* 0x0F70 */ u8 unkF70[0x103C - 0xF70];
+    /* 0x103C */ s16 frames; /* the scenery's frames (StageJewelHunt_tickScenery adds 1) */
     /* 0x103E */ u8 unk103E[0x1040 - 0x103E];
-    /* 0x1040 */ MeshScene *scene; /* func_8006F1B8's (func_800D41E4) */
+    /* 0x1040 */ MeshScene *scene; /* Fight_getMeshScene's (StageJewelHunt_startRound) */
     /* 0x1044 */ u8 unk1044[0x1404 - 0x1044];
-    /* 0x1404 */ u16 unk1404[2]; /* by character: the next of 30 slots func_800D5190 gives an Unk800D4B78 */
+    /* 0x1404 */ u16 nextThrowSlot[2]; /* by side: the next of 30 slots BonusThrower_throw gives an St09Throw */
     /* 0x1408 */ u8 unk1408[0x15A0 - 0x1408];
     /* 0x15A0 */ s16 unk15A0; /* the func_800D5BA0 entities func_800D49A0 has made, up to 16 */
-    /* 0x15A2 */ u16 unk15A2[2]; /* by character: frames button 0x80 has been held, up to 30 (func_800D48A4) */
-    /* 0x15A6 */ u16 unk15A6[2]; /* by character: how long it was held, when let go */
-} Unk800D3D58;
+    /* 0x15A2 */ u16 holdFrames[2]; /* by side: frames button 0x80 has been held, up to BONUS_CHARGE_FRAMES */
+    /* 0x15A6 */ u16 heldCharge[2]; /* by side: how long it was held, when let go (st09_updateCharge) */
+} StageJewelHunt;
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D3AB0);
+INCLUDE_ASM("st09/nonmatchings/st09", JewelHuntController_getButtons);
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D3D58);
+INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_init);
 
-/* The stage's override of func_800702E0: creates its own 0x20-byte object for arg. */
-void *func_800D4070(void *this, s32 unk, s32 arg) {
-    return func_800D3A64(operatorNew(0x20), arg);
+/* The stage's override of Fight_createController: a JewelHuntController for the side. */
+void *StageJewelHunt_createController(void *this, s32 unk, BattleSide *battleSide) {
+    return JewelHuntController_init(operatorNew(0x20), battleSide);
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D40A4);
+INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_destroy);
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D417C);
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D41E4);
+INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_startRound);
 
-/* Clears the stage's update count (0x103C). */
-void func_800D4268(Unk800D3D58 *this) {
-    this->unk103C = 0;
+/* Clears the stage's frames. */
+void st09_clearFrames(StageJewelHunt *this) {
+    this->frames = 0;
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D4270);
+INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_tickScenery);
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D42EC);
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D43CC);
+INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_tick);
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D4458);
+INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_drawWorld);
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D45F8);
 
-/* Clears the hold counts at 0x15A2 and 0x15A6 and sets 0xF34 to 30 (st07's func_800D3E94). */
-void func_800D46D0(Unk800D3D58 *this) {
-    this->unk15A2[0] = 0;
-    this->unk15A2[1] = 0;
-    this->unk15A6[1] = 0;
-    this->unk15A6[0] = 0;
-    this->unkF34 = 30;
+/* Clears the hold counts and sets the gauge's maximum to BONUS_CHARGE_FRAMES (as st07_resetCharge). */
+void st09_resetCharge(StageJewelHunt *this) {
+    this->holdFrames[0] = 0;
+    this->holdFrames[1] = 0;
+    this->heldCharge[1] = 0;
+    this->heldCharge[0] = 0;
+    this->base.gaugeMax = BONUS_CHARGE_FRAMES;
 }
 
-/* g++'s `new` of func_800D5068's class (0x54 bytes): NULL when the allocation fails. The match depends
+/* g++'s `new` of a BonusThrower: NULL when the allocation fails. The match depends
  * on this helper: written out in the loop, the second NULL check folds into the first. */
-static inline Entity *newStageQuad(Unk8006ED20 *owner, s32 index) {
-    Entity *child = allocEntityMemory(0x54);
+static inline Entity *newThrower(Fight *owner, s32 side) {
+    Entity *child = allocEntityMemory(sizeof(BonusThrower));
 
     if (child != NULL) {
-        func_800D5068(entityOperatorNewAt(0x54, child), owner, index);
+        BonusThrower_init(entityOperatorNewAt(sizeof(BonusThrower), child), owner, side);
     }
     return child;
 }
 
-/* Creates the stage's two entities of func_800D5068's class (index 0 and 1), each put into the entity
- * group of this. */
-void func_800D46EC(Unk8006ED20 *this) {
+/* Creates the stage's two BonusThrowers (side 0 and 1), each put into the entity group of this. */
+void st09_createThrowers(Fight *this) {
     s32 i;
 
     for (i = 0; i < 2; i++) {
-        Entity *child = newStageQuad(this, i);
+        Entity *child = newThrower(this, i);
 
         if (child != NULL) {
-            func_8006F0B4(this, child);
+            Fight_addEntity(this, child);
         }
     }
 }
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D476C);
 
-/* Sets entry index of 0xF2C: the stage base's setter, out of line in game.bin as func_800D3284. The match
+/* Sets a side's gauge: BonusFight's setter, out of line in game.bin as func_800D3284. The match
  * depends on its s16 value parameter: promoted to int, it loads the u16 count with lh before the store. */
-static inline void setUnkF2C(Unk800D3D58 *this, s32 index, s16 value) {
-    this->unkF2C[index] = value;
+static inline void setGauge(StageJewelHunt *this, s32 index, s16 value) {
+    this->base.gauges[index] = value;
 }
 
-/* Each frame, for both characters: counts the frames their button 0x80 is held (up to 30), keeps the count
- * at 0x15A6 when it is let go, and copies the count to 0xF2C (st07's func_800D4044). */
-void func_800D48A4(Unk800D3D58 *this) {
-    struct Unk80075000 *pads[2];
+/* Each frame, for both sides: counts the frames their button 0x80 is held (up to BONUS_CHARGE_FRAMES), keeps the
+ * count in heldCharge when it is let go, and copies the count to the side's gauge (as st07_updateCharge). */
+void st09_updateCharge(StageJewelHunt *this) {
+    struct InputHistory *pads[2];
     u32 buttons[2];
     s32 i;
 
     for (i = 0; i < 2; i++) {
-        pads[i] = func_80073260(&this->base.base, i);
-        buttons[i] = func_800750C4(pads[i]);
+        pads[i] = Fight_getInput(&this->base.base, i);
+        buttons[i] = InputHistory_getHeld(pads[i]);
         if (buttons[i] & 0x80) {
-            if (++this->unk15A2[i] > 30) {
-                this->unk15A2[i] = 30;
+            if (++this->holdFrames[i] > BONUS_CHARGE_FRAMES) {
+                this->holdFrames[i] = BONUS_CHARGE_FRAMES;
             }
-            this->unk15A6[i] = 0;
+            this->heldCharge[i] = 0;
         } else {
-            this->unk15A6[i] = this->unk15A2[i];
-            this->unk15A2[i] = 0;
+            this->heldCharge[i] = this->holdFrames[i];
+            this->holdFrames[i] = 0;
         }
-        setUnkF2C(this, i, this->unk15A2[i]);
+        setGauge(this, i, this->holdFrames[i]);
     }
 }
 
-struct Unk800D5BA0 *func_800D5BA0(struct Unk800D5BA0 *this, Unk800D3D58 *stage, MeshScene *scene, Vec3 *vec,
+struct Unk800D5BA0 *func_800D5BA0(struct Unk800D5BA0 *this, StageJewelHunt *stage, MeshScene *scene, Vec3 *vec,
                                   u16 kind);
 
-/* Every 16 updates, until 16 have been made: a new func_800D5BA0 entity of a random kind (0 to 2), whose x
+/* Every 16 frames, until 16 have been made: a new func_800D5BA0 entity of a random kind (0 to 2), whose x
  * depends on the kind and y is random. The random words are read as signed (s32) for % and abs. */
-void func_800D49A0(Unk800D3D58 *this) {
+void func_800D49A0(StageJewelHunt *this) {
     Vec3 vec;
     Entity *entity;
     u16 kind;
 
-    if (this->unk15A0 < 16 && (this->unk103C & 0xF) == 0) {
-        kind = abs((s32)func_8006F004(&this->base.base) % 3);
+    if (this->unk15A0 < 16 && (this->frames & 0xF) == 0) {
+        kind = abs((s32)Fight_random(&this->base.base) % 3);
         switch (kind) {
         case 0:
-            vec.vx = ((((s32)func_8006F004(&this->base.base) % 5) | 1) << 8) - 0x80;
+            vec.vx = ((((s32)Fight_random(&this->base.base) % 5) | 1) << 8) - 0x80;
             break;
         case 1:
-            if (func_8006F004(&this->base.base) & 1) {
+            if (Fight_random(&this->base.base) & 1) {
                 vec.vx = -0x500;
             } else {
                 vec.vx = 0x500;
             }
             break;
         case 2:
-            vec.vx = ((((s32)func_8006F004(&this->base.base) % 5) & ~1) << 8) - 0x80;
+            vec.vx = ((((s32)Fight_random(&this->base.base) % 5) & ~1) << 8) - 0x80;
             break;
         }
-        vec.vy = -((func_8006F004(&this->base.base) & 3) << 8) - 0x180;
+        vec.vy = -((Fight_random(&this->base.base) & 3) << 8) - 0x180;
         vec.vz = 0;
         entity = NEW_ENTITY(0x4C, func_800D5BA0, this, this->scene, &vec, kind);
         if (entity != NULL) {
-            func_8006F084(&this->base.base, entity);
+            Fight_addStageEntity(&this->base.base, entity);
             this->unk15A0++;
         }
     }
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D4B78);
+INCLUDE_ASM("st09/nonmatchings/st09", St09Throw_init);
 
-/* The destructor of the entity class of vtable D_800D3974, which func_800D4B78 installs. */
-void func_800D4CDC(Entity *this, s32 flags) {
-    this->vtable = &D_800D3974;
+/* St09Throw's destructor. */
+void St09Throw_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST09_THROW_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D4D30);
+INCLUDE_ASM("st09/nonmatchings/st09", St09Throw_tick);
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D4EC8);
+INCLUDE_ASM("st09/nonmatchings/st09", St09Throw_draw);
 
-/* Constructs an UnkStageQuad (vtable D_800D394C) of owner: the corners of a 128 by 128 square, then
- * func_800D5410. */
-UnkStageQuad *func_800D5068(UnkStageQuad *this, Unk8006ED20 *owner, s32 index) {
+/* Constructs the BonusThrower of side for owner: the corners of a 128 by 128 square, then BonusThrower_place. */
+BonusThrower *BonusThrower_init(BonusThrower *this, Fight *owner, s32 side) {
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_800D394C;
+    this->entity.vtable = &BONUS_THROWER_VTABLE;
     this->owner = owner;
-    this->index = index;
+    this->side = side;
     /* The match depends on these chained assignments: the left and right sides, the top and bottom. */
     this->corners[0].vx = this->corners[2].vx = -0x40;
     this->corners[1].vx = this->corners[3].vx = 0x40;
     this->corners[0].vy = this->corners[1].vy = -0x40;
     this->corners[2].vy = this->corners[3].vy = 0x40;
     this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = 0;
-    this->unk1E = 0;
-    func_800D5410(this);
+    this->frame = 0;
+    BonusThrower_place(this);
     return this;
 }
 
-/* The destructor of the entity class of vtable D_800D394C, which func_800D5068 installs. */
-void func_800D5104(Entity *this, s32 flags) {
-    this->vtable = &D_800D394C;
+/* BonusThrower's destructor. */
+void BonusThrower_destroy(Entity *this, s32 flags) {
+    this->vtable = &BONUS_THROWER_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* The stage that owns st09's quads. */
-static inline Unk800D3D58 *quadStage(UnkStageQuad *quad) {
-    return (Unk800D3D58 *)quad->owner;
+/* The stage that owns a thrower. */
+static inline StageJewelHunt *throwerStage(BonusThrower *thrower) {
+    return (StageJewelHunt *)thrower->owner;
 }
 
-struct Unk800D4B78 *func_800D4B78(struct Unk800D4B78 *this, Unk8006ED20 *stage, Vec3 *position, VECTOR *vec,
+struct St09Throw *St09Throw_init(struct St09Throw *this, Fight *stage, Vec3 *position, VECTOR *vec,
                                   u16 slot);
-void func_800D0ABC(Unk800D02C8 *this, s32 side);
+void BonusFight_holdFighter(BonusFight *this, s32 side);
 
-/* The gather of func_800D5068's UnkStageQuad: func_800D5410, func_800D5190, then counts 0x1E up. */
-void func_800D5158(UnkStageQuad *this, s32 arg) {
-    func_800D5410(this);
-    func_800D5190(this);
-    this->unk1E++;
+/* BonusThrower's tick: BonusThrower_place, BonusThrower_throw, then counts its frames. */
+void BonusThrower_tick(BonusThrower *this, s32 arg) {
+    BonusThrower_place(this);
+    BonusThrower_throw(this);
+    this->frame++;
 }
 
-/* Each frame for its character (index): 0x20 follows the hold count; when the button is let go after a hold
- * (0x15A6) and the stage allows it, throws an Unk800D4B78 from 0x44, harder the longer the hold, in the slot
- * after the last, plays sound 10 and calls func_800D0ABC. */
-void func_800D5190(UnkStageQuad *this) {
+/* Each frame for its side: scale follows the hold count; when the button is let go after a hold (heldCharge) and the
+ * stage allows it, throws an St09Throw from position, harder the longer the hold, in the slot after the last,
+ * plays sound 10 and holds the side's fighter (BonusFight_holdFighter). */
+void BonusThrower_throw(BonusThrower *this) {
     VECTOR vec;
     Entity *entity;
     s32 power;
     s32 x;
     s32 y;
 
-    this->unk20 = quadStage(this)->unk15A2[this->index] * 0xCC;
-    if (quadStage(this)->base.unkD98[this->index] == 0 && quadStage(this)->unkF6A == 0
-        && quadStage(this)->unk15A6[this->index] != 0) {
+    this->scale = throwerStage(this)->holdFrames[this->side] * 0xCC;
+    if (throwerStage(this)->base.holding[this->side] == 0 && throwerStage(this)->base.hudHidden == 0
+        && throwerStage(this)->heldCharge[this->side] != 0) {
         /* The match depends on vec's address taken here: the game keeps it in a saved register from the start
          * of the block. */
         VECTOR *launch = &vec;
@@ -278,30 +271,30 @@ void func_800D5190(UnkStageQuad *this) {
         vec.vy = 0;
         vec.vz = 0;
         vec.pad = 0;
-        power = ((quadStage(this)->unk15A6[this->index] + 8) >> 1) * 0x71C;
+        power = ((throwerStage(this)->heldCharge[this->side] + 8) >> 1) * 0x71C;
         x = ((s64)power * 0x4000) >> 16;
-        vec.vx += x * func_80079E10(func_800700C8(&quadStage(this)->base.base, this->index));
+        vec.vx += x * Fighter_getFacing(Fight_getFighter(&throwerStage(this)->base.base, this->side));
         y = ((s64)power * 0x10000) >> 16;
         vec.vy -= y;
-        vec.vz = quadStage(this)->unk15A6[this->index] * 0xCC;
-        vec.pad = this->index;
-        this->unk44.vz = 0;
-        entity = NEW_ENTITY(0x78, func_800D4B78, this->owner, &this->unk44, launch,
-                            quadStage(this)->unk1404[this->index]);
+        vec.vz = throwerStage(this)->heldCharge[this->side] * 0xCC;
+        vec.pad = this->side;
+        this->position.vz = 0;
+        entity = NEW_ENTITY(0x78, St09Throw_init, this->owner, &this->position, launch,
+                            throwerStage(this)->nextThrowSlot[this->side]);
         if (entity != NULL) {
             entityAddSibling(&this->entity, entity);
-            quadStage(this)->unk1404[this->index]++;
-            quadStage(this)->unk1404[this->index] %= 30;
+            throwerStage(this)->nextThrowSlot[this->side]++;
+            throwerStage(this)->nextThrowSlot[this->side] %= 30;
         }
         soundControlPlaySound(&SOUND_CONTROL, 10, 0);
-        func_800D0ABC(&quadStage(this)->base, this->index);
+        BonusFight_holdFighter(&throwerStage(this)->base, this->side);
     }
 }
 
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D5410);
+INCLUDE_ASM("st09/nonmatchings/st09", BonusThrower_place);
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D5550);
+INCLUDE_ASM("st09/nonmatchings/st09", BonusThrower_draw);
 
 /* The entity func_800D572C constructs (virtual table D_800D39C4): 24 items that slide up from y -0x4C4
  * (even ones) or down from y -0x40 (odd ones), fading as they go. */
@@ -355,7 +348,7 @@ void func_800D57D4(Entity *this, s32 flags) {
 }
 
 
-/* Unk800D572C's update: every 4 frames two more items move; each speeds up, its brightness falling
+/* Unk800D572C's tick: every 4 frames two more items move; each speeds up, its brightness falling
  * with the distance from its start, and starts again from there at the end of its way. */
 void func_800D5828(Unk800D572C *this, s32 arg) {
     s32 i;
@@ -409,26 +402,26 @@ INCLUDE_ASM("st09/nonmatchings/st09", func_800D5EB8);
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D6110);
 
-/* An object of st09 whose 0x20 is a scene object (func_800D6360, func_800D636C); its class is not known
- * yet. */
+/* An object of st09 whose 0x20 is a scene object (Unk800D6360_getLocalMatrix, func_800D636C); its class is not
+ * known yet. */
 typedef struct Unk800D6360 {
     /* 0x00 */ u8 unk0[0x20];
     /* 0x20 */ SceneObject *unk20;
 } Unk800D6360;
 
 /* Returns the local matrix of the scene object at 0x20. */
-MATRIX *func_800D6360(Unk800D6360 *this) {
+MATRIX *Unk800D6360_getLocalMatrix(Unk800D6360 *this) {
     return &this->unk20->transform.local.m;
 }
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D636C);
 
-/* Constructs an UnkStageQuadPos (vtable D_800D3924) of owner at pos: the corners of a 512 by 512 square, index 0. */
-UnkStageQuadPos *func_800D63D4(UnkStageQuadPos *this, Unk8006ED20 *owner, Vec3 *pos) {
+/* Constructs a BonusLandingMark of owner at pos: a 512 by 512 square. */
+BonusLandingMark *BonusLandingMark_init(BonusLandingMark *this, Fight *owner, Vec3 *pos) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_800D3924;
+    this->entity.vtable = &BONUS_LANDING_MARK_VTABLE;
     this->owner = owner;
     /* The match depends on reading pos into x, y and z here and storing them last. */
     x = pos->vx;
@@ -440,30 +433,30 @@ UnkStageQuadPos *func_800D63D4(UnkStageQuadPos *this, Unk8006ED20 *owner, Vec3 *
     this->corners[0].vy = this->corners[1].vy = -0x100;
     this->corners[2].vy = this->corners[3].vy = 0x100;
     this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = 0;
-    this->index = 0;
+    this->frame = 0;
     this->pos.vx = x;
     this->pos.vy = y;
     this->pos.vz = z;
     return this;
 }
 
-/* The destructor of the entity class of vtable D_800D3924, which func_800D63D4 installs. */
-void func_800D647C(Entity *this, s32 flags) {
-    this->vtable = &D_800D3924;
+/* BonusLandingMark's destructor. */
+void BonusLandingMark_destroy(Entity *this, s32 flags) {
+    this->vtable = &BONUS_LANDING_MARK_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* The gather method of UnkStageQuadPos: counts it in index, and deletes the entity on the 17th. */
-void func_800D64D0(UnkStageQuadPos *this, s32 arg) {
-    if (++this->index > 16) {
+/* BonusLandingMark's tick: counts its frames, and deletes it after BONUS_LANDING_MARK_FRAMES. */
+void BonusLandingMark_tick(BonusLandingMark *this, s32 arg) {
+    if (++this->frame > BONUS_LANDING_MARK_FRAMES) {
         entityDelete(&this->entity);
     }
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D6538);
+INCLUDE_ASM("st09/nonmatchings/st09", BonusLandingMark_draw);
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D66C0);
 
@@ -473,7 +466,7 @@ void func_800D66F8(void *this, SceneObject *child) {
     listRemove(&child->link);
 }
 
-/* The destructor of func_800D3A64's object (virtual table D_800D3904): Unk8007C084's. */
-void func_800D6724(Unk8007C084 *this, s32 flags) {
-    func_8007C09C(this, flags);
+/* JewelHuntController's destructor: Controller's. */
+void JewelHuntController_destroy(Controller *this, s32 flags) {
+    Controller_destroy(this, flags);
 }

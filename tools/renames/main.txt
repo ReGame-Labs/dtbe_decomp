@@ -1,0 +1,7 @@
+# The executable's own names for addresses in the overlays' memory (config/<version>/symbols_main.txt), run with
+#   python3 tools/rename.py --overlay main -f tools/renames/main.txt
+# Each overlay names its own symbols there (title.bin's 0x800643E0 is its first datum), so a plain run would
+# rename those too.
+
+# where the overlays are loaded (the system menu loads its commands' overlays there)
+D_800643E0 OVERLAY_MEMORY

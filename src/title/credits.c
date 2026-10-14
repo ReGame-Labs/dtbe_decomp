@@ -11,22 +11,27 @@
 #include "psyq.h"
 #include "vtable.h"
 
-/* The credits task (virtual table D_800664CC), as creditsTaskInit builds it. */
-typedef struct Unk800767AC {
+/* The credits task (CREDITS_TASK_VTABLE), as creditsTaskInit builds it: /credit.txt's lines scroll up over
+ * the slides of /title/credit.tim until Start or frame 0x1480. */
+typedef struct CreditsTask {
     /* 0x00 */ Task task;
-    /* 0x20 */ s32 unk20; /* the argument of the last update */
-    /* 0x24 */ u8 *text;   /* /credit.txt, its lines cut apart by func_80076764 */
+    /* 0x20 */ s32 updateArg; /* the argument of the last update */
+    /* 0x24 */ u8 *text;   /* /credit.txt, its lines cut apart by splitLines */
     /* 0x28 */ u8 **lines; /* the start of each line of text */
     /* 0x2C */ Font *font;
     /* 0x30 */ u16 *fontData; /* /credit.k15 */
-} Unk800767AC;
+    /* 0x34 */ s32 lineCount; /* creditsCountLines' count of text */
+    /* 0x38 */ s32 frame;     /* the slides, the pictures and the end are timed by it */
+    /* 0x3C */ s32 leaving;   /* set on Start or at frame 0x1480: the task ends once the fade out is done */
+    /* 0x40 */ s32 scroll;    /* in lines, 16.16 (the pixel is (scroll >> 12) & 0xF): 0x800 more a frame */
+} CreditsTask; /* size 0x44 */
 
-extern Unk8006713CVtable D_800664CC;
+extern TickTaskVtable CREDITS_TASK_VTABLE;
 
 INCLUDE_ASM("title/nonmatchings/credits", creditsTaskInit);
 
 /* Sets the STP bit of every CLUT color of a run of TIMs (/title/credit.tim), before they go to VRAM. */
-void func_800766A4(u32 *tims) {
+void setTimClutsStp(u32 *tims) {
     TIM_IMAGE image;
 
     OpenTIM((u_long *)tims);
@@ -45,7 +50,7 @@ void func_800766A4(u32 *tims) {
 }
 
 /* The number of line breaks in text: creditsTaskInit's count of the credits' lines. */
-s32 func_80076728(const u8 *text) {
+s32 creditsCountLines(const u8 *text) {
     s32 lines = 0;
     u8 c;
 
@@ -58,7 +63,7 @@ s32 func_80076728(const u8 *text) {
 }
 
 /* Cuts text at its line breaks into lines, the start of each line that ends in one. */
-void func_80076764(u8 **lines, u8 *text) {
+void splitLines(u8 **lines, u8 *text) {
     u8 *line = text;
     u8 c;
 
@@ -73,8 +78,8 @@ void func_80076764(u8 **lines, u8 *text) {
 
 /* The destructor of the credits task: stops the music, frees the text, its lines, the font and its data, fades
  * the screen in and destroys the task. */
-void func_800767AC(Unk800767AC *this, s32 flags) {
-    this->task.vtable = &D_800664CC.task;
+void CreditsTask_destroy(CreditsTask *this, s32 flags) {
+    this->task.vtable = &CREDITS_TASK_VTABLE.task;
     stopMusic();
     if (this->text != NULL) {
         operatorVecDelete(this->text);
@@ -90,15 +95,15 @@ void func_800767AC(Unk800767AC *this, s32 flags) {
     taskDestroy(&this->task, flags);
 }
 
-INCLUDE_ASM("title/nonmatchings/credits", func_80076858);
+INCLUDE_ASM("title/nonmatchings/credits", CreditsTask_tick);
 
 #if VERSION_JP
 INCLUDE_ASM("title/nonmatchings/credits", func_80076B0C);
 #endif
 
-/* Draws the credits picture (256 x 120 from texture page 13) at x - 128, y, as bright as brightness; nothing at
- * brightness 0. */
-void func_80076C14(u_long *ot, s32 x, s32 y, s32 brightness) {
+/* Draws the credits' end picture (256 x 120 from texture page 13) at x - 128, y, as bright as brightness;
+ * nothing at brightness 0. */
+void drawCreditsEndPicture(u_long *ot, s32 x, s32 y, s32 brightness) {
     if (brightness != 0) {
         DR_TPAGE *tpage = allocDrTpage(13);
         SPRT *sprt = allocSprt();
@@ -118,12 +123,12 @@ void func_80076C14(u_long *ot, s32 x, s32 y, s32 brightness) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/credits", func_80076CC4);
+INCLUDE_ASM("title/nonmatchings/credits", drawCreditsSlide);
 
-/* Update: keeps arg at 0x20 and runs the task's own method at 0x20. */
-void func_80076DF0(Unk8006713C *this, s32 arg) {
-    this->unk20 = arg;
-    this->vtable->unk20.func((u8 *)this + this->vtable->unk20.delta, arg);
+/* Update: keeps arg and runs the task's tick. */
+void CreditsTask_update(TickTask *this, s32 arg) {
+    this->updateArg = arg;
+    this->vtable->tick.func((u8 *)this + this->vtable->tick.delta, arg);
 }
 
-INCLUDE_RODATA("title/nonmatchings/credits", D_800664CC);
+INCLUDE_RODATA("title/nonmatchings/credits", CREDITS_TASK_VTABLE);

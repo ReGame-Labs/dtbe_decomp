@@ -1,0 +1,25 @@
+# The PsyQ functions the masked match leaves open (config/<version>/symbols.txt says how they are named)
+
+# libspu: on_off with SPU_ON/SPU_OFF, and SPU_CHECK (-1) returning the reserve flag, SPU_DIAG (-2) asking
+# _SpuIsInAllocateArea_ about the reverb work area
+func_800479E0 SpuReserveReverbWorkArea
+func_80047CF0 SpuIsReverbWorkAreaReserved
+# libsnd: _svm_stereo_mono set to 1 / cleared (_SsVmInit clears it), the options call them for mono / stereo
+func_80052A90 SsSetMono
+func_80052AA0 SsSetStereo
+# a voice count 1..24 stored and returned, else -1
+func_80052AB0 SsSetReservedVoice
+# _SsVabOpenHeadWithMode with mode 0 (not sticky)
+func_80052F10 SsVabOpenHead
+# the byte at 0x14 of the score entry of (sep, seq)
+func_80049460 SsIsEos
+# libds: CD_getsector(...) == 0, next to DsSystemStatus
+func_80046930 DsGetSector
+# libmcrd: "file not open." and a callback that writes / reads; "file already open." and a path built with strcat
+func_80059374 MemCardWriteData
+func_8005910C MemCardReadData
+func_800595D8 MemCardReadFile
+# libc: bcmp's twin, between bzero and memcpy in libc's name order
+func_8003DF40 memcmp
+# libapi: main's call with the event and thread counts and the stack; the kernel's 0xA000E800 table
+func_800403C0 SetConf

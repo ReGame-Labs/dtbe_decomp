@@ -15,15 +15,15 @@
 #include "engine/text/font.h"
 #include "title/title_classes.h"
 
-extern Unk80073390Image D_80066024[];
+extern TitleImage RANKING_IMAGES[];
 
 /* Draws image at (x, y): a SPRT, then the DR_TPAGE of its texture page, added to ot. Returns the SPRT. */
-SprtColorWords *func_80073390(u_long *ot, s32 x, s32 y, Unk80073390Image *image) {
+SprtColorWords *drawImage(u_long *ot, s32 x, s32 y, TitleImage *image) {
     SprtColorWords *sprt = (SprtColorWords *)allocSprt();
 
     sprt->xy = (y << 16) | (x & 0xFFFF);
-    sprt->uvClut = image->uvClut;
-    sprt->wh = image->wh;
+    sprt->uvClut = image->uvClut.word;
+    sprt->wh = image->wh.word;
     AddPrim(ot, sprt);
     AddPrim(ot, allocDrTpage(image->tpage));
     return sprt;
@@ -33,7 +33,7 @@ SprtColorWords *func_80073390(u_long *ot, s32 x, s32 y, Unk80073390Image *image)
  * up at x 2. */
 /* The match depends on frame & 0x3F written in each loop (GCSE shares the two) and on y declared per loop
  * (a function-wide y keeps the second loop's counter from being reversed). */
-void func_8007342C(u_long *ot, s32 frame) {
+void drawSideStrips(u_long *ot, s32 frame) {
     s32 i;
 
     for (i = 0; i < 6; i++) {
@@ -76,72 +76,76 @@ void func_8007342C(u_long *ot, s32 frame) {
     }
 }
 
-/* The ranking's task (virtual table D_80065FE8), which func_80073818 runs: 0x10C counts its frames (it fades
- * out at 0x1CC). */
-typedef struct Unk80073818 {
+/* One line of the ranking: a record's rank, name and score as RankingTask_initLines prints them. */
+typedef struct RankingLine {
+    /* 0x00 */ s16 x;         /* slides in to 16 (even lines) or 32 (odd ones) */
+    /* 0x02 */ s16 character; /* the record's, whose face RankingTask_drawFace draws */
+    /* 0x04 */ u8 text[0x50]; /* STR_RANKING_LINE_FORMAT, its digits full-width */
+} RankingLine; /* size 0x54 */
+
+/* The ranking's task (RANKING_TASK_VTABLE, 0x474 bytes as the sequencer allocates it), which
+ * RankingTask_tick runs: it shows the records' lines one by one and fades out at frame 0x1CC. */
+typedef struct RankingTask {
     /* 0x000 */ Task task;
-    /* 0x020 */ s32 unk20;
-    /* 0x024 */ Unk800764BC records;
-    /* 0x038 */ Unk80074220 entry;
-    /* 0x108 */ u8 unk108[0x10C - 0x108];
+    /* 0x020 */ s32 updateArg;
+    /* 0x024 */ RankingTable records;
+    /* 0x038 */ NameEntry entry;
+    /* 0x108 */ s32 enterName;  /* rankingTaskInit's last argument (not in the demo): opens the name entry */
     /* 0x10C */ s32 frame;
-} Unk80073818;
+    /* 0x110 */ s32 shownLines; /* the lines drawn: one more every 16 frames, up to 7 */
+    /* 0x114 */ RankingLine lines[8];
+    /* 0x3B4 */ u8 unk3B4[0x474 - 0x3B4];
+} RankingTask; /* size 0x474 */
 
-/* The button that confirms: circle in Japan, cross in the US. */
-#if VERSION_JP
-#define PAD_CONFIRM PADRright
-#else
-#define PAD_CONFIRM PADRdown
-#endif
 
-extern Unk8006713CVtable D_80065FE8;
+extern TickTaskVtable RANKING_TASK_VTABLE;
 
 /* name_entry.c's, as C sees them */
-void func_800744BC(Unk80074220 *entry);
-void func_8007460C(Unk80074220 *entry);
-void func_800747F8(Unk80074220 *entry, void *arg);
+void NameEntry_update(NameEntry *entry);
+void NameEntry_draw(NameEntry *entry);
+void NameEntry_storeRecord(NameEntry *entry, void *arg);
 
-void func_80073A04(Unk80073818 *this);
-void func_80073B34(Unk80073818 *this);
-s32 func_80073918(Unk80073818 *this);
-void func_80073F94(Unk80073818 *this);
+void RankingTask_initLines(RankingTask *this);
+void RankingTask_drawLines(RankingTask *this);
+s32 RankingTask_isSkipPressed(RankingTask *this);
+void RankingTask_draw(RankingTask *this);
 
 INCLUDE_ASM("title/nonmatchings/ranking", rankingTaskInit);
 
 /* The destructor of the ranking's task: clears the screen to black, unloads the sounds, then destroys the
- * name entry, 0x24 and the task. */
-void func_80073784(Unk80073818 *this, s32 flags) {
-    this->task.vtable = &D_80065FE8.task;
+ * name entry, the records and the task. */
+void RankingTask_destroy(RankingTask *this, s32 flags) {
+    this->task.vtable = &RANKING_TASK_VTABLE.task;
     displaySetClearColor(CURRENT_DISPLAY, 0, 0, 0);
     soundControlUnloadSeps(&SOUND_CONTROL);
     soundControlUnloadVabs(&SOUND_CONTROL);
-    func_80074220(&this->entry, DESTROY_BASES);
-    func_80076040(&this->records, DESTROY_BASES);
+    NameEntry_destroy(&this->entry, DESTROY_BASES);
+    RankingTable_destroy(&this->records, DESTROY_BASES);
     taskDestroy(&this->task, flags);
 }
 
 /* The ranking's frame: runs the name entry while it is open; else draws the ranking, fades out at frame 0x1CC
  * (or on Start or the confirm button) and kills the task once the fade is done. */
-void func_80073818(Unk80073818 *this) {
-    Unk80074220 *entry = &this->entry;
+void RankingTask_tick(RankingTask *this) {
+    NameEntry *entry = &this->entry;
 
     if (this->entry.active != 0) {
-        func_800744BC(entry);
-        func_8007460C(entry);
+        NameEntry_update(entry);
+        NameEntry_draw(entry);
         return;
     }
     if (this->frame == 0) {
         if (this->entry.finished != 0) {
-            func_800747F8(entry, &this->records);
+            NameEntry_storeRecord(entry, &this->records);
         }
-        func_80073A04(this);
+        RankingTask_initLines(this);
     }
-    func_80073B34(this);
-    func_80073F94(this);
+    RankingTask_drawLines(this);
+    RankingTask_draw(this);
     if (++this->frame == 0x1CC) {
         fadeControlFadeOut(&FADE_CONTROL, 0x14);
     }
-    if (this->frame < 0x1E1 && func_80073918(this) == 0) {
+    if (this->frame < 0x1E1 && RankingTask_isSkipPressed(this) == 0) {
         return;
     }
     if (fadeControlIsDone(&FADE_CONTROL)) {
@@ -151,14 +155,14 @@ void func_80073818(Unk80073818 *this) {
 }
 
 /* Whether Start or the confirm button was pressed on either pad. */
-s32 func_80073918(Unk80073818 *this) {
+s32 RankingTask_isSkipPressed(RankingTask *this) {
     PadManager *pads = PAD_MANAGER_INSTANCE;
 
     return (padManagerGetPressed(pads, 0) | padManagerGetPressed(pads, 1)) & (PADstart | PAD_CONFIRM);
 }
 
 /* Loads "title/ranking.tim", uploads its TIMs to VRAM and frees it. */
-void func_80073960(void) {
+void loadRankingTexture(void) {
     u32 *file = loadFile("title/ranking.tim");
 
     uploadTims(file);
@@ -167,7 +171,7 @@ void func_80073960(void) {
 
 /* Writes value with digits digits, zero padded, as two-byte (full-width) digits into text.
  * The match depends on reading each digit in the loop's test and storing both bytes before text += 2. */
-void func_8007399C(u8 *text, s32 value, s32 digits) {
+void writeWideNumber(u8 *text, s32 value, s32 digits) {
     u8 buffer[0x20];
     u8 *digit = buffer;
     u8 c;
@@ -180,28 +184,29 @@ void func_8007399C(u8 *text, s32 value, s32 digits) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/ranking", func_80073A04);
+INCLUDE_ASM("title/nonmatchings/ranking", RankingTask_initLines);
 
-INCLUDE_ASM("title/nonmatchings/ranking", func_80073B34);
+INCLUDE_ASM("title/nonmatchings/ranking", RankingTask_drawLines);
 
-INCLUDE_ASM("title/nonmatchings/ranking", func_80073D40);
+INCLUDE_ASM("title/nonmatchings/ranking", RankingTask_drawFace);
 
-INCLUDE_ASM("title/nonmatchings/ranking", func_80073E34);
+INCLUDE_ASM("title/nonmatchings/ranking", RankingTask_drawLineBar);
 
+/* An empty function that nothing calls. */
 void func_80073F8C(void) {
 }
 
-/* Draws func_80073818's screen: func_8007342C's part, two of D_80066024's sprites, then the 0x140 x 0xF0
+/* Draws RankingTask_tick's screen: drawSideStrips's part, two of RANKING_IMAGES's sprites, then the 0x140 x 0xF0
  * picture at (0, 0) of texture pages 7 and 8. */
-void func_80073F94(Unk80073818 *this) {
+void RankingTask_draw(RankingTask *this) {
     u_long *ot = FRAME_OT.firstDrawn + 5;
     SPRT *sprt;
     DR_TPAGE *tpage;
 
-    func_8007342C(ot, this->frame);
-    sprt = (SPRT *)func_80073390(ot, 0x2F, 0xD, &D_80066024[0]);
+    drawSideStrips(ot, this->frame);
+    sprt = (SPRT *)drawImage(ot, 0x2F, 0xD, &RANKING_IMAGES[0]);
     setRGB0(sprt, 0x80, 0x80, 0x80);
-    sprt = (SPRT *)func_80073390(ot, 0x5E, 0xD0, &D_80066024[2]);
+    sprt = (SPRT *)drawImage(ot, 0x5E, 0xD0, &RANKING_IMAGES[2]);
     setRGB0(sprt, 0x80, 0x80, 0x80);
     tpage = allocDrTpage(7);
     sprt = allocSprt();
@@ -223,11 +228,11 @@ void func_80073F94(Unk80073818 *this) {
     AddPrim(ot, tpage);
 }
 
-/* Update: keeps arg at 0x20 and runs the task's own method at 0x20. */
-void func_800740FC(Unk8006713C *this, s32 arg) {
-    this->unk20 = arg;
-    this->vtable->unk20.func((u8 *)this + this->vtable->unk20.delta, arg);
+/* Update: keeps arg and runs the task's tick. */
+void RankingTask_update(TickTask *this, s32 arg) {
+    this->updateArg = arg;
+    this->vtable->tick.func((u8 *)this + this->vtable->tick.delta, arg);
 }
 
-INCLUDE_RODATA("title/nonmatchings/ranking", D_80065FE8);
-INCLUDE_RODATA("title/nonmatchings/ranking", D_80066024);
+INCLUDE_RODATA("title/nonmatchings/ranking", RANKING_TASK_VTABLE);
+INCLUDE_RODATA("title/nonmatchings/ranking", RANKING_IMAGES);

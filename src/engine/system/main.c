@@ -40,7 +40,7 @@ INCLUDE_RODATA("main/nonmatchings/system/main", BUILD_NAME);
 
 /* The game's entry point: starts the system, loads the font and the system
  * TIMs, then runs the frames in a thread (runFramesThread). It passes $fp to
- * func_800403C0, which needs inline asm. */
+ * SetConf, which needs inline asm. */
 INCLUDE_ASM("main/nonmatchings/system/main", main);
 
 /* The function of main's thread: every frame, makes the sequencer again if

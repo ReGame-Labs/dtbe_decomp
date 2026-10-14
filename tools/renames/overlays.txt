@@ -10,3 +10,12 @@ func_80071F28 guideLogoTaskInit
 func_8007360C rankingTaskInit
 func_80076504 creditsTaskInit
 func_800794E0 optionTaskInit
+
+# The "test" overlay's task constructors (the overlay is not on the disc), named after the label of the system
+# menu command that starts each: "Testing ground for HANAMASU/IWANAGA/SHOHYAMA/TERADA", "ModelView", "MapView"
+func_80065AE4 hanamasuTestTaskInit
+func_80066084 iwanagaTestTaskInit
+func_800673A4 shohyamaTestTaskInit
+func_80066F74 teradaTestTaskInit
+func_800681A4 modelViewTaskInit
+func_8006A43C mapViewTaskInit

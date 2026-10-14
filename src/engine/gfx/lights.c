@@ -97,6 +97,8 @@ INCLUDE_RODATA("main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_COLOR2);
 
 INCLUDE_RODATA("main/nonmatchings/gfx/lights", LIGHTS_DEFAULT_BACK_COLOR);
 
+INCLUDE_RODATA("main/nonmatchings/gfx/lights", ZERO_VECTOR);
+
 INCLUDE_RODATA("main/nonmatchings/gfx/lights", AXIS_Y);
 
 INCLUDE_RODATA("main/nonmatchings/gfx/lights", AXIS_Z);

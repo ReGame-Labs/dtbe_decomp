@@ -194,6 +194,37 @@ files splat's names in the symbol file's section of the module, and can be
 run again: a list that is already applied changes nothing, so a branch that
 still has the old names catches up the same way.
 
+The overlays load at the same addresses, so the same splat name can be a
+different symbol in each one. An overlay's list runs only in that overlay:
+
+```
+python3 tools/rename.py --overlay title -f tools/renames/title.txt
+```
+
+It then changes only `config/<version>/symbols_title.txt` and the overlay's
+own folders (`src/title/`, `include/title/`), and files splat's names at the
+end of the overlay's symbol file, for each version whose assembly has them.
+The overlays that link to it (the stages read `symbols_game.txt` and call
+game.bin by its names) take its names in their folders too.
+The overlays on one parent are linked apart, so a stage's list may give a
+name another stage already has (`BonusThrower_init` in st07 and st09): one
+list per stage, `tools/renames/stNN.txt`, run with `--overlay stNN`.
+
+How each list runs (every one can be run again, and then renames nothing):
+
+| List | Run |
+|---|---|
+| the engine's modules (`cd`, `debug`, `game`, `gfx`, `lib`, `math`, `menu`, `pad`, `sound`, `system`, `task`, `text`), `psyq`, `overlays`, `stages` | plain |
+| `main` (the executable's names in the overlays' memory, `symbols_main.txt`) | `--overlay main` |
+| `title` | `--overlay title` |
+| `battle`, `fighters` | `--overlay game` |
+| `stNN` | `--overlay stNN` |
+
+game.bin's names for the stages' addresses (their constructors, where they
+load) are in `config/<version>/imports_game.txt`, which only game.bin reads,
+as each stage has its own symbols there: a stage's list doesn't reach it, so
+a constructor renamed again is renamed there, and in `game_main.c`, by hand.
+
 ## Clean code
 
 Every change follows these rules, after the match: nothing goes in that

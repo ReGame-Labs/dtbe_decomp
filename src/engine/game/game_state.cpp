@@ -49,7 +49,7 @@ s32 gameStateUnlockByCode(GameState *gameState, char *code) {
     i = 0;
     expected = CODE_DIGESTS[0];
     do {
-        if (func_8003DF40(expected, digest, MD5_DIGEST_SIZE) == 0) {
+        if (memcmp(expected, digest, MD5_DIGEST_SIZE) == 0) {
             gameState->save.unlocked |= CHARACTER_BIT(CODE_CHARACTERS[i]);
             return i;
         }
@@ -114,8 +114,8 @@ void gameStateReset(GameState *gameState) {
     gameState->roundsNotWon = 0;
     gameState->level = gameState->save.level;
     bzero((u8 *)gameState->fighters, sizeof(gameState->fighters));
-    gameState->fighters[0].unk14 = 7;
-    gameState->fighters[1].unk14 = 7;
+    gameState->fighters[0].versusGauge = VERSUS_GAUGE_MAX;
+    gameState->fighters[1].versusGauge = VERSUS_GAUGE_MAX;
 }
 
 /* Sets up a run against the computer: the player picks side 1's character. */
@@ -197,8 +197,8 @@ s32 gameStateGetArena(GameState *gameState) {
     s32 otherCharacter;
     s32 home;
     s32 otherHome;
-    s32 unk8;
-    s32 otherUnk8;
+    s32 tamer;
+    s32 otherTamer;
 
     if (gameState->arena >= ARENA_FIGHT_COUNT) {
         return gameState->arena;
@@ -212,12 +212,12 @@ s32 gameStateGetArena(GameState *gameState) {
     otherCharacter = gameState->fighters[side ^ 1].character;
     home = CHARACTER_HOMES[character];
     otherHome = CHARACTER_HOMES[otherCharacter];
-    unk8 = gameState->fighters[side].unk8;
-    otherUnk8 = gameState->fighters[side ^ 1].unk8;
-    if (home == 10 && !unk8) {
+    tamer = gameState->fighters[side].tamer;
+    otherTamer = gameState->fighters[side ^ 1].tamer;
+    if (home == 10 && !tamer) {
         home = 12;
     }
-    if (otherHome == 10 && !otherUnk8) {
+    if (otherHome == 10 && !otherTamer) {
         otherHome = 12;
     }
     if (gameState->singleFight) {
@@ -258,12 +258,12 @@ s16 gameStateGetSound(GameState *gameState, s32 character) {
 }
 
 /* Picks a sound of each side's character: the first of its five (0 for
- * none, by the side's unk8), plus a random 0 to 4. */
+ * none, by the side's tamer), plus a random 0 to 4. */
 void gameStatePickFighterSounds(GameState *gameState) {
     s32 side;
 
     for (side = 0; side < FIGHTER_COUNT; side++) {
-        s16 *table = gameState->fighters[side].unk8 ? D_800102D4 : D_80010304;
+        s16 *table = gameState->fighters[side].tamer ? D_800102D4 : D_80010304;
         s32 sound = table[gameState->fighters[side].character];
 
         if (sound) {
@@ -392,15 +392,15 @@ void gameStatePickOpponents(GameState *gameState) {
 }
 
 /* Takes a continue if the player chose to on the continue screen, clearing
- * their side's unk10. Returns whether they did. */
+ * their side's score. Returns whether they did. */
 s32 gameStateAddContinue(GameState *gameState) {
     if (!gameState->continued) {
         return 0;
     }
     if (!gameState->fighters[0].computer) {
-        gameState->fighters[0].unk10 = 0;
+        gameState->fighters[0].score = 0;
     } else if (!gameState->fighters[1].computer) {
-        gameState->fighters[1].unk10 = 0;
+        gameState->fighters[1].score = 0;
     }
     gameState->continues++;
     return gameState->continued;
@@ -469,7 +469,7 @@ s32 func_8001DECC(GameState *gameState) {
 s32 gameStateHasUnsavedProgress(GameState *gameState) {
     s32 changed = 0;
 
-    if (gameState->save.unk4) {
+    if (gameState->save.autoSave) {
         changed = saveDataIsValid(&gameState->save) == 0;
     }
     return changed;
@@ -514,7 +514,7 @@ void gameStateSetUpChallenge(GameState *gameState) {
     }
     gameState->fighters[0].computer = 0;
     gameState->fighters[1].computer = 0;
-    gameState->fighters[other].unk10 = 0;
+    gameState->fighters[other].score = 0;
     gameState->challenge = 1;
 }
 
@@ -523,14 +523,14 @@ void gameStateSetUpChallenge(GameState *gameState) {
  * the first step. */
 void gameStateStoreFighters(GameState *gameState) {
     s32 side = gameState->challengerSide;
-    Fighter *fighters = gameState->fighters;
+    FighterSetup *fighters = gameState->fighters;
 
     gameState->saved[0] = gameState->fighters[0];
     gameState->saved[1] = gameState->fighters[1];
     gameState->saved[side].computer = 1;
-    gameState->saved[side].unk10 = 0;
+    gameState->saved[side].score = 0;
     if (gameState->singleFight) {
-        Fighter *opponent = &fighters[side];
+        FighterSetup *opponent = &fighters[side];
 
         gameState->arenas[0] = gameState->arena;
         gameState->opponents[0] = opponent->character;
@@ -566,7 +566,7 @@ void gameStateSetOpponent(GameState *gameState, s32 character) {
     for (side = 0; side < FIGHTER_COUNT; side++) {
         if (gameState->fighters[side].computer) {
             gameState->fighters[side].character = character;
-            gameState->fighters[side].unk10 = 0;
+            gameState->fighters[side].score = 0;
             gameStateSetAltColor(gameState, side);
             break;
         }
@@ -588,9 +588,9 @@ void gameStateSetUpDemo(GameState *gameState) {
     for (side = 0; side < FIGHTER_COUNT; side++) {
         gameState->fighters[side].character = shuffle.getNumber(side);
         gameState->fighters[side].computer = 1;
-        gameState->fighters[side].unk8 = 0;
-        gameState->fighters[side].unk14 = 7;
-        gameState->fighters[side].unk10 = 0;
+        gameState->fighters[side].tamer = 0;
+        gameState->fighters[side].versusGauge = VERSUS_GAUGE_MAX;
+        gameState->fighters[side].score = 0;
     }
 }
 
@@ -612,14 +612,14 @@ s32 gameStateHasPlayerWon(GameState *gameState) {
     return gameState->fighters[gameState->winner].computer ^ 1;
 }
 
-/* unk10 of the player's side, 0 when there is no player. */
-s32 func_8001E3E4(GameState *gameState) {
+/* The score of the player's side, 0 when there is no player. */
+s32 gameStateGetPlayerScore(GameState *gameState) {
     s32 side = gameStateGetPlayerSide(gameState);
 
     if (side < 0) {
         return 0;
     }
-    return gameState->fighters[side].unk10;
+    return gameState->fighters[side].score;
 }
 
 /* Has no player joined. */

@@ -1,35 +1,35 @@
-/* An entity on a list the stage supplies, and four classes on one base (virtual tables D_8006D980 to
- * D_8006DBA0). */
+/* The battle's items: the stage's item spawner, the pickup items and what they give a fighter, their HUD popup
+ * and icon, and the item shot (virtual tables D_8006D980 to ITEM_SPAWNER_VTABLE). */
 
 #include "common.h"
 #include "battle/game_classes.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 
-struct Unk800C82CC *func_800C82CC(struct Unk800C82CC *this, Unk8006ED20 *owner, void *list, s32 arg3);
+struct ItemSpawner *ItemSpawner_init(struct ItemSpawner *this, Fight *scene, void *spawnPoints, s32 arg3);
 Unk800C3CFC *func_800CAEF0(Unk800C3CFC *this, Vec3 *pos, s32 arg2, s32 arg3);
-Entity *func_800C8778(Entity *this, struct Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+Entity *Item_init(Entity *this, struct ItemSpawner *arg1, s32 arg2, Fight *arg3, s32 arg4, Vec3 *arg5,
                       s32 arg6);
-struct Unk800CA430 *func_800CA430(struct Unk800CA430 *this, Unk80076F34 *chara, s32 arg);
-struct Unk800CA768 *func_800CA768(struct Unk800CA768 *this, Unk80076F34 *chara, s32 arg);
-struct Unk800CAACC *func_800CAACC(struct Unk800CAACC *this, Unk80076F34 *chara, s32 arg2, s32 arg3, s32 arg4,
+struct ItemPopup *ItemPopup_init(struct ItemPopup *this, Fighter *fighter, s32 itemKind);
+struct ItemEffectIcon *ItemEffectIcon_init(struct ItemEffectIcon *this, Fighter *fighter, s32 itemKind);
+struct Unk800CAACC *func_800CAACC(struct Unk800CAACC *this, Fighter *chara, s32 arg2, s32 arg3, s32 arg4,
                                   s32 arg5);
 extern EntityVtable D_8006D9F0;
 extern EntityVtable D_8006DA18;
-extern EntityVtable D_8006DA40;
-extern EntityVtable D_8006DA68;
+extern EntityVtable ITEM_EFFECT_ICON_VTABLE;
+extern EntityVtable ITEM_POPUP_VTABLE;
 extern EntityVtable D_8006DAC0;
 extern EntityVtable D_8006DAF0;
 extern EntityVtable D_8006DA90;
 extern EntityVtable D_8006DB20;
-extern VtableEntry D_8006DB80[];
-extern EntityVtable D_8006DBA0;
+extern VtableEntry ITEM_HIT_LISTENER_VTABLE[];
+extern EntityVtable ITEM_SPAWNER_VTABLE;
 
-/* The object at 4 of Unk800C8778: its virtual table, at 0x14 as an Entity's,
- * has a method at 0x20 that func_800C8DFC calls. */
+/* The item an ItemHitListener forwards to, seen as Item_callTouch sees it: its entity's virtual table (at 0x14)
+ * with the touch slot at 0x20 (Item_touch). */
 typedef struct Unk800C8DFCVtable {
     /* 0x00 */ VtableEntry unk0[4];
-    /* 0x20 */ VtableEntry unk20;
+    /* 0x20 */ VtableEntry touch;
 } Unk800C8DFCVtable;
 
 typedef struct Unk800C8DFC {
@@ -37,96 +37,98 @@ typedef struct Unk800C8DFC {
     /* 0x14 */ Unk800C8DFCVtable *vtable;
 } Unk800C8DFC;
 
-/* The entity class func_800C8778 constructs (virtual table D_8006DB50; the
- * classes of D_8006DAC0, D_8006DAF0 and D_8006DB20 derive from it). */
-/* The class func_800C8778 constructs (virtual table D_8006DB80), derived from Unk80076308. */
-typedef struct Unk800C8778 {
-    /* 0x0 */ Unk80076308 base;
-    /* 0x4 */ Unk800C8DFC *unk4;
-} Unk800C8778;
+/* An item's hit listener (ItemHitListener_init, virtual table ITEM_HIT_LISTENER_VTABLE; Item_init builds it inline
+ * at Item 0x60), a CollisionOwner: the owner of the item's hit part, it forwards a touch to the item's slot 0x20. */
+typedef struct ItemHitListener {
+    /* 0x0 */ CollisionOwner base;
+    /* 0x4 */ Unk800C8DFC *item;
+} ItemHitListener;
 
-typedef struct Unk800C90FC {
+/* A pickup item (Item_init, virtual table ITEM_VTABLE, entity kind 0x20000; the classes of D_8006DAC0,
+ * D_8006DAF0 and D_8006DB20 derive from it): a fighter that touches it gets its kind's effect (Item_giveTo). */
+typedef struct Item {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk80075EE4 part;
-    /* 0x60 */ Unk800C8778 unk60;
-    /* 0x68 */ s32 unk68; /* func_800C8778's fifth argument */
-    /* 0x6C */ Vec3 unk6C; /* func_800C8778's position */
+    /* 0x18 */ CollisionSphere part; /* the hit sphere, radius 0xA0 */
+    /* 0x60 */ ItemHitListener listener;
+    /* 0x68 */ s32 kind;     /* ITEM_KIND_POOLS resolved (resolveItemKind): its effect (Item_giveTo) */
+    /* 0x6C */ Vec3 position;
     /* 0x78 */ u8 unk78[0x7C - 0x78];
     /* 0x7C */ s32 unk7C;
     /* 0x80 */ s32 unk80;
     /* 0x84 */ s32 unk84;
     /* 0x88 */ s32 unk88;
-    /* 0x8C */ s32 unk8C; /* its slot in func_800C82CC's table (func_800C86E4, D_800D3798) */
+    /* 0x8C */ s32 slot;     /* its slot of ITEM_SLOTS (ItemSpawner_removeItem) */
     /* 0x90 */ u8 unk90[0xA4 - 0x90];
-    /* 0xA4 */ void *unkA4; /* func_800C8778's first argument, the table's owner (func_800C8658) */
+    /* 0xA4 */ void *spawner; /* the ItemSpawner it came from, or NULL (func_800C8658) */
     /* 0xA8 */ u8 unkA8[0xAC - 0xA8];
-    /* 0xAC */ s32 unkAC;
+    /* 0xAC */ s32 life;     /* frames; the item box's opening adds 150 */
     /* 0xB0 */ s32 unkB0;
     /* 0xB4 */ s32 unkB4;
     /* 0xB8 */ s32 unkB8;
     /* 0xBC */ u8 unkBC[0xC4 - 0xBC];
-} Unk800C90FC;
+} Item;
 
-void func_800C9140(Unk800C90FC *this, s32 arg);
-void func_800C9288(Unk800C90FC *this, s32 arg);
+void func_800C9140(Item *this, s32 arg);
+void func_800C9288(Item *this, s32 arg);
 
-/* the destructor of Unk800C90FC, the entity class others derive from */
-void func_800C8920(Unk800C90FC *this, s32 flags);
-void func_800C8DFC(Unk800C8DFC *object, s32 arg);
-void func_800C89B4(void *this);
+/* the destructor of Item, the entity class others derive from */
+void Item_destroy(Item *this, s32 flags);
+void Item_callTouch(Unk800C8DFC *object, s32 arg);
+void Item_tick(void *this);
 
-/* A slot of the table func_800C82CC's entities share. */
-typedef struct Unk800C82CCSlot {
-    /* 0x0 */ u8 flags; /* cleared by func_800C82CC and func_800C86E4, bits cleared by func_800C90C0 */
+/* A slot of ITEM_SLOTS: where an item of the spawner is. */
+typedef struct ItemSlot {
+    /* 0x0 */ u8 flags; /* cleared by ItemSpawner_init and ItemSpawner_removeItem; Item_clearSlotFlags clears bits */
     /* 0x1 */ u8 unk1;
-    /* 0x2 */ s16 x;    /* the position of the slot's object (func_800C9034) */
+    /* 0x2 */ s16 x;    /* the position of the slot's object (Item_syncSlot) */
     /* 0x4 */ s16 y;
     /* 0x6 */ s16 z;
-} Unk800C82CCSlot;
+} ItemSlot;
 
-/* The table func_800C82CC's entities share: a count and 16 slots. */
-typedef struct Unk800C82CCTable {
+/* ITEM_SLOTS: the items the spawner has out, and a slot for each of its spawn points. */
+typedef struct ItemSlots {
     /* 0x00 */ s32 count;
-    /* 0x04 */ Unk800C82CCSlot slots[16];
-} Unk800C82CCTable;
+    /* 0x04 */ ItemSlot slots[16];
+} ItemSlots;
 
-extern Unk800C82CCTable D_800D3798;
+extern ItemSlots ITEM_SLOTS;
 
-/* An entry of func_800C82CC's list: the list ends at an entry whose first halfword is -1. */
-typedef struct Unk800C82CCEntry {
+/* A spawn point of the stage's list (ItemSpawner_init): the list ends at one whose first halfword is -1; then
+ * the kind (negative for a pool of ITEM_KIND_POOLS) and the position, x, y and z. */
+typedef struct ItemSpawnPoint {
     /* 0x0 */ s16 unk0;
     /* 0x2 */ s16 unk2[4];
-} Unk800C82CCEntry;
+} ItemSpawnPoint;
 
-/* The entity func_800C82CC constructs for the game (virtual table D_8006DBA0): a list of entries counted at 0x28
- * and the shared table D_800D3798. */
-typedef struct Unk800C82CC {
+/* The stage's item spawner (ItemSpawner_init, virtual table ITEM_SPAWNER_VTABLE): its spawn points, one slot of
+ * ITEM_SLOTS each, an item every 90 frames, and a cooldown on the healing items (kinds 11 to 13). */
+typedef struct ItemSpawner {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8006ED20 *owner;
-    /* 0x1C */ Unk800C82CCEntry *list;
-    /* 0x20 */ s32 unk20;
-    /* 0x24 */ Unk800C82CCTable *table;
-    /* 0x28 */ s32 count; /* the entries of the list (func_800C84C8) */
+    /* 0x18 */ Fight *scene;
+    /* 0x1C */ ItemSpawnPoint *spawnPoints;
+    /* 0x20 */ s32 unk20;           /* ItemSpawner_init's last argument (st04 passes 2) */
+    /* 0x24 */ ItemSlots *slots;
+    /* 0x28 */ s32 spawnPointCount; /* ItemSpawner_countSpawnPoints */
     /* 0x2C */ s32 unk2C;
-    /* 0x30 */ s32 unk30; /* 90 from func_800C82CC and func_800C86E4 */
-    /* 0x34 */ s32 unk34;
+    /* 0x30 */ s32 spawnTimer;      /* 90 from ItemSpawner_init and ItemSpawner_removeItem */
+    /* 0x34 */ s32 healCooldown;    /* 300 at first, 600 after a healing item */
     /* 0x38 */ s32 unk38;
-} Unk800C82CC; /* size 0x3C */
+} ItemSpawner; /* size 0x3C */
 
-/* Returns the table func_800C82CC's entities share. */
-Unk800C82CCTable *func_800C77BC(void) {
-    return &D_800D3798;
+/* Returns ITEM_SLOTS. */
+ItemSlots *getItemSlots(void) {
+    return &ITEM_SLOTS;
 }
 
-/* Creates func_800C82CC's entity (0x3C bytes) with the two arguments and adds it to the group at
- * 0x3C (the stages call it with a table of their .data). */
-void func_800C77C8(Unk8006ED20 *this, void *arg1, s32 arg2) {
+/* Creates the stage's item spawner (0x3C bytes) with its spawn points and adds it to the fight's stage entities
+ * (the stages call it with a list of their .data). */
+void createItemSpawner(Fight *this, void *spawnPoints, s32 arg2) {
     Entity *child = allocEntityMemory(0x3C);
 
     if (child != NULL) {
-        func_800C82CC(entityOperatorNewAt(0x3C, child), this, arg1, arg2);
+        ItemSpawner_init(entityOperatorNewAt(0x3C, child), this, spawnPoints, arg2);
     }
-    func_8006F084(this, child);
+    Fight_addStageEntity(this, child);
 }
 
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D788);
@@ -138,18 +140,18 @@ INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D7B0);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D7B4);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D7B8);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D7C0);
-INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D7C8);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_KIND_POOLS);
 
-/* A list of kinds to draw one from at random (D_8006D7C8). */
-typedef struct Unk800C7844Pool {
+/* A pool of item kinds to draw one from at random (ITEM_KIND_POOLS, by kind -10 to -2). */
+typedef struct ItemKindPool {
     /* 0x0 */ s8 *kinds;
     /* 0x4 */ s32 count;
-} Unk800C7844Pool;
+} ItemKindPool;
 
-extern Unk800C7844Pool D_8006D7C8[];
+extern ItemKindPool ITEM_KIND_POOLS[];
 
-/* Resolves a kind: -10 to -2 draw one at random from the pools of D_8006D7C8, any other is returned as it is. */
-s32 func_800C7844(s32 kind) {
+/* Resolves a kind: -10 to -2 draw one at random from the pools of ITEM_KIND_POOLS, any other is returned as it is. */
+s32 resolveItemKind(s32 kind) {
     s32 pool;
     s8 *kinds;
     s32 count;
@@ -185,28 +187,28 @@ s32 func_800C7844(s32 kind) {
     default:
         return kind;
     }
-    kinds = D_8006D7C8[pool].kinds;
-    count = D_8006D7C8[pool].count;
+    kinds = ITEM_KIND_POOLS[pool].kinds;
+    count = ITEM_KIND_POOLS[pool].count;
     /* the game scales the draw with a signed shift (sra): the u32 draw is taken as an s32 */
     return kinds[((s32)(mersenneTwisterGenerate(&RANDOM) & 0xFF) * count) >> 8];
 }
 
-Entity *func_800C9A88(Entity *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+Entity *func_800C9A88(Entity *this, ItemSpawner *arg1, s32 arg2, Fight *arg3, s32 arg4, Vec3 *arg5,
                       s32 arg6);
-struct Unk800C9AF4 *func_800C9AF4(struct Unk800C9AF4 *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3,
+struct Unk800C9AF4 *func_800C9AF4(struct Unk800C9AF4 *this, ItemSpawner *arg1, s32 arg2, Fight *arg3,
                                   s32 arg4, Vec3 *arg5, s32 arg6);
-Entity *func_800C9CA0(Entity *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+Entity *func_800C9CA0(Entity *this, ItemSpawner *arg1, s32 arg2, Fight *arg3, s32 arg4, Vec3 *arg5,
                       s32 arg6);
-struct Unk800C9D0C *func_800C9D0C(struct Unk800C9D0C *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3,
+struct Unk800C9D0C *func_800C9D0C(struct Unk800C9D0C *this, ItemSpawner *arg1, s32 arg2, Fight *arg3,
                                   s32 arg4, Vec3 *arg5, s32 arg6);
 
-/* Creates the entity of a kind (resolved by func_800C7844) from this's list: kinds 0 to 10 one of two classes,
+/* Creates the entity of a kind (resolved by resolveItemKind) from this's list: kinds 0 to 10 one of two classes,
  * 11 to 13 func_800C9CA0's (with no list when this is NULL; with one, only while 0x34 is 0, which then holds it
  * for 600 frames, else as kind 14), 14 func_800C9D0C's. Returns NULL for any other kind. */
-Entity *func_800C7924(Unk800C82CC *this, s32 arg1, Unk8006ED20 *arg2, s32 kind, Vec3 *arg4, s32 arg5) {
+Entity *createItem(ItemSpawner *this, s32 arg1, Fight *arg2, s32 kind, Vec3 *arg4, s32 arg5) {
     Entity *child;
 
-    kind = func_800C7844(kind);
+    kind = resolveItemKind(kind);
     switch (kind) {
     case 0:
     case 1:
@@ -239,8 +241,8 @@ Entity *func_800C7924(Unk800C82CC *this, s32 arg1, Unk8006ED20 *arg2, s32 kind, 
             }
             return child;
         }
-        if (this->unk34 == 0) {
-            this->unk34 = 600;
+        if (this->healCooldown == 0) {
+            this->healCooldown = 600;
             child = allocEntityMemory(0xC4);
             if (child != NULL) {
                 func_800C9CA0(entityOperatorNewAt(0xC4, child), this, arg1, arg2, kind, arg4, arg5);
@@ -258,42 +260,42 @@ Entity *func_800C7924(Unk800C82CC *this, s32 arg1, Unk8006ED20 *arg2, s32 kind, 
     return NULL;
 }
 
-/* Creates an entity of func_800CA430's class (0x24 bytes) with g++'s new, and hands it to
- * func_8007AD4C. */
-void func_800C7B30(Unk80076F34 *this, s32 arg) {
+/* Creates an entity of ItemPopup_init's class (0x24 bytes) with g++'s new, and hands it to
+ * Fighter_addEntity. */
+void showItemPopup(Fighter *this, s32 arg) {
     Entity *child = allocEntityMemory(0x24);
 
     if (child != NULL) {
-        func_800CA430(entityOperatorNewAt(0x24, child), this, arg);
+        ItemPopup_init(entityOperatorNewAt(0x24, child), this, arg);
     }
-    func_8007AD4C(this, child);
+    Fighter_addEntity(this, child);
 }
 
-/* Creates an entity of func_800CA768's class (0x30 bytes) with g++'s new, and hands it to
- * func_8007AD4C. */
-void func_800C7B9C(Unk80076F34 *this, s32 arg) {
+/* Creates an entity of ItemEffectIcon_init's class (0x30 bytes) with g++'s new, and hands it to
+ * Fighter_addEntity. */
+void showItemEffectIcon(Fighter *this, s32 arg) {
     Entity *child = allocEntityMemory(0x30);
 
     if (child != NULL) {
-        func_800CA768(entityOperatorNewAt(0x30, child), this, arg);
+        ItemEffectIcon_init(entityOperatorNewAt(0x30, child), this, arg);
     }
-    func_8007AD4C(this, child);
+    Fighter_addEntity(this, child);
 }
 
 /* Creates func_800CAACC's entity (0x48 bytes) for the character with the four arguments, and hands
- * it to func_8007AD4C. */
-void func_800C7C08(Unk80076F34 *this, s32 arg1, s32 arg2, s32 arg3, s32 arg4) {
+ * it to Fighter_addEntity. */
+void func_800C7C08(Fighter *this, s32 arg1, s32 arg2, s32 arg3, s32 arg4) {
     Entity *child = allocEntityMemory(0x48);
 
     if (child != NULL) {
         func_800CAACC(entityOperatorNewAt(0x48, child), this, arg1, arg2, arg3, arg4);
     }
-    func_8007AD4C(this, child);
+    Fighter_addEntity(this, child);
 }
 
 /* Creates func_800CAEF0's entity (0x54 bytes) at the character's func_8007A650 point with 0x100 and
- * the colour (0x2020FF, 0xFF2020), and hands it to func_8007AD4C. arg1 is not read. */
-void func_800C7C9C(Unk80076F34 *this, s32 arg1, s32 color) {
+ * the colour (0x2020FF, 0xFF2020), and hands it to Fighter_addEntity. arg1 is not read. */
+void func_800C7C9C(Fighter *this, s32 arg1, s32 color) {
     Vec3 position;
     Entity *child;
 
@@ -302,40 +304,40 @@ void func_800C7C9C(Unk80076F34 *this, s32 arg1, s32 color) {
     if (child != NULL) {
         func_800CAEF0(entityOperatorNewAt(0x54, child), &position, 0x100, color);
     }
-    func_8007AD4C(this, child);
+    Fighter_addEntity(this, child);
 }
 
-/* Throws count func_800C3654 entities (entry 9 of D_8006D5C4) from the character's position (func_800775D8),
+/* Throws count Sparkle_init entities (entry 9 of PARTICLE_ANIMS) from the character's position (Fighter_getPosition),
  * each 256 either side of it in x, at a random velocity (x -8 to 7, y -50 to -19) from the character's
- * generator (func_80077580), with color. */
-void func_800C7D14(Unk80076F34 *this, s32 arg1, u32 count, u32 color) {
-    Unk8006ED20 *random;
+ * generator (Fighter_getScene), with color. */
+void throwSparkles(Fighter *this, s32 arg1, u32 count, u32 color) {
+    Fight *random;
     Vec3 position;
     Vec3 velocity;
     s32 vx, vy;
     Entity *child;
 
-    random = func_80077580(this);
+    random = Fighter_getScene(this);
     while (count--) {
-        func_800775D8(this, &position);
-        position.vx += (func_8006F004(random) & 0x1FF) - 0x100;
+        Fighter_getPosition(this, &position);
+        position.vx += (Fight_random(random) & 0x1FF) - 0x100;
         /* The match depends on drawing both random words first and centring them in the stores. */
-        vx = func_8006F004(random) & 0xF;
-        vy = func_8006F004(random) & 0x1F;
+        vx = Fight_random(random) & 0xF;
+        vy = Fight_random(random) & 0x1F;
         velocity.vx = vx - 8;
         velocity.vy = vy - 0x32;
         velocity.vz = 0;
         child = allocEntityMemory(0x5C);
         if (child != NULL) {
-            func_800C3654(entityOperatorNewAt(0x5C, child), &position, &velocity, 0x1E, color, 9);
+            Sparkle_init(entityOperatorNewAt(0x5C, child), &position, &velocity, 0x1E, color, 9);
         }
-        func_8007AD4C(this, child);
+        Fighter_addEntity(this, child);
     }
 }
 
-/* Throws count func_800C391C entities (entry 11 of D_8006D5C4) from the character's point (func_8007A650), each
+/* Throws count func_800C391C entities (entry 11 of PARTICLE_ANIMS) from the character's point (func_8007A650), each
  * 16 either side of it in x, at a random velocity (x -8 to 7, y -20 to -13), with color. */
-void func_800C7E1C(Unk80076F34 *this, s32 arg1, u32 count, u32 color) {
+void func_800C7E1C(Fighter *this, s32 arg1, u32 count, u32 color) {
     Vec3 position;
     Vec3 velocity;
     s32 vx, vy;
@@ -354,26 +356,26 @@ void func_800C7E1C(Unk80076F34 *this, s32 arg1, u32 count, u32 color) {
         if (child != NULL) {
             func_800C391C(entityOperatorNewAt(0x5C, child), &position, &velocity, 0x1E, color);
         }
-        func_8007AD4C(this, child);
+        Fighter_addEntity(this, child);
     }
 }
 
 /* The direction (ratan2, in 0 to 0xFFF) from from to to, on x and y. The match depends on to's x and y read first. */
-s32 func_800C7F14(Vec3 *from, Vec3 *to) {
+s32 getAngleTo(Vec3 *from, Vec3 *to) {
     s32 x = to->vx;
     s32 y = to->vy;
 
     return ratan2(y - from->vy, x - from->vx) & 0xFFF;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C7F48);
+INCLUDE_ASM("game/nonmatchings/game_0i", fireItemShot);
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8008);
+INCLUDE_ASM("game/nonmatchings/game_0i", fireItemShots);
 
-/* Puffs a grey particle of D_8006D574 (0x80 big) from the character's point (func_8007A650), moved by -32 to 31
- * in x and y, at a random velocity (x and y -32 to 31): its frame is 0, 1 or 2 for the kind 1, 2 or 3 of 0x478,
- * none for any other kind. */
-void func_800C811C(Unk80076F34 *this) {
+/* Puffs a grey particle of SPIN_PARTICLE_VTABLE (0x80 big) from the character's point (func_8007A650), moved by -32 to
+ * 31 in x and y, at a random velocity (x and y -32 to 31): its frame is 0, 1 or 2 for the kind 1, 2 or 3 of 0x478, none
+ * for any other kind. */
+void func_800C811C(Fighter *this) {
     VECTOR position;
     VECTOR velocity;
     Entity *entity;
@@ -384,7 +386,7 @@ void func_800C811C(Unk80076F34 *this) {
     velocity.vx = (mersenneTwisterGenerate(&RANDOM) & 0x3F) - 0x20;
     velocity.vy = (mersenneTwisterGenerate(&RANDOM) & 0x3F) - 0x20;
     velocity.vz = 0;
-    switch (this->unk478.unk0) {
+    switch (this->unk478.kind) {
     case 1:
         entity = NEW_ENTITY(0x58, func_8006D574_init, &position, &velocity, 0x80, 0);
         break;
@@ -397,104 +399,106 @@ void func_800C811C(Unk80076F34 *this) {
     default:
         return;
     }
-    func_8007AD4C(this, entity);
+    Fighter_addEntity(this, entity);
 }
 
-void func_800C84C8(Unk800C82CC *this);
+void ItemSpawner_countSpawnPoints(ItemSpawner *this);
 
-/* Constructs an Unk800C82CC for owner with list: empties the shared table, then counts the list. The match depends
- * on the table read into a local after the count is cleared and on the slots cleared from the last. */
-Unk800C82CC *func_800C82CC(Unk800C82CC *this, Unk8006ED20 *owner, void *list, s32 arg3) {
-    Unk800C82CCTable *table;
+/* Constructs the item spawner of scene with its spawn points: empties ITEM_SLOTS, then counts the points. The
+ * match depends on the table read into a local after the count is cleared and on the slots cleared from the
+ * last. */
+ItemSpawner *ItemSpawner_init(ItemSpawner *this, Fight *scene, void *spawnPoints, s32 arg3) {
+    ItemSlots *table;
     s32 i;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_8006DBA0;
-    this->table = &D_800D3798;
-    this->owner = owner;
-    this->list = list;
+    this->entity.vtable = &ITEM_SPAWNER_VTABLE;
+    this->slots = &ITEM_SLOTS;
+    this->scene = scene;
+    this->spawnPoints = spawnPoints;
     this->unk20 = arg3;
     this->unk2C = 0;
-    this->unk30 = 90;
-    this->unk34 = 300;
+    this->spawnTimer = 90;
+    this->healCooldown = 300;
     this->unk38 = 0;
-    D_800D3798.count = 0;
-    table = this->table;
+    ITEM_SLOTS.count = 0;
+    table = this->slots;
     for (i = 15; i >= 0; i--) {
         table->slots[i].flags = 0;
     }
-    func_800C84C8(this);
+    ItemSpawner_countSpawnPoints(this);
     return this;
 }
 
-/* The destructor of the entity class of vtable D_8006DBA0, which func_800C82CC installs. */
-void func_800C8380(Entity *this, s32 flags) {
-    this->vtable = &D_8006DBA0;
+/* The destructor of the entity class of vtable ITEM_SPAWNER_VTABLE, which ItemSpawner_init installs. */
+void ItemSpawner_destroy(Entity *this, s32 flags) {
+    this->vtable = &ITEM_SPAWNER_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C83D4);
+INCLUDE_ASM("game/nonmatchings/game_0i", ItemSpawner_tick);
 
-/* Counts the entries of the list, up to the one whose first halfword is -1. */
-void func_800C84C8(Unk800C82CC *this) {
-    Unk800C82CCEntry *list = this->list;
+/* Counts the spawn points, up to the one whose first halfword is -1. */
+void ItemSpawner_countSpawnPoints(ItemSpawner *this) {
+    ItemSpawnPoint *list = this->spawnPoints;
 
-    this->count = 0;
+    this->spawnPointCount = 0;
     if (list != NULL) {
-        while (list[this->count].unk0 != -1) {
-            this->count++;
+        while (list[this->spawnPointCount].unk0 != -1) {
+            this->spawnPointCount++;
         }
     }
 }
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8520);
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C85C4);
+INCLUDE_ASM("game/nonmatchings/game_0i", ItemSpawner_spawnItem);
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8658);
 
-/* Frees object's slot of the shared table: one fewer in it, the slot's flags cleared, and 0x30 back to 90. */
-void func_800C86E4(Unk800C82CC *this, Unk800C90FC *object) {
-    this->unk30 = 90;
-    this->table->count--;
-    this->table->slots[object->unk8C].flags = 0;
+/* Takes an item off the spawner: one fewer in ITEM_SLOTS, its slot's flags cleared, and the spawn timer back
+ * to 90. */
+void ItemSpawner_removeItem(ItemSpawner *this, Item *object) {
+    this->spawnTimer = 90;
+    this->slots->count--;
+    this->slots->slots[object->slot].flags = 0;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8718);
+INCLUDE_ASM("game/nonmatchings/game_0i", rotNclip3);
 
-/* The first method of Unk800C8778: func_800C8DFC on the object at 4, with arg. */
-void func_800C8754(Unk800C8778 *this, s32 arg) {
-    func_800C8DFC(this->unk4, arg);
+/* An item's listener's hit (slot 0x08): the item is touched (Item_callTouch). */
+void ItemHitListener_onHit(ItemHitListener *this, s32 arg) {
+    Item_callTouch(this->item, arg);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8778);
+INCLUDE_ASM("game/nonmatchings/game_0i", Item_init);
 
-extern EntityVtable D_8006DB50;
+extern EntityVtable ITEM_VTABLE;
 
-/* The destructor of the entity class of vtable D_8006DB50, which func_800C8778 installs. */
-void func_800C8920(Unk800C90FC *this, s32 flags) {
+/* The destructor of the entity class of vtable ITEM_VTABLE, which Item_init installs. */
+void Item_destroy(Item *this, s32 flags) {
     ListNode *node;
 
-    this->entity.vtable = &D_8006DB50;
+    this->entity.vtable = &ITEM_VTABLE;
     /* the members' destructors, inlined in reverse order: the one at 0x60 first */
-    this->unk60.base.vtable = D_80065164;
-    this->part.vtable = D_80065184;
+    this->listener.base.vtable = COLLISION_OWNER_VTABLE;
+    this->part.vtable = COLLISION_SHAPE_VTABLE;
     /* listRemove(&this->part.node), in the access order the game's compiler used */
-    node = &this->part.node;
-    this->part.node.next->prev = this->part.node.prev;
-    node->prev->next = this->part.node.next;
-    this->part.node.next = node;
-    this->part.node.prev = node;
+    node = &this->part.link;
+    this->part.link.next->prev = this->part.link.prev;
+    node->prev->next = this->part.link.next;
+    this->part.link.next = node;
+    this->part.link.prev = node;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C89B4);
+INCLUDE_ASM("game/nonmatchings/game_0i", Item_tick);
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8B0C);
 
@@ -502,27 +506,27 @@ INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8C40);
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8CD0);
 
-/* Calls the object's virtual method at 0x20 with arg. */
-void func_800C8DFC(Unk800C8DFC *object, s32 arg) {
-    object->vtable->unk20.func((u8 *)object + object->vtable->unk20.delta, arg);
+/* Runs the item's touch slot (0x20, Item_touch) with arg. */
+void Item_callTouch(Unk800C8DFC *object, s32 arg) {
+    object->vtable->touch.func((u8 *)object + object->vtable->touch.delta, arg);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8E30);
+INCLUDE_ASM("game/nonmatchings/game_0i", Item_touch);
 
-/* func_8002BD68 of the entity at 0x14 of arg, or 0 when there is none. */
-s32 func_800C8F04(void *this, Unk80075EE4 *arg) {
+/* entityGetKind of the entity at 0x14 of arg, or 0 when there is none. */
+s32 getToucherKind(void *this, CollisionSphere *arg) {
     s32 result = 0;
 
-    if (arg->unk14) {
-        result = func_8002BD68(arg->unk14);
+    if (arg->entity) {
+        result = entityGetKind(arg->entity);
     }
     return result;
 }
 
 /* Stops the part's motion: 0x7C..0x88 cleared, then 0x7C set to +-0x133 by the sign of its x speed, which is cleared
  * with the rest. */
-void func_800C8F34(Unk800C90FC *this) {
-    s32 speed = this->part.unk20.vx;
+void func_800C8F34(Item *this) {
+    s32 speed = this->part.hitKnockback.vx;
 
     this->unk7C = 0;
     this->unk80 = 0;
@@ -531,50 +535,50 @@ void func_800C8F34(Unk800C90FC *this) {
     if (speed > 0) {
         this->unk7C = 0x133;
     }
-    if (this->part.unk20.vx < 0) {
+    if (this->part.hitKnockback.vx < 0) {
         this->unk7C = -0x133;
     }
-    this->part.unk20.vx = 0;
-    this->part.unk20.vy = 0;
-    this->part.unk20.vz = 0;
-    this->part.unk2C = 0;
+    this->part.hitKnockback.vx = 0;
+    this->part.hitKnockback.vy = 0;
+    this->part.hitKnockback.vz = 0;
+    this->part.hitKnockbackPad = 0;
 }
 
-/* Whether func_8007AED0 is false for the target (a chara). */
-s32 func_800C8F7C(Unk800C90FC *this, Entity *target) {
-    return func_8007AED0((Unk80076F34 *)target) ^ 1;
+/* Whether Fighter_isAttackIdle is false for the target (a chara). */
+s32 func_800C8F7C(Item *this, Entity *target) {
+    return Fighter_isAttackIdle((Fighter *)target) ^ 1;
 }
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8F9C);
 
-/* Copies the position at 0x6C into the object's slot of D_800D3798, when it has an owner. */
-void func_800C9034(Unk800C90FC *this) {
-    if (this->unkA4) {
-        Unk800C82CCSlot *slot = &D_800D3798.slots[this->unk8C];
+/* Copies the item's position into its slot of ITEM_SLOTS, when it came from a spawner. */
+void Item_syncSlot(Item *this) {
+    if (this->spawner) {
+        ItemSlot *slot = &ITEM_SLOTS.slots[this->slot];
 
-        slot->x = this->unk6C.vx;
-        slot->y = this->unk6C.vy;
-        slot->z = this->unk6C.vz;
+        slot->x = this->position.vx;
+        slot->y = this->position.vy;
+        slot->z = this->position.vz;
     }
 }
 
-/* Sets bits in the flags of the object's slot of D_800D3798, when it has an owner. */
-void func_800C9080(Unk800C90FC *this, u8 bits) {
-    if (this->unkA4) {
-        D_800D3798.slots[this->unk8C].flags |= bits;
+/* Sets bits in the flags of the item's slot of ITEM_SLOTS, when it came from a spawner. */
+void Item_setSlotFlags(Item *this, u8 bits) {
+    if (this->spawner) {
+        ITEM_SLOTS.slots[this->slot].flags |= bits;
     }
 }
 
-/* Clears bits in the flags of the object's slot of D_800D3798, when it has an owner. */
-void func_800C90C0(Unk800C90FC *this, u8 bits) {
-    if (this->unkA4) {
-        D_800D3798.slots[this->unk8C].flags &= ~bits;
+/* Clears bits in the flags of the item's slot of ITEM_SLOTS, when it came from a spawner. */
+void Item_clearSlotFlags(Item *this, u8 bits) {
+    if (this->spawner) {
+        ITEM_SLOTS.slots[this->slot].flags &= ~bits;
     }
 }
 
-/* The update of the four classes derived from Unk800C90FC: func_800C9288 while 0x68 is under 11, func_800C9140 after. */
-void func_800C90FC(Unk800C90FC *this, s32 arg) {
-    if (this->unk68 < 11) {
+/* The items' draw: a capsule (func_800C9288) for kinds under 11, a model (func_800C9140) after. */
+void Item_draw(Item *this, s32 arg) {
+    if (this->kind < 11) {
         func_800C9288(this, arg);
     } else {
         func_800C9140(this, arg);
@@ -591,122 +595,122 @@ INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D8C4);
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C9288);
 
-/* Gives the character what this entity's kind holds (0x68), unless func_8006F190 says so for its 0x228 object:
- * first func_800773F4 with 500, then per kind 0 to 13 a change through its 0x238 object, a timed effect at 0x464
- * or func_800C7B9C, with a sound; kinds 0 to 10 then get func_800C7B30's entity. */
-void func_800C94C4(Unk800C90FC *this, Unk80076F34 *chara) {
-    if (func_8006F190(func_80077580(chara)) != 0) {
+/* Gives the fighter what the item's kind holds, unless the round is over: 500 score, then by kind 0 to 13 a
+ * change to its side's gauge or life, or an item effect (Fighter.itemEffect, with its HUD icon), with a sound;
+ * kinds 0 to 10 then show their popup. */
+void Item_giveTo(Item *this, Fighter *chara) {
+    if (Fight_isRoundOver(Fighter_getScene(chara)) != 0) {
         return;
     }
-    func_800773F4(chara, 500);
-    switch (this->unk68) {
+    Fighter_addScore(chara, 500);
+    switch (this->kind) {
     case 0:
-        func_80077448(chara, 0x2000);
-        func_800C7D14(chara, 0, 10, 0xC8C8C8);
+        Fighter_addGauge(chara, 0x2000);
+        throwSparkles(chara, 0, 10, 0xC8C8C8);
         soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
         break;
     case 1:
-        func_80077448(chara, -0x2000);
-        func_800C7D14(chara, 0, 15, 0xC82020);
+        Fighter_addGauge(chara, -0x2000);
+        throwSparkles(chara, 0, 15, 0xC82020);
         soundControlPlaySound(&SOUND_CONTROL, 0x4A, 0);
         break;
     case 2:
-        func_80077448(chara, 0x10000);
-        func_800C7D14(chara, 0, 15, 0xFFFFFF);
+        Fighter_addGauge(chara, 0x10000);
+        throwSparkles(chara, 0, 15, 0xFFFFFF);
         soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
         break;
     case 3:
         soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
-        func_8007746C(chara);
+        Fighter_evolveIfReady(chara);
         break;
     case 4:
-        func_800774C0(chara, 1, 300, 0x200);
-        func_800C7B9C(chara, 4);
+        Fighter_startItemEffect(chara, 1, 300, 0x200);
+        showItemEffectIcon(chara, 4);
         soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
         break;
     case 5:
-        func_800774C0(chara, 2, 300, 0x80);
-        func_800C7B9C(chara, 5);
+        Fighter_startItemEffect(chara, 2, 300, 0x80);
+        showItemEffectIcon(chara, 5);
         soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
         break;
     case 6:
-        func_800774C0(chara, 3, 150, 0);
-        func_800C7B9C(chara, 6);
+        Fighter_startItemEffect(chara, 3, 150, 0);
+        showItemEffectIcon(chara, 6);
         soundControlPlaySound(&SOUND_CONTROL, 0x4B, 0);
         break;
     case 7:
-        func_800774C0(chara, 3, 240, 0);
-        func_800C7B9C(chara, 7);
+        Fighter_startItemEffect(chara, 3, 240, 0);
+        showItemEffectIcon(chara, 7);
         soundControlPlaySound(&SOUND_CONTROL, 0x4B, 0);
         break;
     case 8:
-        func_800774C0(chara, 4, 300, 0);
-        func_800C7B9C(chara, 8);
+        Fighter_startItemEffect(chara, 4, 300, 0);
+        showItemEffectIcon(chara, 8);
         soundControlPlaySound(&SOUND_CONTROL, 0x4E, 0);
         break;
     case 9:
-        func_800774C0(chara, 5, 300, 0);
-        func_800C7B9C(chara, 9);
+        Fighter_startItemEffect(chara, 5, 300, 0);
+        showItemEffectIcon(chara, 9);
         soundControlPlaySound(&SOUND_CONTROL, 0x4E, 0);
         break;
     case 10:
-        func_800774C0(chara, 6, 300, 0);
-        func_800C7B9C(chara, 10);
+        Fighter_startItemEffect(chara, 6, 300, 0);
+        showItemEffectIcon(chara, 10);
         soundControlPlaySound(&SOUND_CONTROL, 0x4E, 0);
         break;
     case 11:
     case 12:
     case 13:
-        func_80077424(chara, 0x2000);
-        func_800C7D14(chara, 0, 10, 0x20C820);
+        Fighter_addHp(chara, 0x2000);
+        throwSparkles(chara, 0, 10, 0x20C820);
         soundControlPlaySound(&SOUND_CONTROL, 0x4C, 0);
         return;
     case 14:
     default:
         return;
     }
-    func_800C7B30(chara, this->unk68);
+    showItemPopup(chara, this->kind);
 }
 
-/* Runs the character's timed effect at 0x464: counts it down and clears it at 0; otherwise, unless
- * func_8006F190 says so for its 0x228 object, emits the effect of its kind (1 to 6) every 16, 4 or 2 frames. */
-void func_800C9790(Unk80076F34 *this) {
-    s32 timer = this->unk464.unk4;
+/* Runs the fighter's item effect (Fighter.itemEffect): counts it down and clears it at 0; otherwise, unless the
+ * round is over, emits the effect of its kind (1 to 6) every 16, 4 or 2 frames. */
+void updateItemEffect(Fighter *this) {
+    s32 timer = this->itemEffect.timer;
 
     if (timer != 0) {
         timer--;
-        this->unk464.unk4 = timer;
+        this->itemEffect.timer = timer;
         if (timer == 0) {
-            func_800774A8(this);
-        } else if (func_8006F190(func_80077580(this)) == 0) {
-            switch (this->unk464.unk0) {
+            Fighter_clearItemEffect(this);
+        } else if (Fight_isRoundOver(Fighter_getScene(this)) == 0) {
+            switch (this->itemEffect.kind) {
             case 1:
-                if ((this->unk464.unk4 & 0xF) == 0) {
+                if ((this->itemEffect.timer & 0xF) == 0) {
                     func_800C7C08(this, 0, 0x80, 0x80, 0x80);
                 }
                 break;
             case 2:
-                if ((this->unk464.unk4 & 0xF) == 0) {
+                if ((this->itemEffect.timer & 0xF) == 0) {
                     func_800C7C08(this, 1, 0x20, 0x20, 0x80);
                 }
                 break;
             case 3:
-                if ((this->unk464.unk4 & 0x3) == 0) {
+                if ((this->itemEffect.timer & 0x3) == 0) {
                     func_800C7E1C(this, 0, 1, 0x808080);
                 }
                 break;
             case 4:
-                if ((this->unk464.unk4 & 0x1) == 0) {
+                if ((this->itemEffect.timer & 0x1) == 0) {
                     func_800C7C9C(this, 0, 0x2020FF);
                 }
                 break;
             case 5:
-                if ((this->unk464.unk4 & 0x1) == 0) {
+                if ((this->itemEffect.timer & 0x1) == 0) {
                     func_800C7C9C(this, 0, 0xFF2020);
                 }
                 break;
             case 6:
-                if ((this->unk464.unk4 & 0x1) == 0) {
+                if ((this->itemEffect.timer & 0x1) == 0) {
                     func_800C7C9C(this, 0, 0x20FF20);
                 }
                 break;
@@ -717,21 +721,21 @@ void func_800C9790(Unk80076F34 *this) {
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C9938);
 
-void func_800C811C(Unk80076F34 *this);
+void func_800C811C(Fighter *this);
 
 /* Runs the chara's timed thing at 0x478: counts it down and clears it at 0, or as soon as func_80079E2C is not
  * 13, 14, 16 or 17; else on even frames, while its kind is 1 to 3, calls func_800C811C. */
-void func_800C99B0(Unk80076F34 *this) {
-    s32 timer = this->unk478.unk4;
+void func_800C99B0(Fighter *this) {
+    s32 timer = this->unk478.timer;
 
     if (timer != 0) {
         timer--;
-        this->unk478.unk4 = timer;
+        this->unk478.timer = timer;
         if (timer == 0) {
             func_80077508(this);
             return;
         }
-        if (func_8006F190(func_80077580(this))) {
+        if (Fight_isRoundOver(Fighter_getScene(this))) {
             return;
         }
         switch (func_80079E2C(this)) {
@@ -743,8 +747,8 @@ void func_800C99B0(Unk80076F34 *this) {
         case 16:
         case 17:
             /* The match depends on the nested tests: one && condition is folded into an unsigned range test. */
-            if (this->unk478.unk0 < 4) {
-                if (this->unk478.unk0 > 0 && !(this->unk478.unk4 & 1)) {
+            if (this->unk478.kind < 4) {
+                if (this->unk478.kind > 0 && !(this->unk478.timer & 1)) {
                     func_800C811C(this);
                 }
             }
@@ -753,98 +757,100 @@ void func_800C99B0(Unk80076F34 *this) {
     }
 }
 
-/* Constructs an entity of D_8006DB20: func_800C8778 with the same arguments. */
-Entity *func_800C9A88(Entity *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+/* Constructs an entity of D_8006DB20: Item_init with the same arguments. */
+Entity *func_800C9A88(Entity *this, ItemSpawner *arg1, s32 arg2, Fight *arg3, s32 arg4, Vec3 *arg5,
                       s32 arg6) {
-    func_800C8778(this, arg1, arg2, arg3, arg4, arg5, arg6);
+    Item_init(this, arg1, arg2, arg3, arg4, arg5, arg6);
     this->vtable = &D_8006DB20;
     return this;
 }
 
-/* The first method of the class of virtual table D_8006DB20: func_800C89B4. */
+/* The first method of the class of virtual table D_8006DB20: Item_tick. */
 void func_800C9AD4(void *this) {
-    func_800C89B4(this);
+    Item_tick(this);
 }
 
-/* The entity class of virtual table D_8006DAF0 (func_800C9AF4), derived from func_800C8778's. */
+/* The entity class of virtual table D_8006DAF0 (func_800C9AF4), derived from Item_init's. */
 typedef struct Unk800C9AF4 {
-    /* 0x00 */ Unk800C90FC base;
+    /* 0x00 */ Item base;
     /* 0xC4 */ s32 unkC4;
 } Unk800C9AF4;
 
-/* Constructs an entity of D_8006DAF0: func_800C8778 with the same arguments, 0xB8 moved by 0x800, then
- * func_800C9080 with bit 1. */
-Unk800C9AF4 *func_800C9AF4(Unk800C9AF4 *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+/* Constructs an entity of D_8006DAF0: Item_init with the same arguments, 0xB8 moved by 0x800, then
+ * Item_setSlotFlags with bit 1. */
+Unk800C9AF4 *func_800C9AF4(Unk800C9AF4 *this, ItemSpawner *arg1, s32 arg2, Fight *arg3, s32 arg4, Vec3 *arg5,
                            s32 arg6) {
-    func_800C8778(&this->base.entity, arg1, arg2, arg3, arg4, arg5, arg6);
+    Item_init(&this->base.entity, arg1, arg2, arg3, arg4, arg5, arg6);
     this->base.entity.vtable = &D_8006DAF0;
     this->unkC4 = 0;
     this->base.unkB8 += 0x800;
-    func_800C9080(&this->base, 2);
+    Item_setSlotFlags(&this->base, 2);
     return this;
 }
 
 /* The first method of the class of virtual table D_8006DAF0: turns 0xB8 by 0x200 (of 0x1000) while 0xC4 is set and
- * it is not 0, then func_800C89B4. */
+ * it is not 0, then Item_tick. */
 void func_800C9B5C(Unk800C9AF4 *this) {
     if (this->unkC4 && this->base.unkB8) {
         this->base.unkB8 = (this->base.unkB8 + 0x200) & 0xFFF;
     }
-    func_800C89B4(this);
+    Item_tick(this);
 }
 
-void func_800C8E30(Unk800C90FC *this, Unk80075EE4 *arg);
+void Item_touch(Item *this, CollisionSphere *arg);
 void func_800C9C58(Unk800C9AF4 *this);
 
-/* The second method of the class of virtual table D_8006DAF0: before 0xC4 or 0xB4 is set, func_800C9C58 unless
- * func_800C8F04 gives 0x20000, or 0x10000 with func_800C8F7C false; after, func_800C8E30 once 0xB8 is 0. */
-void func_800C9BA4(Unk800C9AF4 *this, Unk80075EE4 *arg) {
+/* The item box's touch (slot 0x20 of D_8006DAF0): while closed (0xC4 and 0xB4 clear), a touch that is not an
+ * item's, nor a fighter's that func_800C8F7C refuses, opens it (func_800C9C58); once open, Item_touch when 0xB8
+ * is 0. */
+void func_800C9BA4(Unk800C9AF4 *this, CollisionSphere *arg) {
     if (this->unkC4 == 0 && this->base.unkB4 == 0) {
         /* The match depends on a switch over the entity kinds with three cases: the game's compare tree has
          * 0x20000 at its root (tests ==, then > to the default arm, then 0x10000), which gcc builds only from a
-         * third case above 0x20000 that shares the default arm. Its value is not in the code: 0x30000 (an
-         * entity kind of entityInit) is a guess. func_800C8E30 has the same tree. */
-        switch (func_800C8F04(this, arg)) {
-        case 0x20000:
+         * third case above 0x20000 that shares the default arm. Its value is not in the code:
+         * ENTITY_KIND_FIGHTER_OBJECT is a guess. Item_touch has the same tree. */
+        switch (getToucherKind(this, arg)) {
+        case ENTITY_KIND_ITEM:
             break;
-        case 0x10000:
-            if (!func_800C8F7C(&this->base, func_80078878(arg))) {
+        case ENTITY_KIND_FIGHTER:
+            if (!func_800C8F7C(&this->base, getHitFighter(arg))) {
                 break;
             }
             /* fallthrough */
-        case 0x30000:
+        case ENTITY_KIND_FIGHTER_OBJECT:
         default:
             func_800C9C58(this);
             break;
         }
     } else if (this->base.unkB8 == 0) {
-        func_800C8E30(&this->base, arg);
+        Item_touch(&this->base, arg);
     }
 }
 
-/* Sets 0xC4 and the part's flag bit 0, 0xB0 to 30, adds 150 to 0xAC, then clears bit 1 of its slot (func_800C90C0). */
+/* Opens the item box: sets 0xC4, disables its part, 0xB0 to 30, 150 more frames of life, and clears its
+ * slot's closed bit (Item_clearSlotFlags with 2). */
 void func_800C9C58(Unk800C9AF4 *this) {
     this->unkC4 = 1;
     this->base.unkB0 = 30;
-    this->base.part.flags |= 1;
-    this->base.unkAC += 150;
-    func_800C90C0(&this->base, 2);
+    this->base.part.flags |= COLLISION_SHAPE_DISABLED;
+    this->base.life += 150;
+    Item_clearSlotFlags(&this->base, 2);
 }
 
-/* Constructs an entity of D_8006DAC0: func_800C8778 with the same arguments. */
-Entity *func_800C9CA0(Entity *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+/* Constructs an entity of D_8006DAC0: Item_init with the same arguments. */
+Entity *func_800C9CA0(Entity *this, ItemSpawner *arg1, s32 arg2, Fight *arg3, s32 arg4, Vec3 *arg5,
                       s32 arg6) {
-    func_800C8778(this, arg1, arg2, arg3, arg4, arg5, arg6);
+    Item_init(this, arg1, arg2, arg3, arg4, arg5, arg6);
     this->vtable = &D_8006DAC0;
     return this;
 }
 
-/* The first method of the class of virtual table D_8006DAC0: func_800C89B4. */
+/* The first method of the class of virtual table D_8006DAC0: Item_tick. */
 void func_800C9CEC(void *this) {
-    func_800C89B4(this);
+    Item_tick(this);
 }
 
-/* The entity class of virtual table D_8006DA90 (func_800C9D0C), derived from func_800C8778's: four 0x24-byte
+/* The entity class of virtual table D_8006DA90 (func_800C9D0C), derived from Item_init's: four 0x24-byte
  * records from 0xC8. */
 typedef struct Unk800C9D0CItem {
     /* 0x00 */ s16 unk0;
@@ -858,13 +864,13 @@ typedef struct Unk800C9D0C {
     /* 0xC8 */ Unk800C9D0CItem unkC8[4];
 } Unk800C9D0C;
 
-/* Constructs an entity of D_8006DA90: func_800C8778 with the same arguments, then clears the first halfword of
+/* Constructs an entity of D_8006DA90: Item_init with the same arguments, then clears the first halfword of
  * its four records, the last first. */
-Unk800C9D0C *func_800C9D0C(Unk800C9D0C *this, Unk800C82CC *arg1, s32 arg2, Unk8006ED20 *arg3, s32 arg4, Vec3 *arg5,
+Unk800C9D0C *func_800C9D0C(Unk800C9D0C *this, ItemSpawner *arg1, s32 arg2, Fight *arg3, s32 arg4, Vec3 *arg5,
                            s32 arg6) {
     s32 i;
 
-    func_800C8778(&this->entity, arg1, arg2, arg3, arg4, arg5, arg6);
+    Item_init(&this->entity, arg1, arg2, arg3, arg4, arg5, arg6);
     this->entity.vtable = &D_8006DA90;
     this->unkC4 = 0;
     /* The match depends on the loop running from the last record (the game clears 0x134 first). */
@@ -880,24 +886,24 @@ INCLUDE_ASM("game/nonmatchings/game_0i", func_800CA028);
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800CA1B4);
 
-/* The entity class of virtual table D_8006DA68 (func_800CA430): a point at (0x30 or 0x110, 0x130) by the
- * chara's side that func_800CA4FC moves up the screen. */
-typedef struct Unk800CA430 {
+/* The HUD popup of an item taken (ItemPopup_init, virtual table ITEM_POPUP_VTABLE): it rises by the fighter's side
+ * from (0x30 or 0x110, 0x130) to 0x78, waits 12 frames, and flies off. */
+typedef struct ItemPopup {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 unk18;
+    /* 0x18 */ s32 itemKind;
     /* 0x1C */ s16 x;
     /* 0x1E */ s16 y;
     /* 0x20 */ s32 frame;
-} Unk800CA430;
+} ItemPopup;
 
-/* Constructs an entity of D_8006DA68 at x 0x110 when func_80077574 is set for chara, else 0x30, and y 0x130. */
-Unk800CA430 *func_800CA430(Unk800CA430 *this, Unk80076F34 *chara, s32 arg) {
+/* Constructs the popup of itemKind for fighter, by its side: x 0x30 for side 0, else 0x110, and y 0x130. */
+ItemPopup *ItemPopup_init(ItemPopup *this, Fighter *fighter, s32 itemKind) {
     s16 x;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_8006DA68;
-    this->unk18 = arg;
-    if (func_80077574(chara) == 0) {
+    this->entity.vtable = &ITEM_POPUP_VTABLE;
+    this->itemKind = itemKind;
+    if (Fighter_getSide(fighter) == 0) {
         x = 0x30;
     } else {
         x = 0x110;
@@ -908,18 +914,18 @@ Unk800CA430 *func_800CA430(Unk800CA430 *this, Unk80076F34 *chara, s32 arg) {
     return this;
 }
 
-/* The destructor of the entity class of vtable D_8006DA68, which func_800CA430 installs. */
-void func_800CA4A8(Entity *this, s32 flags) {
-    this->vtable = &D_8006DA68;
+/* The destructor of the entity class of vtable ITEM_POPUP_VTABLE, which ItemPopup_init installs. */
+void ItemPopup_destroy(Entity *this, s32 flags) {
+    this->vtable = &ITEM_POPUP_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* The update of Unk800CA430: moves it up by 0x30 while it is below 0x79, and every frame after the 12th; deletes
- * it once it is above -0x30. */
-void func_800CA4FC(Unk800CA430 *this) {
+/* The popup's tick: rises by 0x30 while it is below 0x79, and every frame after the 12th; deleted once it is
+ * above -0x30. */
+void ItemPopup_tick(ItemPopup *this) {
     if (this->y > 0x78) {
         this->y -= 0x30;
     }
@@ -933,30 +939,30 @@ void func_800CA4FC(Unk800CA430 *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800CA5AC);
+INCLUDE_ASM("game/nonmatchings/game_0i", ItemPopup_draw);
 
-/* The entity class of virtual table D_8006DA40 (func_800CA768): a point at (0x2C or 0x114, 0xAC) by the side of
- * the chara it keeps the handle of, with the kind of the chara's timed thing at 0x464. */
-typedef struct Unk800CA768 {
+/* The HUD icon of a fighter's item effect (ItemEffectIcon_init, virtual table ITEM_EFFECT_ICON_VTABLE): at
+ * (0x2C or 0x114, 0xAC) by the side of the fighter it keeps the handle of, while that fighter lives. */
+typedef struct ItemEffectIcon {
     /* 0x00 */ Entity entity;
     /* 0x18 */ u32 charaHandle;
-    /* 0x1C */ s32 unk1C;
+    /* 0x1C */ s32 itemKind;
     /* 0x20 */ s16 x;
     /* 0x22 */ s16 y;
     /* 0x24 */ s32 unk24;
-    /* 0x28 */ s32 unk28; /* the chara's unk464.unk0 */
+    /* 0x28 */ s32 effectKind; /* the fighter's itemEffect.kind */
     /* 0x2C */ s32 unk2C;
-} Unk800CA768;
+} ItemEffectIcon;
 
-/* Constructs an entity of D_8006DA40 for chara at x 0x114 when func_80077574 is set for it, else 0x2C, and y 0xAC. */
-Unk800CA768 *func_800CA768(Unk800CA768 *this, Unk80076F34 *chara, s32 arg) {
+/* Constructs the effect icon of itemKind for fighter, by its side: x 0x2C for side 0, else 0x114, and y 0xAC. */
+ItemEffectIcon *ItemEffectIcon_init(ItemEffectIcon *this, Fighter *fighter, s32 itemKind) {
     s16 x;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_8006DA40;
-    this->charaHandle = entityGetHandle(&chara->entity);
-    this->unk1C = arg;
-    if (func_80077574(chara) == 0) {
+    this->entity.vtable = &ITEM_EFFECT_ICON_VTABLE;
+    this->charaHandle = entityGetHandle(&fighter->entity);
+    this->itemKind = itemKind;
+    if (Fighter_getSide(fighter) == 0) {
         x = 0x2C;
     } else {
         x = 0x114;
@@ -964,23 +970,23 @@ Unk800CA768 *func_800CA768(Unk800CA768 *this, Unk80076F34 *chara, s32 arg) {
     this->x = x;
     this->y = 0xAC;
     this->unk24 = 0;
-    this->unk28 = chara->unk464.unk0;
+    this->effectKind = fighter->itemEffect.kind;
     this->unk2C = 0;
     return this;
 }
 
-/* The destructor of the entity class of vtable D_8006DA40, which func_800CA768 installs. */
-void func_800CA7F8(Entity *this, s32 flags) {
-    this->vtable = &D_8006DA40;
+/* The destructor of the entity class of vtable ITEM_EFFECT_ICON_VTABLE, which ItemEffectIcon_init installs. */
+void ItemEffectIcon_destroy(Entity *this, s32 flags) {
+    this->vtable = &ITEM_EFFECT_ICON_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800CA84C);
+INCLUDE_ASM("game/nonmatchings/game_0i", ItemEffectIcon_tick);
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800CA920);
+INCLUDE_ASM("game/nonmatchings/game_0i", ItemEffectIcon_draw);
 
 /* The entity class of virtual table D_8006DA18 (func_800CAACC): follows the point (func_8007A650) of the chara it
  * keeps the handle of for 8 frames, while 0x3C and 0x40 move in opposite directions (which by unk1C). */
@@ -1000,7 +1006,7 @@ typedef struct Unk800CAACC {
 
 /* Constructs an entity of D_8006DA18 for chara at its point, 0x3C and 0x40 starting at 0 and
  * 0x80 when arg2 is 0, else at 0x140 and 0. */
-Unk800CAACC *func_800CAACC(Unk800CAACC *this, Unk80076F34 *chara, s32 arg2, s32 arg3, s32 arg4, s32 arg5) {
+Unk800CAACC *func_800CAACC(Unk800CAACC *this, Fighter *chara, s32 arg2, s32 arg3, s32 arg4, s32 arg5) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006DA18;
     this->charaHandle = entityGetHandle(&chara->entity);
@@ -1032,7 +1038,7 @@ void func_800CAB94(Entity *this, s32 flags) {
 /* The update of Unk800CAACC: deletes it once its chara is gone or after 8 frames, else moves 0x3C by 0x28 and 0x40
  * by 0x10 (in opposite directions, by unk1C) and takes the chara's point again. */
 void func_800CABE8(Unk800CAACC *this) {
-    Unk80076F34 *chara = (Unk80076F34 *)getEntityByHandle(this->charaHandle);
+    Fighter *chara = (Fighter *)getEntityByHandle(this->charaHandle);
 
     if (chara == NULL || this->frame >= 8) {
         entityDelete(&this->entity);
@@ -1059,63 +1065,64 @@ Unk800C3CFC *func_800CAEF0(Unk800C3CFC *this, Vec3 *pos, s32 arg2, s32 arg3) {
     return this;
 }
 
-/* The class of virtual tables D_8006D9C8 (and D_8006D9A8 for the base at 0x18), derived from Unk800C7024: its
- * index picks the word passed to func_800C7024 (D_8006DBC8) and the frame of the pieces func_800CB25C throws. */
-typedef struct Unk800CAF2C {
-    /* 0x00 */ Unk800C7024 base;
+/* The class of virtual tables ITEM_SHOT_VTABLE (and ITEM_SHOT_HIT_VTABLE for the base at 0x18), derived from
+ * Projectile: its index picks the word passed to Projectile_init (ITEM_SHOT_ATTACKS) and the frame of the pieces
+ * ItemShot_throwPiece throws. */
+typedef struct ItemShot {
+    /* 0x00 */ Projectile base;
     /* 0xC0 */ s32 index;
     /* 0xC4 */ s32 angle;
-    /* 0xC8 */ s32 unkC8; /* counts 0 to 3 */
-} Unk800CAF2C;
+    /* 0xC8 */ s32 pieceFrame; /* the frame of the pieces it throws, 0 to 3 */
+} ItemShot;
 
-extern u32 D_8006DBC8[];
-extern VtableEntry D_8006D9A8[];
-extern EntityVtable D_8006D9C8;
+extern u32 ITEM_SHOT_ATTACKS[];
+extern VtableEntry ITEM_SHOT_HIT_VTABLE[];
+extern EntityVtable ITEM_SHOT_VTABLE;
 
-/* Constructs func_800C7024's entity with 0xC0, entry index of D_8006DBC8, 0xA00 and 2, then the virtual tables
- * D_8006D9C8 (and D_8006D9A8 for the base at 0x18). */
-Unk800CAF2C *func_800CAF2C(Unk800CAF2C *this, Unk80076F34 *chara, Vec3 *position, Vec3 *velocity, s32 index,
+/* Constructs Projectile_init's entity with 0xC0, entry index of ITEM_SHOT_ATTACKS, 0xA00 and 2, then the virtual tables
+ * ITEM_SHOT_VTABLE (and ITEM_SHOT_HIT_VTABLE for the base at 0x18). */
+ItemShot *ItemShot_init(ItemShot *this, Fighter *chara, Vec3 *position, Vec3 *velocity, s32 index,
                            s32 angle) {
-    func_800C7024(&this->base, chara, position, velocity, 0xC0, D_8006DBC8[index], 0xA00, 2);
-    this->base.parts.base.vtable = D_8006D9A8;
-    this->base.parts.entity.vtable = &D_8006D9C8;
+    Projectile_init(&this->base, chara, position, velocity, 0xC0, ITEM_SHOT_ATTACKS[index], 0xA00, 2);
+    this->base.parts.base.vtable = ITEM_SHOT_HIT_VTABLE;
+    this->base.parts.entity.vtable = &ITEM_SHOT_VTABLE;
     this->index = index;
     this->angle = angle & 0xFFF;
-    this->unkC8 = 0;
+    this->pieceFrame = 0;
     return this;
 }
-void func_800CB25C(Unk800CAF2C *this);
+void ItemShot_throwPiece(ItemShot *this);
 
-/* The update of Unk800CAF2C: throws a piece (func_800CB25C), steps 0xC8 through 0 to 3, then the base's update. */
-void func_800CAFC4(Unk800CAF2C *this, s32 arg) {
-    func_800CB25C(this);
-    this->unkC8 = (this->unkC8 + 1) & 3;
-    func_800C71DC(&this->base, arg);
+/* The update of ItemShot: throws a piece (ItemShot_throwPiece), steps 0xC8 through 0 to 3, then the base's update. */
+void ItemShot_tick(ItemShot *this, s32 arg) {
+    ItemShot_throwPiece(this);
+    this->pieceFrame = (this->pieceFrame + 1) & 3;
+    Projectile_tick(&this->base, arg);
 }
 
-/* func_800C72D8 for a derived class of Unk800C7024: only when func_80078878 finds an entity in sum, which also
- * gets func_800773F4 with 50 on its character (func_8007AEEC). */
-void func_800CB010(Unk800C7024 *this, Unk80075EE4 *sum) {
+/* Projectile_hit for a derived class of Projectile: only when getHitFighter finds an entity in sum, which also
+ * gets Fighter_addScore with 50 on its character (Fighter_getOpponent). */
+void ItemShot_hit(Projectile *this, CollisionSphere *sum) {
     Entity *target;
 
-    func_8007BDF0(&this->parts.base, sum);
-    func_800C73A8(this, func_800C7358(this));
-    target = func_80078878(sum);
+    Hit_apply(&this->parts.base, sum);
+    Projectile_spawnBurst(this, Projectile_getBurstKind(this));
+    target = getHitFighter(sum);
     if (target != NULL) {
-        func_800773F4(func_8007AEEC((Unk80076F34 *)target), 50);
-        func_800C7474(this, target);
+        Fighter_addScore(Fighter_getOpponent((Fighter *)target), 50);
+        Projectile_spawnHitSpark(this, target);
     }
     entityDelete(&this->parts.entity);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800CB0B0);
+INCLUDE_ASM("game/nonmatchings/game_0i", ItemShot_draw);
 
 struct Unk800CB338 *func_800CB338(struct Unk800CB338 *this, VECTOR *position, VECTOR *velocity, s32 index,
                                   s32 angle);
 
 /* Throws a piece (func_800CB338, 0x60 bytes) from the position, a quarter of the velocity backwards in x and y with
  * up to 8 either way at random, as a sibling. */
-void func_800CB25C(Unk800CAF2C *this) {
+void ItemShot_throwPiece(ItemShot *this) {
     VECTOR velocity;
     Entity *child;
     s32 vx;
@@ -1123,7 +1130,7 @@ void func_800CB25C(Unk800CAF2C *this) {
     /* The match depends on vel.vx read into a local before the other words are copied (the game loads it first). */
     vx = this->base.vel.vx;
     velocity.vz = this->base.vel.vz;
-    velocity.pad = this->base.unk9C;
+    velocity.pad = this->base.velPad;
     velocity.vx = -vx >> 2;
     velocity.vy = -this->base.vel.vy >> 2;
     velocity.vx += (mersenneTwisterGenerate(&RANDOM) & 0xF) - 8;
@@ -1136,26 +1143,26 @@ void func_800CB25C(Unk800CAF2C *this) {
     entityAddSibling(&this->base.parts.entity, child);
 }
 
-/* The entity class of virtual table D_8006D980 (func_800CB338): a sprite of Unk800C2F14 with a frame of
- * D_8006D940 and an angle. */
+/* The entity class of virtual table D_8006D980 (func_800CB338): a sprite of Particle with a frame of
+ * ITEM_SHOT_PIECE_ANIMS and an angle. */
 typedef struct Unk800CB338 {
-    /* 0x00 */ Unk800C2F14 base;
+    /* 0x00 */ Particle base;
     /* 0x58 */ s32 index;
     /* 0x5C */ s32 angle;
 } Unk800CB338;
 
-extern u16 D_8006D940[][10];
+extern u16 ITEM_SHOT_PIECE_ANIMS[][10];
 extern EntityVtable D_8006D980;
 
-INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D940);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_SHOT_PIECE_ANIMS);
 
-/* Constructs an entity of D_8006D980: func_800C2F14 with frame index of D_8006D940, size 0x80 and color
+/* Constructs an entity of D_8006D980: Particle_init with frame index of ITEM_SHOT_PIECE_ANIMS, size 0x80 and color
  * 0x404040. */
 Unk800CB338 *func_800CB338(Unk800CB338 *this, VECTOR *position, VECTOR *velocity, s32 index, s32 angle) {
     /* The match depends on the table's address taken into a local first (the game computes it before index * 20). */
-    u16 (*frames)[10] = D_8006D940;
+    u16 (*frames)[10] = ITEM_SHOT_PIECE_ANIMS;
 
-    func_800C2F14(&this->base, frames[index], position, velocity, 0x80, 0x404040, 0);
+    Particle_init(&this->base, frames[index], position, velocity, 0x80, 0x404040, 0);
     this->base.entity.vtable = &D_8006D980;
     this->index = index;
     this->angle = angle;
@@ -1164,49 +1171,48 @@ Unk800CB338 *func_800CB338(Unk800CB338 *this, VECTOR *position, VECTOR *velocity
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800CB3CC);
 
-/* The destructor of the class of virtual table D_8006DB80: Unk80076308's, inlined. */
-void func_800CB508(Unk80076308 *this, s32 flags) {
-    this->vtable = D_80065164;
+/* The destructor of the class of virtual table ITEM_HIT_LISTENER_VTABLE: CollisionOwner's, inlined. */
+void ItemHitListener_destroy(CollisionOwner *this, s32 flags) {
+    this->vtable = COLLISION_OWNER_VTABLE;
     if (flags & DESTROY_FREE) {
         operatorDelete(this);
     }
 }
 
-/* Constructs an object of the class of vtable D_8006DB80, which derives from the class of
- * D_80065164, with a word. */
-Unk800CB53C *func_800CB53C(Unk800CB53C *this, s32 arg) {
-    this->vtable = D_8006DB80;
-    this->unk4 = arg;
+/* Constructs an item's hit listener for item (Item_init builds the same inline). */
+ItemHitListener *ItemHitListener_init(ItemHitListener *this, Unk800C8DFC *item) {
+    this->base.vtable = ITEM_HIT_LISTENER_VTABLE;
+    this->item = item;
     return this;
 }
 
 /* The destructor of the entity class of vtable D_8006DB20, which func_800C9A88 installs. */
-void func_800CB554(Unk800C90FC *this, s32 flags) {
-    func_800C8920(this, 0);
+void func_800CB554(Item *this, s32 flags) {
+    Item_destroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
 /* The destructor of the entity class of vtable D_8006DAF0, which func_800C9AF4 installs. */
-void func_800CB59C(Unk800C90FC *this, s32 flags) {
-    func_800C8920(this, 0);
+void func_800CB59C(Item *this, s32 flags) {
+    Item_destroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
 /* The destructor of the entity class of vtable D_8006DAC0, which func_800C9CA0 installs. */
-void func_800CB5E4(Unk800C90FC *this, s32 flags) {
-    func_800C8920(this, 0);
+void func_800CB5E4(Item *this, s32 flags) {
+    Item_destroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
 /* The destructor of the entity class of vtable D_8006DA90, which func_800C9D0C installs. */
-void func_800CB62C(Unk800C90FC *this, s32 flags) {
-    func_800C8920(this, 0);
+void func_800CB62C(Item *this, s32 flags) {
+    Item_destroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
@@ -1220,31 +1226,31 @@ void func_800CB674(Entity *this, s32 flags) {
     }
 }
 
-/* A copy of the destructor of the UnkPartsEntity38 class of vtables D_8006D760 and D_8006D740,
- * which func_800C7024 installs: game has 11 identical ones. */
-void func_800CB6BC(UnkPartsEntity38 *this, s32 flags) {
+/* A copy of the destructor of the UnkPartsEntity38 class of vtables PROJECTILE_VTABLE and PROJECTILE_HIT_VTABLE,
+ * which Projectile_init installs: game has 11 identical ones. */
+void ItemShot_destroy(UnkPartsEntity38 *this, s32 flags) {
     ListNode *node;
 
-    this->base.vtable = D_8006D740;
-    this->entity.vtable = &D_8006D760;
-    this->part.vtable = D_80065184;
+    this->base.vtable = PROJECTILE_HIT_VTABLE;
+    this->entity.vtable = &PROJECTILE_VTABLE;
+    this->part.vtable = COLLISION_SHAPE_VTABLE;
     /* listRemove(&this->part.node), in the access order the game's compiler used */
-    node = &this->part.node;
-    this->part.node.next->prev = this->part.node.prev;
-    node->prev->next = this->part.node.next;
-    this->part.node.next = node;
-    this->part.node.prev = node;
-    this->base.vtable = D_80065164;
+    node = &this->part.link;
+    this->part.link.next->prev = this->part.link.prev;
+    node->prev->next = this->part.link.next;
+    this->part.link.next = node;
+    this->part.link.prev = node;
+    this->base.vtable = COLLISION_OWNER_VTABLE;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* A copy of the destructor of the entity class of vtable D_8006D59C, which func_800C2F14,
- * func_800C2FBC and func_800C6820 install: game has 15 identical ones. */
+/* A copy of the destructor of the entity class of vtable PARTICLE_VTABLE, which Particle_init,
+ * Particle_initById and Particle_initStill install: game has 15 identical ones. */
 void func_800CB75C(Entity *this, s32 flags) {
-    this->vtable = &D_8006D59C;
+    this->vtable = &PARTICLE_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
@@ -1252,17 +1258,17 @@ void func_800CB75C(Entity *this, s32 flags) {
 }
 
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D980);
-INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D9A8);
-INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D9C8);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_SHOT_HIT_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_SHOT_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D9F0);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DA18);
-INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DA40);
-INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DA68);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_EFFECT_ICON_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_POPUP_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DA90);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DAC0);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DAF0);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DB20);
-INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DB50);
-INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DB80);
-INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DBA0);
-INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DBC8);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_HIT_LISTENER_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_SPAWNER_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_SHOT_ATTACKS);

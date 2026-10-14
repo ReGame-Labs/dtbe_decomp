@@ -79,7 +79,7 @@ TmdHeader *charaGetTmd(Chara *chara);
 AnimData *charaGetAnimData(Chara *chara);
 u16 charaGetLoopFrame(Chara *chara, s32 clip);
 u16 charaGetClipPlays(Chara *chara, s32 clip);
-s32 func_800312D8(Chara *chara);
+s32 charaGetTmdObjectCount(Chara *chara);
 s32 func_80031300(void);
 s32 func_80031308(void);
 void tintTim(TIM_IMAGE *tim, HsvColor *tint);

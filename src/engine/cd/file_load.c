@@ -115,7 +115,7 @@ void *loadFileWith(char *path, void *(*allocFile)(s32), void *(*allocData)(s32))
     CompressedHeader *file = loadRawFileWith(path, allocFile);
     void *data;
 
-    if (func_8003DF40(file, COMPRESSED_MAGIC, sizeof(COMPRESSED_MAGIC)) == 0) {
+    if (memcmp(file, COMPRESSED_MAGIC, sizeof(COMPRESSED_MAGIC)) == 0) {
         data = allocData(file->size);
         decompressStreamTo(data, (u8 *)(file + 1));
     } else {
@@ -163,7 +163,7 @@ void finishLoadFileAsync(void *buffer, u32 size, char *name, s32 user) {
     CompressedHeader *file = buffer;
     void *data;
 
-    if (func_8003DF40(file, COMPRESSED_MAGIC, sizeof(COMPRESSED_MAGIC)) == 0) {
+    if (memcmp(file, COMPRESSED_MAGIC, sizeof(COMPRESSED_MAGIC)) == 0) {
         data = mainHeapAllocBest(file->size);
         decompressStreamTo(data, (u8 *)(file + 1));
     } else {
@@ -185,7 +185,7 @@ void *decompressFileIfCompressed(CompressedHeader *file, s32 size) {
     u8 *stream;
     void *data;
 
-    if (func_8003DF40(file, COMPRESSED_MAGIC, sizeof(COMPRESSED_MAGIC)) != 0) {
+    if (memcmp(file, COMPRESSED_MAGIC, sizeof(COMPRESSED_MAGIC)) != 0) {
         return file;
     }
     streamSize = size - sizeof(CompressedHeader);
@@ -205,7 +205,7 @@ void *decompressFileIfCompressed(CompressedHeader *file, s32 size) {
 void *decompressFile(CompressedHeader *file) {
     void *data;
 
-    func_8003DF40(file, COMPRESSED_MAGIC, sizeof(COMPRESSED_MAGIC));
+    memcmp(file, COMPRESSED_MAGIC, sizeof(COMPRESSED_MAGIC));
     data = mainHeapAllocBest(file->size);
     decompressStreamTo(data, (u8 *)(file + 1));
     return data;
@@ -219,5 +219,5 @@ void *decompressStreamTo(void *dst, u8 *src) {
 
 /* Returns whether a loaded file is compressed. */
 s32 isFileCompressed(CompressedHeader *file) {
-    return func_8003DF40(file, COMPRESSED_MAGIC, sizeof(COMPRESSED_MAGIC)) == 0;
+    return memcmp(file, COMPRESSED_MAGIC, sizeof(COMPRESSED_MAGIC)) == 0;
 }

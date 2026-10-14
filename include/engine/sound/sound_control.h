@@ -78,6 +78,12 @@ typedef struct SoundControl {
 /* the most sequences of a SEP, which libsnd's table is sized for */
 #define SOUND_SEQ_MAX 8
 
+/* the menus' sound effects */
+#define SOUND_MENU_CURSOR 0xF   /* the cursor moved */
+#define SOUND_MENU_CONFIRM 0x10
+#define SOUND_MENU_BACK 0x11
+#define SOUND_MENU_REFUSE 0x12  /* a locked item, a wrong code */
+#define SOUND_MENU_STEP 0x13    /* an option's value moved */
 /* the sound effect of the pause */
 #define SOUND_PAUSE 0x14
 

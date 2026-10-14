@@ -18,12 +18,16 @@ rankingTaskInit = 0x80068178; // type:func
 creditsTaskInit = 0x8006B070; // type:func
 optionTaskInit = 0x8006D684; // type:func
 
-// The JP build's other names there, at the US address the same code calls
-func_80065AE4 = 0x80065AC4; // type:func
-func_80066084 = 0x80066064; // type:func
-func_80066F74 = 0x80066F54; // type:func
-func_800673A4 = 0x80067384; // type:func
-func_800681A4 = 0x80068184; // type:func
-func_8006A43C = 0x8006A41C; // type:func
-func_80076A00 = 0x80076AA4; // type:func
-func_80076A5C = 0x80076B00; // type:func
+// the "test" overlay's (not on the disc), named after the system menu
+// commands that start them
+hanamasuTestTaskInit = 0x80065AC4; // type:func
+iwanagaTestTaskInit = 0x80066064; // type:func
+teradaTestTaskInit = 0x80066F54; // type:func
+shohyamaTestTaskInit = 0x80067384; // type:func
+modelViewTaskInit = 0x80068184; // type:func
+mapViewTaskInit = 0x8006A41C; // type:func
+
+// the functions of game_0c that main calls on the list of the mesh scene links
+// that have collision lines (COLLISION_LINKS, include/overlay.h)
+getCollisionLinks = 0x80076AA4; // type:func
+moveCollisionLinkToBack = 0x80076B00; // type:func

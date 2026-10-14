@@ -57,7 +57,7 @@ Task *createMovieTask(void) {
     return movieTaskInit(operatorNew(0x28));
 }
 
-/* Creates the main menu ("MainMenu"): its result is the choice (0 to 5), or
+/* Creates the main menu ("MainMenu"): its result is a MAIN_MENU_CHOICE_*, or
  * another to go back. */
 Task *createMainMenuTask(void) {
     return mainMenuTaskInit(operatorNew(0x90), 0);
@@ -141,22 +141,22 @@ next:
     case SEQUENCER_MAIN_MENU:
         gameStateResetLastPicks(&GAME_STATE);
         switch (appSequencerRunScene(this, createMainMenuTask, TITLE_OVERLAY, 0)) {
-        case 0:
+        case MAIN_MENU_CHOICE_VS_COMPUTER:
             this->state = SEQUENCER_VS_COMPUTER;
             break;
-        case 1:
+        case MAIN_MENU_CHOICE_VERSUS:
             this->state = SEQUENCER_VERSUS;
             break;
-        case 2:
+        case MAIN_MENU_CHOICE_VERSUS_COMPUTER:
             this->state = SEQUENCER_VERSUS_COMPUTER;
             break;
-        case 3:
+        case MAIN_MENU_CHOICE_BONUS_VS_COMPUTER:
             this->state = SEQUENCER_BONUS_VS_COMPUTER;
             break;
-        case 4:
+        case MAIN_MENU_CHOICE_BONUS_VERSUS:
             this->state = SEQUENCER_BONUS_VERSUS;
             break;
-        case 5:
+        case MAIN_MENU_CHOICE_OPTIONS:
             this->state = SEQUENCER_OPTIONS;
             break;
         default:
@@ -330,8 +330,8 @@ void appSequencerRunRandomFights(AppSequencer *this) {
     }
 }
 
-/* Runs a scene: loads its overlay, behind the loading screen when asked, and
- * waits for its task to end. The game keeps the path buffer and the loading
+/* Runs a scene: loads its overlay, behind the loading screen when asked,
+ * waits for its task to end and returns SYSTEM_CONTEXT.sceneResult. The game keeps the path buffer and the loading
  * screen, locals of two different blocks, in one stack slot, which g++ does
  * and gcc does not. Under cc1plus the C matches whole: a counter declared in
  * each for (the loading screen's counts 3 down to 0), and scene's handle

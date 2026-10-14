@@ -10,18 +10,21 @@
 
 EXTERN_C_BEGIN
 
-/* One side of a fight. */
-typedef struct Fighter {
+/* One side of a fight, as the select scene sets it up. */
+typedef struct FighterSetup {
     /* 0x00 */ s32 character;
     /* 0x04 */ s32 computer; /* played by the computer, not with a pad */
-    /* 0x08 */ s32 unk8;
+    /* 0x08 */ s32 tamer;    /* which of the character's two tamers (L1 or R1 held at the pick) */
     /* 0x0C */ s32 altColor; /* the other colors, when both sides look alike */
-    /* 0x10 */ s32 unk10;
-    /* 0x14 */ s32 unk14;
-} Fighter; /* size 0x18 */
+    /* 0x10 */ s32 score; /* the fights add their tallies to it */
+    /* 0x14 */ s32 versusGauge; /* 0 to VERSUS_GAUGE_MAX, picked on the versus select screen */
+} FighterSetup; /* size 0x18 */
 
 /* the sides of a fight */
 #define FIGHTER_COUNT 2
+
+/* FighterSetup.versusGauge's top level, and its default */
+#define VERSUS_GAUGE_MAX 7
 
 /* how many characters there are */
 #define CHARACTER_COUNT 24
@@ -65,8 +68,16 @@ typedef struct Fighter {
 #define ARENA_BOSS 6
 /* the arena of the first bonus game: the bonus games' follow the fights' */
 #define ARENA_BONUS ARENA_FIGHT_COUNT
-/* the bonus games (the debug menu's "Bonus #0" to "Bonus #2") */
+/* the bonus games (the debug menu's "Bonus #0" to "Bonus #2"), by their guide's
+ * title: GameState.bonusGame, the arena less ARENA_BONUS (st07, st08, st09) */
+#define BONUS_GAME_BASKETBALL 0
+#define BONUS_GAME_EVOLUTION_RACE 1
+#define BONUS_GAME_TARGET 2
 #define BONUS_GAME_COUNT 3
+/* the bit of an arena in SaveData.bonusGamesUnlocked */
+#define ARENA_BIT(arena) (1 << (arena))
+/* the bits of the bonus games' arenas */
+#define BONUS_GAME_ARENA_BITS (ARENA_BIT(ARENA_BONUS + BONUS_GAME_COUNT) - ARENA_BIT(ARENA_BONUS))
 /* the most fights one run of the game goes through */
 #define RUN_STEP_COUNT 9
 /* the step of a run that is a bonus game */
@@ -86,13 +97,20 @@ typedef struct Fighter {
 /* GameState.selectFlags: what the select scene picks */
 #define SELECT_SIDE_0 0x1     /* side 1's character */
 #define SELECT_SIDE_1 0x2     /* side 2's character */
-#define SELECT_VERSUS 0x4     /* the arena, and each side's unk14 */
+#define SELECT_VERSUS 0x4     /* the arena, and each side's versusGauge */
 #define SELECT_BONUS 0x8      /* the bonus game */
+#define SELECT_COMPUTER_0 0x10 /* side 1's character for the computer */
 #define SELECT_COMPUTER_1 0x20 /* side 2's character for the computer */
 
-/* GameState.roundResult: the secret character came in; the fight starts
- * again against it */
-#define ROUND_SECRET_OPPONENT 6
+/* GameState.roundResult: how the fight's last round ended (Fight_playRound) */
+#define ROUND_STOPPED 0         /* a stage stopped it (Fight_stopRound): the fight ends */
+#define ROUND_WON_SIDE_0 1
+#define ROUND_WON_SIDE_1 2
+#define ROUND_DRAW 3            /* time up with the same life */
+#define ROUND_DOUBLE_KO 4       /* both sides' life ran out */
+#define ROUND_CHALLENGER 5      /* a player pressed Start on a computer side */
+#define ROUND_SECRET_OPPONENT 6 /* the secret character came in; the fight starts again against it */
+#define ROUND_QUIT 7            /* the pause menu's quit */
 
 /* The state of the game: the arenas and opponents of the run, the options
  * and progress (SaveData), the button maps and the two sides. */
@@ -120,8 +138,8 @@ typedef struct GameState {
     /* 0x314 */ s32 lastCharacters[FIGHTER_COUNT]; /* by side: picked for the last single fight */
     /* 0x31C */ s32 lastVersusArena; /* picked for the last versus fight */
     /* 0x320 */ s32 lastBonusArena;  /* picked for the last bonus game */
-    /* 0x324 */ Fighter fighters[FIGHTER_COUNT];
-    /* 0x354 */ Fighter saved[FIGHTER_COUNT]; /* the sides of the last fight */
+    /* 0x324 */ FighterSetup fighters[FIGHTER_COUNT];
+    /* 0x354 */ FighterSetup saved[FIGHTER_COUNT]; /* the sides of the last fight */
     /* 0x384 */ s16 fighterSounds[FIGHTER_COUNT]; /* by side: a sound of its character, or 0 */
     /* 0x388 */ s16 sounds[CHARACTER_COUNT]; /* by character: one of its CHARACTER_SOUNDS */
 } GameState; /* size 0x3B8 */
@@ -189,12 +207,12 @@ extern GameState GAME_STATE;
  * (Agumon's is WarGreymon) */
 extern s32 CHARACTER_EVOLUTIONS[CHARACTER_COUNT];
 /* by character: the arena of its home (gameStateGetArena), the boss's or one
- * past the bonus games'; 10 is 12 for a side whose unk8 is 0 */
+ * past the bonus games'; 10 is 12 for a side whose tamer is 0 */
 extern u8 CHARACTER_HOMES[CHARACTER_COUNT];
 /* by character: the first of the FIGHTER_SOUND_COUNT sounds of a side whose
- * Fighter.unk8 is set, 0 for none */
+ * FighterSetup.tamer is 1, 0 for none */
 extern s16 D_800102D4[CHARACTER_COUNT];
-/* the same, for a side whose unk8 is 0 */
+/* the same, for a side whose tamer is 0 */
 extern s16 D_80010304[CHARACTER_COUNT];
 /* by character: its group (0 to 3), by whose preferences (ARENA_PREFERENCES)
  * a run orders its arenas and opponents */
@@ -257,7 +275,7 @@ void gameStateSetOpponent(GameState *gameState, s32 character);
 void gameStateSetUpDemo(GameState *gameState);
 s32 gameStateGetPlayerSide(GameState *gameState);
 s32 gameStateHasPlayerWon(GameState *gameState);
-s32 func_8001E3E4(GameState *gameState);
+s32 gameStateGetPlayerScore(GameState *gameState);
 #ifdef __cplusplus
 void joinStateReset(JoinState *joinState);
 void joinStateSetLeft(JoinState *joinState);

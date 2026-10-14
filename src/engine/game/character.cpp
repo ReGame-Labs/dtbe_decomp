@@ -265,7 +265,7 @@ u16 charaGetClipPlays(Chara *chara, s32 clip) {
 }
 
 /* What tmdHeaderGetObjectCount gives for the character's model. */
-s32 func_800312D8(Chara *chara) {
+s32 charaGetTmdObjectCount(Chara *chara) {
     return tmdHeaderGetObjectCount(charaGetTmd(chara));
 }
 

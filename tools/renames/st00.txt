@@ -1,0 +1,57 @@
+# The names of st00's own symbols: run with tools/rename.py --overlay st00 -f tools/renames/st00.txt
+
+# StageHit (stages.txt): a hit of the stage; its slot 0x08 adds its damage and knockback into the touched sphere
+D_800D3ADC STAGE_HIT_VTABLE
+func_800D9970 StageHit_init
+func_800D99AC StageHit_apply
+func_800DA14C StageHit_destroy
+func_800DA180 StageHit_setKnockback
+func_800DA19C StageHit_setDamage
+# St00GroupDrawer (stages.txt): an entity whose draw draws the stage's Group at 0x1060 (the mesh of node 28)
+D_800D3AB4 ST00_GROUP_DRAWER_VTABLE
+func_800D7978 St00GroupDrawer_init
+func_800D7A24 St00GroupDrawer_draw
+func_800D79D0 St00GroupDrawer_destroy
+
+# StageMachine: STAGE_NAMES' "Machine" for arena 0 (game_main.c constructs it for GAME_STATE.arena 0, 0x10C4 bytes)
+Unk800D3B74 StageMachine
+D_800D3AFC STAGE_MACHINE_VTABLE
+func_800D3B74 StageMachine_init
+func_800D3C34 StageMachine_destroy
+# its overrides of Fight's slots (STAGE_MACHINE_VTABLE: 0x08, 0x20, 0x38)
+func_800D4198 StageMachine_startRound
+func_800D4A70 StageMachine_tickScenery
+func_800D4AE8 StageMachine_prepareNextRound
+# the stage's own steps: StoreImage of its CLUT rectangle; the group drawer it makes for node 28; the angle
+# stepped by 0x40; the round's fields cleared with the item spawner made (createItemSpawner), from startRound
+func_800D4074 st00_readClut
+func_800D4B0C st00_createGroupDrawer
+func_800D704C st00_turnAngle
+func_800D3CA8 st00_resetRound
+# St00SlidingSprites: 16 textured quads (buildPolyFT4) sliding out from x +-0x880, 2 more every 16 frames
+Unk800D950C St00SlidingSprites
+D_800D3924 ST00_SLIDING_SPRITES_VTABLE
+func_800D950C St00SlidingSprites_init
+func_800D9614 St00SlidingSprites_tick
+func_800D977C St00SlidingSprites_draw
+func_800D95C0 St00SlidingSprites_destroy
+# St00CrossingSprites: 16 textured quads crossing the +-0xB54 square from a random side, one more every 8 frames
+D_800D394C ST00_CROSSING_SPRITES_VTABLE
+func_800D8ED4 St00CrossingSprites_init
+func_800D9008 St00CrossingSprites_tick
+func_800D932C St00CrossingSprites_draw
+func_800D8FB4 St00CrossingSprites_destroy
+# St00ColorQuad: a 512 by 512 quad of colour 0x208080 at z -0x200 on a mesh node's world matrix
+Unk800D8C0C St00ColorQuad
+D_800D3974 ST00_COLOR_QUAD_VTABLE
+func_800D8C0C St00ColorQuad_init
+func_800D8CF4 St00ColorQuad_tick
+func_800D8D48 St00ColorQuad_draw
+func_800D8CA0 St00ColorQuad_destroy
+# St00SignalQuads: two quads, teal, red while the stage's 0x1050 is set
+Unk800D8930 St00SignalQuads
+D_800D399C ST00_SIGNAL_QUADS_VTABLE
+func_800D8930 St00SignalQuads_init
+func_800D8A58 St00SignalQuads_tick
+func_800D8AB4 St00SignalQuads_draw
+func_800D8A04 St00SignalQuads_destroy

@@ -1,4 +1,5 @@
-/* Entity classes the fighters derive from (virtual tables D_8006D29C to D_8006D59C). */
+/* The battle's sprite effects: particles and their emitters, hit sparks, sparkles, the evolution's cut-in and
+ * flash, and the fighters' motion trails (virtual tables PARTICLE_IMPLOSION_VTABLE to PARTICLE_VTABLE). */
 
 #include "common.h"
 #include "battle/game_classes.h"
@@ -11,51 +12,55 @@
 
 extern EntityVtable D_8006D54C;
 extern EntityVtable D_8006D524;
-extern EntityVtable D_8006D29C;
-extern EntityVtable D_8006D2C4;
+extern EntityVtable PARTICLE_IMPLOSION_VTABLE;
+extern EntityVtable PARTICLE_BURST_VTABLE;
 extern EntityVtable D_8006D2EC;
 extern EntityVtable D_8006D45C;
 extern EntityVtable D_8006D484;
-extern EntityVtable D_8006D4AC;
+extern EntityVtable SPARKLE_VTABLE;
 
-/* The entity func_800C4204 constructs (virtual table D_8006D3E4), with a Sprite at 0x28. */
-typedef struct Unk800C4204 {
+/* The cut-in of an evolving side (CutIn_init, virtual table CUTIN_VTABLE): the side's image, already in VRAM,
+ * slides in with speed lines for 60 frames, then fades. */
+typedef struct CutIn {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ u8 unk18[0x28 - 0x18];
+    /* 0x18 */ s32 side;
+    /* 0x1C */ s32 slide; /* eases to 0xAD */
+    /* 0x20 */ s32 alpha; /* 0xFF, then 0x20 less a frame */
+    /* 0x24 */ s32 frame; /* 60 frames of speed lines */
     /* 0x28 */ Sprite sprite;
-} Unk800C4204;
-void func_800C2E84(Unk800C2CCC *sprite, PolyFT4Shape *shape, SVECTOR *corners);
+} CutIn;
+void spriteAnimFillShape(SpriteAnim *sprite, PolyFT4Shape *shape, SVECTOR *corners);
 
-void func_800C5834(Unk800C5680 *this);
-void func_800C59D4(Unk800C5680 *this);
+void Trail_record(Trail *this);
+void Trail_fadeColors(Trail *this);
 
 Entity *func_800C38D8(Entity *this, Vec3 *arg1, Vec3 *arg2, s32 arg3, s32 arg4);
 
 /* The constructors of the particle classes of vtables D_8006D54C, D_8006D524 and D_8006D4D4, which
- * func_800C28B8 gets inlined like func_8006D574_init (out-of-line copies: func_800C69C4, func_800C6A74; the
+ * createParticle gets inlined like func_8006D574_init (out-of-line copies: func_800C69C4, func_800C6A74; the
  * D_8006D4D4 one with size and color, unlike func_8006D4D4_init). */
 static inline void func_8006D54C_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
-    func_800C2FBC((Unk800C2F14 *)this, frame + 3, pos, vel, size, 0x808080, 0);
+    Particle_initById((Particle *)this, frame + 3, pos, vel, size, 0x808080, 0);
     this->vtable = &D_8006D54C;
 }
 
 static inline void func_8006D524_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
-    func_800C2FBC((Unk800C2F14 *)this, 6, pos, vel, size, color, 0);
+    Particle_initById((Particle *)this, 6, pos, vel, size, color, 0);
     this->vtable = &D_8006D524;
 }
 
 static inline void func_8006D4D4_initSized(Entity *this, VECTOR *pos, s32 size, u32 color) {
-    func_800C2FBC((Unk800C2F14 *)this, 8, pos, &D_80010814, size, color, 0);
+    Particle_initById((Particle *)this, 8, pos, &ZERO_VECTOR, size, color, 0);
     this->vtable = &D_8006D4D4;
 }
 
 /* Creates a particle entity of a kind (0 to 11) at pos moving by vel, with size and color: 0 to 6 and 8 are
- * func_800C2FBC's sprites on that frame (0 to 5 grey, 8 still) with the inlined constructors of D_8006D574,
- * D_8006D54C, D_8006D524 and D_8006D4D4, 7 func_800C32E0's, 9 to 11 func_800C3654's. NULL for any other kind.
- * pos and vel are VECTORs as func_800C2FBC takes them; the constructors that take a Vec3 get them cast.
- * The match depends on a child per case (a new-expression each): the inlined-constructor cases keep it in s1
- * and the others in s0, so they are not one variable. */
-Entity *func_800C28B8(s32 kind, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
+ * Particle_initById's sprites on that frame (0 to 5 grey, 8 still) with the inlined constructors of
+ * SPIN_PARTICLE_VTABLE, D_8006D54C, D_8006D524 and D_8006D4D4, 7 HitSpark_init's, 9 to 11 Sparkle_init's. NULL for any
+ * other kind. pos and vel are VECTORs as Particle_initById takes them; the constructors that take a Vec3 get them cast.
+ * The match depends on a child per case (a new-expression each): the inlined-constructor cases keep it in s1 and the
+ * others in s0, so they are not one variable. */
+Entity *createParticle(s32 kind, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
     switch (kind) {
     case 0: {
         Entity *child = allocEntityMemory(0x58);
@@ -117,7 +122,7 @@ Entity *func_800C28B8(s32 kind, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
         Entity *child = allocEntityMemory(0x48);
 
         if (child != NULL) {
-            func_800C32E0(entityOperatorNewAt(0x48, child), (Vec3 *)pos, vel, size, color);
+            HitSpark_init(entityOperatorNewAt(0x48, child), (Vec3 *)pos, vel, size, color);
         }
         return child;
     }
@@ -133,7 +138,7 @@ Entity *func_800C28B8(s32 kind, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
         Entity *child = allocEntityMemory(0x5C);
 
         if (child != NULL) {
-            func_800C3654(entityOperatorNewAt(0x5C, child), (Vec3 *)pos, (Vec3 *)vel, size, color, 9);
+            Sparkle_init(entityOperatorNewAt(0x5C, child), (Vec3 *)pos, (Vec3 *)vel, size, color, 9);
         }
         return child;
     }
@@ -157,37 +162,38 @@ Entity *func_800C28B8(s32 kind, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
     return NULL;
 }
 
-void func_800C2D04(Unk800C2CCC *this);
+void spriteAnimRewind(SpriteAnim *this);
 
-/* Constructs an Unk800C2CCC on frame: keeps the 0x100 bit of flags as 0x10, then its corners (func_800C2D04). */
-Unk800C2CCC *func_800C2CCC(Unk800C2CCC *this, u16 *frame, s32 flags) {
-    this->frame = frame;
+/* Constructs a sprite animation on its row of PARTICLE_ANIMS: keeps the 0x100 bit of flags as 0x10, then starts
+ * at the first cell (spriteAnimRewind). */
+SpriteAnim *spriteAnimInit(SpriteAnim *this, u16 *anim, s32 flags) {
+    this->anim = anim;
     this->flags = (flags & 0x100) >> 4;
-    func_800C2D04(this);
+    spriteAnimRewind(this);
     return this;
 }
 
-/* Sets the corners of the sprite from its frame's x, y, w and h. */
-void func_800C2D04(Unk800C2CCC *this) {
-    u16 *frame = this->frame;
+/* Goes back to the first cell: the anim's x and y, one cell wide and high. */
+void spriteAnimRewind(SpriteAnim *this) {
+    u16 *anim = this->anim;
 
-    this->left = frame[0];
-    this->top = frame[1];
-    this->right = frame[0] + frame[2] - 1;
-    this->bottom = frame[1] + frame[3] - 1;
+    this->left = anim[0];
+    this->top = anim[1];
+    this->right = anim[0] + anim[2] - 1;
+    this->bottom = anim[1] + anim[3] - 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C2D58);
+INCLUDE_ASM("game/nonmatchings/game_0g", spriteAnimStep);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C2DF4);
+INCLUDE_ASM("game/nonmatchings/game_0g", spriteAnimBuildShape);
 
 /* Makes shape a PolyFT4Shape of the sprite: the four corners, its color, the uvs from its corners (their low
- * bytes) and the clut and tpage words of the frame (halfwords 8 and 9) with the flags of the sprite. The match
- * depends on the frame local (this->frame twice reloads it after the clut store) and on reading the corners
+ * bytes) and the clut and tpage words of the anim (halfwords 8 and 9) with the flags of the sprite. The match
+ * depends on the anim local (this->anim twice reloads it after the clut store) and on reading the corners
  * top, left, right, bottom first. */
-void func_800C2E84(Unk800C2CCC *this, PolyFT4Shape *shape, SVECTOR *corners) {
+void spriteAnimFillShape(SpriteAnim *this, PolyFT4Shape *shape, SVECTOR *corners) {
     s32 top, left, right, bottom;
-    u16 *frame;
+    u16 *anim;
 
     shape->corners[0] = &corners[0];
     shape->corners[1] = &corners[1];
@@ -202,43 +208,42 @@ void func_800C2E84(Unk800C2CCC *this, PolyFT4Shape *shape, SVECTOR *corners) {
     shape->uv1 = left | (bottom << 8);
     shape->uv2 = right | (top << 8);
     shape->uv3 = right | (bottom << 8);
-    frame = this->frame;
-    shape->clut = frame[8] + (this->flags << 10);
-    shape->tpage = frame[9] | this->flags;
+    anim = this->anim;
+    shape->clut = anim[8] + (this->flags << 10);
+    shape->tpage = anim[9] | this->flags;
 }
 
-/* Constructs a sprite entity: the given frame, moved from pos by vel (func_800C3078), size and color. */
-Unk800C2F14 *func_800C2F14(Unk800C2F14 *this, u16 *frame, VECTOR *pos, VECTOR *vel, s32 size, u32 color,
-                           s32 flags) {
+/* Constructs a particle on an anim row, at pos moving by vel (Particle_setMotion), with size and color. */
+Particle *Particle_init(Particle *this, u16 *anim, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags) {
     entityInit(&this->entity, 0);
-    func_800C2CCC(&this->sprite, frame, flags);
-    this->entity.vtable = &D_8006D59C;
-    func_800C3078(this, pos, vel, size, color);
+    spriteAnimInit(&this->sprite, anim, flags);
+    this->entity.vtable = &PARTICLE_VTABLE;
+    Particle_setMotion(this, pos, vel, size, color);
     return this;
 }
 
-/* the sprite frames of func_800C2FBC: x, y, w, h, ..., clut and tpage at 8 and 9 */
-extern u16 D_8006D5C4[][10];
+/* the particles' anims: x, y, cell width, cell height, strip width, cell count, step mask, 0, clut, tpage */
+extern u16 PARTICLE_ANIMS[][10];
 
-/* Constructs a sprite entity like func_800C2F14, with entry frame of D_8006D5C4. The match depends on the table
- * taken into a local first (its address is loaded before the index is scaled). */
-Unk800C2F14 *func_800C2FBC(Unk800C2F14 *this, s32 frame, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags) {
-    u16 (*frames)[10];
+/* Constructs a particle like Particle_init, on row anim of PARTICLE_ANIMS. The match depends on the table taken
+ * into a local first (its address is loaded before the index is scaled). */
+Particle *Particle_initById(Particle *this, s32 anim, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags) {
+    u16 (*anims)[10];
 
     entityInit(&this->entity, 0);
-    frames = D_8006D5C4;
-    func_800C2CCC(&this->sprite, frames[frame], flags);
-    this->entity.vtable = &D_8006D59C;
-    func_800C3078(this, pos, vel, size, color);
+    anims = PARTICLE_ANIMS;
+    spriteAnimInit(&this->sprite, anims[anim], flags);
+    this->entity.vtable = &PARTICLE_VTABLE;
+    Particle_setMotion(this, pos, vel, size, color);
     return this;
 }
 
 /* Sets the sprite's motion: at pos with velocity vel, size and color, counters at 0. */
-void func_800C3078(Unk800C2F14 *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
+void Particle_setMotion(Particle *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
     s32 x, y, z;
     s32 dx, dy, dz;
 
-    this->unk40 = 0;
+    this->cell = 0;
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
@@ -249,135 +254,135 @@ void func_800C3078(Unk800C2F14 *this, VECTOR *pos, VECTOR *vel, s32 size, u32 co
     dy = vel->vy;
     dz = vel->vz;
     this->sprite.size = size;
-    this->sprite.unk6 = 0;
-    this->unk54 = 0;
+    this->sprite.angle = 0;
+    this->age = 0;
     this->sprite.color = color;
-    this->unk44.vx = dx;
-    this->unk44.vy = dy;
-    this->unk44.vz = dz;
+    this->vel.vx = dx;
+    this->vel.vy = dy;
+    this->vel.vz = dz;
 }
 
-void func_800C2D58(Unk800C2CCC *this);
+void spriteAnimStep(SpriteAnim *this);
 
-/* Steps the sprite's frame (func_800C2D58) and returns its frame count, one more. */
-s32 func_800C30C4(Unk800C2F14 *this) {
-    func_800C2D58(&this->sprite);
-    return ++this->unk40;
+/* Steps the sprite to its next cell (spriteAnimStep) and returns the cells stepped, one more. */
+s32 Particle_stepAnim(Particle *this) {
+    spriteAnimStep(&this->sprite);
+    return ++this->cell;
 }
 
-/* Has func_800C2E84 make shape of the sprite with these corners, then sets bit 3 of its flags. */
-void func_800C3100(Unk800C2F14 *this, PolyFT4Shape *shape, SVECTOR *corners) {
-    func_800C2E84(&this->sprite, shape, corners);
+/* Has spriteAnimFillShape make shape of the sprite with these corners, then sets bit 3 of its flags. */
+void Particle_buildShape(Particle *this, PolyFT4Shape *shape, SVECTOR *corners) {
+    spriteAnimFillShape(&this->sprite, shape, corners);
     shape->flags |= 8;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C3134);
+INCLUDE_ASM("game/nonmatchings/game_0g", Particle_tick);
 
-void func_800C2DF4(Unk800C2CCC *sprite, PolyFT4Shape *shape);
+void spriteAnimBuildShape(SpriteAnim *sprite, PolyFT4Shape *shape);
 
-/* The draw method of the sprite entities (D_8006D59C and the classes derived from it): func_800C2DF4 makes the
- * shape of the sprite, bit 3 set, and buildPolyFT4 puts it in the camera's ordering table. The match depends on
- * the shape's address kept in a pointer (it stays in a saved register across func_800C2DF4). */
-void func_800C3238(Unk800C2F14 *this, Camera *camera) {
+/* The draw method of the sprite entities (PARTICLE_VTABLE and the classes derived from it): spriteAnimBuildShape makes
+ * the shape of the sprite, bit 3 set, and buildPolyFT4 puts it in the camera's ordering table. The match depends on the
+ * shape's address kept in a pointer (it stays in a saved register across spriteAnimBuildShape). */
+void Particle_draw(Particle *this, Camera *camera) {
     PolyFT4Shape buffer;
     PolyFT4Shape *shape = &buffer;
 
     shape->flags = 0;
-    func_800C2DF4(&this->sprite, shape);
+    spriteAnimBuildShape(&this->sprite, shape);
     shape->flags |= 8;
     PRIM_BUFFER_FREE = buildPolyFT4(shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
 }
 
-/* The first method of D_8006D54C and D_8006D574: turns the sprite by twice the low half of the velocity's x, grows
- * it by 8, then the base's (func_800C3134) with arg. The game reads that x with lhu: only its low half counts. */
-void func_800C32A4(Unk800C2F14 *this, s32 arg) {
-    this->sprite.unk6 += (u16)this->unk44.vx * 2;
+/* The first method of D_8006D54C and SPIN_PARTICLE_VTABLE: turns the sprite by twice the low half of the velocity's x,
+ * grows it by 8, then the base's (Particle_tick) with arg. The game reads that x with lhu: only its low half counts. */
+void SpinParticle_tick(Particle *this, s32 arg) {
+    this->sprite.angle += (u16)this->vel.vx * 2;
     this->sprite.size += 8;
-    func_800C3134(this, arg);
+    Particle_tick(this, arg);
 }
 
-/* Constructs an Unk800C32E0 at position, turned the way of dir (its y and x, ratan2), with color. The match depends
- * on the frame table taken into a local first, as in func_800C2FBC. */
-Unk800C32E0 *func_800C32E0(Unk800C32E0 *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color) {
+/* Constructs an HitSpark at position, turned the way of dir (its y and x, ratan2), with color. The match depends
+ * on the frame table taken into a local first, as in Particle_initById. */
+HitSpark *HitSpark_init(HitSpark *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color) {
     u16 (*frames)[10];
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
-    frames = D_8006D5C4;
-    func_800C2CCC(&this->sprite, frames[7], 0);
-    this->entity.vtable = &D_8006D4FC;
+    frames = PARTICLE_ANIMS;
+    spriteAnimInit(&this->sprite, frames[7], 0);
+    this->entity.vtable = &HIT_SPARK_VTABLE;
     x = position->vx;
     y = position->vy;
     z = position->vz;
     this->sprite.pos.vx = x;
     this->sprite.pos.vy = y;
     this->sprite.pos.vz = z;
-    this->sprite.unk6 = ratan2(dir->vy, dir->vx);
-    this->unk40 = unk3;
+    this->sprite.angle = ratan2(dir->vy, dir->vx);
+    this->targetSize = unk3;
     this->sprite.color = color;
     this->sprite.size = 0;
-    this->unk44 = 0;
+    this->age = 0;
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C339C);
+INCLUDE_ASM("game/nonmatchings/game_0g", HitSpark_tick);
 
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D1AC);
+INCLUDE_RODATA("game/nonmatchings/game_0g", HIT_SPARK_CORNERS);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C347C);
+INCLUDE_ASM("game/nonmatchings/game_0g", HitSpark_draw);
 
-/* The draw method of D_8006D4D4: like func_800C3238, without bit 3, one OT slot further while func_8006F104 of
- * D_800D377C gives 0. */
-void func_800C35D4(Unk800C2F14 *this, Camera *camera) {
+/* The draw method of D_8006D4D4: like Particle_draw, without bit 3, one OT slot further while func_8006F104 of
+ * CURRENT_FIGHT gives 0. */
+void func_800C35D4(Particle *this, Camera *camera) {
     PolyFT4Shape buffer;
     PolyFT4Shape *shape;
-    s32 further = func_8006F104(D_800D377C) == 0;
+    s32 further = func_8006F104(CURRENT_FIGHT) == 0;
 
     shape = &buffer;
     shape->flags = 0;
-    func_800C2DF4(&this->sprite, shape);
+    spriteAnimBuildShape(&this->sprite, shape);
     PRIM_BUFFER_FREE = buildPolyFT4(shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + further);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C3654);
+INCLUDE_ASM("game/nonmatchings/game_0g", Sparkle_init);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C374C);
+INCLUDE_ASM("game/nonmatchings/game_0g", Sparkle_tick);
 
-/* The entity func_800C3654 constructs (virtual tables D_8006D45C, D_8006D484, D_8006D4AC): a sprite with a
- * velocity at 0x40 and its color kept as hue, saturation and value at 0x50. */
-typedef struct Unk800C3654 {
+/* A sparkle (Sparkle_init, virtual tables D_8006D45C, D_8006D484, SPARKLE_VTABLE): a 16-pixel glint that floats
+ * up and grows, its color kept as hue, saturation and value, the value fading over its life of 16 frames. */
+typedef struct Sparkle {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk800C2CCC sprite;
-    /* 0x40 */ Vec3 unk40;
-    /* 0x4C */ u8 unk4C[0x50 - 0x4C];
+    /* 0x18 */ SpriteAnim sprite;
+    /* 0x40 */ Vec3 vel;
+    /* 0x4C */ u8 velPad[0x50 - 0x4C];
     /* 0x50 */ HsvColor hsv;
-    /* 0x54 */ s32 unk54;
-    /* 0x58 */ s32 unk58;
-} Unk800C3654; /* size 0x5C */
+    /* 0x54 */ s32 startValue; /* the value is startValue * life >> 4 */
+    /* 0x58 */ s32 life;       /* 16 frames, counted down */
+} Sparkle; /* size 0x5C */
 
-/* The draw method of func_800C3654's classes: the sprite's color from its hsv, then like func_800C3238 with bits 0
+/* The draw method of Sparkle_init's classes: the sprite's color from its hsv, then like Particle_draw with bits 0
  * and 3 set and bit 1 cleared. */
-void func_800C384C(Unk800C3654 *this, Camera *camera) {
+void Sparkle_draw(Sparkle *this, Camera *camera) {
     PolyFT4Shape buffer;
     PolyFT4Shape *shape = &buffer;
 
     shape->flags = 0;
     convertHsvToRgb((CVECTOR *)&this->sprite.color, this->hsv.hue, this->hsv.saturation, this->hsv.value);
-    func_800C2DF4(&this->sprite, shape);
+    spriteAnimBuildShape(&this->sprite, shape);
     shape->flags = (shape->flags & ~3) | 9;
     PRIM_BUFFER_FREE = buildPolyFT4(shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
 }
 
-/* Constructs an entity of D_8006D484: func_800C3654 with entry 10 of D_8006D5C4. */
+/* Constructs an entity of D_8006D484: Sparkle_init with entry 10 of PARTICLE_ANIMS. */
 Entity *func_800C38D8(Entity *this, Vec3 *arg1, Vec3 *arg2, s32 arg3, s32 arg4) {
-    func_800C3654(this, arg1, arg2, arg3, arg4, 10);
+    Sparkle_init(this, arg1, arg2, arg3, arg4, 10);
     this->vtable = &D_8006D484;
     return this;
 }
 
-/* Constructs an entity of D_8006D45C: func_800C3654 with entry 11 of D_8006D5C4. */
+/* Constructs an entity of D_8006D45C: Sparkle_init with entry 11 of PARTICLE_ANIMS. */
 Entity *func_800C391C(Entity *this, Vec3 *arg1, Vec3 *arg2, s32 arg3, s32 arg4) {
-    func_800C3654(this, arg1, arg2, arg3, arg4, 11);
+    Sparkle_init(this, arg1, arg2, arg3, arg4, 11);
     this->vtable = &D_8006D45C;
     return this;
 }
@@ -394,7 +399,7 @@ typedef struct Unk800C3960 {
 } Unk800C3960; /* size 0xE4 */
 
 /* Constructs the character's entity of vtable D_8006D434. */
-Unk800C3960 *func_800C3960(Unk800C3960 *this, Unk80076F34 *chara) {
+Unk800C3960 *func_800C3960(Unk800C3960 *this, Fighter *chara) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006D434;
     this->chara = entityGetHandle(&chara->entity);
@@ -454,66 +459,66 @@ void func_800C3E64(Unk800C3CFC *this) {
 
 INCLUDE_ASM("game/nonmatchings/game_0g", func_800C3ED0);
 
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D1EC);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D1FC);
+INCLUDE_RODATA("game/nonmatchings/game_0g", CUTIN_CLUT_RECTS);
+INCLUDE_RODATA("game/nonmatchings/game_0g", CUTIN_IMAGE_RECTS);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C4204);
+INCLUDE_ASM("game/nonmatchings/game_0g", CutIn_init);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C42D0);
+INCLUDE_ASM("game/nonmatchings/game_0g", CutIn_tick);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C4480);
+INCLUDE_ASM("game/nonmatchings/game_0g", CutIn_draw);
 
-/* The entity class of virtual table D_8006D3BC (constructor func_800C4860). */
-typedef struct Unk800C4860 {
+/* A speed line of the cut-in (SpeedLine_init, virtual table SPEED_LINE_VTABLE): a horizontal line whose front
+ * moves at speed and its back at half of it. */
+typedef struct SpeedLine {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 unk18; /* unk1C + unk24 */
-    /* 0x1C */ s32 unk1C;
-    /* 0x20 */ s32 unk20;
-    /* 0x24 */ s32 unk24;
+    /* 0x18 */ s32 frontX; /* backX + speed at first */
+    /* 0x1C */ s32 backX;
+    /* 0x20 */ s32 y;
+    /* 0x24 */ s32 speed;
     /* 0x28 */ s32 unk28;
     /* 0x2C */ s32 unk2C;
-} Unk800C4860;
+} SpeedLine;
 
-extern EntityVtable D_8006D3BC;
+extern EntityVtable SPEED_LINE_VTABLE;
 
-/* Constructs the entity of virtual table D_8006D3BC with its three values, and the sum of the first and
- * the third at 0x18. */
-Unk800C4860 *func_800C4860(Unk800C4860 *this, s32 arg1, s32 arg2, s32 arg3) {
+/* Constructs a speed line at (x, y) moving at speed, its front one step ahead of its back. */
+SpeedLine *SpeedLine_init(SpeedLine *this, s32 x, s32 y, s32 speed) {
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_8006D3BC;
-    this->unk18 = arg1 + arg3;
-    this->unk1C = arg1;
-    this->unk20 = arg2;
-    this->unk24 = arg3;
+    this->entity.vtable = &SPEED_LINE_VTABLE;
+    this->frontX = x + speed;
+    this->backX = x;
+    this->y = y;
+    this->speed = speed;
     this->unk28 = 0;
     this->unk2C = 0;
     return this;
 }
 
-/* The first method of Unk800C4860: moves 0x18 by 0x24 and 0x1C by half of it, and deletes the entity once 0x1C
- * leaves 0 to 320. */
-void func_800C48D8(Unk800C4860 *this) {
-    s32 step = this->unk24;
+/* The speed line's tick: the front moves at speed and the back at half of it; deleted once the back leaves 0 to
+ * 320. */
+void SpeedLine_tick(SpeedLine *this) {
+    s32 step = this->speed;
 
-    this->unk18 += step;
-    this->unk1C += step >> 1;
-    if ((u32)this->unk1C > 320) {
+    this->frontX += step;
+    this->backX += step >> 1;
+    if ((u32)this->backX > 320) {
         entityDelete(&this->entity);
     }
 }
 
-/* The draw method of Unk800C4860: a semi-transparent line from (0x18, 0x20) in grey 0xC0 to (0x1C, 0x20) in black,
+/* The speed line's draw: a semi-transparent line from its front in grey 0xC0 to its back in black,
  * after a tpage 0x29, two slots after the camera's last drawn one. The match depends on y read once into a local
  * (a word load, where the x reads are narrowed to halfwords). */
-void func_800C4940(Unk800C4860 *this, Camera *camera) {
+void SpeedLine_draw(SpeedLine *this, Camera *camera) {
     u_long *ot = camera->ot.lastDrawn + 2;
     DR_TPAGE *tpage = allocDrTpage(0x29);
     LINE_G2 *line = allocLineG2();
-    s32 y = this->unk20;
+    s32 y = this->y;
 
-    line->x0 = this->unk18;
+    line->x0 = this->frontX;
     line->y0 = y;
-    line->x1 = this->unk1C;
+    line->x1 = this->backX;
     line->y1 = y;
     line->r0 = 0xC0;
     line->g0 = 0xC0;
@@ -526,12 +531,12 @@ void func_800C4940(Unk800C4860 *this, Camera *camera) {
     AddPrim(ot, tpage);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C49E4);
+INCLUDE_ASM("game/nonmatchings/game_0g", TransformFlash_init);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C4ADC);
+INCLUDE_ASM("game/nonmatchings/game_0g", TransformFlash_tick);
 
 /* Spawns the entity of func_800C3CFC at the position, as a sibling. */
-void func_800C4CD8(Unk800C49E4 *this) {
+void TransformFlash_spawnFlare(TransformFlash *this) {
     Entity *child = allocEntityMemory(0x54);
 
     if (child != NULL) {
@@ -540,19 +545,19 @@ void func_800C4CD8(Unk800C49E4 *this) {
     entityAddSibling(&this->entity, child);
 }
 
-/* Spawns the entity of func_800C62EC at the position (radius 0x60, colour 0x8090A0), as a sibling. */
-void func_800C4D40(Unk800C49E4 *this, s32 arg1, s32 count) {
+/* Spawns the entity of ParticleBurst_init at the position (radius 0x60, colour 0x8090A0), as a sibling. */
+void TransformFlash_spawnBurst(TransformFlash *this, s32 arg1, s32 count) {
     Entity *child = allocEntityMemory(0x3C);
 
     if (child != NULL) {
-        func_800C62EC(entityOperatorNewAt(0x3C, child), arg1, &this->position, 0x60, 0x20, count, 0x8090A0);
+        ParticleBurst_init(entityOperatorNewAt(0x3C, child), arg1, &this->position, 0x60, 0x20, count, 0x8090A0);
     }
     entityAddSibling(&this->entity, child);
 }
 
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D214);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C4DD4);
+INCLUDE_ASM("game/nonmatchings/game_0g", TransformFlash_draw);
 
 INCLUDE_ASM("game/nonmatchings/game_0g", func_800C4F74);
 
@@ -560,319 +565,322 @@ INCLUDE_ASM("game/nonmatchings/game_0g", func_800C52C4);
 
 INCLUDE_ASM("game/nonmatchings/game_0g", func_800C5480);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C5680);
+INCLUDE_ASM("game/nonmatchings/game_0g", Trail_init);
 
-/* The first method of Unk800C5680: counts 0x24 down, calling func_800C5834 until it runs out (it runs out at once
- * when func_8007AED0 of the character is set or its func_800792B8 is 0x13); then counts 0x20 down and deletes the
- * entity below 3. func_800C59D4 every frame it lives. */
-void func_800C5778(Unk800C5680 *this, Unk80075EE4 *sum) {
-    if (--this->unk24 < 0) {
-        if (--this->unk20 < 3) {
+/* The trail's tick: records (Trail_record) while recordTimer runs, which ends at once when the fighter stops
+ * attacking or is held; then shortens, and is deleted below 3 samples. Its colors fade every frame it lives. */
+void Trail_tick(Trail *this, CollisionSphere *sum) {
+    if (--this->recordTimer < 0) {
+        if (--this->length < 3) {
             entityDelete(&this->entity);
             return;
         }
     } else {
-        func_800C5834(this);
-        if (func_8007AED0(this->chara) || func_800792B8(this->chara) == 0x13) {
-            this->unk24 = 0;
+        Trail_record(this);
+        if (Fighter_isAttackIdle(this->fighter) || Fighter_getBodyStateId(this->fighter) == FIGHTER_STATE_HELD) {
+            this->recordTimer = 0;
         }
     }
-    func_800C59D4(this);
+    Trail_fadeColors(this);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C5834);
+INCLUDE_ASM("game/nonmatchings/game_0g", Trail_record);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C59D4);
+INCLUDE_ASM("game/nonmatchings/game_0g", Trail_fadeColors);
 
 /* Copies up to 4 entries of the table, all but their word at 0x10, and keeps their count. The match depends on
  * the entries indexed and the table walked with a post-increment taken first (its pointer moves at the loop's top),
  * and on the vector read whole before it is stored. */
-void func_800C5B18(Unk800C5680 *this, Unk800C5B18Entry *entries, s32 count) {
+void Trail_setPoints(Trail *this, TrailPoint *entries, s32 count) {
     s32 i;
 
     if (count > 4) {
         count = 4;
     }
-    this->count = count;
+    this->pointCount = count;
     for (i = 0; i < count; i++) {
-        Unk800C5B18Entry *entry = &this->entries[i];
-        Unk800C5B18Entry *src = entries++;
+        TrailPoint *entry = &this->points[i];
+        TrailPoint *src = entries++;
         s32 x, y, z;
 
-        entry->unk0 = src->unk0;
-        x = src->unk4.vx;
-        y = src->unk4.vy;
-        z = src->unk4.vz;
-        entry->unk4.vx = x;
-        entry->unk4.vy = y;
-        entry->unk4.vz = z;
+        entry->node = src->node;
+        x = src->offset.vx;
+        y = src->offset.vy;
+        z = src->offset.vz;
+        entry->offset.vx = x;
+        entry->offset.vy = y;
+        entry->offset.vz = z;
         entry->color = src->color;
     }
 }
 
 /* Sets the colors of the entries in use, up to count of them. The match depends on colors walked with ++ while the
  * entries are indexed (the colors' pointer then moves first). */
-void func_800C5B84(Unk800C5680 *this, CVECTOR *colors, s32 count) {
-    s32 n = this->count;
+void Trail_setColors(Trail *this, CVECTOR *colors, s32 count) {
+    s32 n = this->pointCount;
     s32 i;
 
     if (count < n) {
         n = count;
     }
     for (i = 0; i < n; i++) {
-        this->entries[i].color = *colors++;
+        this->points[i].color = *colors++;
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C5BD4);
+INCLUDE_ASM("game/nonmatchings/game_0g", Trail_draw);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C5C4C);
+INCLUDE_ASM("game/nonmatchings/game_0g", Trail_drawStrips);
 
-/* The entity class of virtual table D_8006D314 (constructor func_800C5DF4): two vectors and three values. */
-typedef struct Unk800C5DF4 {
+/* A particle spray (ParticleSpray_init, virtual table PARTICLE_SPRAY_VTABLE): emits particles of createParticle's
+ * kind at pos with vel, both jittered by half of vel's length (count > 0: one a frame; < 0: all at once). */
+typedef struct ParticleSpray {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 unk18;
-    /* 0x1C */ Vec3 unk1C;
-    /* 0x28 */ s32 unk28;
-    /* 0x2C */ Vec3 unk2C;
-    /* 0x38 */ s32 unk38;
-    /* 0x3C */ s32 unk3C;
-    /* 0x40 */ s32 unk40;
-    /* 0x44 */ s32 unk44;
-} Unk800C5DF4;
+    /* 0x18 */ s32 kind;
+    /* 0x1C */ Vec3 pos;
+    /* 0x28 */ s32 posPad;
+    /* 0x2C */ Vec3 vel;
+    /* 0x38 */ s32 velPad;
+    /* 0x3C */ s32 size;
+    /* 0x40 */ s32 count;
+    /* 0x44 */ s32 color;
+} ParticleSpray;
 
-extern EntityVtable D_8006D314;
+extern EntityVtable PARTICLE_SPRAY_VTABLE;
 
-/* Constructs the entity of virtual table D_8006D314 with arg1, copies of the two vectors and three values.
- * The match depends on reading each vector's three words before storing any, as vecCopy does. */
-Unk800C5DF4 *func_800C5DF4(Unk800C5DF4 *this, s32 arg1, Vec3 *vec1, Vec3 *vec2, s32 arg4, s32 arg5, s32 arg6) {
+/* Constructs a particle spray of kind at pos moving by vel, with size, count and color. The match depends on
+ * reading each vector's three words before storing any, as vecCopy does. */
+ParticleSpray *ParticleSpray_init(ParticleSpray *this, s32 kind, Vec3 *pos, Vec3 *vel, s32 size, s32 count,
+                                  s32 color) {
     s32 x, y, z;
     s32 x2, y2, z2;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_8006D314;
-    this->unk18 = arg1;
-    x = vec1->vx;
-    y = vec1->vy;
-    z = vec1->vz;
-    this->unk1C.vx = x;
-    this->unk1C.vy = y;
-    this->unk1C.vz = z;
-    x2 = vec2->vx;
-    y2 = vec2->vy;
-    z2 = vec2->vz;
-    this->unk2C.vx = x2;
-    this->unk2C.vy = y2;
-    this->unk2C.vz = z2;
-    this->unk3C = arg4;
-    this->unk40 = arg5;
-    this->unk44 = arg6;
+    this->entity.vtable = &PARTICLE_SPRAY_VTABLE;
+    this->kind = kind;
+    x = pos->vx;
+    y = pos->vy;
+    z = pos->vz;
+    this->pos.vx = x;
+    this->pos.vy = y;
+    this->pos.vz = z;
+    x2 = vel->vx;
+    y2 = vel->vy;
+    z2 = vel->vz;
+    this->vel.vx = x2;
+    this->vel.vy = y2;
+    this->vel.vz = z2;
+    this->size = size;
+    this->count = count;
+    this->color = color;
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C5EB4);
+INCLUDE_ASM("game/nonmatchings/game_0g", ParticleSpray_tick);
 
-/* Constructs an Unk800C6088 (vtable D_8006D2EC): count particles around pos. */
-Unk800C6088 *func_800C6088(Unk800C6088 *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 arg6) {
+/* Constructs an ParticleEmitter (vtable D_8006D2EC): count particles around pos. */
+ParticleEmitter *func_800C6088(ParticleEmitter *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 arg6) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006D2EC;
-    this->unk18 = arg1;
+    this->kind = arg1;
     /* The match depends on reading pos into x, y and z first, and on storing radius before them. */
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->radius = radius;
+    this->spread = radius;
     this->pos.vx = x;
     this->pos.vy = y;
     this->pos.vz = z;
-    this->unk30 = arg4;
+    this->size = arg4;
     this->count = count;
-    this->unk38 = arg6;
+    this->color = arg6;
     return this;
 }
 
 INCLUDE_ASM("game/nonmatchings/game_0g", func_800C6134);
 
-/* Constructs an Unk800C6088 (vtable D_8006D2C4): count particles around pos. */
-Unk800C6088 *func_800C62EC(Unk800C6088 *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 arg6) {
+/* Constructs a ParticleEmitter (vtable PARTICLE_BURST_VTABLE): count particles around pos. */
+ParticleEmitter *ParticleBurst_init(ParticleEmitter *this, s32 kind, Vec3 *pos, s32 spread, s32 size, s32 count,
+                                    s32 color) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_8006D2C4;
-    this->unk18 = arg1;
-    /* The match depends on reading pos into x, y and z first, and on storing radius before them. */
+    this->entity.vtable = &PARTICLE_BURST_VTABLE;
+    this->kind = kind;
+    /* The match depends on reading pos into x, y and z first, and on storing spread before them. */
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->radius = radius;
+    this->spread = spread;
     this->pos.vx = x;
     this->pos.vy = y;
     this->pos.vz = z;
-    this->unk30 = arg4;
+    this->size = size;
     this->count = count;
-    this->unk38 = arg6;
+    this->color = color;
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C6398);
+INCLUDE_ASM("game/nonmatchings/game_0g", ParticleBurst_tick);
 
-/* Constructs an Unk800C6088 (vtable D_8006D29C): count particles around pos. */
-Unk800C6088 *func_800C652C(Unk800C6088 *this, s32 arg1, Vec3 *pos, s32 radius, s32 arg4, s32 count, s32 arg6) {
+/* Constructs a ParticleEmitter (vtable PARTICLE_IMPLOSION_VTABLE): count particles around pos. */
+ParticleEmitter *ParticleImplosion_init(ParticleEmitter *this, s32 kind, Vec3 *pos, s32 spread, s32 size, s32 count,
+                                        s32 color) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_8006D29C;
-    this->unk18 = arg1;
-    /* The match depends on reading pos into x, y and z first, and on storing radius before them. */
+    this->entity.vtable = &PARTICLE_IMPLOSION_VTABLE;
+    this->kind = kind;
+    /* The match depends on reading pos into x, y and z first, and on storing spread before them. */
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->radius = radius;
+    this->spread = spread;
     this->pos.vx = x;
     this->pos.vy = y;
     this->pos.vz = z;
-    this->unk30 = arg4;
+    this->size = size;
     this->count = count;
-    this->unk38 = arg6;
+    this->color = color;
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", func_800C65D8);
+INCLUDE_ASM("game/nonmatchings/game_0g", ParticleImplosion_tick);
 
 /* Returns the first word of what it is given. Nothing in game.bin calls it. */
 s32 func_800C67C0(s32 *words) {
     return words[0];
 }
 
-/* A copy of the destructor of the entity class of vtable D_8006D59C, which func_800C2F14,
- * func_800C2FBC and func_800C6820 install: game has 15 identical ones. */
-void func_800C67CC(Entity *this, s32 flags) {
-    this->vtable = &D_8006D59C;
+/* A copy of the destructor of the entity class of vtable PARTICLE_VTABLE, which Particle_init,
+ * Particle_initById and Particle_initStill install: game has 15 identical ones. */
+void Particle_destroy(Entity *this, s32 flags) {
+    this->vtable = &PARTICLE_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* Constructs a sprite entity of D_8006D59C on frame with flags, without the motion of func_800C3078. */
-Unk800C2F14 *func_800C6820(Unk800C2F14 *this, u16 *frame, s32 flags) {
+/* Constructs a sprite entity of PARTICLE_VTABLE on frame with flags, without the motion of Particle_setMotion. */
+Particle *Particle_initStill(Particle *this, u16 *frame, s32 flags) {
     entityInit(&this->entity, 0);
-    func_800C2CCC(&this->sprite, frame, flags);
-    this->entity.vtable = &D_8006D59C;
+    spriteAnimInit(&this->sprite, frame, flags);
+    this->entity.vtable = &PARTICLE_VTABLE;
     return this;
 }
 
-/* A copy of the destructor of the entity class of vtable D_8006D59C, which func_800C2F14,
- * func_800C2FBC and func_800C6820 install: game has 15 identical ones. */
-void func_800C6880(Entity *this, s32 flags) {
-    this->vtable = &D_8006D59C;
+/* A copy of the destructor of the entity class of vtable PARTICLE_VTABLE, which Particle_init,
+ * Particle_initById and Particle_initStill install: game has 15 identical ones. */
+void SpinParticle_destroy(Entity *this, s32 flags) {
+    this->vtable = &PARTICLE_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* Constructs an entity of D_8006D574: func_800C2FBC with the arguments and 0. */
-Entity *func_800C68D4(Entity *this, s32 frame, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
-    func_800C2FBC((Unk800C2F14 *)this, frame, pos, vel, size, color, 0);
-    this->vtable = &D_8006D574;
+/* Constructs an entity of SPIN_PARTICLE_VTABLE: Particle_initById with the arguments and 0. */
+Entity *SpinParticle_init(Entity *this, s32 frame, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
+    Particle_initById((Particle *)this, frame, pos, vel, size, color, 0);
+    this->vtable = &SPIN_PARTICLE_VTABLE;
     return this;
 }
 
-/* Constructs an entity of D_8006D574: func_800C2FBC with frame, color 0x808080 and no flags. */
-Entity *func_800C691C(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
-    func_800C2FBC((Unk800C2F14 *)this, frame, pos, vel, size, 0x808080, 0);
-    this->vtable = &D_8006D574;
+/* Constructs an entity of SPIN_PARTICLE_VTABLE: Particle_initById with frame, color 0x808080 and no flags. */
+Entity *SpinParticle_initGrey(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
+    Particle_initById((Particle *)this, frame, pos, vel, size, 0x808080, 0);
+    this->vtable = &SPIN_PARTICLE_VTABLE;
     return this;
 }
 
-/* A copy of the destructor of the entity class of vtable D_8006D59C, which func_800C2F14,
- * func_800C2FBC and func_800C6820 install: game has 15 identical ones. */
+/* A copy of the destructor of the entity class of vtable PARTICLE_VTABLE, which Particle_init,
+ * Particle_initById and Particle_initStill install: game has 15 identical ones. */
 void func_800C6970(Entity *this, s32 flags) {
-    this->vtable = &D_8006D59C;
+    this->vtable = &PARTICLE_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* Constructs an entity of D_8006D54C: func_800C2FBC with frame + 3, color 0x808080 and no flags. */
+/* Constructs an entity of D_8006D54C: Particle_initById with frame + 3, color 0x808080 and no flags. */
 Entity *func_800C69C4(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
-    func_800C2FBC((Unk800C2F14 *)this, frame + 3, pos, vel, size, 0x808080, 0);
+    Particle_initById((Particle *)this, frame + 3, pos, vel, size, 0x808080, 0);
     this->vtable = &D_8006D54C;
     return this;
 }
 
-/* A copy of the destructor of the entity class of vtable D_8006D59C, which func_800C2F14,
- * func_800C2FBC and func_800C6820 install: game has 15 identical ones. */
+/* A copy of the destructor of the entity class of vtable PARTICLE_VTABLE, which Particle_init,
+ * Particle_initById and Particle_initStill install: game has 15 identical ones. */
 void func_800C6A20(Entity *this, s32 flags) {
-    this->vtable = &D_8006D59C;
+    this->vtable = &PARTICLE_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* Constructs an entity of D_8006D524: func_800C2FBC with frame 6 and no flags. */
-Unk800C2F14 *func_800C6A74(Unk800C2F14 *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
-    func_800C2FBC(this, 6, pos, vel, size, color, 0);
+/* Constructs an entity of D_8006D524: Particle_initById with frame 6 and no flags. */
+Particle *func_800C6A74(Particle *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
+    Particle_initById(this, 6, pos, vel, size, color, 0);
     this->entity.vtable = &D_8006D524;
     return this;
 }
 
-/* A copy of the destructor of the entity class of vtable D_8006D4FC, which func_800C32E0
+/* A copy of the destructor of the entity class of vtable HIT_SPARK_VTABLE, which HitSpark_init
  * installs: game has 2 identical ones. */
-void func_800C6AC8(Entity *this, s32 flags) {
-    this->vtable = &D_8006D4FC;
+void HitSpark_destroy(Entity *this, s32 flags) {
+    this->vtable = &HIT_SPARK_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* A copy of the destructor of the entity class of vtable D_8006D59C, which func_800C2F14,
- * func_800C2FBC and func_800C6820 install: game has 15 identical ones. */
+/* A copy of the destructor of the entity class of vtable PARTICLE_VTABLE, which Particle_init,
+ * Particle_initById and Particle_initStill install: game has 15 identical ones. */
 void func_800C6B1C(Entity *this, s32 flags) {
-    this->vtable = &D_8006D59C;
+    this->vtable = &PARTICLE_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* Constructs an entity of D_8006D4D4: func_800C2FBC with frame 8, the velocity D_80010814 and no flags. */
-Unk800C2F14 *func_800C6B70(Unk800C2F14 *this, VECTOR *pos, s32 size, u32 color) {
-    func_800C2FBC(this, 8, pos, &D_80010814, size, color, 0);
+/* Constructs an entity of D_8006D4D4: Particle_initById with frame 8, the velocity ZERO_VECTOR and no flags. */
+Particle *func_800C6B70(Particle *this, VECTOR *pos, s32 size, u32 color) {
+    Particle_initById(this, 8, pos, &ZERO_VECTOR, size, color, 0);
     this->entity.vtable = &D_8006D4D4;
     return this;
 }
 
-/* A copy of the destructor of the entity class of vtable D_8006D4AC, which func_800C3654
+/* A copy of the destructor of the entity class of vtable SPARKLE_VTABLE, which Sparkle_init
  * installs: game has 3 identical ones. */
-void func_800C6BC0(Entity *this, s32 flags) {
-    this->vtable = &D_8006D4AC;
+void Sparkle_destroy(Entity *this, s32 flags) {
+    this->vtable = &SPARKLE_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* A copy of the destructor of the entity class of vtable D_8006D4AC, which func_800C3654
+/* A copy of the destructor of the entity class of vtable SPARKLE_VTABLE, which Sparkle_init
  * installs: game has 3 identical ones. */
 void func_800C6C14(Entity *this, s32 flags) {
-    this->vtable = &D_8006D4AC;
+    this->vtable = &SPARKLE_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* A copy of the destructor of the entity class of vtable D_8006D4AC, which func_800C3654
+/* A copy of the destructor of the entity class of vtable SPARKLE_VTABLE, which Sparkle_init
  * installs: game has 3 identical ones. */
 void func_800C6C68(Entity *this, s32 flags) {
-    this->vtable = &D_8006D4AC;
+    this->vtable = &SPARKLE_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
@@ -895,9 +903,9 @@ void func_800C6D04(Entity *this, s32 flags) {
     }
 }
 
-/* The destructor of the entity class of vtable D_8006D3E4, which func_800C4204 installs:
+/* The destructor of the entity class of vtable CUTIN_VTABLE, which CutIn_init installs:
  * its sprite, then the entity. */
-void func_800C6D4C(Unk800C4204 *this, s32 flags) {
+void CutIn_destroy(CutIn *this, s32 flags) {
     spriteDestroy(&this->sprite, DESTROY_BASES);
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {
@@ -905,16 +913,16 @@ void func_800C6D4C(Unk800C4204 *this, s32 flags) {
     }
 }
 
-/* The destructor of the entity class of vtable D_8006D3BC, which func_800C4860 installs. */
-void func_800C6DA4(Entity *this, s32 flags) {
+/* The destructor of the entity class of vtable SPEED_LINE_VTABLE, which SpeedLine_init installs. */
+void SpeedLine_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* The destructor of the entity class of vtable D_8006D394, which func_800C49E4 installs. */
-void func_800C6DEC(Entity *this, s32 flags) {
+/* The destructor of the entity class of vtable TRANSFORM_FLASH_VTABLE, which TransformFlash_init installs. */
+void TransformFlash_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
@@ -929,24 +937,24 @@ void func_800C6E34(Entity *this, s32 flags) {
     }
 }
 
-/* The destructor of the entity class of vtable D_8006D33C, which func_800C5680 installs. */
-void func_800C6E7C(Entity *this, s32 flags) {
+/* The destructor of the entity class of vtable TRAIL_VTABLE, which Trail_init installs. */
+void Trail_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* When 0x24 is above 0, runs func_800C5834 and func_800C59D4. */
-void func_800C6EC4(Unk800C5680 *this) {
-    if (this->unk24 > 0) {
-        func_800C5834(this);
-        func_800C59D4(this);
+/* While recordTimer runs, records and fades the trail (no caller found). */
+void func_800C6EC4(Trail *this) {
+    if (this->recordTimer > 0) {
+        Trail_record(this);
+        Trail_fadeColors(this);
     }
 }
 
-/* The destructor of the entity class of vtable D_8006D314, which func_800C5DF4 installs. */
-void func_800C6F04(Entity *this, s32 flags) {
+/* The destructor of the entity class of vtable PARTICLE_SPRAY_VTABLE, which ParticleSpray_init installs. */
+void ParticleSpray_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
@@ -961,42 +969,42 @@ void func_800C6F4C(Entity *this, s32 flags) {
     }
 }
 
-/* The destructor of the entity class of vtable D_8006D2C4, which func_800C62EC installs. */
-void func_800C6F94(Entity *this, s32 flags) {
+/* The destructor of the entity class of vtable PARTICLE_BURST_VTABLE, which ParticleBurst_init installs. */
+void ParticleBurst_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* The destructor of the entity class of vtable D_8006D29C, which func_800C652C installs. */
-void func_800C6FDC(Entity *this, s32 flags) {
+/* The destructor of the entity class of vtable PARTICLE_IMPLOSION_VTABLE, which ParticleImplosion_init installs. */
+void ParticleImplosion_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D29C);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D2C4);
+INCLUDE_RODATA("game/nonmatchings/game_0g", PARTICLE_IMPLOSION_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0g", PARTICLE_BURST_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D2EC);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D314);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D33C);
+INCLUDE_RODATA("game/nonmatchings/game_0g", PARTICLE_SPRAY_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0g", TRAIL_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D36C);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D394);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D3BC);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D3E4);
+INCLUDE_RODATA("game/nonmatchings/game_0g", TRANSFORM_FLASH_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0g", SPEED_LINE_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0g", CUTIN_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D40C);
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D434);
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D45C);
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D484);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D4AC);
+INCLUDE_RODATA("game/nonmatchings/game_0g", SPARKLE_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D4D4);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D4FC);
+INCLUDE_RODATA("game/nonmatchings/game_0g", HIT_SPARK_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D524);
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D54C);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D574);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D59C);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D5C4);
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D6C8);
+INCLUDE_RODATA("game/nonmatchings/game_0g", SPIN_PARTICLE_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0g", PARTICLE_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0g", PARTICLE_ANIMS);
+INCLUDE_RODATA("game/nonmatchings/game_0g", CHARA_OTHER_FORM);
 INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D728);

@@ -106,32 +106,32 @@ Task *debugCreateFightTask(void) {
 
 /* Creates a testing ground of the "test" overlay (the "Testing ground for HANAMASU" command). */
 Task *debugCreateHanamasuTestTask(void) {
-    return func_80065AE4(operatorNew(0xF4C), &SYSTEM_CONTEXT);
+    return hanamasuTestTaskInit(operatorNew(0xF4C), &SYSTEM_CONTEXT);
 }
 
 /* Creates a testing ground of the "test" overlay (the "Testing ground for IWANAGA" command). */
 Task *debugCreateIwanagaTestTask(void) {
-    return func_80066084(operatorNew(0x14C), &SYSTEM_CONTEXT);
+    return iwanagaTestTaskInit(operatorNew(0x14C), &SYSTEM_CONTEXT);
 }
 
 /* Creates a testing ground of the "test" overlay (the "Testing ground for SHOHYAMA" command). */
 Task *debugCreateShohyamaTestTask(void) {
-    return func_800673A4(operatorNew(0xA1C), &SYSTEM_CONTEXT);
+    return shohyamaTestTaskInit(operatorNew(0xA1C), &SYSTEM_CONTEXT);
 }
 
 /* Creates a testing ground of the "test" overlay (the "Testing ground for TERADA" command). */
 Task *debugCreateTeradaTestTask(void) {
-    return func_80066F74(operatorNew(0xA5C), &SYSTEM_CONTEXT);
+    return teradaTestTaskInit(operatorNew(0xA5C), &SYSTEM_CONTEXT);
 }
 
 /* Creates the model viewer (the "ModelView" command). */
 Task *debugCreateModelViewTask(void) {
-    return func_800681A4(operatorNew(0x30), &SYSTEM_CONTEXT);
+    return modelViewTaskInit(operatorNew(0x30), &SYSTEM_CONTEXT);
 }
 
 /* Creates the map viewer (the "MapView" command). */
 Task *debugCreateMapViewTask(void) {
-    return func_8006A43C(operatorNew(0x30), &SYSTEM_CONTEXT);
+    return mapViewTaskInit(operatorNew(0x30), &SYSTEM_CONTEXT);
 }
 
 /* Runs the game's executable again (the "LoadExec" command). */
@@ -336,10 +336,10 @@ s32 SystemGameMenu::confirm(s32 arg, s32 held, s32 own) {
     GAME_STATE.arena = stage->value;
     GAME_STATE.fighters[0].character = character1->value;
     GAME_STATE.fighters[0].computer = control1->value == GAME_CONTROL_COMPUTER;
-    GAME_STATE.fighters[0].unk14 = 7;
+    GAME_STATE.fighters[0].versusGauge = VERSUS_GAUGE_MAX;
     GAME_STATE.fighters[1].character = character2->value;
     GAME_STATE.fighters[1].computer = control2->value == GAME_CONTROL_COMPUTER;
-    GAME_STATE.fighters[1].unk14 = 7;
+    GAME_STATE.fighters[1].versusGauge = VERSUS_GAUGE_MAX;
     GAME_STATE.level = level->value;
     GAME_STATE.phase = phase->value;
     return 0;
@@ -460,7 +460,7 @@ s32 SystemXa::confirm(s32 arg, s32 held, s32 own) {
 
 /* Draws the entry: its index and the XA track number, up to the number of tracks. */
 void SystemXa::draw(s32 arg, s32 isCurrent, s32 active) {
-    max = D_8005F870[0] - 1;
+    max = SOUND_CONTROL.trackCount - 1;
     consolePrint(startEntryLine(arg, isCurrent, index), "#%02d XA %d", index, value);
 }
 

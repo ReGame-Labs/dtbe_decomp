@@ -1,1 +1,36 @@
 // st04.bin's own names (config/jp/st04.yaml)
+
+// the names tools/rename.py gave (tools/renames/), in address order
+STAGE_HIT_VTABLE = 0x800D3914;
+ST04_GLOW_VTABLE = 0x800D3934;
+ST04_PLUNGE_VTABLE = 0x800D3984;
+ST04_SIDE_SQUARE_VTABLE = 0x800D39AC;
+STAGE_ICEBERG_VTABLE = 0x800D3A4C;
+StageIceberg_init = 0x800D3AC4; // type:func
+StageIceberg_destroy = 0x800D3AFC; // type:func
+StageIceberg_startRound = 0x800D3B24; // type:func
+StageIceberg_tickScenery = 0x800D3CB8; // type:func
+st04_copyTexturesB = 0x800D3DA0; // type:func
+st04_copyTexturesA = 0x800D3E20; // type:func
+st04_scrollTexture = 0x800D3EA4; // type:func
+st04_readClut = 0x800D40BC; // type:func
+st04_clearPlunged = 0x800D4198; // type:func
+st04_checkPlunge = 0x800D41A4; // type:func
+st04_clearLiftBack = 0x800D4280; // type:func
+st04_tickLiftBack = 0x800D49D0; // type:func
+St04SideSquare_init = 0x800D6F9C; // type:func
+St04SideSquare_destroy = 0x800D7084; // type:func
+St04SideSquare_tick = 0x800D70D8; // type:func
+St04SideSquare_draw = 0x800D71D0; // type:func
+St04Plunge_init = 0x800D72D8; // type:func
+St04Plunge_destroy = 0x800D7458; // type:func
+St04Plunge_tick = 0x800D74AC; // type:func
+St04Plunge_draw = 0x800D770C; // type:func
+St04Glow_init = 0x800D7F70; // type:func
+St04Glow_destroy = 0x800D80C8; // type:func
+St04Glow_tick = 0x800D811C; // type:func
+St04Glow_draw = 0x800D8158; // type:func
+StageHit_init = 0x800D848C; // type:func
+StageHit_apply = 0x800D84C8; // type:func
+StageHit_destroy = 0x800D8938; // type:func
+StageHit_setKnockback = 0x800D896C; // type:func

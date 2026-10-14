@@ -49,8 +49,8 @@ void cacheMarkSlotUsed(Cache *cache, CacheSlot *slot);
 void cacheAddSlot(Cache *cache, CacheSlot *slot, u32 key);
 void cacheRemoveSlot(Cache *cache, CacheSlot *slot);
 CacheSlot *removeHighestSlot(CacheSlot **link);
-s32 func_8002EB94(RECT *rect, s32 widthShift, s32 heightShift);
-RECT *func_8002EC00(RECT *out, RECT *rect, s32 widthShift, s32 heightShift);
+s32 cacheCountCells(RECT *rect, s32 widthShift, s32 heightShift);
+RECT *cacheSplitCells(RECT *out, RECT *rect, s32 widthShift, s32 heightShift);
 
 s16 cacheSlotGetX(CacheSlot *cacheSlot);
 s16 cacheSlotGetY(CacheSlot *cacheSlot);

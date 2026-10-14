@@ -9,6 +9,7 @@
 #include "strings.h"
 #include "engine/gfx/box.h"
 #include "engine/game/game_state.h"
+#include "engine/game/sequencer.h"
 #include "engine/gfx/ordering_table.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
@@ -19,10 +20,10 @@
 #include "engine/text/text_printer.h"
 #include "title/title_classes.h"
 
-/* A message window (constructor func_800702F8, virtual table D_800656B8): a rectangle that grows open
- * and shrinks closed (func_8007043C) with lines of text centred in it (func_800705A8). The four values
- * of the constructor are the rectangle, as func_800705A8 copies them into the RECT it draws. */
-typedef struct Unk800702F8 {
+/* A message window (MessageWindow_init, MESSAGE_WINDOW_VTABLE): a rectangle that grows open and shrinks
+ * closed (MessageWindow_tick) with lines of text centred in it (MessageWindow_draw). The four values of the
+ * constructor are the rectangle, as MessageWindow_draw copies them into the RECT it draws. */
+typedef struct MessageWindow {
     /* 0x00 */ Entity entity;
     /* 0x18 */ s32 scale; /* how far open, 0 (closed) to 0x1000 */
     /* 0x1C */ s32 open;  /* nonzero while opening or open, 0 while closing */
@@ -31,60 +32,56 @@ typedef struct Unk800702F8 {
     /* 0x28 */ s32 y;
     /* 0x2C */ s32 width;
     /* 0x30 */ s32 height;
-} Unk800702F8;
+} MessageWindow;
 
-/* The yes/no window (constructor func_80071C78, virtual table D_80065690): a message window with two
- * choices under the text, D_80065304 and D_8006530C, picked with up and down (func_80070768). */
-typedef struct Unk80071C78 {
-    /* 0x00 */ Unk800702F8 window;
-    /* 0x34 */ s32 choice;  /* 0 for the first choice, 1 for the second */
+/* The yes/no window (YesNoWindow_init, YES_NO_WINDOW_VTABLE): a message window with two choices under the
+ * text, STR_YES and STR_NO, picked with up and down (YesNoWindow_tick). */
+typedef struct YesNoWindow {
+    /* 0x00 */ MessageWindow window;
+    /* 0x34 */ s32 choice;  /* 0 for yes (the first choice), 1 for no */
     /* 0x38 */ s32 decided; /* set once the player confirmed a choice */
-} Unk80071C78;
+} YesNoWindow;
 
-extern EntityVtable D_800656B8;
-extern EntityVtable D_80065690;
+extern EntityVtable MESSAGE_WINDOW_VTABLE;
+extern EntityVtable YES_NO_WINDOW_VTABLE;
 
-/* The memory card task (memoryCardTaskInit, virtual table D_800656E0). Its thread (func_80070B8C) does
+/* The memory card task (memoryCardTaskInit, MEMORY_CARD_TASK_VTABLE). Its thread (MemoryCardTask_run) does
  * the work of the mode it was made with and shows what happens in its two windows; the card callback
- * func_80071550 hands it the results the thread waits for (func_80071854). */
+ * memoryCardCallback hands it the results the thread waits for (MemoryCardTask_waitResult). */
 typedef struct MemoryCardTask {
     /* 0x00 */ Task task;
-    /* 0x20 */ s32 mode;    /* the work the thread does (func_80070B8C) */
+    /* 0x20 */ s32 mode;    /* the work the thread does (MemoryCardTask_run): MEMORY_CARD_* */
     /* 0x24 */ Thread thread;
     /* 0x30 */ s32 channel; /* what the card calls get */
     /* 0x34 */ EntityGroup windows;
     /* 0x44 */ s32 done;    /* set once the thread returned */
-    /* 0x48 */ Unk800702F8 *message;
-    /* 0x4C */ Unk80071C78 *question;
-    /* Set by the memory card callback func_80071550 and polled by the thread, so volatile:
-     * func_80071854 stores 0x50 and loads it right back, and func_80071550's last store stays out
-     * of the delay slot of its `jr ra`. */
+    /* 0x48 */ MessageWindow *message;
+    /* 0x4C */ YesNoWindow *question;
+    /* Set by the memory card callback memoryCardCallback and polled by the thread, so volatile:
+     * MemoryCardTask_waitResult stores 0x50 and loads it right back, and memoryCardCallback's last store
+     * stays out of the delay slot of its `jr ra`. */
     /* 0x50 */ volatile s32 cmds;   /* the command the callback reported (MemCB's cmds), 0 until it ran */
     /* 0x54 */ volatile s32 result; /* its result (MemCB's rslt) */
 } MemoryCardTask;
 
-/* func_8007096C points 0 at a word and sets the word to 1; func_80070C2C
- * makes one on its stack for D_8005FCB0. */
-typedef struct Unk8007096C {
-    /* 0x0 */ s32 *unk0;
-} Unk8007096C;
+/* Keeps the reset buttons off while it lives: the card's format, read and write make one on their stack
+ * over SYSTEM_CONTEXT.resetDisabled (D_8005FCB0), so the game is not reset in the middle of a card write. */
+typedef struct ResetLock {
+    /* 0x0 */ s32 *flag; /* set to 1 by ResetLock_init, back to 0 by ResetLock_destroy */
+} ResetLock;
 
 /* in .rodata: the yes/no window's choices, messages and a file name pattern */
-extern u8 D_80065304[];
-extern u8 D_8006530C[];
-extern u8 D_800653B8[];
-extern u8 D_8006564C[];
-extern u8 D_80065688[];
-extern TaskVtable D_800656E0;
+extern u8 STR_YES[];
+extern u8 STR_NO[];
+extern u8 STR_LOAD_PROMPT[];
+extern u8 STR_CARD_REMOVED[];
+extern u8 STR_ANY_FILE[];
+extern TaskVtable MEMORY_CARD_TASK_VTABLE;
 /* the task memoryCardTaskInit builds, while it lives */
-extern MemoryCardTask *D_8007B238;
+extern MemoryCardTask *MEMORY_CARD_TASK;
 
-/* The buttons that confirm a choice: start or circle in Japan, start or cross in the US. */
-#if VERSION_JP
-#define MEMORY_CARD_CONFIRM 0x820
-#else
-#define MEMORY_CARD_CONFIRM 0x840
-#endif
+/* The buttons that confirm a choice: start or the menus' confirm button. */
+#define MEMORY_CARD_CONFIRM (PADstart | PAD_CONFIRM)
 /* start, triangle, circle, cross or square */
 #define MEMORY_CARD_ANY_BUTTON 0x8F0
 
@@ -92,30 +89,30 @@ extern MemoryCardTask *D_8007B238;
 #define TEXT_SET_COLOR(printer, color) \
     (printer).printer.vtable->setColor.func((u8 *)&(printer) + (printer).printer.vtable->setColor.delta, color)
 
-void func_800705A8(Unk800702F8 *this, s32 arg);
-void func_80070B6C(s32 unused, void *object);
-void func_80070B8C(MemoryCardTask *this);
-void func_80070D84(MemoryCardTask *this);
-void func_80070DE8(MemoryCardTask *this);
-void func_80070E28(MemoryCardTask *this);
-void func_80070E6C(MemoryCardTask *this);
-void func_80070EAC(MemoryCardTask *this, s32 arg);
-void func_80071020(MemoryCardTask *this);
-void func_80071550(long cmds, long result);
-s32 func_80071854(MemoryCardTask *this);
-void func_800718F8(MemoryCardTask *this, s32 frames, s32 skippable);
-s32 func_80071980(MemoryCardTask *this, s32 onFirst);
+void MessageWindow_draw(MessageWindow *this, s32 arg);
+void memoryCardThreadEntry(s32 unused, void *object);
+void MemoryCardTask_run(MemoryCardTask *this);
+void MemoryCardTask_runOptionLoad(MemoryCardTask *this);
+void MemoryCardTask_runOptionSave(MemoryCardTask *this);
+void MemoryCardTask_runLoad(MemoryCardTask *this);
+void MemoryCardTask_runSave(MemoryCardTask *this);
+void MemoryCardTask_load(MemoryCardTask *this, s32 timed);
+void MemoryCardTask_save(MemoryCardTask *this);
+void memoryCardCallback(long cmds, long result);
+s32 MemoryCardTask_waitResult(MemoryCardTask *this);
+void MemoryCardTask_wait(MemoryCardTask *this, s32 frames, s32 skippable);
+s32 MemoryCardTask_ask(MemoryCardTask *this, s32 defaultYes);
 
 /* The card file's name ("BISLPS-03357" in Japan), its title and a yes/no pair that no code names. */
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_800652B8);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_SAVE_FILE_NAME);
 
 /* Constructs a closed message window over the rectangle x, y, width, height. */
-Unk800702F8 *func_800702F8(Unk800702F8 *this, s32 x, s32 y, s32 width, s32 height) {
+MessageWindow *MessageWindow_init(MessageWindow *this, s32 x, s32 y, s32 width, s32 height) {
     entityInit(&this->entity, 0);
     this->x = x;
     this->y = y;
     this->width = width;
-    this->entity.vtable = &D_800656B8;
+    this->entity.vtable = &MESSAGE_WINDOW_VTABLE;
     this->scale = 0;
     this->open = 0;
     this->text = NULL;
@@ -124,7 +121,7 @@ Unk800702F8 *func_800702F8(Unk800702F8 *this, s32 x, s32 y, s32 width, s32 heigh
 }
 
 /* Prints one line of text centred in the window's width, offsetY below its top (8 pixels a character). */
-void func_8007037C(Unk800702F8 *this, Printer *printer, u8 *text, s32 offsetY) {
+void MessageWindow_printLine(MessageWindow *this, Printer *printer, u8 *text, s32 offsetY) {
     s32 length = strlen(text);
     s32 left = (this->width - length * 8) / 2;
     s32 top = this->y + offsetY; /* The match depends on top computed first and stored last. */
@@ -135,28 +132,28 @@ void func_8007037C(Unk800702F8 *this, Printer *printer, u8 *text, s32 offsetY) {
 }
 
 /* Opens the window on text. */
-void func_80070404(Unk800702F8 *this, u8 *text) {
+void MessageWindow_show(MessageWindow *this, u8 *text) {
     this->open = 1;
     this->text = text;
 }
 
 /* Opens the window on the text it has. */
-void func_80070414(Unk800702F8 *this) {
+void MessageWindow_open(MessageWindow *this) {
     this->open = 1;
 }
 
 /* Closes the window. */
-void func_80070420(Unk800702F8 *this) {
+void MessageWindow_close(MessageWindow *this) {
     this->open = 0;
 }
 
 /* Whether the window is all the way open. */
-s32 func_80070428(Unk800702F8 *this) {
+s32 MessageWindow_isOpen(MessageWindow *this) {
     return this->scale == 0x1000;
 }
 
 /* Grows the window open, or shrinks it closed, by 0x111 a frame. */
-void func_8007043C(Unk800702F8 *this) {
+void MessageWindow_tick(MessageWindow *this) {
     if (this->open) {
         if (this->scale != 0x1000) {
             this->scale += 0x111;
@@ -173,7 +170,7 @@ void func_8007043C(Unk800702F8 *this) {
 }
 
 /* Shrinks rect about its centre to scale (0x1000 is the whole), to no less than 1 by 1. */
-void func_80070494(RECT *rect, s32 scale) {
+void scaleRect(RECT *rect, s32 scale) {
     s32 w = rect->w;
     s32 h = rect->h;
     s32 scaledW = (w * scale) >> 12;
@@ -192,7 +189,7 @@ void func_80070494(RECT *rect, s32 scale) {
 }
 
 /* The number of lines in text: its line breaks plus one. */
-s32 func_80070518(const u8 *text) {
+s32 countLines(const u8 *text) {
     s32 lines = 1;
     u8 c;
 
@@ -206,7 +203,7 @@ s32 func_80070518(const u8 *text) {
 
 /* Copies the first line of text into line; returns the text after its line break, NULL after the
  * last line. */
-u8 *func_80070554(u8 *line, u8 *text) {
+u8 *copyLine(u8 *line, u8 *text) {
     u8 c = *text++;
 
     while (c != '\0' && c != '\n') {
@@ -217,12 +214,12 @@ u8 *func_80070554(u8 *line, u8 *text) {
     return c != '\0' ? text : NULL;
 }
 
-INCLUDE_ASM("title/nonmatchings/memory_card", func_800705A8);
+INCLUDE_ASM("title/nonmatchings/memory_card", MessageWindow_draw);
 
-/* Opens the yes/no window on the first choice, or on the second when onFirst is 0. */
-void func_80070708(Unk80071C78 *this, s32 onFirst) {
-    func_80070414(&this->window);
-    if (onFirst) {
+/* Opens the yes/no window on yes, or on no when defaultYes is 0. */
+void YesNoWindow_open(YesNoWindow *this, s32 defaultYes) {
+    MessageWindow_open(&this->window);
+    if (defaultYes) {
         this->choice = 0;
     } else {
         this->choice = 1;
@@ -231,57 +228,57 @@ void func_80070708(Unk80071C78 *this, s32 onFirst) {
 }
 
 /* Whether the player confirmed a choice. */
-s32 func_80070750(Unk80071C78 *this) {
+s32 YesNoWindow_isDecided(YesNoWindow *this) {
     return this->decided;
 }
 
-/* Whether the choice is the first one. */
-s32 func_8007075C(Unk80071C78 *this) {
+/* Whether the choice is yes (the first one). */
+s32 YesNoWindow_isYes(YesNoWindow *this) {
     return this->choice == 0;
 }
 
 /* The yes/no window's update: once open, up and down move the choice and the confirm button closes it
  * on that choice. */
-void func_80070768(Unk80071C78 *this) {
+void YesNoWindow_tick(YesNoWindow *this) {
     u32 pressed;
 
-    func_8007043C(&this->window);
-    if (!func_80070428(&this->window)) {
+    MessageWindow_tick(&this->window);
+    if (!MessageWindow_isOpen(&this->window)) {
         return;
     }
-    if (func_80070750(this)) {
+    if (YesNoWindow_isDecided(this)) {
         return;
     }
     pressed = padManagerGetPressed(PAD_MANAGER_INSTANCE, -1);
     if (pressed & MEMORY_CARD_CONFIRM) {
-        soundControlPlaySound(&SOUND_CONTROL, 0x10, 0);
+        soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CONFIRM, 0);
         this->decided = 1;
-        func_80070420(&this->window);
+        MessageWindow_close(&this->window);
         return;
     }
     if (this->choice <= 0) {
         if (pressed & PAD_DOWN) {
             this->choice++;
-            soundControlPlaySound(&SOUND_CONTROL, 0xF, 0);
+            soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CURSOR, 0);
         }
     } else {
         if (pressed & PAD_UP) {
             this->choice--;
-            soundControlPlaySound(&SOUND_CONTROL, 0xF, 0);
+            soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CURSOR, 0);
         }
     }
 }
 
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065304);
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_8006530C);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_YES);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_NO);
 
 /* The yes/no window's draw: once open, its two choices (the one picked bright) under the text. */
-void func_8007084C(Unk80071C78 *this, s32 arg) {
+void YesNoWindow_draw(YesNoWindow *this, s32 arg) {
     TextPrinter printer;
     u32 firstColor;
     u32 secondColor;
 
-    if (!func_80070428(&this->window)) {
+    if (!MessageWindow_isOpen(&this->window)) {
         return;
     }
     firstColor = 0x808080;
@@ -294,23 +291,23 @@ void func_8007084C(Unk80071C78 *this, s32 arg) {
     textPrinterSetShadow(&printer, 1);
     textPrinterSetShadowColor(&printer, 0x700000);
     TEXT_SET_COLOR(printer, firstColor);
-    func_8007037C(&this->window, &printer.printer, D_80065304, 0);
+    MessageWindow_printLine(&this->window, &printer.printer, STR_YES, 0);
     TEXT_SET_COLOR(printer, secondColor);
-    func_8007037C(&this->window, &printer.printer, D_8006530C, 0x10);
-    func_800705A8(&this->window, arg);
+    MessageWindow_printLine(&this->window, &printer.printer, STR_NO, 0x10);
+    MessageWindow_draw(&this->window, arg);
     printerDestroy(&printer.printer, DESTROY_BASES);
 }
 
-/* Points this at word and sets the word to 1; returns this. */
-Unk8007096C *func_8007096C(Unk8007096C *this, s32 *word) {
-    this->unk0 = word;
-    *word = 1;
+/* Turns the reset off: points this at flag and sets the flag to 1; returns this. */
+ResetLock *ResetLock_init(ResetLock *this, s32 *flag) {
+    this->flag = flag;
+    *flag = 1;
     return this;
 }
 
-/* Unk8007096C's destructor: sets the word it points at back to 0. */
-void func_80070980(Unk8007096C *this, s32 flags) {
-    *this->unk0 = 0;
+/* ResetLock's destructor: turns the reset back on (its flag back to 0). */
+void ResetLock_destroy(ResetLock *this, s32 flags) {
+    *this->flag = 0;
     if (flags & DESTROY_FREE) {
         operatorDelete(this);
     }
@@ -319,68 +316,68 @@ void func_80070980(Unk8007096C *this, s32 flags) {
 /* Constructs the memory card task for mode: starts the card and installs its callback, checks the
  * ranking's records (the table's constructor resets broken ones), and makes its thread and two windows. */
 MemoryCardTask *memoryCardTaskInit(MemoryCardTask *this, s32 mode) {
-    Unk800764BC records;
-    Unk80071C78 *question;
+    RankingTable records;
+    YesNoWindow *question;
 
     taskInit(&this->task, 0, "no name");
-    this->task.vtable = &D_800656E0;
-    threadInit(&this->thread, func_80070B6C, 0x1000, this, 0);
+    this->task.vtable = &MEMORY_CARD_TASK_VTABLE;
+    threadInit(&this->thread, memoryCardThreadEntry, 0x1000, this, 0);
     entityGroupInit(&this->windows);
     this->mode = mode;
     MemCardStart();
-    MemCardCallback(func_80071550);
+    MemCardCallback(memoryCardCallback);
     this->channel = 0;
-    func_80075FAC(&records, (Unk800764F4 *)GAME_STATE.save.records, 8);
-    this->message = func_800702F8(entityOperatorNew(sizeof(Unk800702F8)), 0x20, 0x30, 0x100, 0x50);
-    /* the yes/no window: func_80071C78, inlined */
-    question = entityOperatorNew(sizeof(Unk80071C78));
-    func_800702F8(&question->window, 0x78, 0x90, 0x50, 0x20);
-    question->window.entity.vtable = &D_80065690;
+    RankingTable_init(&records, (RankingRecord *)GAME_STATE.save.records, 8);
+    this->message = MessageWindow_init(entityOperatorNew(sizeof(MessageWindow)), 0x20, 0x30, 0x100, 0x50);
+    /* the yes/no window: YesNoWindow_init, inlined */
+    question = entityOperatorNew(sizeof(YesNoWindow));
+    MessageWindow_init(&question->window, 0x78, 0x90, 0x50, 0x20);
+    question->window.entity.vtable = &YES_NO_WINDOW_VTABLE;
     question->choice = 0;
     this->question = question;
     entityGroupAppend(&this->windows, &this->message->entity);
     entityGroupAppend(&this->windows, &this->question->window.entity);
-    D_8007B238 = this;
+    MEMORY_CARD_TASK = this;
     this->done = 0;
-    func_80076040(&records, DESTROY_BASES);
+    RankingTable_destroy(&records, DESTROY_BASES);
     return this;
 }
 
 /* The memory card task's destructor: stops the card, then destroys the windows and the thread. */
-void func_80070AEC(MemoryCardTask *this, s32 flags) {
-    this->task.vtable = &D_800656E0;
+void MemoryCardTask_destroy(MemoryCardTask *this, s32 flags) {
+    this->task.vtable = &MEMORY_CARD_TASK_VTABLE;
     MemCardCallback(NULL);
     MemCardStop();
-    D_8007B238 = NULL;
+    MEMORY_CARD_TASK = NULL;
     entityGroupDestroy(&this->windows, DESTROY_BASES);
     threadDestroy(&this->thread, DESTROY_BASES);
     taskDestroy(&this->task, flags);
 }
 
 /* Whether the task's work is done. */
-s32 func_80070B60(MemoryCardTask *this) {
+s32 MemoryCardTask_isDone(MemoryCardTask *this) {
     return this->done;
 }
 
 /* The entry of the thread of memoryCardTaskInit's object. */
-void func_80070B6C(s32 unused, void *object) {
-    func_80070B8C(object);
+void memoryCardThreadEntry(s32 unused, void *object) {
+    MemoryCardTask_run(object);
 }
 
 /* The task's thread: does the work of its mode, then hands back 1 every frame. */
-void func_80070B8C(MemoryCardTask *this) {
+void MemoryCardTask_run(MemoryCardTask *this) {
     switch (this->mode) {
-    case 0:
-        func_80070D84(this);
+    case MEMORY_CARD_OPTION_LOAD:
+        MemoryCardTask_runOptionLoad(this);
         break;
-    case 1:
-        func_80070DE8(this);
+    case MEMORY_CARD_OPTION_SAVE:
+        MemoryCardTask_runOptionSave(this);
         break;
-    case 2:
-        func_80070E28(this);
+    case MEMORY_CARD_LOAD:
+        MemoryCardTask_runLoad(this);
         break;
-    case 3:
-        func_80070E6C(this);
+    case MEMORY_CARD_SAVE:
+        MemoryCardTask_runSave(this);
         break;
     }
     for (;;) {
@@ -388,88 +385,91 @@ void func_80070B8C(MemoryCardTask *this) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/memory_card", func_80070C2C);
+INCLUDE_ASM("title/nonmatchings/memory_card", MemoryCardTask_formatCard);
 
 /* Opens the message window on text. */
-void func_80070D60(MemoryCardTask *this, u8 *text) {
-    func_80070404(this->message, text);
+void MemoryCardTask_showMessage(MemoryCardTask *this, u8 *text) {
+    MessageWindow_show(this->message, text);
 }
 
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_800653B8);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_LOAD_PROMPT);
 
-/* Mode 0: shows D_800653B8 and asks; on the first choice runs func_80070EAC with 0. */
-void func_80070D84(MemoryCardTask *this) {
-    func_80070D60(this, D_800653B8);
-    if (func_80071980(this, 0)) {
-        func_80070EAC(this, 0);
+/* MEMORY_CARD_OPTION_LOAD: asks "Load data?" (the cursor on no) and on yes loads, waiting for a button at the end;
+ * then closes the message window and waits 0x14 frames. */
+void MemoryCardTask_runOptionLoad(MemoryCardTask *this) {
+    MemoryCardTask_showMessage(this, STR_LOAD_PROMPT);
+    if (MemoryCardTask_ask(this, 0)) {
+        MemoryCardTask_load(this, 0);
     }
-    func_80070420(this->message);
-    func_800718F8(this, 0x14, 0);
+    MessageWindow_close(this->message);
+    MemoryCardTask_wait(this, 0x14, 0);
 }
 
-/* func_80071020, resets the object at 0x48 (func_80070420), then func_800718F8 with 0x14. */
-void func_80070DE8(MemoryCardTask *this) {
-    func_80071020(this);
-    func_80070420(this->message);
-    func_800718F8(this, 0x14, 0);
+/* MEMORY_CARD_OPTION_SAVE: saves (MemoryCardTask_save asks "Save data?" itself), then closes the message
+ * window and waits 0x14 frames. */
+void MemoryCardTask_runOptionSave(MemoryCardTask *this) {
+    MemoryCardTask_save(this);
+    MessageWindow_close(this->message);
+    MemoryCardTask_wait(this, 0x14, 0);
 }
 
-/* func_80070EAC with 1, resets the object at 0x48 (func_80070420), then func_800718F8 with 0x14. */
-void func_80070E28(MemoryCardTask *this) {
-    func_80070EAC(this, 1);
-    func_80070420(this->message);
-    func_800718F8(this, 0x14, 0);
+/* MEMORY_CARD_LOAD: loads without asking, closing "Loaded." after 0x2D frames (or a button); then closes the
+ * message window and waits 0x14 frames. */
+void MemoryCardTask_runLoad(MemoryCardTask *this) {
+    MemoryCardTask_load(this, 1);
+    MessageWindow_close(this->message);
+    MemoryCardTask_wait(this, 0x14, 0);
 }
 
-/* The same as func_80070DE8. */
-void func_80070E6C(MemoryCardTask *this) {
-    func_80071020(this);
-    func_80070420(this->message);
-    func_800718F8(this, 0x14, 0);
+/* MEMORY_CARD_SAVE: the same as MemoryCardTask_runOptionSave (it asks "Save data?" too). */
+void MemoryCardTask_runSave(MemoryCardTask *this) {
+    MemoryCardTask_save(this);
+    MessageWindow_close(this->message);
+    MemoryCardTask_wait(this, 0x14, 0);
 }
 
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_800653CC);
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065418);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_CHECKING_DO_NOT_TOUCH);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_CHECKING);
 
-INCLUDE_ASM("title/nonmatchings/memory_card", func_80070EAC);
+INCLUDE_ASM("title/nonmatchings/memory_card", MemoryCardTask_load);
 
-INCLUDE_ASM("title/nonmatchings/memory_card", func_80071020);
+INCLUDE_ASM("title/nonmatchings/memory_card", MemoryCardTask_save);
 
-INCLUDE_ASM("title/nonmatchings/memory_card", func_80071204);
+INCLUDE_ASM("title/nonmatchings/memory_card", MemoryCardTask_readSave);
 
-INCLUDE_ASM("title/nonmatchings/memory_card", func_8007138C);
+INCLUDE_ASM("title/nonmatchings/memory_card", MemoryCardTask_writeSave);
 
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_8006564C);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_REMOVED);
 
-/* Shows a card result in the message window: 0 shows nothing and returns 0; 1 and 3 show D_8006564C
- * (the card was pulled out), any other result shows text; returns -1 then. */
-s32 func_800714DC(MemoryCardTask *this, s32 result, u8 *text) {
+/* Shows a card result (McErr*) in the message window: McErrNone shows nothing and returns 0; no card or a
+ * new card shows STR_CARD_REMOVED (the card was pulled out), any other result shows text; returns -1 then. */
+s32 MemoryCardTask_checkResult(MemoryCardTask *this, s32 result, u8 *text) {
     switch (result) {
-    case 0:
+    case McErrNone:
         return 0;
-    case 1:
-    case 3:
-        func_80070D60(this, D_8006564C);
+    case McErrCardNotExist:
+    case McErrNewCard:
+        MemoryCardTask_showMessage(this, STR_CARD_REMOVED);
         break;
-    case 2:
-    case 4:
-    case 5:
+    case McErrCardInvalid:
+    case McErrNotFormat:
+    case McErrFileNotExist:
     default:
-        func_80070D60(this, text);
+        MemoryCardTask_showMessage(this, text);
         break;
     }
     return -1;
 }
 
 /* The memory card callback (a MemCB) that memoryCardTaskInit installs: keeps the command and its
- * result in the task for the thread waiting in func_80071854. */
-void func_80071550(long cmds, long result) {
-    D_8007B238->cmds = cmds;
-    D_8007B238->result = result;
+ * result in the task for the thread waiting in MemoryCardTask_waitResult. */
+void memoryCardCallback(long cmds, long result) {
+    MEMORY_CARD_TASK->cmds = cmds;
+    MEMORY_CARD_TASK->result = result;
 }
 
 /* The number of files on the card whose name matches name, -1 when the card can't say. */
-s32 func_8007156C(MemoryCardTask *this, char *name) {
+s32 MemoryCardTask_countFiles(MemoryCardTask *this, char *name) {
     struct DIRENTRY entry;
     long files;
 
@@ -479,16 +479,16 @@ s32 func_8007156C(MemoryCardTask *this, char *name) {
     return files;
 }
 
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065688);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_ANY_FILE);
 
 /* The free blocks of the card (of its 15), -1 when the card can't say. */
-s32 func_800715AC(MemoryCardTask *this) {
+s32 MemoryCardTask_getFreeBlocks(MemoryCardTask *this) {
     struct DIRENTRY entries[15];
     long files;
     s32 freeBlocks = 15;
     s32 i;
 
-    if (MemCardGetDirentry(this->channel, D_80065688, entries, &files, 0, freeBlocks) != 0) {
+    if (MemCardGetDirentry(this->channel, STR_ANY_FILE, entries, &files, 0, freeBlocks) != 0) {
         return -1;
     }
     for (i = 0; i < files; i++) {
@@ -499,41 +499,41 @@ s32 func_800715AC(MemoryCardTask *this) {
 
 /* Makes sure the file name exists: opens it, else creates it with blocks blocks and opens it again,
  * each step tried up to tries frames; returns the last card result (0 when it worked). */
-s32 func_8007163C(MemoryCardTask *this, char *name, s32 blocks, s32 tries) {
+s32 MemoryCardTask_openOrCreateFile(MemoryCardTask *this, char *name, s32 blocks, s32 tries) {
     s32 result = 0;
     s32 n;
 
     n = tries;
     while (n != 0) {
         result = MemCardOpen(this->channel, name, 2);
-        if (result == 0) {
+        if (result == McErrNone) {
             return 0;
         }
-        if (result == 5) {
+        if (result == McErrFileNotExist) {
             break;
         }
         threadSwitchBack(&this->thread, 0);
         n--;
     }
-    if (result != 5) {
+    if (result != McErrFileNotExist) {
         return result;
     }
     n = tries;
     while (n != 0) {
         result = MemCardCreateFile(this->channel, name, blocks);
-        if (result == 0) {
+        if (result == McErrNone) {
             break;
         }
         threadSwitchBack(&this->thread, 0);
         n--;
     }
-    if (result != 0) {
+    if (result != McErrNone) {
         return result;
     }
     n = tries;
     while (n != 0) {
         result = MemCardOpen(this->channel, name, 2);
-        if (result == 0) {
+        if (result == McErrNone) {
             break;
         }
         threadSwitchBack(&this->thread, 0);
@@ -542,9 +542,9 @@ s32 func_8007163C(MemoryCardTask *this, char *name, s32 blocks, s32 tries) {
     return result;
 }
 
-/* Runs MemCardExist on the card (once it is free) and waits for its result, up to
- * three times: 1 for a result of 0 or 3, 0 when all three are others. */
-s32 func_8007175C(MemoryCardTask *this) {
+/* Runs MemCardExist on the card (once it is free) and waits for its result, up to three times: 1 for a
+ * card there (McErrNone or McErrNewCard), 0 when all three are others. */
+s32 MemoryCardTask_isCardPresent(MemoryCardTask *this) {
     s32 tries = 3;
     s32 result;
 
@@ -552,17 +552,17 @@ s32 func_8007175C(MemoryCardTask *this) {
         while (!MemCardExist(this->channel)) {
             threadSwitchBack(&this->thread, 0);
         }
-        result = func_80071854(this);
-        if (result == 0 || result == 3) {
+        result = MemoryCardTask_waitResult(this);
+        if (result == McErrNone || result == McErrNewCard) {
             return 1;
         }
     } while (--tries != 0);
     return 0;
 }
 
-/* Runs MemCardAccept on the card (once it is free) and waits for its result, up to
- * three times while the result is neither 0 nor 3; returns the last one. */
-s32 func_800717DC(MemoryCardTask *this) {
+/* Runs MemCardAccept on the card (once it is free) and waits for its result, up to three times while the
+ * result is neither McErrNone nor McErrNewCard; returns the last one. */
+s32 MemoryCardTask_acceptCard(MemoryCardTask *this) {
     s32 tries = 3;
     s32 result;
 
@@ -570,8 +570,8 @@ s32 func_800717DC(MemoryCardTask *this) {
         while (!MemCardAccept(this->channel)) {
             threadSwitchBack(&this->thread, 0);
         }
-        result = func_80071854(this);
-        if (result == 0 || result == 3) {
+        result = MemoryCardTask_waitResult(this);
+        if (result == McErrNone || result == McErrNewCard) {
             break;
         }
     } while (--tries != 0);
@@ -579,7 +579,7 @@ s32 func_800717DC(MemoryCardTask *this) {
 }
 
 /* Gives up the thread each frame until the card callback ran; returns what it got. */
-s32 func_80071854(MemoryCardTask *this) {
+s32 MemoryCardTask_waitResult(MemoryCardTask *this) {
     this->cmds = 0;
     while (this->cmds == 0) {
         threadSwitchBack(&this->thread, 0);
@@ -588,7 +588,7 @@ s32 func_80071854(MemoryCardTask *this) {
 }
 
 /* Gives up the thread each frame until a button is pressed. */
-void func_800718A4(MemoryCardTask *this) {
+void MemoryCardTask_waitButton(MemoryCardTask *this) {
     PadManager *pad = PAD_MANAGER_INSTANCE;
 
     while (!(padManagerGetPressed(pad, -1) & MEMORY_CARD_ANY_BUTTON)) {
@@ -597,7 +597,7 @@ void func_800718A4(MemoryCardTask *this) {
 }
 
 /* Gives up the thread for frames frames, or until a button is pressed when skippable. */
-void func_800718F8(MemoryCardTask *this, s32 frames, s32 skippable) {
+void MemoryCardTask_wait(MemoryCardTask *this, s32 frames, s32 skippable) {
     /* The match depends on the test against -1 (kept in a saved register) after the decrement. */
     while (--frames != -1) {
         if (skippable && (padManagerGetPressed(PAD_MANAGER_INSTANCE, -1) & MEMORY_CARD_ANY_BUTTON)) {
@@ -607,21 +607,21 @@ void func_800718F8(MemoryCardTask *this, s32 frames, s32 skippable) {
     }
 }
 
-/* Asks the yes/no window's question (opened on the first choice unless onFirst is 0) and gives up the
- * thread each frame until the player answers; returns whether the answer is the first choice. */
-s32 func_80071980(MemoryCardTask *this, s32 onFirst) {
-    Unk80071C78 *object = this->question;
+/* Asks the yes/no window's question (opened on yes unless defaultYes is 0) and gives up the thread each
+ * frame until the player answers; returns whether the answer is yes. */
+s32 MemoryCardTask_ask(MemoryCardTask *this, s32 defaultYes) {
+    YesNoWindow *question = this->question;
 
-    func_80070708(object, onFirst);
+    YesNoWindow_open(question, defaultYes);
     do {
         threadSwitchBack(&this->thread, 0);
-    } while (!func_80070750(object));
-    return func_8007075C(object);
+    } while (!YesNoWindow_isDecided(question));
+    return YesNoWindow_isYes(question);
 }
 
 /* The task's update: runs its thread for a frame and kills the task once the thread is done, then
  * updates the windows. */
-void func_800719D8(MemoryCardTask *this) {
+void MemoryCardTask_update(MemoryCardTask *this) {
     s32 result = threadSwitchTo(&this->thread, 0);
 
     this->done = result > 0;
@@ -629,8 +629,8 @@ void func_800719D8(MemoryCardTask *this) {
         taskKill(&this->task);
     }
     if (result >= 0) {
-        entityGroupGather(&this->windows, (s32)this);
-        entityGroupUpdate(&this->windows, (s32)this);
+        entityGroupTick(&this->windows, (s32)this);
+        entityGroupDraw(&this->windows, (s32)this);
     }
 }
 
@@ -640,7 +640,7 @@ void func_800719D8(MemoryCardTask *this) {
  * The match depends on: the header plus the data summed apart (end), both TIM pointers read before the
  * clut copy (an inline unaligned block move), the bytes 3 then 2, and a running offset for the last two
  * copies. */
-u8 *func_80071A44(u32 *fileSize, char *title, u32 *icon, u8 *data, s32 size) {
+u8 *buildSaveFile(u32 *fileSize, char *title, u32 *icon, u8 *data, s32 size) {
     TIM_IMAGE tim;
     s32 frames;
     s32 iconSize;
@@ -675,16 +675,17 @@ u8 *func_80071A44(u32 *fileSize, char *title, u32 *icon, u8 *data, s32 size) {
     return file;
 }
 
-/* The destructor of the entity class of vtable D_800656B8, which func_800702F8 installs. */
-void func_80071BE8(Entity *this, s32 flags) {
+/* The message window's destructor (MESSAGE_WINDOW_VTABLE, installed by MessageWindow_init). */
+void MessageWindow_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* The destructor of the entity class of vtable D_80065690, which memoryCardTaskInit and func_80071C78 install. */
-void func_80071C30(Entity *this, s32 flags) {
+/* The yes/no window's destructor (YES_NO_WINDOW_VTABLE, installed by YesNoWindow_init and its inlined copy in
+ * memoryCardTaskInit). */
+void YesNoWindow_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
@@ -692,19 +693,19 @@ void func_80071C30(Entity *this, s32 flags) {
 }
 
 /* Constructs a yes/no window on the first choice. */
-Unk80071C78 *func_80071C78(Unk80071C78 *this, s32 x, s32 y, s32 width, s32 height) {
-    func_800702F8(&this->window, x, y, width, height);
-    this->window.entity.vtable = &D_80065690;
+YesNoWindow *YesNoWindow_init(YesNoWindow *this, s32 x, s32 y, s32 width, s32 height) {
+    MessageWindow_init(&this->window, x, y, width, height);
+    this->window.entity.vtable = &YES_NO_WINDOW_VTABLE;
     this->choice = 0;
     return this;
 }
 
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065690);
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_800656B8);
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_800656E0);
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065708);
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_800658C8);
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_800658F4);
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_80065950);
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_8006597C);
-INCLUDE_RODATA("title/nonmatchings/memory_card", D_800659A8);
+INCLUDE_RODATA("title/nonmatchings/memory_card", YES_NO_WINDOW_VTABLE);
+INCLUDE_RODATA("title/nonmatchings/memory_card", MESSAGE_WINDOW_VTABLE);
+INCLUDE_RODATA("title/nonmatchings/memory_card", MEMORY_CARD_TASK_VTABLE);
+INCLUDE_RODATA("title/nonmatchings/memory_card", SAVE_ICON_TIM);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_NOT_INSERTED_2);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_SAVE_DATA_NOT_FOUND);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_NOT_FORMATTED);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_ALREADY_FORMATTED);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_FORMATTED);

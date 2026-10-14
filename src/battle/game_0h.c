@@ -1,25 +1,26 @@
-/* The class of the constructor func_800C7024 (virtual tables D_8006D740 and D_8006D760), which nine
- * fighters derive from. */
+/* The projectile (Projectile_init, virtual tables PROJECTILE_HIT_VTABLE and PROJECTILE_VTABLE) that nine fighters'
+ * shots and the item shot derive from. */
 
 #include "common.h"
 #include "battle/game_classes.h"
 
-INCLUDE_ASM("game/nonmatchings/game_0h", func_800C7024);
+INCLUDE_ASM("game/nonmatchings/game_0h", Projectile_init);
 
-INCLUDE_ASM("game/nonmatchings/game_0h", func_800C71DC);
+INCLUDE_ASM("game/nonmatchings/game_0h", Projectile_tick);
 
-/* The second base's first method of Unk800C7024: func_8007BDF0 with sum, func_800C73A8 with what func_800C7358
- * picks, func_800C7474 with the entity func_80078878 finds in sum, then deletes itself. */
-void func_800C72D8(Unk800C7024 *this, Unk80075EE4 *sum) {
-    func_8007BDF0(&this->parts.base, sum);
-    func_800C73A8(this, func_800C7358(this));
-    func_800C7474(this, func_80078878(sum));
+/* The projectile's hit (its Hit's slot 0x08): applies the hit (Hit_apply), spawns a burst by its hit level and a
+ * hit spark toward the fighter it hit, then deletes itself. */
+void Projectile_hit(Projectile *this, CollisionSphere *sum) {
+    Hit_apply(&this->parts.base, sum);
+    Projectile_spawnBurst(this, Projectile_getBurstKind(this));
+    Projectile_spawnHitSpark(this, getHitFighter(sum));
     entityDelete(&this->parts.entity);
 }
 
-/* Picks 3 for 0xA0 of 0 or 1 (and any other value), 4 for 2, 5 for 3. */
-s32 func_800C7358(Unk800C7024 *this) {
-    switch (this->unkA0) {
+/* The particle kind of the projectile's burst by its hit level: 3 for 0 or 1 (and any other value), 4 for 2, 5
+ * for 3. */
+s32 Projectile_getBurstKind(Projectile *this) {
+    switch (this->hitLevel) {
     case 0:
     case 1:
         return 3;
@@ -31,35 +32,36 @@ s32 func_800C7358(Unk800C7024 *this) {
     return 3;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0h", func_800C73A8);
+INCLUDE_ASM("game/nonmatchings/game_0h", Projectile_spawnBurst);
 
-INCLUDE_ASM("game/nonmatchings/game_0h", func_800C7474);
+INCLUDE_ASM("game/nonmatchings/game_0h", Projectile_spawnHitSpark);
 
-INCLUDE_ASM("game/nonmatchings/game_0h", func_800C75FC);
+INCLUDE_ASM("game/nonmatchings/game_0h", createHitSpark);
 
-/* A copy of the destructor of the UnkPartsEntity38 class of vtables D_8006D760 and D_8006D740,
- * which func_800C7024 installs: game has 11 identical ones. */
-void func_800C7714(UnkPartsEntity38 *this, s32 flags) {
+/* The projectile's destructor (Projectile_init's virtual tables): game has 11 identical copies, one per derived
+ * class. */
+void Projectile_destroy(UnkPartsEntity38 *this, s32 flags) {
     ListNode *node;
 
-    this->base.vtable = D_8006D740;
-    this->entity.vtable = &D_8006D760;
-    this->part.vtable = D_80065184;
+    this->base.vtable = PROJECTILE_HIT_VTABLE;
+    this->entity.vtable = &PROJECTILE_VTABLE;
+    this->part.vtable = COLLISION_SHAPE_VTABLE;
     /* listRemove(&this->part.node), in the access order the game's compiler used */
-    node = &this->part.node;
-    this->part.node.next->prev = this->part.node.prev;
-    node->prev->next = this->part.node.next;
-    this->part.node.next = node;
-    this->part.node.prev = node;
-    this->base.vtable = D_80065164;
+    node = &this->part.link;
+    this->part.link.next->prev = this->part.link.prev;
+    node->prev->next = this->part.link.next;
+    this->part.link.next = node;
+    this->part.link.prev = node;
+    this->base.vtable = COLLISION_OWNER_VTABLE;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-void func_800C77B4(void) {
+/* The projectile's draw: nothing (the derived classes draw). */
+void Projectile_draw(void) {
 }
 
-INCLUDE_RODATA("game/nonmatchings/game_0h", D_8006D740);
-INCLUDE_RODATA("game/nonmatchings/game_0h", D_8006D760);
+INCLUDE_RODATA("game/nonmatchings/game_0h", PROJECTILE_HIT_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0h", PROJECTILE_VTABLE);

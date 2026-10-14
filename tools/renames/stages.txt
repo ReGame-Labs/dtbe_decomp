@@ -1,0 +1,15 @@
+# The stage overlays' shared layouts (include/battle/stage_objects.h). Each stage's own names are in
+# tools/renames/stNN.txt, run with --overlay stNN.
+
+# A stage's hit: {vtable, damage, knockback}; its slot 0x08 adds both into the touched sphere's hitDamage and
+# hitKnockback (st00 func_800D99AC, st04 func_800D84C8), as game.bin's Hit_apply does; derived from CollisionOwner
+UnkStageObject StageHit
+# st02's and st03's mesh movers: an entity whose tick moves its mesh (st02 turns it about z, st03 bobs it)
+UnkStageMeshPos StageMeshMover
+# st07's and st09's per-character throwers: their tick launches the ball (st07) or throws (st09)
+UnkStageQuad BonusThrower
+# the mark a thrown object leaves where it lands, deleted on its 17th frame (st07, st09)
+UnkStageQuadPos BonusLandingMark
+# the drawers of a part of the scenery: st00's draws its Group, st02's one mesh node
+UnkSt00Entity St00GroupDrawer
+UnkSt02MeshEntity St02MeshDrawer

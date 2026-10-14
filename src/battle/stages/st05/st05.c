@@ -9,61 +9,62 @@
 #include "engine/system/memory.h"
 #include "engine/task/entity.h"
 
-/* The stage's class, which func_800D3CEC constructs on func_8006ED20's. */
-typedef struct Unk800D3CEC {
-    /* 0x000 */ Unk8006ED20 base;
+/* Arena 5's stage, "Volcano" in STAGE_NAMES (StageVolcano_init, virtual table STAGE_VOLCANO_VTABLE): a Fight that
+ * lights its fighters (StageVolcano_lightFighter), keeps them within its x range and throws shots; embers rise. */
+typedef struct StageVolcano {
+    /* 0x000 */ Fight base;
     /* 0xD38 */ u8 unkD38[0xD7C - 0xD38];
-    /* 0xD7C */ s32 unkD7C; /* adds 4 per unit to the rise of func_800D5968's entities (func_800D5A90) */
-    /* 0xD80 */ u32 unkD80; /* a sound's handle (stopSound) */
-} Unk800D3CEC;
+    /* 0xD7C */ s32 riseBoost; /* adds 4 per unit to the embers' rise (St05Ember_tick) */
+    /* 0xD80 */ u32 sound; /* sound 0x67's handle (st05_startSound, st05_stopSound) */
+} StageVolcano;
 
 void func_800D4BB4(void *this);
 
 /* the virtual tables the functions below install */
-extern VtableEntry D_800D3C0C[];
+extern VtableEntry ST05_HIT_VTABLE[];
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D3CEC);
+INCLUDE_ASM("st05/nonmatchings/st05", StageVolcano_init);
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D3FC0);
+INCLUDE_ASM("st05/nonmatchings/st05", StageVolcano_destroy);
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D40CC);
+INCLUDE_ASM("st05/nonmatchings/st05", StageVolcano_startRound);
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D4210);
+INCLUDE_ASM("st05/nonmatchings/st05", StageVolcano_tickScenery);
 
-/* the stage's steps for one character */
-void func_800D4570(Unk800D3CEC *this, Unk80076F34 *chara);
-void func_800D45E0(Unk800D3CEC *this, Unk80076F34 *chara);
+/* the stage's steps for one fighter */
+void st05_clampFighterX(StageVolcano *this, Fighter *chara);
+void func_800D45E0(StageVolcano *this, Fighter *chara);
 
-/* The stage's step for the characters: func_80070314, then for each side func_800D4570 and, unless
- * func_8006F144 or func_8006F190 holds, func_800D45E0. */
-void func_800D44CC(Unk800D3CEC *this) {
+/* The stage's override of Fight_tick: the base tick, then for each side st05_clampFighterX and, unless
+ * func_8006F144 or Fight_isRoundOver holds, func_800D45E0. */
+void StageVolcano_tick(StageVolcano *this) {
     s32 held;
     s32 side;
-    Unk80076F34 *chara;
+    Fighter *chara;
 
-    func_80070314(&this->base);
+    Fight_tick(&this->base);
     held = 0;
     if (func_8006F144(&this->base)) {
         held = 1;
-    } else if (func_8006F190(&this->base)) {
+    } else if (Fight_isRoundOver(&this->base)) {
         held = 1;
     }
     for (side = 0; side < 2; side++) {
-        chara = func_800700C8(&this->base, side);
-        func_800D4570(this, chara);
+        chara = Fight_getFighter(&this->base, side);
+        st05_clampFighterX(this, chara);
         if (!held) {
             func_800D45E0(this, chara);
         }
     }
 }
 
-/* Keeps a character's x within -0xE00..0xF00 (gcc folds the in-range test into one unsigned compare).
+/* Keeps a fighter's x within -0xE00..0xF00 (gcc folds the in-range test into one unsigned compare).
  * The match depends on the clamp testing the low bound first, with the high one inside it. */
-void func_800D4570(Unk800D3CEC *this, Unk80076F34 *chara) {
+void st05_clampFighterX(StageVolcano *this, Fighter *chara) {
     Vec3 position;
     s32 x;
 
-    func_800775D8(chara, &position);
+    Fighter_getPosition(chara, &position);
     x = position.vx;
     if (x >= -0xE00 && x <= 0xF00) {
         return;
@@ -76,14 +77,14 @@ void func_800D4570(Unk800D3CEC *this, Unk80076F34 *chara) {
         x = -0xE00;
     }
     position.vx = x;
-    func_800775B0(chara, &position);
+    Fighter_setPosition(chara, &position);
 }
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D45E0);
 
-/* A value by bits 8-9 of 0x0 of the character's table (func_80077698): 0xC0, 0x40, 0x80 or 0x100. */
-s32 func_800D4768(Unk80076F34 *chara) {
-    switch (func_80077698(chara)->unk0 & 0x300) {
+/* A value by bits 8-9 of 0x0 of the character's table (Fighter_getParams): 0xC0, 0x40, 0x80 or 0x100. */
+s32 func_800D4768(Fighter *chara) {
+    switch (Fighter_getParams(chara)->flags & 0x300) {
     case 0x000:
         return 0xC0;
     case 0x100:
@@ -96,33 +97,33 @@ s32 func_800D4768(Unk80076F34 *chara) {
     return 0xC0;
 }
 
-/* The stage's override of func_80070824 (at 0x58 of D_800D3C2C): whether a
- * character's position (func_800706A4 passes it) has a y greater than 0x400. */
-s32 func_800D47D4(Unk800D3CEC *this, Vec3 *position) {
+/* The stage's override of Fight_isFallen: whether a
+ * fighter's position (Fight_catchFalls passes it) has a y greater than 0x400. */
+s32 StageVolcano_isFallen(StageVolcano *this, Vec3 *position) {
     return position->vy > 0x400;
 }
 
-/* The base's func_80072748, then the stage's own part (func_800D4BB4). */
-void func_800D47E8(void *this) {
-    func_80072748(this);
+/* The stage's override of Fight_drawWorld: the base's, then the stage's own part (func_800D4BB4). */
+void StageVolcano_drawWorld(void *this) {
+    Fight_drawWorld(this);
     func_800D4BB4(this);
 }
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D4814);
+INCLUDE_ASM("st05/nonmatchings/st05", StageVolcano_lightFighter);
 
-/* The stage's camera step: func_80072088, then keeps the eye at y -0x300 or above it (lower y), copying
- * it into the LookAt when it moves it. The match depends on the eye read into locals before the copy
+/* The stage's override of Fight_updateCamera: the base update, then keeps the eye at y -0x300 or above it (lower
+ * y), copying it into the LookAt when it moves it. The match depends on the eye read into locals before the copy
  * (the LookAt's stores could alias the stage, so a direct copy interleaves the loads). */
-void func_800D4A10(Unk800D3CEC *this) {
+void StageVolcano_updateCamera(StageVolcano *this) {
     LookAt *lookAt;
     s32 x;
     s32 y;
     s32 z;
 
-    func_80072088(&this->base);
+    Fight_updateCamera(&this->base);
     if (this->base.eye.vy > -0x300) {
         this->base.eye.vy = -0x300;
-        lookAt = func_8006EF64(&this->base);
+        lookAt = Fight_getLookAt(&this->base);
         lookAt->dirty = 1;
         x = this->base.eye.vx;
         y = this->base.eye.vy;
@@ -152,18 +153,18 @@ INCLUDE_ASM("st05/nonmatchings/st05", func_800D5144);
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D5254);
 
-/* Starts sound 0x67 into 0xD80, unless one is playing there. */
-void func_800D5364(Unk800D3CEC *this) {
-    if (this->unkD80 == 0) {
-        this->unkD80 = soundControlPlaySound(&SOUND_CONTROL, 0x67, 0);
+/* Starts sound 0x67 into the stage's sound, unless one is playing there. */
+void st05_startSound(StageVolcano *this) {
+    if (this->sound == 0) {
+        this->sound = soundControlPlaySound(&SOUND_CONTROL, 0x67, 0);
     }
 }
 
-/* Stops the sound at 0xD80, if there is one. */
-void func_800D53A8(Unk800D3CEC *this) {
-    if (this->unkD80 != 0) {
-        stopSound(this->unkD80);
-        this->unkD80 = 0;
+/* Stops the stage's sound, if there is one. */
+void st05_stopSound(StageVolcano *this) {
+    if (this->sound != 0) {
+        stopSound(this->sound);
+        this->sound = 0;
     }
 }
 
@@ -194,24 +195,24 @@ INCLUDE_ASM("st05/nonmatchings/st05", func_800D5518);
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D5690);
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D5968);
+INCLUDE_ASM("st05/nonmatchings/st05", St05Ember_init);
 
-/* The entity class func_800D5968 constructs (virtual table D_800D3BBC): a rising particle that keeps its
- * last four positions. */
-typedef struct Unk800D5968 {
+/* An ember: a rising particle that keeps its last four positions, drawn as a line strip (St05Ember_init, virtual
+ * table ST05_EMBER_VTABLE). */
+typedef struct St05Ember {
     /* 0x00 */ Entity entity;
     /* 0x18 */ VECTOR positions[4]; /* a ring; current indexes the newest */
     /* 0x58 */ VECTOR velocity;
     /* 0x68 */ s32 current;
-    /* 0x6C */ s32 life; /* 128 to 255 at construction, 2 less per update */
-} Unk800D5968;
+    /* 0x6C */ s32 life; /* 128 to 255 at construction, 2 less per tick */
+} St05Ember;
 
-/* func_800D5968's class's update: the next position is the newest plus the velocity, then the velocity
- * drifts by -3..3 in x and z and its y becomes -(16 + 4 * the stage's 0xD7C) minus 0..7; the entity
+/* St05Ember's tick: the next position is the newest plus the velocity, then the velocity
+ * drifts by -3..3 in x and z and its y becomes -(16 + 4 * the stage's riseBoost) minus 0..7; the entity
  * deletes itself when its life runs out. The match depends on the newest position read before the
- * velocity is added, on 0xD7C read before the random calls, and on the y's two parts in locals of their
+ * velocity is added, on riseBoost read before the random calls, and on the y's two parts in locals of their
  * own (an inline "- (extra + 0x10)" folds the 0x10 elsewhere). */
-void func_800D5A90(Unk800D5968 *this, Unk800D3CEC *stage) {
+void St05Ember_tick(St05Ember *this, StageVolcano *stage) {
     VECTOR *newest;
     VECTOR *position;
     s32 next;
@@ -235,7 +236,7 @@ void func_800D5A90(Unk800D5968 *this, Unk800D3CEC *stage) {
     position->vy = y;
     position->vz = z;
     this->current = next;
-    extra = stage->unkD7C * 4;
+    extra = stage->riseBoost * 4;
     this->velocity.vx += (s32)mersenneTwisterGenerate(&RANDOM) % 4;
     jitter = -(mersenneTwisterGenerate(&RANDOM) & 7);
     rise = extra + 0x10;
@@ -247,16 +248,17 @@ void func_800D5A90(Unk800D5968 *this, Unk800D3CEC *stage) {
     }
 }
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D5BD4);
+INCLUDE_ASM("st05/nonmatchings/st05", St05Ember_draw);
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D5D54);
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D5E3C);
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D621C);
+INCLUDE_ASM("st05/nonmatchings/st05", St05Hit_apply);
 
-/* The entity class func_800D627C constructs (virtual table D_800D3B6C). */
-typedef struct Unk800D627C {
+/* A quad whose size closes toward its target while its alpha falls (St05Fade_init, virtual table
+ * ST05_FADE_VTABLE). */
+typedef struct St05Fade {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Vec3 position;
     /* 0x24 */ u8 unk24[4];
@@ -265,17 +267,17 @@ typedef struct Unk800D627C {
     /* 0x30 */ s32 unk30;
     /* 0x34 */ s32 unk34;
     /* 0x38 */ s32 unk38;
-} Unk800D627C;
+} St05Fade;
 
-extern EntityVtable D_800D3B6C;
+extern EntityVtable ST05_FADE_VTABLE;
 
-/* Constructs an Unk800D627C at position, with unk30 and unk34; 0x38 is 0xFF.
+/* Constructs an St05Fade at position, with unk30 and unk34; 0x38 is 0xFF.
  * The match depends on reading the three words before storing any, as vecCopy does. */
-Unk800D627C *func_800D627C(Unk800D627C *this, Vec3 *position, s32 unk30, s32 unk34) {
+St05Fade *St05Fade_init(St05Fade *this, Vec3 *position, s32 unk30, s32 unk34) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_800D3B6C;
+    this->entity.vtable = &ST05_FADE_VTABLE;
     x = position->vx;
     y = position->vy;
     z = position->vz;
@@ -290,9 +292,9 @@ Unk800D627C *func_800D627C(Unk800D627C *this, Vec3 *position, s32 unk30, s32 unk
     return this;
 }
 
-/* Unk800D627C's update: 0x28 and 0x2C close a quarter of their distance to 0x30 and 0x34, and 0x38 falls
+/* St05Fade's tick: 0x28 and 0x2C close a quarter of their distance to 0x30 and 0x34, and 0x38 falls
  * by 0x18; the entity deletes itself when 0x38 runs out. */
-void func_800D6308(Unk800D627C *this) {
+void St05Fade_tick(St05Fade *this) {
     this->unk28 += (this->unk30 - this->unk28) >> 2;
     this->unk2C += (this->unk34 - this->unk2C) >> 2;
     this->unk38 -= 0x18;
@@ -301,10 +303,10 @@ void func_800D6308(Unk800D627C *this) {
     }
 }
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D6388);
+INCLUDE_ASM("st05/nonmatchings/st05", St05Fade_draw);
 
-/* The entity class func_800D64FC constructs (virtual table D_800D3B44). */
-typedef struct Unk800D64FC {
+/* A Gouraud triangle that slows down while its alpha falls (St05Shard_init, virtual table ST05_SHARD_VTABLE). */
+typedef struct St05Shard {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Vec3 position;
     /* 0x24 */ u8 unk24[4];
@@ -312,17 +314,17 @@ typedef struct Unk800D64FC {
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30;
     /* 0x34 */ s32 unk34;
-} Unk800D64FC;
+} St05Shard;
 
-extern EntityVtable D_800D3B44;
+extern EntityVtable ST05_SHARD_VTABLE;
 
-/* Constructs an Unk800D64FC at position, with unk30 and unk2C; 0x34 is 0xFF.
+/* Constructs an St05Shard at position, with unk30 and unk2C; 0x34 is 0xFF.
  * The match depends on reading the three words before storing any, as vecCopy does. */
-Unk800D64FC *func_800D64FC(Unk800D64FC *this, Vec3 *position, s32 unk30, s32 unk2C) {
+St05Shard *St05Shard_init(St05Shard *this, Vec3 *position, s32 unk30, s32 unk2C) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_800D3B44;
+    this->entity.vtable = &ST05_SHARD_VTABLE;
     x = position->vx;
     y = position->vy;
     z = position->vz;
@@ -336,9 +338,9 @@ Unk800D64FC *func_800D64FC(Unk800D64FC *this, Vec3 *position, s32 unk30, s32 unk
     return this;
 }
 
-/* Unk800D64FC's update: 0x28 moves by 0x2C, which loses an eighth of itself, and 0x34 falls by 8; the
+/* St05Shard's tick: 0x28 moves by 0x2C, which loses an eighth of itself, and 0x34 falls by 8; the
  * entity deletes itself when 0x34 runs out. */
-void func_800D6584(Unk800D64FC *this) {
+void St05Shard_tick(St05Shard *this) {
     this->unk28 += this->unk2C;
     this->unk2C += -this->unk2C >> 3;
     this->unk34 -= 8;
@@ -347,7 +349,7 @@ void func_800D6584(Unk800D64FC *this) {
     }
 }
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D65F8);
+INCLUDE_ASM("st05/nonmatchings/st05", St05Shard_draw);
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D6740);
 
@@ -355,42 +357,49 @@ INCLUDE_ASM("st05/nonmatchings/st05", func_800D6814);
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D68A4);
 
-/* The stage's 0xD7C. */
-s32 func_800D6A08(Unk800D3CEC *this) {
-    return this->unkD7C;
+/* The stage's riseBoost. */
+s32 st05_getRiseBoost(StageVolcano *this) {
+    return this->riseBoost;
 }
 
-/* The destructor of the class of virtual table D_800D3C0C: Unk80076308's, inlined. */
-void func_800D6A14(Unk80076308 *this, s32 flags) {
-    this->vtable = D_80065164;
+/* The hit of the stage's shots (St05Hit_init): StageHit's layout, but its slot 0x08 (St05Hit_apply) pushes the
+ * touched sphere away from center (its knockback gets 32 times its offset from center in x, 16 times in y) and adds
+ * the damage. */
+typedef struct St05Hit {
+    /* 0x0 */ VtableEntry *vtable;
+    /* 0x4 */ s32 damage;
+    /* 0x8 */ Vec3 center;
+} St05Hit;
+
+/* The destructor of the class of virtual table ST05_HIT_VTABLE: CollisionOwner's, inlined. */
+void St05Hit_destroy(CollisionOwner *this, s32 flags) {
+    this->vtable = COLLISION_OWNER_VTABLE;
     if (flags & DESTROY_FREE) {
         operatorDelete(this);
     }
 }
 
-/* Constructs an object of the class of vtable D_800D3C0C, which derives from the class of
- * D_80065164, with a word. */
-UnkStageObject *func_800D6A48(UnkStageObject *this, s32 arg) {
-    this->vtable = D_800D3C0C;
-    this->unk4 = arg;
+/* Constructs a St05Hit with its damage (virtual table ST05_HIT_VTABLE, derived from CollisionOwner). */
+St05Hit *St05Hit_init(St05Hit *this, s32 damage) {
+    this->vtable = ST05_HIT_VTABLE;
+    this->damage = damage;
     return this;
 }
 
-/* Sets the object's vector, reading all three components before writing any (as vecCopy
- * does). */
-void func_800D6A60(UnkStageObject *this, Vec3 *vec) {
+/* Sets the hit's center, reading all three components before writing any (as vecCopy does). */
+void St05Hit_setCenter(St05Hit *this, Vec3 *center) {
     s32 x, y, z;
 
-    x = vec->vx;
-    y = vec->vy;
-    z = vec->vz;
-    this->unk8.vx = x;
-    this->unk8.vy = y;
-    this->unk8.vz = z;
+    x = center->vx;
+    y = center->vy;
+    z = center->vz;
+    this->center.vx = x;
+    this->center.vy = y;
+    this->center.vz = z;
 }
 
-/* The destructor of the entity class of vtable D_800D3BBC, which func_800D5968 installs. */
-void func_800D6A7C(Entity *this, s32 flags) {
+/* St05Ember's destructor. */
+void St05Ember_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
@@ -398,22 +407,22 @@ void func_800D6A7C(Entity *this, s32 flags) {
 }
 
 /* The entity class func_800D5D54 constructs (virtual table D_800D3B94): an
- * Unk80076308 base at 0x18 (virtual table D_800D3C0C) and a member of
- * func_80075EE4's class at 0x30. */
+ * CollisionOwner base at 0x18 (virtual table ST05_HIT_VTABLE) and a member of
+ * CollisionSphere_init's class at 0x30. */
 typedef struct Unk800D5D54 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk80076308 unk18;
+    /* 0x18 */ CollisionOwner unk18;
     /* 0x1C */ s32 unk1C;
     /* 0x20 */ Vec3 unk20; /* func_800D5D54's third argument */
     /* 0x2C */ u8 unk2C[0x30 - 0x2C];
-    /* 0x30 */ Unk800761AC unk30;
+    /* 0x30 */ CollisionShape unk30;
 } Unk800D5D54;
 
 /* Unk800D5D54's destructor: its member's and its base's inlined, then entityDestroy. */
 void func_800D6AC4(Unk800D5D54 *this, s32 flags) {
     ListNode *link;
 
-    this->unk30.vtable = D_80065184;
+    this->unk30.vtable = COLLISION_SHAPE_VTABLE;
     /* listRemove(&this->unk30.link) written out: the match depends on this
      * access order (soundControlDestroy's), as in st04's func_800D8618 */
     link = &this->unk30.link;
@@ -421,23 +430,23 @@ void func_800D6AC4(Unk800D5D54 *this, s32 flags) {
     link->prev->next = this->unk30.link.next;
     this->unk30.link.next = link;
     this->unk30.link.prev = link;
-    this->unk18.vtable = D_80065164;
+    this->unk18.vtable = COLLISION_OWNER_VTABLE;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* The destructor of the entity class of vtable D_800D3B6C, which func_800D627C installs. */
-void func_800D6B4C(Entity *this, s32 flags) {
+/* St05Fade's destructor. */
+void St05Fade_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* The destructor of the entity class of vtable D_800D3B44, which func_800D64FC installs. */
-void func_800D6B94(Entity *this, s32 flags) {
+/* St05Shard's destructor. */
+void St05Shard_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);

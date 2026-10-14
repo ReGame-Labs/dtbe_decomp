@@ -20,6 +20,9 @@ D_800107D4 LIGHTS_DEFAULT_COLOR0
 D_800107E4 LIGHTS_DEFAULT_COLOR1
 D_800107F4 LIGHTS_DEFAULT_COLOR2
 D_80010804 LIGHTS_DEFAULT_BACK_COLOR
+# the zero vector 0x10 bytes into the back color's block: the fighters, the stages and the hit effects pass it
+# as a VECTOR or a Vec3 where no offset or speed is wanted (lights.c includes its rodata after the back color's)
+D_80010814 ZERO_VECTOR
 D_80010864 AXIS_Y
 D_80010884 AXIS_Z
 D_80019308 CACHE_VTABLE
@@ -343,3 +346,26 @@ D_80113EE0 CLIP_OUTCODES
 
 # the static inline copies of a function, named after it
 transformSetParent transformSetParentKeepLocalInline
+
+# vram_cache.cpp's own copies of sprite.c's rectCountCells and rectSplitCells (the same code); only cacheInit
+# calls them
+func_8002EB94 cacheCountCells
+func_8002EC00 cacheSplitCells
+
+# a mesh scene node's collision lines: meshSceneLoad stores them in the node's link and appends the link to
+# D_8006437C, and game_0c walks them, 0x10 bytes a line (two ends, a normal and an offset), testing segments
+# against them (the ground under a character)
+MeshSceneEntry MeshSceneCollision
+func_80031B4C meshSceneGetCollisionCount
+func_80031BB8 meshSceneGetCollisionLines
+func_80031E68 meshSceneLinkGetCollisionLines
+func_80031E80 meshSceneLinkGetCollisionCount
+D_8006437C COLLISION_LINKS
+# game_0c's functions of that list: the head; moving the link func_80076474 picked to the front; moving a link
+# to the back, which meshSceneHideNode calls on the links it hides
+func_80076A00 getCollisionLinks
+func_80076A0C moveCollisionLinkToFront
+func_80076A5C moveCollisionLinkToBack
+
+# the RECT {0, 0, 256, 256} buildPolyFT4Windowed sets in its first DR_TWIN: the whole texture page
+D_8006434C DEFAULT_TEX_WINDOW

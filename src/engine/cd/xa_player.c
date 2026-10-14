@@ -110,7 +110,7 @@ void receiveXaSector(u8 intr, u8 *result) {
         DsPacket(XA_STREAM.track->mode, &XA_STREAM.position, CdlReadS, receiveXaRestart, -1);
         return;
     }
-    func_80046930(&header, sizeof(header) / 4);
+    DsGetSector(&header, sizeof(header) / 4);
     if ((header.submode & XA_SUBMODE_DATA) && XA_STREAM.track->filter.chan == header.channel) {
         DsReadyCallback(NULL);
         if (XA_PLAYER.loopsLeft != 0) {
@@ -220,7 +220,7 @@ void receiveXaSeek(u8 intr, u8 *result) {
     s32 discard;
 
     if (intr == CdlComplete) {
-        func_80046930(&discard, 1);
+        DsGetSector(&discard, 1);
         XA_PLAYER.flags |= XA_SEEKED;
     }
 }

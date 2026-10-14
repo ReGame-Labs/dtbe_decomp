@@ -1,7 +1,7 @@
 #ifndef DTBE_TITLE_OPTION_H
 #define DTBE_TITLE_OPTION_H
 
-/* The options' menu items and task (title/option.cpp). */
+/* The options' rows, the button menu and the options' task (title/option.cpp). */
 
 #ifdef __cplusplus
 /* Their virtual tables stay in the overlay's assembly (.rodata), so option.cpp
@@ -24,57 +24,57 @@
  * g++'s names there.
  */
 
-/* An item of the options' menu (virtual table D_80066914): an image drawn at its row, blinking while it
- * is current. The other items derive from it; Stepper is its virtual base, reached through the pointer
- * at 0x00 and placed after the members of the most derived class. */
-class Unk80077AC8 : public virtual Stepper {
+/* A row of the options' menus: its label image drawn at its row, blinking while it is current; it reads and
+ * writes the save option of its row (refresh, apply). The other rows derive from it; Stepper is its virtual
+ * base, reached through the pointer at 0x00 and placed after the members of the most derived class. */
+class OptionItem : public virtual Stepper {
 public:
-    /* 0x04 */ Unk80073390Image *image;
+    /* 0x04 */ TitleImage *image;
     /* 0x08 */ s32 blink; /* the blink's angle; 0 while the item is not active */
 
-    void stepUp(s32 arg, s32 held, u32 buttons) __asm__("func_80077820");
-    void stepDown(s32 arg, s32 held, u32 buttons) __asm__("func_8007786C");
-    void refresh(s32 arg) __asm__("func_800778F8");
-    void func_8007799C() __asm__("func_8007799C");
-    void focus(s32 arg) __asm__("func_80077A88");
-    s32 cancel(s32 arg, s32 held, s32 own) __asm__("func_80077AB4");
-    Unk80077AC8(Unk80073390Image *image) __asm__("func_80077AC8");
-    s32 confirm(s32 arg, s32 held, s32 own) __asm__("func_80077BF8");
-    s32 input(s32 arg, s32 held, u32 buttons) __asm__("func_80077C2C");
-    s32 func_80077C44(s32 isCurrent) __asm__("func_80077C44");
-    void draw(s32 arg, s32 isCurrent, s32 active) __asm__("func_80077C78");
-    ~Unk80077AC8();
+    void stepUp(s32 arg, s32 held, u32 buttons) __asm__("OptionItem_stepUp");
+    void stepDown(s32 arg, s32 held, u32 buttons) __asm__("OptionItem_stepDown");
+    void refresh(s32 arg) __asm__("OptionItem_refresh");
+    void apply() __asm__("OptionItem_apply");
+    void focus(s32 arg) __asm__("OptionItem_focus");
+    s32 cancel(s32 arg, s32 held, s32 own) __asm__("OptionItem_cancel");
+    OptionItem(TitleImage *image) __asm__("OptionItem_init");
+    s32 confirm(s32 arg, s32 held, s32 own) __asm__("OptionItem_confirm");
+    s32 input(s32 arg, s32 held, u32 buttons) __asm__("OptionItem_input");
+    s32 getBrightness(s32 isCurrent) __asm__("OptionItem_getBrightness");
+    void draw(s32 ot, s32 isCurrent, s32 active) __asm__("OptionItem_draw");
+    ~OptionItem();
 };
 
-/* The item of virtual table D_800668B4: Unk80077AC8 that also draws the image of its value, from a
- * table. */
-class Unk80077D20 : public Unk80077AC8 {
+/* A row with a choice: OptionItem that also draws the image of its value, from a table: the level, the sound,
+ * two ON/OFF options and the vibration. */
+class OptionChoiceItem : public OptionItem {
 public:
-    /* 0x0C */ Unk80073390Image **images; /* one per value */
+    /* 0x0C */ TitleImage **images; /* one per value */
 
-    Unk80077D20(Unk80073390Image *image, Unk80073390Image **images, s32 count) __asm__("func_80077D20");
-    void draw(s32 arg, s32 isCurrent, s32 active) __asm__("func_80077E78");
-    s32 confirm(s32 arg, s32 held, s32 own) __asm__("func_8007A3B0");
-    ~Unk80077D20();
+    OptionChoiceItem(TitleImage *image, TitleImage **images, s32 count) __asm__("OptionChoiceItem_init");
+    void draw(s32 ot, s32 isCurrent, s32 active) __asm__("OptionChoiceItem_draw");
+    s32 confirm(s32 arg, s32 held, s32 own) __asm__("OptionChoiceItem_confirm");
+    ~OptionChoiceItem();
 };
 
-/* The item of virtual table D_80066854: confirm starts a memory card task (memoryCardTaskInit) in
- * mode, and the item keeps that task while it runs. */
-class Unk80077F28 : public Unk80077AC8 {
+/* The save and load rows: confirm starts a memory card task (memoryCardTaskInit) in mode, and the item keeps
+ * that task while it runs. */
+class OptionMemoryCardItem : public OptionItem {
 public:
-    /* 0x0C */ const s32 mode; /* memoryCardTaskInit's, fixed by the constructor */
+    /* 0x0C */ const s32 mode; /* MEMORY_CARD_OPTION_SAVE or _LOAD, fixed by the constructor */
     /* 0x10 */ Task *task;
     /* 0x14 */ u32 taskHandle; /* the task's handle, in TASK_HANDLES */
 
-    Unk80077F28(Unk80073390Image *image, s32 unkC) __asm__("func_80077F28");
-    s32 confirm(s32 arg, s32 held, s32 own) __asm__("func_80078078");
-    s32 input(s32 arg, s32 held, u32 buttons) __asm__("func_800780F4");
-    s32 cancel(s32 arg, s32 held, s32 own) __asm__("func_80078160");
-    ~Unk80077F28();
+    OptionMemoryCardItem(TitleImage *image, s32 mode) __asm__("OptionMemoryCardItem_init");
+    s32 confirm(s32 arg, s32 held, s32 own) __asm__("OptionMemoryCardItem_confirm");
+    s32 input(s32 arg, s32 held, u32 buttons) __asm__("OptionMemoryCardItem_input");
+    s32 cancel(s32 arg, s32 held, s32 own) __asm__("OptionMemoryCardItem_cancel");
+    ~OptionMemoryCardItem();
 };
 
-/* The item of virtual table D_800667F4: moves the screen (the save data's screenX and screenY). */
-class Unk800782D8 : public Unk80077AC8 {
+/* The screen position row: moves the screen (the save data's screenX and screenY). */
+class OptionScreenItem : public OptionItem {
 public:
     /* 0x0C */ s32 screenX; /* the screen position as shown (SaveData.screenX, screenY) */
     /* 0x10 */ s32 screenY;
@@ -82,90 +82,97 @@ public:
     /* 0x18 */ s32 keptY;
     /* 0x1C */ s32 moving;  /* the screen is being moved (confirm without own) */
 
-    Unk800782D8(Unk80073390Image *image) __asm__("func_800782D8");
-    void refresh(s32 arg) __asm__("func_8007841C");
-    s32 cancel(s32 arg, s32 held, s32 own) __asm__("func_80078448");
-    s32 confirm(s32 arg, s32 held, s32 own) __asm__("func_800784A0");
-    s32 input(s32 arg, s32 held, u32 buttons) __asm__("func_8007850C");
-    void draw(s32 arg, s32 isCurrent, s32 active) __asm__("func_80078628");
-    ~Unk800782D8();
+    OptionScreenItem(TitleImage *image) __asm__("OptionScreenItem_init");
+    void refresh(s32 arg) __asm__("OptionScreenItem_refresh");
+    s32 cancel(s32 arg, s32 held, s32 own) __asm__("OptionScreenItem_cancel");
+    s32 confirm(s32 arg, s32 held, s32 own) __asm__("OptionScreenItem_confirm");
+    s32 input(s32 arg, s32 held, u32 buttons) __asm__("OptionScreenItem_input");
+    void draw(s32 ot, s32 isCurrent, s32 active) __asm__("OptionScreenItem_draw");
+    ~OptionScreenItem();
 };
 
-/* The item of virtual table D_80066794, with a name entry. */
-class Unk800786E4 : public Unk80077AC8 {
+/* The code row: a name entry on the code grid, whose codes unlock things (NameEntry_tryCode). */
+class OptionCodeItem : public OptionItem {
 public:
-    /* 0x0C */ Unk80074220 entry;
+    /* 0x0C */ NameEntry entry;
 
-    Unk800786E4(Unk80073390Image *image) __asm__("func_800786E4");
-    s32 confirm(s32 arg, s32 held, s32 own) __asm__("func_80078848");
-    s32 input(s32 arg, s32 held, u32 buttons) __asm__("func_800788A0");
-    void draw(s32 arg, s32 isCurrent, s32 active) __asm__("func_800788F4");
-    s32 cancel(s32 arg, s32 held, s32 own) __asm__("func_8007A3B8");
-    ~Unk800786E4();
+    OptionCodeItem(TitleImage *image) __asm__("OptionCodeItem_init");
+    s32 confirm(s32 arg, s32 held, s32 own) __asm__("OptionCodeItem_confirm");
+    s32 input(s32 arg, s32 held, u32 buttons) __asm__("OptionCodeItem_input");
+    void draw(s32 ot, s32 isCurrent, s32 active) __asm__("OptionCodeItem_draw");
+    s32 cancel(s32 arg, s32 held, s32 own) __asm__("OptionCodeItem_cancel");
+    ~OptionCodeItem();
 };
 
-/* The item of virtual table D_80066734. */
-class Unk80078914 : public Unk80077AC8 {
+/* The button menu's row that puts the buttons back to the defaults. */
+class OptionResetButtonsItem : public OptionItem {
 public:
-    Unk80078914(Unk80073390Image *image) __asm__("func_80078914");
-    s32 confirm(s32 arg, s32 held, s32 own) __asm__("func_8007A3C0");
-    ~Unk80078914();
+    OptionResetButtonsItem(TitleImage *image) __asm__("OptionResetButtonsItem_init");
+    s32 confirm(s32 arg, s32 held, s32 own) __asm__("OptionResetButtonsItem_confirm");
+    ~OptionResetButtonsItem();
 };
 
-/* The item of virtual table D_800666D4: the button slot of its row (its index) for both players, in the
- * save data. */
-class Unk80078A4C : public Unk80077AC8 {
+/* A button row of the button menu: the button slot of its row (its index) for both players, in the save
+ * data. */
+class OptionButtonItem : public OptionItem {
 public:
     /* 0x0C */ s32 editing;  /* confirm without own started a change */
     /* 0x10 */ s32 slots[2]; /* by player, while editing */
 
-    Unk80078A4C(Unk80073390Image *image) __asm__("func_80078A4C");
-    s32 confirm(s32 arg, s32 held, s32 own) __asm__("func_80078B84");
-    s32 cancel(s32 arg, s32 held, s32 own) __asm__("func_80078C64");
-    void refresh(s32 arg) __asm__("func_80078CB8");
-    s32 input(s32 arg, s32 held, u32 buttons) __asm__("func_80078D20");
-    void draw(s32 arg, s32 isCurrent, s32 active) __asm__("func_80078E3C");
-    ~Unk80078A4C();
+    OptionButtonItem(TitleImage *image) __asm__("OptionButtonItem_init");
+    s32 confirm(s32 arg, s32 held, s32 own) __asm__("OptionButtonItem_confirm");
+    s32 cancel(s32 arg, s32 held, s32 own) __asm__("OptionButtonItem_cancel");
+    void refresh(s32 arg) __asm__("OptionButtonItem_refresh");
+    s32 input(s32 arg, s32 held, u32 buttons) __asm__("OptionButtonItem_input");
+    void draw(s32 ot, s32 isCurrent, s32 active) __asm__("OptionButtonItem_draw");
+    ~OptionButtonItem();
 };
 
-/* The options' menu (virtual table D_80066674): a StepperGroup and an Unk80077AC8 (at 0x24) on one
- * Stepper. It overrides what both of them override, mostly by calling StepperGroup's. */
-class Unk80079254 : public StepperGroup, public Unk80077AC8 {
+/* The button settings submenu, a row of the options' menu: a StepperGroup of the six button rows, the
+ * vibration and the reset, and an OptionItem (at 0x24) on one Stepper. It overrides what both of them
+ * override, mostly by calling StepperGroup's. */
+class OptionButtonMenu : public StepperGroup, public OptionItem {
 public:
-    Unk80079254(Unk80073390Image *image) __asm__("func_80078F5C");
-    ~Unk80079254();
-    s32 confirm(s32 arg, s32 held, s32 own) __asm__("func_800793D0");
-    s32 input(s32 arg, s32 held, u32 buttons) __asm__("func_8007943C");
-    void draw(s32 arg, s32 isCurrent, s32 active) __asm__("func_8007945C");
-    s32 cancel(s32 arg, s32 held, s32 own) __asm__("func_8007A41C");
-    void refresh(s32 arg) __asm__("func_8007A44C");
+    OptionButtonMenu(TitleImage *image) __asm__("OptionButtonMenu_init");
+    ~OptionButtonMenu();
+    s32 confirm(s32 arg, s32 held, s32 own) __asm__("OptionButtonMenu_confirm");
+    s32 input(s32 arg, s32 held, u32 buttons) __asm__("OptionButtonMenu_input");
+    void draw(s32 ot, s32 isCurrent, s32 active) __asm__("OptionButtonMenu_draw");
+    s32 cancel(s32 arg, s32 held, s32 own) __asm__("OptionButtonMenu_cancel");
+    void refresh(s32 arg) __asm__("OptionButtonMenu_refresh");
 };
 
-/* The options' task (virtual table D_80066974), like main_menu.c's Unk8006A62C with a word at 0x2C, named
- * after its destructor. */
-class Unk800797D8 : public Task {
+/* The options' task "Option", like main_menu.c's MainMenuTask with a frame count at 0x2C: its thread runs the
+ * options' menu over the background. */
+class OptionTask : public Task {
 public:
     /* 0x20 */ Thread thread;
-    /* 0x2C */ s32 unk2C;
-    /* 0x30 */ u8 steppers[0x44]; /* a StepperGroup */
-    /* 0x74 */ Sprite sprite;
+    /* 0x2C */ s32 frame;
+    /* 0x30 */ u8 menu[0x44]; /* a StepperGroup: the options' menu */
+    /* 0x74 */ Sprite background;
 
-    Unk800797D8() __asm__("optionTaskInit");
-    ~Unk800797D8();
-    void update(s32 arg) __asm__("func_80079978");
+    OptionTask() __asm__("optionTaskInit");
+    ~OptionTask();
+    void update(s32 arg) __asm__("OptionTask_update");
 };
 
 #endif /* __cplusplus */
 
+/* The rows (Stepper.index) whose save option OptionItem reads and writes: the options' menu's first two,
+ * and the button menu's row after its six button rows. */
+#define OPTION_ROW_LEVEL 0
+#define OPTION_ROW_SOUND 1
+#define BUTTON_MENU_ROW_VIBRATION 6
+
 EXTERN_C_BEGIN
 
-/* the first row of the options' menu on the screen */
-extern s32 D_8007B32C;
+/* the first row of the options' menus on the screen: 1 while the button menu is open */
+extern s32 OPTION_ROW_OFFSET;
 
-s32 func_80077690(s32 index);
-s32 func_800776BC(s32 index);
-SprtColorWords *func_800776DC(u_long *ot, s32 x, s32 y, Unk80073390Image *image);
-SprtColorWords *func_80077778(u_long *ot, s32 x, s32 y, Unk80073390Image *image, s32 index);
+s32 getOptionRowX(s32 index);
+s32 getOptionRowY(s32 index);
+SprtColorWords *optionDrawImage(u_long *ot, s32 x, s32 y, TitleImage *image);
+SprtColorWords *optionDrawImageCell(u_long *ot, s32 x, s32 y, TitleImage *image, s32 index);
 
 EXTERN_C_END
 

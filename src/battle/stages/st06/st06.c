@@ -14,23 +14,24 @@
 #include "engine/task/entity.h"
 
 /* An entity the stage keeps by handle, with the level it last gave it (0 to 0xFF, func_800D43A4). */
-typedef struct Unk800D43A4 {
+typedef struct St06LevelEntry {
     /* 0x0 */ u32 handle;
     /* 0x4 */ s32 level;
-} Unk800D43A4;
+} St06LevelEntry;
 
-/* The stage's class, derived from func_8006ED20's; func_800D3C10 constructs it. */
-typedef struct Unk800D3C10 {
-    /* 0x000 */ Unk8006ED20 base;
-    /* 0xD38 */ Unk800D43A4 unkD38[4];
+/* Arena 6's stage, "Boss" in STAGE_NAMES (StageBoss_init, virtual table STAGE_BOSS_VTABLE): a Fight whose arena
+ * moves along x with the fighters on it (StageBoss_tick); it keeps four scenery entities by handle with a level. */
+typedef struct StageBoss {
+    /* 0x000 */ Fight base;
+    /* 0xD38 */ St06LevelEntry levels[4]; /* st06_setLevel */
     /* 0xD58 */ u8 unkD58[0xD74 - 0xD58];
-    /* 0xD74 */ s32 unkD74;
+    /* 0xD74 */ s32 scrollX; /* the x its meshes are put at (st06_getScrollX) */
     /* 0xD78 */ s32 unkD78;
-    /* 0xD7C */ u32 unkD7C; /* set: copy the shown buffer once (func_800D433C) */
+    /* 0xD7C */ u32 freezeFrame; /* set: copy the shown buffer once, a frozen frame (StageBoss_drawWorld) */
     /* 0xD80 */ s32 unkD80;
-} Unk800D3C10;
+} StageBoss;
 
-void func_800D43A4(Unk800D43A4 *entry);
+void func_800D43A4(St06LevelEntry *entry);
 
 /* The entity class of virtual table D_800D3A4C (0x28 bytes). */
 typedef struct Unk800D5164 {
@@ -88,27 +89,27 @@ typedef struct Unk800D4468 {
 void func_800D45BC(Unk800D4468 *this, s32 arg);
 void func_800D46C4(Unk800D4468 *this, s32 arg);
 
-INCLUDE_ASM("st06/nonmatchings/st06", func_800D3C10);
+INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_init);
 
-INCLUDE_ASM("st06/nonmatchings/st06", func_800D3CD0);
+INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_destroy);
 
-INCLUDE_ASM("st06/nonmatchings/st06", func_800D3D40);
+INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_startRound);
 
-INCLUDE_ASM("st06/nonmatchings/st06", func_800D3ED8);
+INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_createNodeEntity);
 
-INCLUDE_ASM("st06/nonmatchings/st06", func_800D4008);
+INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_tickScenery);
 
-INCLUDE_ASM("st06/nonmatchings/st06", func_800D41BC);
+INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_tick);
 
-/* The stage's override of func_80072748: after it, when 0xD7C is set, clears it and queues a copy of the
+/* The stage's override of Fight_drawWorld: after it, when freezeFrame is set, clears it and queues a copy of the
  * shown buffer to x 0x200 in the camera's first-drawn slot. */
-void func_800D433C(Unk800D3C10 *this) {
+void StageBoss_drawWorld(StageBoss *this) {
     u_long *ot;
 
-    func_80072748(this);
-    ot = func_8006EF5C(&this->base)->ot.firstDrawn;
-    if (this->unkD7C != 0) {
-        this->unkD7C = 0;
+    Fight_drawWorld(this);
+    ot = Fight_getCamera(&this->base)->ot.firstDrawn;
+    if (this->freezeFrame != 0) {
+        this->freezeFrame = 0;
         AddPrim(ot, allocDrMove(getShownBufferRect(), 0x200, 0));
     }
 }
@@ -116,8 +117,8 @@ void func_800D433C(Unk800D3C10 *this) {
 INCLUDE_ASM("st06/nonmatchings/st06", func_800D43A4);
 
 /* Sets the level of the stage's entity number index (a negative level keeps the last one) and passes it on. */
-void func_800D4434(Unk800D3C10 *this, s32 index, s32 level) {
-    Unk800D43A4 *entry = &this->unkD38[index];
+void st06_setLevel(StageBoss *this, s32 index, s32 level) {
+    St06LevelEntry *entry = &this->levels[index];
 
     if (level >= 0) {
         entry->level = level;
@@ -147,7 +148,7 @@ static inline s16 getCosInline(s32 angle) {
     return COS_SIN_TABLE[angle & 0xFFF].cos;
 }
 
-/* The gather of Unk800D4468: 0x1C climbs by 8 when 0x20 is 0, else follows a cosine of the 0x24 count. */
+/* Unk800D4468's tick: 0x1C climbs by 8 when 0x20 is 0, else follows a cosine of the 0x24 count. */
 void func_800D44C4(Unk800D4468 *this) {
     if (this->unk20 == 0) {
         this->unk1C += 8;
@@ -177,7 +178,7 @@ void func_800D4520(Unk800D4468 *this, s32 level) {
     }
 }
 
-/* The update of Unk800D4468: func_800D45BC when 0x20 is 0, func_800D46C4 otherwise. */
+/* Unk800D4468's draw: func_800D45BC when 0x20 is 0, func_800D46C4 otherwise. */
 void func_800D457C(Unk800D4468 *this, s32 arg) {
     if (this->unk20 == 0) {
         func_800D45BC(this, arg);
@@ -196,70 +197,70 @@ INCLUDE_ASM("st06/nonmatchings/st06", func_800D4A00);
 
 INCLUDE_ASM("st06/nonmatchings/st06", func_800D4B78);
 
-/* The entity class of virtual table D_800D3AA4 (0x38 bytes): one mesh of the stage, scaled and spun about
- * a random axis. */
-typedef struct Unk800D4EC0 {
+/* One mesh of the stage, scaled and spun about a random axis (St06Spinner_init, virtual table ST06_SPINNER_VTABLE,
+ * 0x38 bytes). */
+typedef struct St06Spinner {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Mesh *mesh;
     /* 0x1C */ VECTOR axis;  /* random, normalized */
     /* 0x2C */ s32 angle;    /* about axis */
     /* 0x30 */ s32 speed;    /* the angle's step, 1 to 8 */
-    /* 0x34 */ s32 scale;    /* of the three axes (func_800D4E64) */
-} Unk800D4EC0;
+    /* 0x34 */ s32 scale;    /* of the three axes (St06SpinGroup_setLevel) */
+} St06Spinner;
 
-/* The entity class of virtual table D_800D3ACC (0x2C bytes): the four Unk800D4EC0 of the meshes of
- * D_800D397C, by handle. */
-typedef struct Unk800D4D8C {
+/* The four St06Spinners of the meshes of ST06_SPIN_NODES, by handle (St06SpinGroup_init, virtual table
+ * ST06_SPIN_GROUP_VTABLE, 0x2C bytes). */
+typedef struct St06SpinGroup {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 unk18; /* func_800D4E64's argument */
+    /* 0x18 */ s32 level; /* St06SpinGroup_setLevel's */
     /* 0x1C */ u32 children[4];
-} Unk800D4D8C;
+} St06SpinGroup;
 
-extern EntityVtable D_800D3ACC;
-extern EntityVtable D_800D3AA4;
+extern EntityVtable ST06_SPIN_GROUP_VTABLE;
+extern EntityVtable ST06_SPINNER_VTABLE;
 
-/* the nodes of the four meshes func_800D4D8C spins: 0 to 3 */
-extern s32 D_800D397C[4];
+/* the nodes of the four meshes St06SpinGroup_init spins: 0 to 3 */
+extern s32 ST06_SPIN_NODES[4];
 
-Unk800D4EC0 *func_800D4EC0(Unk800D4EC0 *this, Mesh *mesh);
+St06Spinner *St06Spinner_init(St06Spinner *this, Mesh *mesh);
 
-/* Constructs the entity of virtual table D_800D3ACC: an Unk800D4EC0 for each of the four meshes of
- * D_800D397C in scene, each put into the stage's entity group. */
-Unk800D4D8C *func_800D4D8C(Unk800D4D8C *this, Unk8006ED20 *stage, MeshScene *scene) {
+/* Constructs an St06SpinGroup: an St06Spinner for each of the four meshes of
+ * ST06_SPIN_NODES in scene, each put into the stage's entity group. */
+St06SpinGroup *St06SpinGroup_init(St06SpinGroup *this, Fight *stage, MeshScene *scene) {
     s32 i;
 
     entityInit(&this->entity, 0);
-    this->unk18 = 0;
-    this->entity.vtable = &D_800D3ACC;
+    this->level = 0;
+    this->entity.vtable = &ST06_SPIN_GROUP_VTABLE;
     for (i = 0; i < 4; i++) {
-        Mesh *mesh = meshSceneGetMesh(scene, D_800D397C[i]);
-        Unk800D4EC0 *child = func_800D4EC0(entityOperatorNew(sizeof(Unk800D4EC0)), mesh);
+        Mesh *mesh = meshSceneGetMesh(scene, ST06_SPIN_NODES[i]);
+        St06Spinner *child = St06Spinner_init(entityOperatorNew(sizeof(St06Spinner)), mesh);
 
         this->children[i] = entityGetHandle(&child->entity);
-        func_8006F084(stage, &child->entity);
+        Fight_addStageEntity(stage, &child->entity);
     }
     return this;
 }
 
-/* Unk800D4D8C's own method (0x20 of its virtual table): keeps arg at 0x18 and scales the four meshes by
- * 40 times it. */
-void func_800D4E64(Unk800D4D8C *this, s32 arg) {
-    s32 scale = arg * 40;
+/* St06SpinGroup's setLevel (0x20 of its virtual table): keeps the level and scales the four meshes by 40 times
+ * it. */
+void St06SpinGroup_setLevel(St06SpinGroup *this, s32 level) {
+    s32 scale = level * 40;
     s32 i;
 
-    this->unk18 = arg;
+    this->level = level;
     for (i = 0; i < 4; i++) {
-        ((Unk800D4EC0 *)getEntityByHandle(this->children[i]))->scale = scale;
+        ((St06Spinner *)getEntityByHandle(this->children[i]))->scale = scale;
     }
 }
 
-/* Constructs the entity of virtual table D_800D3AA4 for mesh: a random axis, a random angle and a random
+/* Constructs an St06Spinner for mesh: a random axis, a random angle and a random
  * step of 1 to 8. */
-Unk800D4EC0 *func_800D4EC0(Unk800D4EC0 *this, Mesh *mesh) {
+St06Spinner *St06Spinner_init(St06Spinner *this, Mesh *mesh) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_800D3AA4;
+    this->entity.vtable = &ST06_SPINNER_VTABLE;
     this->mesh = mesh;
     x = mersenneTwisterGenerate(&RANDOM);
     y = mersenneTwisterGenerate(&RANDOM);
@@ -298,11 +299,11 @@ static inline void meshSetScale(Mesh *mesh, u16 scale) {
     mesh->object.transform.local.words[4] = scale;
 }
 
-/* The gather of Unk800D4EC0: steps the angle, then sets the mesh's matrix at (0xD74 of the stage, 0, 0),
+/* St06Spinner's tick: steps the angle, then sets the mesh's matrix at (the stage's scrollX, 0, 0),
  * scaled by 0x34, turned by the angle about the axis and by twice it about y. The match depends on reading
  * the stage's x before the angle step. */
-void func_800D4F9C(Unk800D4EC0 *this, Unk800D3C10 *stage) {
-    s32 x = stage->unkD74;
+void St06Spinner_tick(St06Spinner *this, StageBoss *stage) {
+    s32 x = stage->scrollX;
     Mesh *mesh;
 
     this->angle += this->speed;
@@ -368,29 +369,29 @@ extern EntityVtable D_800D39FC;
 /* Constructs the entity of virtual table D_800D39FC, derived from func_800C3CFC's at the zero vector, with
  * 0x50 a random 0x60 to 0x7F. */
 Unk800C3CFC *func_800D57C4(Unk800C3CFC *this, s32 unk38, s32 color) {
-    func_800C3CFC(this, (Vec3 *)&D_80010814, unk38, color);
+    func_800C3CFC(this, (Vec3 *)&ZERO_VECTOR, unk38, color);
     this->entity.vtable = &D_800D39FC;
     this->unk50 = (mersenneTwisterGenerate(&RANDOM) & 0x1F) + 0x60;
     return this;
 }
 
-/* The gather of func_800D57C4's entity: func_800C3E64, then puts it at (0xD74 of the stage, -0x200,
+/* The tick of func_800D57C4's entity: func_800C3E64, then puts it at (the stage's scrollX, -0x200,
  * 0x4000). */
-void func_800D5824(Unk800C3CFC *this, Unk800D3C10 *stage) {
+void func_800D5824(Unk800C3CFC *this, StageBoss *stage) {
     func_800C3E64(this);
-    this->unk28.vx = stage->unkD74;
+    this->unk28.vx = stage->scrollX;
     this->unk28.vy = -0x200;
     this->unk28.vz = 0x4000;
 }
 
 /* Returns the stage's camera eye. */
-Vec3 *func_800D586C(Unk800D3C10 *this) {
+Vec3 *st06_getEye(StageBoss *this) {
     return &this->base.eye;
 }
 
-/* Returns the stage's 0xD74 (the x its meshes are put at). */
-s32 func_800D5874(Unk800D3C10 *this) {
-    return this->unkD74;
+/* Returns the stage's scrollX (the x its meshes are put at). */
+s32 st06_getScrollX(StageBoss *this) {
+    return this->scrollX;
 }
 
 /* The destructor of the entity class of vtable D_800D3B5C, which func_800D58D8 installs. */
@@ -401,10 +402,12 @@ void func_800D5880(Entity *this, s32 flags) {
     }
 }
 
-void func_800D58C8(void) {
+/* St06SpinGroup's tick: nothing. */
+void St06SpinGroup_tick(void) {
 }
 
-void func_800D58D0(void) {
+/* St06SpinGroup's draw: nothing. */
+void St06SpinGroup_draw(void) {
 }
 
 /* Constructs an entity of the class of virtual table D_800D3B5C. */
@@ -436,16 +439,16 @@ void func_800D5964(Entity *this, s32 flags) {
     }
 }
 
-/* The destructor of the entity class of vtable D_800D3ACC, which func_800D4D8C installs. */
-void func_800D59AC(Entity *this, s32 flags) {
+/* St06SpinGroup's destructor. */
+void St06SpinGroup_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-/* The destructor of the entity class of vtable D_800D3AA4, which func_800D4EC0 installs. */
-void func_800D59F4(Entity *this, s32 flags) {
+/* St06Spinner's destructor. */
+void St06Spinner_destroy(Entity *this, s32 flags) {
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);

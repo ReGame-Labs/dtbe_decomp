@@ -52,3 +52,15 @@ func_8002C350 entityUpdate
 func_8002C358 entityGroupAdd
 D_8005EE50 SCHEDULER
 D_80114490 ENTITY_HEAP
+
+# Entity.kind: the value entityInit stores, constant per class family (0x10000 for the base fighter,
+# 0x30000 for the fighters' objects, 0x40000 for the stages'); the callers compare it to those
+func_8002BD68 entityGetKind
+
+# Entity's slots 0x08 / 0x10 are its tick and its draw: the group calls 0x08 for every entity, the pending ones
+# included, with the scene (the fight passes itself), and 0x10 with the camera until the primitive buffer is nearly
+# full; every override of 0x10 adds primitives
+entityGroupGather entityGroupTick
+entityGroupUpdate entityGroupDraw
+entityGather entityTick
+entityUpdate entityDraw

@@ -12,66 +12,74 @@
 
 EXTERN_C_BEGIN
 
-/* An object whose class derives from the class of game.bin's D_80065164
- * (func_800762F4: nothing but the virtual table): a word and a vector. Each
- * stage has classes of its own with this layout. */
-typedef struct UnkStageObject {
+/* A hit of a stage (st00, st01, st04): derived from CollisionOwner, like game.bin's Hit but without its owner and
+ * kind; its slot 0x08 (StageHit_apply) adds its damage and knockback into the sphere it touches, as Hit_apply does
+ * (st01's adds nothing). st05's class has this layout too (St05Hit). */
+typedef struct StageHit {
     /* 0x0 */ VtableEntry *vtable;
-    /* 0x4 */ s32 unk4;
-    /* 0x8 */ Vec3 unk8;
-} UnkStageObject;
+    /* 0x4 */ s32 damage; /* HIT_DAMAGE_MASK, with flags above it */
+    /* 0x8 */ Vec3 knockback;
+} StageHit;
 
-/* An entity of st02 (func_800D7FC0) that keeps a mesh of the stage and the Unk8006ED20 whose entity
+/* st02's entity that draws one mesh node of the scenery (St02MeshDrawer_init), kept with the Fight whose entity
  * group holds it. */
-typedef struct UnkSt02MeshEntity {
+typedef struct St02MeshDrawer {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Mesh *mesh;
-    /* 0x1C */ Unk8006ED20 *owner;
-} UnkSt02MeshEntity;
+    /* 0x1C */ Fight *owner;
+} St02MeshDrawer;
 
-/* An entity of st00 (func_800D7978) with the same layout: the Unk8006ED20 whose entity group holds
- * it, and the MeshScene that object keeps at 0xEC4. */
-typedef struct UnkSt00Entity {
+/* st00's entity that draws the stage's Group (St00GroupDrawer_init): the Fight whose entity group holds it, and
+ * the MeshScene the stage keeps at 0xEC4. */
+typedef struct St00GroupDrawer {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8006ED20 *owner;
-    /* 0x1C */ MeshScene *unk1C;
-} UnkSt00Entity;
+    /* 0x18 */ Fight *owner;
+    /* 0x1C */ MeshScene *meshScene;
+} St00GroupDrawer;
 
-/* An entity of st02 (func_800D680C) and st03 (func_800D5358): a mesh of the stage and where it is (the
- * translation of the mesh's world matrix, which the stage's func_800D4110 passes). */
-typedef struct UnkStageMeshPos {
+/* The mesh movers of st02 (St02MeshMover_init) and st03 (St03MeshMover_init): a mesh of the stage and where it is
+ * (the translation of the mesh's world matrix, which the stage's createNodeEntity passes); the tick moves the mesh
+ * by motion. */
+typedef struct StageMeshMover {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Mesh *mesh;
     /* 0x1C */ Vec3 pos;
     /* 0x28 */ s32 unk28;
-    /* 0x2C */ s32 unk2C;
-    /* 0x30 */ s32 unk30;
-} UnkStageMeshPos; /* size 0x34 */
+    /* 0x2C */ s32 motion; /* st02: the angle about z, 0xC0 more each tick; st03: the height added to pos */
+    /* 0x30 */ s32 frame;  /* its ticks */
+} StageMeshMover; /* size 0x34 */
 
-/* An entity of st07 (func_800D5080) and st09 (func_800D5068), made twice by each stage (index 0 and 1):
- * the four corners of a 128 by 128 square around the origin. */
-typedef struct UnkStageQuad {
+/* The thrower of a side in st07 (BonusThrower_init) and st09: each stage makes two (side 0 and 1); a 128 by 128
+ * square drawn at position, scaled while the side holds its button. Its tick puts it at its fighter
+ * (BonusThrower_place) and throws when the button is let go (BonusThrower_throw). */
+typedef struct BonusThrower {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8006ED20 *owner;
-    /* 0x1C */ u16 index; /* unsigned: st09's func_800D5190 indexes with lhu */
-    /* 0x1E */ s16 unk1E;
-    /* 0x20 */ s32 unk20;
+    /* 0x18 */ Fight *owner;
+    /* 0x1C */ u16 side;  /* unsigned: st09's BonusThrower_throw indexes with lhu */
+    /* 0x1E */ s16 frame; /* its ticks */
+    /* 0x20 */ s32 scale; /* the draw's matrixScale: eases to 0x1000 while held (st07), the hold * 0xCC (st09) */
     /* 0x24 */ SVECTOR corners[4];
-    /* 0x44 */ Vec3 unk44; /* where st09's func_800D5190 throws from */
+    /* 0x44 */ Vec3 position; /* where it is drawn, and where st09's BonusThrower_throw throws from */
     /* 0x50 */ u8 unk50[0x54 - 0x50];
-} UnkStageQuad; /* size 0x54 */
+} BonusThrower; /* size 0x54 */
 
-/* A 256 by 256 square of the stage at pos: index (0x1C) picks its entry in the owner's tables. Its gather
- * (st07's func_800D572C, st09's func_800D64D0) adds 1 to index and deletes it on the 17th. */
-typedef struct UnkStageQuadPos {
+/* The mark a thrown object leaves where it lands (BonusLandingMark_init, st07 and st09): a 512 by 512 square at
+ * pos. Its tick counts frame and deletes it after BONUS_LANDING_MARK_FRAMES. */
+typedef struct BonusLandingMark {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Unk8006ED20 *owner;
-    /* 0x1C */ u16 index; /* unsigned: the gathers compare it with andi 0xFFFF and sltiu */
+    /* 0x18 */ Fight *owner;
+    /* 0x1C */ u16 frame; /* unsigned: the ticks compare it with andi 0xFFFF and sltiu */
     /* 0x1E */ s16 unk1E;
     /* 0x20 */ SVECTOR corners[4];
     /* 0x40 */ Vec3 pos;
     /* 0x4C */ s32 unk4C;
-} UnkStageQuadPos; /* size 0x50 */
+} BonusLandingMark; /* size 0x50 */
+
+/* The bonus games' hold: the frames a side's button charges up to (st07 and st09; BonusFight.gaugeMax there). */
+#define BONUS_CHARGE_FRAMES 30
+
+/* A BonusLandingMark's ticks: it is deleted on the one after them. */
+#define BONUS_LANDING_MARK_FRAMES 16
 
 EXTERN_C_END
 

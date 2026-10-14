@@ -24,17 +24,17 @@ typedef struct ButtonSlot {
  * changed since it was saved. */
 typedef struct {
     /* 0x000 */ s32 mono; /* the sound output: mono, or stereo */
-    /* 0x004 */ s32 unk4;
+    /* 0x004 */ s32 autoSave; /* saves after the options and the runs when the progress changed */
     /* 0x008 */ s32 unk8;
-    /* 0x00C */ s32 unkC;
+    /* 0x00C */ s32 vibration; /* the pads shake in the fights */
     /* 0x010 */ s32 level; /* of the fights (GameState.level) */
     /* 0x014 */ s16 screenX;
     /* 0x016 */ s16 screenY;
-    /* 0x018 */ u32 unk18; /* a bit for each arena: the select scene skips the bonus games whose bit is clear */
+    /* 0x018 */ u32 bonusGamesUnlocked; /* ARENA_BIT of each bonus game played to a win (unlockBonusGame) */
     /* 0x01C */ u32 unlocked; /* a bit for each character that can be picked */
     /* 0x020 */ u32 cleared;  /* a bit for each character a run was won with */
     /* 0x024 */ u16 buttons[2][BUTTON_SLOT_COUNT]; /* a slot index for each slot, by player */
-    /* 0x03C */ u8 records[8][0x40]; /* the ranking's records (title.bin's Unk800764F4) */
+    /* 0x03C */ u8 records[8][0x40]; /* the ranking's records (title.bin's RankingRecord) */
     /* 0x23C */ u8 md5[MD5_DIGEST_SIZE];
 } SaveData;
 

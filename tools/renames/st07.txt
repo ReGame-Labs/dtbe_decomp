@@ -1,0 +1,47 @@
+# The names of st07's own symbols: run with tools/rename.py --overlay st07 -f tools/renames/st07.txt
+
+# BallShootController: the stage's computer player, derived from Controller (made by its createController slot); its
+# slot 0x08 gives the side's buttons (Controller_getButtons)
+Unk800D39B4 BallShootController
+D_800D3854 BALL_SHOOT_CONTROLLER_VTABLE
+func_800D39B4 BallShootController_init
+func_800D39F8 BallShootController_getButtons
+func_800D5E04 BallShootController_destroy
+# BonusThrower (stages.txt): the entity of a side that throws (slot 0x08 places it, then throws when the
+# side's held button is let go: allocs the thrown object, BonusFight_holdFighter)
+D_800D38C4 BONUS_THROWER_VTABLE
+func_800D5080 BonusThrower_init
+func_800D5174 BonusThrower_tick
+func_800D54EC BonusThrower_draw
+func_800D5120 BonusThrower_destroy
+func_800D51F0 BonusThrower_throw
+func_800D53AC BonusThrower_place
+# BonusLandingMark (stages.txt): the mark a thrown object leaves, deleted on its 17th frame
+D_800D389C BONUS_LANDING_MARK_VTABLE
+func_800D5630 BonusLandingMark_init
+func_800D572C BonusLandingMark_tick
+func_800D5794 BonusLandingMark_draw
+func_800D56D8 BonusLandingMark_destroy
+# StageBallShoot: bonus game 0's stage (the vtable's overrides: startRound, tick, createController, tickScenery)
+Unk800D3B14 StageBallShoot
+D_800D393C STAGE_BALL_SHOOT_VTABLE
+func_800D3B14 StageBallShoot_init
+func_800D3B88 StageBallShoot_destroy
+func_800D3BB0 StageBallShoot_startRound
+func_800D3C58 StageBallShoot_tick
+func_800D3C08 StageBallShoot_createController
+func_800D3D10 StageBallShoot_tickScenery
+func_800D3C3C st07_clearState
+func_800D3E94 st07_resetCharge
+func_800D3EB0 st07_createThrowers
+func_800D3F30 st07_createBoard
+func_800D4044 st07_updateCharge
+func_800D4DE4 st07_spawnGoalEffect
+# St07Ball: the ball a BonusThrower throws, which falls and is tested against the goal
+Unk800D49B0 St07Ball
+D_800D38EC ST07_BALL_VTABLE
+func_800D49B0 St07Ball_init
+func_800D4B0C St07Ball_tick
+func_800D4F68 St07Ball_draw
+func_800D4AB8 St07Ball_destroy
+func_800D4C64 St07Ball_testGoal

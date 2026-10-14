@@ -1,0 +1,19 @@
+// game.bin's own names for addresses in the stage overlays' memory, which the
+// stages' configs must not see: each stage names its own symbols there
+// (config/<version>/symbols_stNN.txt, tools/renames/stNN.txt). game.yaml reads
+// this file for splat, and tools/link_imports.py links game.bin with it.
+
+// where the stage overlays load (game_main.c), each one's first datum
+STAGE_OVERLAY_MEMORY = 0x800D3820;
+
+// the stages' constructors game_main.c calls, by the names of tools/renames/stNN.txt
+StageEvolution_init = 0x800D3AA8; // type:func
+StageIceberg_init = 0x800D3AC4; // type:func
+StageBallShoot_init = 0x800D3B14; // type:func
+StageMachine_init = 0x800D3B74; // type:func
+StageBoss_init = 0x800D3C10; // type:func
+StageVolcano_init = 0x800D3CEC; // type:func
+StageJewelHunt_init = 0x800D3D58; // type:func
+StageNature_init = 0x800D3DBC; // type:func
+StageShrine_init = 0x800D3E18; // type:func
+StageTurn_init = 0x800D41E0; // type:func

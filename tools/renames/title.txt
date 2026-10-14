@@ -1,0 +1,575 @@
+# title.bin's names. Run with the overlay's scope, then make regenerate:
+#   python3 tools/rename.py --overlay title -f tools/renames/title.txt
+# The g++ mangled names of option.cpp's classes (_vt.<length><class>.7Stepper, _._<length><class>) are not
+# C identifiers: they were renamed by hand with their class, length prefix included, in
+# config/*/symbols_title.txt and option.cpp's INCLUDE_RODATA lines.
+
+# option.cpp: the options' rows and menus, from the rows optionTaskInit and the button menu add, the save
+# fields each row reads and writes, and the memory card task and name entry they start
+# classes (vtables _vt.<len><class>.7Stepper)
+Unk80077AC8 OptionItem
+Unk80077D20 OptionChoiceItem
+Unk80077F28 OptionMemoryCardItem
+Unk800782D8 OptionScreenItem
+Unk800786E4 OptionCodeItem
+Unk80078914 OptionResetButtonsItem
+Unk80078A4C OptionButtonItem
+Unk80079254 OptionButtonMenu
+Unk800797D8 OptionTask
+# member asm labels (Class_member)
+func_80077820 OptionItem_stepUp
+func_8007786C OptionItem_stepDown
+func_800778F8 OptionItem_refresh
+func_8007799C OptionItem_apply
+func_80077A88 OptionItem_focus
+func_80077AB4 OptionItem_cancel
+func_80077AC8 OptionItem_init
+func_80077BF8 OptionItem_confirm
+func_80077C2C OptionItem_input
+func_80077C44 OptionItem_getBrightness
+func_80077C78 OptionItem_draw
+func_80077D20 OptionChoiceItem_init
+func_80077E78 OptionChoiceItem_draw
+func_8007A3B0 OptionChoiceItem_confirm
+func_80077F28 OptionMemoryCardItem_init
+func_80078078 OptionMemoryCardItem_confirm
+func_800780F4 OptionMemoryCardItem_input
+func_80078160 OptionMemoryCardItem_cancel
+func_800782D8 OptionScreenItem_init
+func_8007841C OptionScreenItem_refresh
+func_80078448 OptionScreenItem_cancel
+func_800784A0 OptionScreenItem_confirm
+func_8007850C OptionScreenItem_input
+func_80078628 OptionScreenItem_draw
+func_800786E4 OptionCodeItem_init
+func_80078848 OptionCodeItem_confirm
+func_800788A0 OptionCodeItem_input
+func_800788F4 OptionCodeItem_draw
+func_8007A3B8 OptionCodeItem_cancel
+func_80078914 OptionResetButtonsItem_init
+func_8007A3C0 OptionResetButtonsItem_confirm
+func_80078A4C OptionButtonItem_init
+func_80078B84 OptionButtonItem_confirm
+func_80078C64 OptionButtonItem_cancel
+func_80078CB8 OptionButtonItem_refresh
+func_80078D20 OptionButtonItem_input
+func_80078E3C OptionButtonItem_draw
+func_80078F5C OptionButtonMenu_init
+func_800793D0 OptionButtonMenu_confirm
+func_8007943C OptionButtonMenu_input
+func_8007945C OptionButtonMenu_draw
+func_8007A41C OptionButtonMenu_cancel
+func_8007A44C OptionButtonMenu_refresh
+func_80079978 OptionTask_update
+func_80079850 OptionTask_run
+D_80079958 optionThreadEntry
+# free functions and data: row layout (45/35, 51 + 17 a row), "Option", /title/option.tim, the rows' images
+func_80077690 getOptionRowX
+func_800776BC getOptionRowY
+func_800776DC optionDrawImage
+func_80077778 optionDrawImageCell
+D_8007B32C OPTION_ROW_OFFSET
+D_80066600 OPTION_SCREEN_LINES
+D_80066620 STR_OPTION
+D_80066628 PATH_OPTION_TIM
+D_8006663C OPTION_BACKGROUND_CLUT_RECT
+D_80066644 OPTION_BACKGROUND_PIXEL_RECT
+D_8006664C OPTION_BACKGROUND_TIM
+D_8006699C OPTION_MENU_BUTTONS
+D_800669A8 OPTION_HEADER_IMAGES
+D_800669C0 OPTION_ROW_IMAGES
+D_80066B34 OPTION_LEVEL_IMAGES
+D_80066B40 OPTION_SOUND_IMAGES
+D_80066B50 OPTION_ON_OFF_IMAGES
+D_80066B58 OPTION_VIBRATION_IMAGES
+D_80066A80 OPTION_IMAGE_ON
+D_80066A8C OPTION_IMAGE_OFF
+D_80066AA4 OPTION_BUTTON_MENU_TITLE
+D_80066AB0 OPTION_BUTTON_MENU_IMAGES
+D_80066AC8 OPTION_BUTTON_ICONS
+
+# shared title types (title_classes.h): the tasks whose update keeps its argument and calls their own
+# per-frame method at 0x20 of the vtable; the image record the title's pictures are tables of
+Unk8006713CVtable TickTaskVtable
+Unk8006713C TickTask
+Unk80073390Image TitleImage
+
+# boot_logo.c: the task "Boot Logo" (bootLogoTaskInit) that fades title/bootlogo.tim through its keys
+func_8006711C BootLogoTask_destroy
+func_8006713C BootLogoTask_update
+func_80066E1C BootLogoTask_tick
+func_80067018 drawBootLogo
+D_800643E4 STR_BOOT_LOGO
+D_800643F0 PATH_BOOT_LOGO_TIM
+D_80064404 BOOT_LOGO_TASK_VTABLE
+D_80064434 BOOT_LOGO_SPRITES
+D_80064444 BOOT_LOGO_KEYS
+
+# title_logo.c: the task "Title Logo" (titleLogoTaskInit, title/title.tim): its steps by the pointer-to-member
+# table TITLE_LOGO_STEPS, its draws by the title.tim picture each one's CLUT picks, its entities by their vtables
+Unk800674F0 TitleLogoTask
+func_800673F8 TitleLogoTask_destroy
+func_80069910 TitleLogoTask_update
+func_800674F0 TitleLogoTask_tick
+func_80067808 TitleLogoTask_stepWait
+func_80067864 TitleLogoTask_stepShowLogo
+func_8006795C TitleLogoTask_stepWaitStart
+func_80067A3C TitleLogoTask_stepHideLogo
+func_80067AE0 TitleLogoTask_stepFadeSongs
+func_80067B14 TitleLogoTask_stepFadeOut
+func_800686D8 TitleLogoTask_checkSkip
+func_8006875C TitleLogoTask_checkStart
+func_80067B80 TitleLogoTask_initTunnel
+func_80067CF0 TitleLogoTask_drawRingLines
+func_8006803C TitleLogoTask_drawPanels
+func_800683DC TitleLogoTask_drawLogo
+func_800685A8 TitleLogoTask_drawPressStart
+func_80068320 TitleLogoTask_spawnLogoPieces
+# US only (US addresses): the stepWait/stepShowLogo twins sit in the other #if branch of the JP ones
+func_80072320 TitleLogoTask_readClut
+func_80072814 TitleLogoTask_stepWait
+func_80072860 TitleLogoTask_stepShowLogo
+# and the US data of the JP ones in the other #if branch: the same string, vectors and step table
+D_80065AF8 STR_TITLE_LOGO
+D_80065B04 TITLE_CAMERA_UP
+D_80065B14 TITLE_CAMERA_TARGET
+D_80065B24 TITLE_CAMERA_EYE
+D_80065B34 PATH_TITLE_TIM
+D_80065B44 TITLE_LOGO_STEPS
+# title_logo.c: the entities
+Unk80069218 TitleStreak
+func_80069218 TitleStreak_init
+func_80069314 TitleStreak_tick
+func_800693B0 TitleStreak_draw
+func_800692C0 TitleStreak_destroy
+Unk800694B8 TitleSparkle
+func_800694B8 TitleSparkle_init
+func_800695D4 TitleSparkle_tick
+func_800696A8 TitleSparkle_draw
+func_80069580 TitleSparkle_destroy
+func_800687CC TitleLogoPiece_init
+func_8006893C TitleLogoPiece_tick
+func_80068BB4 TitleLogoPiece_draw
+func_800688E8 TitleLogoPiece_destroy
+# title_logo.c: data
+D_80064454 STR_TITLE_LOGO
+D_80064490 PATH_TITLE_TIM
+D_80064460 TITLE_CAMERA_UP
+D_80064470 TITLE_CAMERA_TARGET
+D_80064480 TITLE_CAMERA_EYE
+D_800644A0 TITLE_LOGO_STEPS
+D_800644F0 LOGO_PIECE_CORNERS
+D_80064530 SPARKLE_CORNERS
+D_80064594 TITLE_SPARKLE_VTABLE
+D_800645BC TITLE_STREAK_VTABLE
+D_8006460C TITLE_LOGO_PIECE_VTABLE
+D_80064634 TITLE_LOGO_TASK_VTABLE
+D_8007B334 TITLE_SPIN_PHASE
+D_8007B330 TITLE_SPIN
+
+
+# main_menu.c: the task "MainMenu" (mainMenuTaskInit, /title/mainmenu.tim): its items' labels and images decode to
+# mainmenu.tim's pictures (1P play, 2P versus, versus COM, the mini games, options, the locked "???")
+Unk8006A62C MainMenuTask
+func_8006A62C MainMenuTask_destroy
+func_8006A7EC MainMenuTask_update
+func_8006A6A4 MainMenuTask_run
+D_8006A7CC mainMenuThreadEntry
+Unk8006A11C MainMenuItem
+func_8006A11C MainMenuItem_init
+func_8006A184 MainMenuItem_confirm
+func_8006A0E0 MainMenuItem_cancel
+func_8006A0B4 MainMenuItem_focus
+func_8006A1E4 MainMenuItem_input
+func_8006A224 MainMenuItem_draw
+func_8006AAA0 MainMenuItem_destroy
+func_80069944 getMainMenuItemY
+func_80069980 mainMenuDrawImage
+func_80069CFC mainMenuDrawImageQuad
+func_80069E4C mainMenuDrawImageShadow
+func_80069FA0 mainMenuDrawBanners
+func_8006A348 hasBonusGame
+D_80064674 STR_MAIN_MENU
+D_80064680 PATH_MAIN_MENU_TIM
+D_80064694 MAIN_MENU_BACKGROUND_CLUT_RECT
+D_8006469C MAIN_MENU_BACKGROUND_RECT
+D_800646A4 MAIN_MENU_BACKGROUND_TIM
+D_800646BC MAIN_MENU_ITEM_VTABLE
+D_8006471C MAIN_MENU_TASK_VTABLE
+D_80064744 MAIN_MENU_BUTTONS
+D_80064768 MAIN_MENU_SIDE_IMAGES
+D_80064780 MAIN_MENU_LABELS
+# D_800647BC: the labels' last two, cut off MAIN_MENU_LABELS by a rodata label (a split change, left)
+D_800647D4 MAIN_MENU_DECOR_IMAGES
+D_8007B338 MAIN_MENU_CURSOR
+D_8007B33C MAIN_MENU_ITEM_COUNT
+
+# chara_select.c: the task "Character Select" (characterSelectTaskInit): its steps from the tick's switch, the
+# sides' picks from what storePicks writes to GAME_STATE, the tables from the grid, l%02d/r%02d.tim and mapsel.tim
+Unk8006CC64 CharacterSelectTask
+Unk8006CC64Side CharacterSelectSide
+Unk80064C40 GridCell
+Unk80065268 SelectSprite
+func_8006B104 CharacterSelectTask_destroy
+func_800702C4 CharacterSelectTask_update
+func_8006BD18 CharacterSelectTask_tick
+func_8006CD6C CharacterSelectTask_draw
+func_8006BE7C CharacterSelectTask_stepEnter
+func_8006BEA8 CharacterSelectTask_stepPick
+func_8006BF94 CharacterSelectTask_tickHostVoice
+func_8006C144 CharacterSelectTask_isBackedOut
+func_8006C244 CharacterSelectTask_checkChallenger
+func_8006C350 CharacterSelectTask_joinSide
+func_8006C408 CharacterSelectTask_pickCharacters
+func_8006C544 CharacterSelectTask_pickVersus
+func_8006C6E4 CharacterSelectTask_storePicks
+func_8006C8D0 CharacterSelectTask_stepRunExit
+func_8006C940 CharacterSelectTask_loadRunPictures
+func_8006CA54 CharacterSelectTask_waitConfirm
+func_8006CA94 CharacterSelectTask_stepArenaExit
+func_8006CAFC CharacterSelectTask_loadArenaPictures
+func_8006CC2C CharacterSelectTask_stepArena
+func_8006CC64 CharacterSelectTask_startFadeOut
+func_8006CC94 CharacterSelectTask_stepFadeOut
+func_8006CCD4 CharacterSelectTask_storeArena
+func_8006B1DC CharacterSelectTask_pickCharacter
+func_8006B568 CharacterSelectTask_pickGauge
+func_8006BAE8 CharacterSelectTask_isTamerPictureWide
+func_8006BB74 CharacterSelectTask_loadTamerVoice
+func_8006EAF0 CharacterSelectTask_drawGrid
+func_8006F3C4 CharacterSelectTask_drawArena
+func_8006FAD8 CharacterSelectTask_pickArena
+func_8006B700 uploadTimAt
+func_8006B770 uploadSidePictures
+func_8006B924 uploadRunPictures
+func_8006D98C getCellPosition
+func_8006DFA4 drawCharacterPortrait
+func_8006E534 drawLeftCellInfo
+func_8006E6F0 drawRightCellInfo
+func_8006E8BC drawGaugeFromRight
+func_8006E9D8 drawGaugeFromLeft
+func_8006EED4 drawSelectBackground
+func_8006FEB8 drawSelectSprite
+func_800700A4 drawSelectSpriteShaded
+func_80070298 getTriangularSum
+D_80064C10 CHARACTER_SELECT_TASK_VTABLE
+D_800647F8 STR_CHARACTER_SELECT
+D_8006482C CHARACTER_SELECT_CAMERA_EYE
+D_8006481C CHARACTER_SELECT_CAMERA_TARGET
+D_8006480C CHARACTER_SELECT_CAMERA_UP
+D_8006483C PATH_CHARASEL_TIM
+D_80064AE8 PATH_MAPSEL_TIM
+D_80064AFC PATH_LEFT_PICTURES_TIM
+D_80064B10 PATH_RIGHT_PICTURES_TIM
+D_80064850 CELL_NEIGHBORS
+D_800649D0 CELL_PAIRS
+D_80064AE0 SIDE_SELECT_MASKS
+D_80064C40 GRID_CELLS
+D_80064E20 CHARACTER_CELLS
+D_80064E80 CHARACTER_TAMERS
+D_80065120 ROOKIE_PICTURE_PLACES
+D_80065140 CHARACTER_PICTURE_PLACES
+D_80065160 TAMER_PICTURE_PLACES
+D_80065180 WIDE_TAMER_PICTURE_PLACES
+D_800651A0 NAME_PLATE_PLACE
+D_800651B0 SELECT_SPRITES
+D_80065268 ARENA_PICTURES
+D_8007B234 EVOLVED_ROW_PICKABLE
+
+# memory_card.c: the memory card task (memoryCardTaskInit) and its two windows, by their vtables' slots
+# (0x08 tick, 0x10 draw, 0x18 destroy), the libmcrd calls each method makes and the message it shows;
+# ResetLock is the stack object whose ctor/dtor set and clear SYSTEM_CONTEXT.resetDisabled around card writes
+Unk800702F8 MessageWindow
+Unk80071C78 YesNoWindow
+Unk8007096C ResetLock
+# MessageWindow (vtable D_800656B8): a rect growing open by 0x111 a frame, with lines centred by strlen*8
+func_800702F8 MessageWindow_init
+func_8007037C MessageWindow_printLine
+func_80070404 MessageWindow_show
+func_80070414 MessageWindow_open
+func_80070420 MessageWindow_close
+func_80070428 MessageWindow_isOpen
+func_8007043C MessageWindow_tick
+func_800705A8 MessageWindow_draw
+func_80071BE8 MessageWindow_destroy
+# YesNoWindow (vtable D_80065690): the message window plus choices YES/NO (JP hai/iie), up/down and confirm
+func_80071C78 YesNoWindow_init
+func_80070708 YesNoWindow_open
+func_80070750 YesNoWindow_isDecided
+func_8007075C YesNoWindow_isYes
+func_80070768 YesNoWindow_tick
+func_8007084C YesNoWindow_draw
+func_80071C30 YesNoWindow_destroy
+# ResetLock: *flag = 1 in the ctor, 0 in the dtor; only ever over &SYSTEM_CONTEXT.resetDisabled
+func_8007096C ResetLock_init
+func_80070980 ResetLock_destroy
+# MemoryCardTask (vtable D_800656E0): the thread's mode switch and the US messages each method shows
+# (Load data? / Save data? / Formatting... / Loading... / Saving... / MEMORY CARD has been removed.)
+func_80070AEC MemoryCardTask_destroy
+func_800719D8 MemoryCardTask_update
+func_80070B60 MemoryCardTask_isDone
+func_80070B8C MemoryCardTask_run
+func_80070C2C MemoryCardTask_formatCard
+func_80070D60 MemoryCardTask_showMessage
+func_80070D84 MemoryCardTask_runOptionLoad
+func_80070DE8 MemoryCardTask_runOptionSave
+func_80070E28 MemoryCardTask_runLoad
+func_80070E6C MemoryCardTask_runSave
+func_80070EAC MemoryCardTask_load
+func_80071020 MemoryCardTask_save
+func_80071204 MemoryCardTask_readSave
+func_8007138C MemoryCardTask_writeSave
+func_800714DC MemoryCardTask_checkResult
+func_8007156C MemoryCardTask_countFiles
+func_800715AC MemoryCardTask_getFreeBlocks
+func_8007163C MemoryCardTask_openOrCreateFile
+func_8007175C MemoryCardTask_isCardPresent
+func_800717DC MemoryCardTask_acceptCard
+func_80071854 MemoryCardTask_waitResult
+func_800718A4 MemoryCardTask_waitButton
+func_800718F8 MemoryCardTask_wait
+func_80071980 MemoryCardTask_ask
+func_80070494 scaleRect
+func_80070518 countLines
+# free functions: the window's line helpers ('\n' count, copy to '\n'), the RECT scale, the thread
+# entry, the MemCB stored by MemCardCallback and the SC header + icon + title file builder
+func_80070554 copyLine
+func_80070B6C memoryCardThreadEntry
+func_80071550 memoryCardCallback
+func_80071A44 buildSaveFile
+D_8007B238 MEMORY_CARD_TASK
+D_8007B23C SAVE_FILE_NAME
+# data: the live task, the file name (BISLPS-03357 / BASLUS-01404) and title, the vtables, the icon TIM
+# passed to buildSaveFile and the messages by their US text (JP the same messages)
+D_8007B240 SAVE_FILE_TITLE
+D_800652B8 STR_SAVE_FILE_NAME
+D_80065304 STR_YES
+D_8006530C STR_NO
+D_8006531C STR_CARD_FORMAT_PROMPT
+D_8006535C STR_CARD_FORMATTING
+D_8006539C STR_CARD_FORMAT_FAILED
+D_800653B8 STR_LOAD_PROMPT
+D_800653CC STR_CARD_CHECKING_DO_NOT_TOUCH
+D_80065418 STR_CARD_CHECKING
+D_8006543C STR_LOAD_FINISH_PROMPT
+D_80065454 STR_SAVE_PROMPT
+D_80065468 STR_CARD_NOT_INSERTED
+D_80065494 STR_CARD_FULL
+D_800654B0 STR_SAVE_OVERWRITE_PROMPT
+D_80065508 STR_SAVE_FINISH_PROMPT
+D_80065520 STR_LOADING
+D_8006555C STR_LOAD_FAILED
+D_80065578 STR_LOADED
+D_8006558C STR_SAVE_DATA_CORRUPTED
+D_800655E0 STR_SAVING
+D_8006561C STR_SAVE_FAILED
+D_80065638 STR_SAVED
+D_8006564C STR_CARD_REMOVED
+D_80065688 STR_ANY_FILE
+D_80065690 YES_NO_WINDOW_VTABLE
+D_800656B8 MESSAGE_WINDOW_VTABLE
+D_800656E0 MEMORY_CARD_TASK_VTABLE
+D_80065708 SAVE_ICON_TIM
+D_800658C8 STR_CARD_NOT_INSERTED_2
+D_800658F4 STR_SAVE_DATA_NOT_FOUND
+D_80065950 STR_CARD_NOT_FORMATTED
+D_8006597C STR_CARD_ALREADY_FORMATTED
+D_800659A8 STR_CARD_FORMATTED
+
+# ranking.c: the task rankingTaskInit builds (title/ranking.tim, vtable D_80065FE8 slots 0x08/0x10/0x20), its
+# lines (sprintf of D_80065FCC, the line format, per record: rank, name, score clamped to 999999 as full-width digits, the face)
+# and the shared draw helpers (a TitleImage SPRT, the two scrolling side strips, %0*d to full-width digits)
+Unk80073818 RankingTask
+func_80073784 RankingTask_destroy
+func_800740FC RankingTask_update
+func_80073818 RankingTask_tick
+func_80073918 RankingTask_isSkipPressed
+func_80073A04 RankingTask_initLines
+func_80073B34 RankingTask_drawLines
+func_80073D40 RankingTask_drawFace
+func_80073E34 RankingTask_drawLineBar
+func_80073F94 RankingTask_draw
+func_80073390 drawImage
+func_8007342C drawSideStrips
+func_80073960 loadRankingTexture
+func_8007399C writeWideNumber
+D_80065FE8 RANKING_TASK_VTABLE
+D_80066024 RANKING_IMAGES
+D_80065FCC STR_RANKING_LINE_FORMAT
+
+# name_entry.c: the name entry the ranking and the options' code row open (no vtable; built inside the ranking
+# task and on the options' stack): its methods by what they read and draw from /title/input.tim and
+# /zascii.tim, its grids by their cells (digits, A-Z, kana / A-Z and the A/B/C buttons), the code check
+# by gameStateUnlockByCode
+Unk80074220 NameEntry
+func_80074130 NameEntry_init
+func_80074220 NameEntry_destroy
+func_80074248 NameEntry_reset
+func_80074318 NameEntry_open
+func_80074344 NameEntry_close
+func_8007434C loadZasciiTim
+func_80074388 loadInputTim
+func_800743C4 NameEntry_setGrid
+func_800744BC NameEntry_update
+func_8007460C NameEntry_draw
+func_80074740 NameEntry_openForScore
+func_800747F8 NameEntry_storeRecord
+func_8007484C NameEntry_setName
+func_800748A0 NameEntry_getName
+func_800748A8 NameEntry_enterChar
+func_800748F0 NameEntry_eraseChar
+func_80074938 NameEntry_readPad
+func_80074988 NameEntry_tryCode
+func_80074A9C NameEntry_showMessage
+func_80074AA8 NameEntry_scrollToCursor
+func_80074C7C NameEntry_snapCursor
+func_80074D44 NameEntry_moveCursorToEnd
+func_80074D90 NameEntry_stepCursorMove
+func_80074E28 NameEntry_readCell
+func_80074F68 NameEntry_input
+func_80075238 NameEntry_drawName
+func_80075304 NameEntry_drawGrid
+func_8007560C NameEntry_drawButton
+func_800756F0 NameEntry_drawGridBackground
+func_8007588C NameEntry_drawBackground
+func_80075A54 NameEntry_drawTitle
+func_80075B14 NameEntry_drawMessage
+func_80075C18 NameEntry_drawCharHighlight
+func_80075D08 NameEntry_drawButtonHighlight
+func_80075DF8 NameEntry_drawHighlight
+func_80075EC8 NameEntry_drawLine
+func_80075F74 NameEntry_isActive
+func_80075F80 NameEntry_isFinished
+func_80075F8C NameEntry_getRank
+func_80075F98 NameEntry_getMode
+func_80075FA4 NameEntry_setMaxLength
+D_800663D0 PATH_ZASCII_TIM
+D_800663DC PATH_INPUT_TIM
+D_800663F0 NAME_ENTRY_CODE_CHARACTERS
+D_800663F8 STR_NAME_CURSOR
+D_800663FC STR_EMPTY_NAME
+D_8007B250 NAME_GRID
+D_8007B280 CODE_GRID
+D_8007B298 DEFAULT_NAMES
+# the ranking's table over GAME_STATE.save.records (8 records of 0x40: next, score, character, name, MD5
+# digest of 0x4..0x30), sorted by score, reset to 10000 steps and DEFAULT_NAMES when a digest fails
+Unk800764BC RankingTable
+Unk800764F4 RankingRecord
+func_80075FAC RankingTable_init
+func_80076040 RankingTable_destroy
+func_80076138 RankingTable_first
+func_80076160 RankingTable_next
+func_8007618C RankingTable_insertScore
+func_80076220 RankingTable_fillPending
+func_80076298 RankingTable_check
+func_80076310 computeRecordDigest
+func_80076380 RankingTable_reset
+func_800764BC RankingTable_sort
+func_800764F4 compareRankingRecords
+
+# title_0a.c (title_chara.c): the character model entity (vtable D_8006659C, slots 0x08 tick, 0x10 draw,
+# 0x18 destroy) the character select and the guide show: character 0x18's model, which blinks (D_8007B2DC's
+# eye rects by DR_MOVE), lip-syncs (D_8007B2FC's mouths, random while the voice handle at 0x3C plays) and
+# plays the action clips the screens request
+Unk80076E24 TitleChara
+func_80076E24 TitleChara_init
+func_80077000 TitleChara_tick
+func_8007731C TitleChara_draw
+func_80076F6C TitleChara_destroy
+func_80077208 TitleChara_tickBlink
+func_80077378 TitleChara_startClip
+func_800773C8 TitleChara_setAction
+func_800773E8 TitleChara_setVoice
+func_800773F0 TitleChara_getAction
+func_800773FC TitleChara_isStopped
+func_80077420 TitleChara_setTransform
+func_800774D4 TitleChara_setEyes
+func_800775AC TitleChara_setMouth
+func_80077684 TitleChara_setInterruptible
+D_8006659C TITLE_CHARA_VTABLE
+D_8007B2DC TITLE_CHARA_EYES
+D_8007B2FC TITLE_CHARA_MOUTHS
+
+# title_0b.c (digifont.c): a Cache (vtable D_80066B68: 0x08 load, 0x10 destroy) over a file of u16 count,
+# count SJIS codes and 192-byte glyphs, the layout of the assets' title/digifont.bin (455 codes,
+# 912 + 455 * 192 bytes); its 4-grey CLUT D_80066B60 goes to VRAM at load; it prints through cache slots
+Unk8007A46C DigifontCache
+func_8007A46C DigifontCache_init
+func_8007A534 DigifontCache_destroy
+func_8007A580 DigifontCache_loadFile
+func_8007A6A0 DigifontCache_selectGlyph
+func_8007A6EC DigifontCache_load
+func_8007A82C DigifontCache_getSlot
+func_8007A8C4 DigifontCache_print
+func_8007ABB0 DigifontCache_drawChar
+func_8007AF88 DigifontCache_getClutRect
+func_8007B008 DigifontCache_setColor
+func_8007B020 DigifontCache_setColorAlpha
+func_8007B038 DigifontCache_setAlpha
+D_80066B60 DIGIFONT_CLUT
+D_80066B68 DIGIFONT_CACHE_VTABLE
+
+# title_0c.c (zascii_printer.c): the Printer (vtable D_80066B88: 0x08 putChar, 0x10 setColor, 0x20 destroy)
+# that draws 16x16 sprites from /zascii.tim (page 0x3B, CLUT 0x742C): 16x13 cells in the order of the 208
+# codes of D_80066BB8; the ranking and the name entry build one on the stack
+Unk8007B0A0 ZasciiPrinter
+func_8007B048 getZasciiUv
+func_8007B0A0 ZasciiPrinter_init
+func_8007B100 ZasciiPrinter_setColor
+func_8007B11C ZasciiPrinter_putChar
+func_8007B184 ZasciiPrinter_drawChar
+func_8007B210 ZasciiPrinter_destroy
+D_80066B88 ZASCII_PRINTER_VTABLE
+D_80066BB8 ZASCII_CODES
+
+# credits.c: the task creditsTaskInit builds (vtable D_800664CC, 0x44 bytes): it scrolls /credit.txt's lines
+# in the /credit.k15 font over the slides and the end picture of /title/credit.tim; the helpers by what they
+# do to the TIMs (STP bit in the CLUTs) and the text ('\n' count, split into lines)
+Unk800767AC CreditsTask
+func_800767AC CreditsTask_destroy
+func_80076DF0 CreditsTask_update
+func_80076858 CreditsTask_tick
+func_800766A4 setTimClutsStp
+func_80076728 creditsCountLines
+func_80076764 splitLines
+func_80076C14 drawCreditsEndPicture
+func_80076CC4 drawCreditsSlide
+D_8007B2D8 CREDITS_TEXT_PATH
+D_800664A8 PATH_CREDIT_K15
+D_800664B4 PATH_CREDIT_TIM
+D_800664CC CREDITS_TASK_VTABLE
+D_80066494 STR_CREDITS_TASK_NAME
+
+# guide.c: the task "Guide Logo" (guideLogoTaskInit, title/guide.tim, vtable D_80065EC4: 0x08 destroy,
+# 0x10 update, 0x20 tick) that explains the bonus game guideLogoTaskInit is given; its methods by what they
+# draw (the window's corners, the game's picture and title) and how they type the text (a character a
+# frame, 4 lines a page, <cN>/<i..>/<vN> tags); the texts JP/US by bonus game
+func_80072100 GuideLogoTask_destroy
+func_8007335C GuideLogoTask_update
+func_800721C0 GuideLogoTask_tick
+func_800722CC GuideLogoTask_readPads
+func_800723FC GuideLogoTask_createModel
+func_800724D8 GuideLogoTask_startText
+func_80072504 GuideLogoTask_drawExplanation
+func_80072568 GuideLogoTask_drawScreen
+func_800726EC GuideLogoTask_drawBonusGamePicture
+func_800728D8 GuideLogoTask_drawTextWindow
+func_80072CF0 GuideLogoTask_resetText
+func_80072D2C GuideLogoTask_typeText
+func_80073210 GuideLogoTask_drawPageMark
+func_800732D8 GuideLogoTask_clearLeaving
+func_800732E8 GuideLogoTask_tickLeaving
+func_80071CB8 guideDrawImage
+func_80071D54 guideDrawSideStrips
+D_800659BC STR_GUIDE_TEXTS
+D_8007B244 GUIDE_TEXTS
+D_80065D74 STR_GUIDE_LOGO
+D_80065D80 PATH_GUIDE_TIM
+D_80065D90 GUIDE_CAMERA_UP
+D_80065DA0 GUIDE_CAMERA_TARGET
+D_80065DB0 GUIDE_CAMERA_EYE
+D_80065DC0 GUIDE_PICTURE_UVS
+D_80065DCC GUIDE_PICTURE_CLUTS
+D_80065DD8 GUIDE_WINDOW_CORNERS
+D_80065EC4 GUIDE_LOGO_TASK_VTABLE
+D_80065EF4 GUIDE_IMAGES
