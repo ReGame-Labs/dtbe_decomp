@@ -41,3 +41,4 @@ func_800D7F70 St04Glow_init
 func_800D811C St04Glow_tick
 func_800D8158 St04Glow_draw
 func_800D80C8 St04Glow_destroy
+func_800D4104 st04_loadPulsingClut

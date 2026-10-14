@@ -1,6 +1,8 @@
 // st08.bin's own names (config/jp/st08.yaml)
 
 // the names tools/rename.py gave (tools/renames/), in address order
+ST08_VIEW_TARGET = 0x800D3824;
+ST08_VIEW_EYE = 0x800D3834;
 EVOLUTION_CONTROLLER_VTABLE = 0x800D3874;
 STAGE_EVOLUTION_VTABLE = 0x800D3894;
 EvolutionController_init = 0x800D390C; // type:func

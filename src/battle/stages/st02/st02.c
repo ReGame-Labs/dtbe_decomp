@@ -166,15 +166,15 @@ void st02_placeFighters(StageTurn *this) {
 
     matrixInitRotationZ(&rotation, this->angle);
     for (side = 0; side < 2; side++) {
-        Fighter *chara = Fight_getFighter(&this->base, side);
+        Fighter *fighter = Fight_getFighter(&this->base, side);
 
         matrixTransformVec(&rotation, &position, &this->fighterPoints[side]);
-        position.vy += Fighter_getParams(chara)->height;
-        Fighter_setPosition(chara, (Vec3 *)&position);
-        chara->velocity.vx = 0;
-        chara->velocity.vy = 0;
-        chara->velocity.vz = 0;
-        chara->velocityPad = 0;
+        position.vy += Fighter_getParams(fighter)->height;
+        Fighter_setPosition(fighter, (Vec3 *)&position);
+        fighter->velocity.vx = 0;
+        fighter->velocity.vy = 0;
+        fighter->velocity.vz = 0;
+        fighter->velocityPad = 0;
     }
 }
 
@@ -237,7 +237,7 @@ typedef struct Unk800D554C {
     /* 0x80 */ Mesh *mesh;
     /* 0x84 */ Vec3 unk84;
     /* 0x90 */ u8 unk90[0x94 - 0x90];
-    /* 0x94 */ Vec3 pos;
+    /* 0x94 */ Vec3 position;
     /* 0xA0 */ u8 unkA0[0xA4 - 0xA0];
     /* 0xA4 */ s32 unkA4;
     /* 0xA8 */ s32 unkA8;
@@ -463,9 +463,9 @@ StageMeshMover *St02MeshMover_init(StageMeshMover *this, Mesh *mesh, Vec3 *pos) 
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->motion = 0;
     this->frame = 0;
     return this;

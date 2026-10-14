@@ -159,6 +159,7 @@ typedef struct RankingRecord {
 
 RankingTable *RankingTable_init(RankingTable *table, RankingRecord *entries, u32 count);
 void RankingTable_destroy(RankingTable *table, s32 flags);
+s32 RankingTable_insertScore(RankingTable *table, s32 score);
 
 /* The zascii printer (ZasciiPrinter_init, ZASCII_PRINTER_VTABLE, zascii_printer.c): a Printer that draws its
  * characters as 16 by 16 sprites of /zascii.tim into ot. The name entry builds one on the stack. */
@@ -169,6 +170,7 @@ typedef struct ZasciiPrinter {
 } ZasciiPrinter;
 
 ZasciiPrinter *ZasciiPrinter_init(ZasciiPrinter *printer, u_long *ot);
+void ZasciiPrinter_drawChar(ZasciiPrinter *printer, s32 x, s32 y, u32 code);
 
 #ifndef __cplusplus
 /* Tasks whose update keeps its argument and calls their own per-frame method, tick (at 0x20 of the virtual

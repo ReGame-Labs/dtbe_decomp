@@ -317,6 +317,16 @@ func_800940DC ImpmonSpecial2Effect_destroy
 func_80092DCC Impmon_spawnThrowParticle
 func_80092F58 Impmon_spawnSpecial1Projectile
 func_800931B0 Impmon_spawnSpecial2Effect
+# special2 stops (func_80093144, also from endMove) on the button's release, at frame 150 or 256 away from its start;
+# its effect spawns a hitbox (Entity + TrackedHit + CollisionSphere, made only there) until then
+func_80093144 Impmon_stopSpecial2
+func_80093150 Impmon_getSpecial2Distance
+func_80094258 ImpmonSpecial2Effect_spawnHitbox
+func_800945F8 ImpmonSpecial2Hitbox_init
+D_8006972C IMPMON_SPECIAL2_HITBOX_VTABLE
+func_80094880 ImpmonSpecial2Hitbox_tick
+func_80094AF8 ImpmonSpecial2Hitbox_draw
+func_800947EC ImpmonSpecial2Hitbox_destroy
 
 # beelzebumon.c (the throw calls func_80095294; special1 / airSpecial1 call func_80095654; special2 calls
 # func_80095894 at frame 7 and func_80095928 20 times at 14; special3 calls func_80095D88)
@@ -458,6 +468,12 @@ func_800A209C PatamonSpecial1Hitbox_tick
 func_800A2244 PatamonSpecial1Hitbox_draw
 func_800A1FF4 PatamonSpecial1Hitbox_destroy
 func_800A1968 Patamon_spawnSpecial1Hitbox
+# the hitbox leaves an effect (func_800A2700, its only constructor call) every frame while it shrinks
+func_800A2700 PatamonSpecial1Effect_init
+D_8006A7AC PATAMON_SPECIAL1_EFFECT_VTABLE
+func_800A27EC PatamonSpecial1Effect_tick
+func_800A2870 PatamonSpecial1Effect_draw
+func_800A2798 PatamonSpecial1Effect_destroy
 
 # renamon.c (special1 / airSpecial1 call func_800A38D8, the hitbox's only spawner, and func_800A3A40)
 func_800A2F98 Renamon_init

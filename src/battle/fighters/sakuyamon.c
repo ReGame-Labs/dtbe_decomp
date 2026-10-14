@@ -30,7 +30,7 @@ typedef struct Sakuyamon {
 /* The entity class of func_800A6220 (virtual table D_8006B03C), which func_800AA0B4's derives from. */
 typedef struct Unk800A6220 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ InputHistory *input; /* the character's (Fighter_getInput) */
     /* 0x20 */ Vec3 position;      /* the character's, at construction */
     /* 0x2C */ u8 unk2C[0x30 - 0x2C];
@@ -39,7 +39,7 @@ typedef struct Unk800A6220 {
     /* 0x38 */ s32 unk38;
 } Unk800A6220;
 
-Unk800A6220 *func_800A6220(Unk800A6220 *this, Fighter *chara);
+Unk800A6220 *func_800A6220(Unk800A6220 *this, Fighter *fighter);
 
 extern EntityVtable SAKUYAMON_VTABLE;
 
@@ -48,9 +48,11 @@ extern EntityVtable SAKUYAMON_VTABLE;
 typedef struct Unk800A7F88 {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Hit unk18;
-    /* 0x34 */ u8 unk34[0x44 - 0x34];
-    /* 0x44 */ u32 unk44;
-    /* 0x48 */ u8 unk48[0x94 - 0x48];
+    /* 0x34 */ s32 unk34;
+    /* 0x38 */ CollisionSphere part;
+    /* 0x80 */ s32 unk80;
+    /* 0x84 */ Vec3 start; /* func_800A7FEC puts the part at start + unk94 * unkB0 / 4 (its asm) */
+    /* 0x90 */ s32 startPad;
     /* 0x94 */ Vec3 unk94;
     /* 0xA0 */ u8 unkA0[0xA8 - 0xA0];
     /* 0xA8 */ s32 unkA8;
@@ -63,7 +65,7 @@ extern EntityVtable D_8006AEAC;
 
 typedef struct SakuyamonSpecial3Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ VECTOR position; /* the character's node 19 (offset D_8006B198), while state is below 3 */
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30;
@@ -233,8 +235,8 @@ void Sakuyamon_special1(Sakuyamon *this, s32 frame) {
 
 /* func_800AA0B4's body: the constructor of the class of vtable D_8006B00C, derived from func_800A6220's, which
  * g++ inlined into func_800A5AD0. */
-static inline Unk800A6220 *constructUnk800AA0B4(Unk800A6220 *this, Fighter *chara) {
-    func_800A6220(this, chara);
+static inline Unk800A6220 *constructUnk800AA0B4(Unk800A6220 *this, Fighter *fighter) {
+    func_800A6220(this, fighter);
     this->entity.vtable = &D_8006B00C;
     return this;
 }
@@ -255,7 +257,7 @@ void func_800A5AD0(Sakuyamon *this) {
     }
 }
 
-UnkPartsEntity38 *func_800A65F8(UnkPartsEntity38 *this, Fighter *chara, s32 handle, VECTOR *from, VECTOR to);
+UnkPartsEntity38 *func_800A65F8(UnkPartsEntity38 *this, Fighter *fighter, s32 handle, VECTOR *from, VECTOR to);
 Entity *func_800A6EB8(Entity *this, s32 handle);
 Entity *func_800A7694(Entity *this, s32 handle, s32 unk);
 
@@ -322,7 +324,7 @@ void Sakuyamon_airSpecial2(Sakuyamon *this, s32 frame) {
     }
 }
 
-Entity *func_800A7C90(void *this, Fighter *chara, VECTOR *point, Vec3 *position);
+Entity *func_800A7C90(void *this, Fighter *fighter, VECTOR *point, Vec3 *position);
 
 /* Creates func_800A7C90's entity (0xB8 bytes) at node 2 and at the character's position moved 384 the way it
  * faces, hands it to Fighter_addEntity and keeps its handle at 0x4B8, when it was allocated. */
@@ -359,7 +361,8 @@ INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", Sakuyamon_special3);
 /* the offset from node 19 where Sakuyamon_spawnSpecial3Effect spawns the effect */
 extern VECTOR D_8006B198;
 
-SakuyamonSpecial3Effect *SakuyamonSpecial3Effect_init(SakuyamonSpecial3Effect *this, Fighter *chara, VECTOR *position);
+SakuyamonSpecial3Effect *SakuyamonSpecial3Effect_init(SakuyamonSpecial3Effect *this, Fighter *fighter,
+                                                      VECTOR *position);
 
 /* Spawns the special move 3's effect at node 19 (offset D_8006B198), then Fighter_addGauge(-0x10000) and its sound. */
 void Sakuyamon_spawnSpecial3Effect(Fighter *this) {
@@ -377,13 +380,13 @@ void Sakuyamon_spawnSpecial3Effect(Fighter *this) {
 }
 
 /* Constructs an entity that follows the character: its input, its position, and 96 the way it faces. */
-Unk800A6220 *func_800A6220(Unk800A6220 *this, Fighter *chara) {
+Unk800A6220 *func_800A6220(Unk800A6220 *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006B03C;
-    this->chara = chara;
-    this->input = Fighter_getInput(chara);
-    func_8007A650(chara, &this->position);
-    this->unk30 = Fighter_getFacing(chara) * 96;
+    this->fighter = fighter;
+    this->input = Fighter_getInput(fighter);
+    func_8007A650(fighter, &this->position);
+    this->unk30 = Fighter_getFacing(fighter) * 96;
     this->unk34 = 0;
     this->unk38 = 0;
     return this;
@@ -393,7 +396,28 @@ INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A62A0);
 
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A63D8);
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A6550);
+/* Method 0x20 of the computer's class (D_8006B00C): the flat way, 96 long, from position to the opponent's top. */
+VECTOR *func_800A6550(Unk800A6220 *this, VECTOR *out) {
+    s32 x, y, z;
+
+    /* func_8007A6CC writes only vx, vy and vz */
+    func_8007A6CC(this->fighter, (Vec3 *)out);
+    /* The match depends on the vecSubInPlace shape: read out whole, subtract, then store. */
+    x = out->vx;
+    y = out->vy;
+    z = out->vz;
+    x -= this->position.vx;
+    y -= this->position.vy;
+    z -= this->position.vz;
+    out->vx = x;
+    out->vy = y;
+    out->vz = z;
+    vecNormalize(out, out);
+    out->vz = 0;
+    out->vx = (out->vx * 96) >> 12;
+    out->vy = (out->vy * 96) >> 12;
+    return out;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A65F8);
 
@@ -411,7 +435,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A6EB8);
 
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A6F8C);
 
-/* The update of the entities of D_8006AF9C: func_800A7290, then func_800A7458. */
+/* The draw of the entities of D_8006AF9C: func_800A7290, then func_800A7458. */
 void func_800A7254(Entity *this, s32 arg) {
     func_800A7290(this, arg);
     func_800A7458(this, arg);
@@ -431,12 +455,12 @@ INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A7C90);
 
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A7DD4);
 
-/* The second base's Hit_apply with arg, then sets bit 0 of 0x44 when getHitFighter finds an entity in arg and 0xAC is
+/* The second base's Hit_apply with arg, then disables the part when getHitFighter finds an entity in arg and 0xAC is
  * 0. */
 void func_800A7F88(Unk800A7F88 *this, void *arg) {
     Hit_apply(&this->unk18, arg);
     if (getHitFighter(arg) != NULL && this->unkAC == 0) {
-        this->unk44 |= 1;
+        this->part.flags |= COLLISION_SHAPE_DISABLED;
     }
 }
 
@@ -477,12 +501,13 @@ INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A84E4);
 
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A86A8);
 
-/* Builds the special move 3's effect for chara, its fields 0; its one caller (Sakuyamon_spawnSpecial3Effect) also
+/* Builds the special move 3's effect for fighter, its fields 0; its one caller (Sakuyamon_spawnSpecial3Effect) also
  * passes a position, which it does not read. */
-SakuyamonSpecial3Effect *SakuyamonSpecial3Effect_init(SakuyamonSpecial3Effect *this, Fighter *chara, VECTOR *position) {
+SakuyamonSpecial3Effect *SakuyamonSpecial3Effect_init(SakuyamonSpecial3Effect *this, Fighter *fighter,
+                                                      VECTOR *position) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &SAKUYAMON_SPECIAL3_EFFECT_VTABLE;
-    this->chara = chara;
+    this->fighter = fighter;
     this->position.vx = 0;
     this->position.vy = 0;
     this->position.vz = 0;
@@ -494,13 +519,13 @@ SakuyamonSpecial3Effect *SakuyamonSpecial3Effect_init(SakuyamonSpecial3Effect *t
     this->unk3C = 0;
     this->state = 0;
     this->frames = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", SakuyamonSpecial3Effect_tick);
 
-/* The update of the entities of SAKUYAMON_SPECIAL3_EFFECT_VTABLE: func_800A8C24, then func_800A8F80. */
+/* The draw of the entities of SAKUYAMON_SPECIAL3_EFFECT_VTABLE: func_800A8C24, then func_800A8F80. */
 void SakuyamonSpecial3Effect_draw(Entity *this, s32 arg) {
     func_800A8C24(this, arg);
     func_800A8F80(this, arg);
@@ -557,23 +582,50 @@ void func_800A9944(Unk800A9944 *this, void *arg) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A9998);
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A9C4C);
-
 /* The class func_800A9C4C constructs (virtual table D_8006AE64). */
 typedef struct Unk800A9C4C {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Vec3 position;
     /* 0x24 */ s32 unk24;
-    /* 0x28 */ s32 unk28; /* three mersenneTwisterGenerate values */
+    /* 0x28 */ s32 unk28; /* three RANDOM values */
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30;
     /* 0x34 */ s32 unk34;
     /* 0x38 */ s32 unk38; /* eases towards 0x804 (func_800A9D0C) */
     /* 0x3C */ s32 unk3C;
-    /* 0x40 */ s32 unk40; /* Fighter_getVramY of the owner */
+    /* 0x40 */ s32 vramY; /* Fighter_getVramY of the owner */
 } Unk800A9C4C;
 
-/* The update of func_800A9C4C's entity: 0x38 eases a quarter of the way to 0x804 every frame, and the
+extern EntityVtable D_8006AE64;
+
+/* Constructs the entity of virtual table D_8006AE64 for fighter at position, with three random words. */
+Unk800A9C4C *func_800A9C4C(Unk800A9C4C *this, Fighter *fighter, Vec3 *position) {
+    s32 x, y, z;
+    s32 random0, random1, random2;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_8006AE64;
+    /* The match depends on reading position whole (a struct copy: 26 diffs) and on drawing the three random
+     * words before storing any. */
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    random0 = mersenneTwisterGenerate(&RANDOM);
+    random1 = mersenneTwisterGenerate(&RANDOM);
+    random2 = mersenneTwisterGenerate(&RANDOM);
+    this->unk28 = random0;
+    this->unk2C = random1;
+    this->unk30 = random2;
+    this->unk38 = 0;
+    this->unk3C = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    return this;
+}
+
+/* The tick of func_800A9C4C's entity: 0x38 eases a quarter of the way to 0x804 every frame, and the
  * entity deletes itself once it reaches 0x800. */
 void func_800A9D0C(Unk800A9C4C *this) {
     this->unk38 += (0x804 - this->unk38) >> 2;
@@ -624,8 +676,8 @@ void func_800AA06C(Entity *this, s32 flags) {
 }
 
 /* Constructs an object of the entity class of vtable D_8006B00C, which derives from func_800A6220's. */
-Unk800A6220 *func_800AA0B4(Unk800A6220 *this, Fighter *chara) {
-    return constructUnk800AA0B4(this, chara);
+Unk800A6220 *func_800AA0B4(Unk800A6220 *this, Fighter *fighter) {
+    return constructUnk800AA0B4(this, fighter);
 }
 
 /* The destructor of the UnkPartsEntity38 class of vtables D_8006AFE4 and D_8006AFC4, which

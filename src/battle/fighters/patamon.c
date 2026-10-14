@@ -5,12 +5,13 @@
 #include "common.h"
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
+#include "engine/math/sin_cos.h"
 
 extern FaceEntry PATAMON_FACES[];
 extern EntityVtable D_8006A784;
-extern EntityVtable D_8006A7AC;
+extern EntityVtable PATAMON_SPECIAL1_EFFECT_VTABLE;
 extern EntityVtable PATAMON_VTABLE;
-Entity *PatamonSpecial1Hitbox_init(Entity *this, Fighter *chara, Vec3 *position, Vec3 *velocity, Fight *unk228);
+Entity *PatamonSpecial1Hitbox_init(Entity *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *unk228);
 
 /* Builds Patamon: a Fighter with its own vtable and faces. */
 Patamon *Patamon_init(Patamon *this) {
@@ -34,7 +35,40 @@ void Patamon_destroy(Entity *this, s32 flags) {
 void Patamon_endMove(void) {
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/patamon", Patamon_intro);
+void func_800A11B0(Patamon *this);
+
+/* getSin (engine/math/sin_cos.c), inline. */
+static inline s16 getSinInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].sin;
+}
+
+/* The intro: for 48 frames 0x3C8 eases along a sine from 0x1400 behind and 0xA00 up to (0, 0) (func_800A11B0), then
+ * is cleared. */
+void Patamon_intro(Patamon *this, s32 frame) {
+    if (frame == 0) {
+        this->unk4B8 = 0;
+        this->unk4CC.vx = 0;
+        this->unk4CC.vy = 0;
+        this->unk4CC.vz = 0;
+        this->unk4CC.pad = 0;
+        this->unk4DC.vx = 0;
+        this->unk4DC.vy = 0;
+        this->unk4DC.vz = 0;
+        this->unk4DC.pad = 0;
+        this->unk4CC.vx = -(Fighter_getFacing(&this->base) * 0x1400);
+        this->unk4CC.vy = -0xA00;
+    }
+    if (frame < 48) {
+        /* The match depends on getSin's inline (the table read in place computes its address first). */
+        this->unk4B8 = getSinInline(frame * 21);
+        func_800A11B0(this);
+    } else {
+        this->base.unk3C8.vx = 0;
+        this->base.unk3C8.vy = 0;
+        this->base.unk3C8.vz = 0;
+        this->base.unk3C8.pad = 0;
+    }
+}
 
 /* Sets out's x and y to the point at t (4.12) of the way from from to to. */
 void func_800A1160(Patamon *this, VECTOR *from, VECTOR *to, s32 t, VECTOR *out) {
@@ -55,9 +89,9 @@ void func_800A11B0(Patamon *this) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/patamon", Patamon_throw);
 
-/* Clamps 0x4B8 to 0..0x1000 and sets chara moving (0x3B4, in 1/256ths) from its position to the point
+/* Clamps 0x4B8 to 0..0x1000 and sets fighter moving (0x3B4, in 1/256ths) from its position to the point
  * that far from 0x4CC to 0x4DC (func_800A1160), clearing 0x3A4..0x3B0 and 0x3BC. */
-void func_800A1760(Patamon *this, Fighter *chara) {
+void func_800A1760(Patamon *this, Fighter *fighter) {
     Vec3 position;
     VECTOR target;
 
@@ -67,20 +101,34 @@ void func_800A1760(Patamon *this, Fighter *chara) {
     if (this->unk4B8 > 0x1000) {
         this->unk4B8 = 0x1000;
     }
-    Fighter_getPosition(chara, &position);
+    Fighter_getPosition(fighter, &position);
     func_800A1160(this, &this->unk4CC, &this->unk4DC, this->unk4B8, &target);
-    chara->force.vz = 0;
-    chara->velocity.vx = 0;
-    chara->velocity.vy = 0;
-    chara->velocity.vz = 0;
-    chara->velocityPad = 0;
-    chara->force.vx = (target.vx - position.vx) << 8;
-    chara->force.vy = (target.vy - position.vy) << 8;
+    fighter->force.vz = 0;
+    fighter->velocity.vx = 0;
+    fighter->velocity.vy = 0;
+    fighter->velocity.vz = 0;
+    fighter->velocityPad = 0;
+    fighter->force.vx = (target.vx - position.vx) << 8;
+    fighter->force.vy = (target.vy - position.vy) << 8;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/patamon", Patamon_special1);
-
 void Patamon_spawnSpecial1Hitbox(Fighter *this);
+
+/* Special move 1: at frame 0 stops when the hitbox is still out, else the voice and the clip; the hitbox at frame
+ * 20. */
+void Patamon_special1(Patamon *this, s32 frame) {
+    if (frame == 0) {
+        if (this->special1Active != 0) {
+            Fighter_stopActionClip(&this->base);
+            return;
+        }
+        Fighter_playVoice(&this->base, 0xC9);
+        Fighter_playActionClip(&this->base, FIGHTER_CLIP_SPECIAL1, 0, 0, -1);
+    }
+    if (frame == 20) {
+        Patamon_spawnSpecial1Hitbox(&this->base);
+    }
+}
 
 /* Special move 1 in the air: at frame 0 stops when the hitbox is still out (0x4A4), else the voice and the clip; the
  * hitbox at frame 3; before frame 17 the force brakes a sixteenth of the horizontal velocity and any fall. */
@@ -195,7 +243,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/patamon", PatamonSpecial1Hitbox_init);
 /* The special move 1's hitbox (0xC8 bytes): while it lives its fighter's special1Active is set. */
 typedef struct PatamonSpecial1Hitbox {
     /* 0x00 */ UnkPartsEntity3C parts;
-    /* 0x84 */ Patamon *chara;
+    /* 0x84 */ Patamon *fighter;
 } PatamonSpecial1Hitbox;
 
 extern EntityVtable PATAMON_SPECIAL1_HITBOX_VTABLE;
@@ -205,8 +253,8 @@ void PatamonSpecial1Hitbox_destroy(PatamonSpecial1Hitbox *this, s32 flags) {
     ListNode *node;
 
     this->parts.entity.vtable = &PATAMON_SPECIAL1_HITBOX_VTABLE;
-    this->chara->special1Active = 0;
-    func_80079B0C(&this->chara->base, 1);
+    this->fighter->special1Active = 0;
+    func_80079B0C(&this->fighter->base, 1);
     this->parts.part.vtable = COLLISION_SHAPE_VTABLE;
     /* listRemove(&this->part.node), in the access order the game's compiler used */
     node = &this->parts.part.link;
@@ -225,20 +273,67 @@ INCLUDE_ASM("game/nonmatchings/fighters/patamon", PatamonSpecial1Hitbox_tick);
 
 INCLUDE_ASM("game/nonmatchings/fighters/patamon", PatamonSpecial1Hitbox_draw);
 
-INCLUDE_ASM("game/nonmatchings/fighters/patamon", func_800A2700);
+/* The special move 1's effect (0x4C bytes), which the hitbox leaves every frame while it shrinks: a ring of 16
+ * quads around a point that widens for 8 frames. */
+typedef struct PatamonSpecial1Effect {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ VECTOR position;
+    /* 0x28 */ s32 radius[2]; /* the ring's two edges: 0x80 and 0x4C, 46 and 51 more a frame */
+    /* 0x30 */ s32 scale[2];  /* of the cosine and sine parts, 0x100 = 1 */
+    /* 0x38 */ u32 color;
+    /* 0x3C */ s32 angle;     /* of the first quad */
+    /* 0x40 */ s32 angleStep; /* between the quads */
+    /* 0x44 */ s16 quads;
+    /* 0x46 */ s16 ticked;    /* set by the tick, cleared by the draw, which draws only when it is set */
+    /* 0x48 */ s32 frames;
+} PatamonSpecial1Effect;
 
-/* The destructor of the entity class of vtable D_8006A7AC, which func_800A2700 installs. */
-void func_800A2798(Entity *this, s32 flags) {
-    this->vtable = &D_8006A7AC;
+/* Builds the special move 1's effect at the position: a grey ring of 16 quads. */
+PatamonSpecial1Effect *PatamonSpecial1Effect_init(PatamonSpecial1Effect *this, Vec3 *position) {
+    s32 x, y, z;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &PATAMON_SPECIAL1_EFFECT_VTABLE;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->radius[0] = 0x80;
+    this->radius[1] = 0x4C;
+    this->scale[0] = 0x100;
+    this->scale[1] = 0x100;
+    this->color = 0x808080;
+    this->angle = 0;
+    this->angleStep = 0x100;
+    this->quads = 16;
+    this->frames = 0;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    return this;
+}
+
+/* The special move 1 effect's destructor. */
+void PatamonSpecial1Effect_destroy(Entity *this, s32 flags) {
+    this->vtable = &PATAMON_SPECIAL1_EFFECT_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/patamon", func_800A27EC);
+/* Widens the ring for 8 frames, then deletes it. */
+void PatamonSpecial1Effect_tick(PatamonSpecial1Effect *this) {
+    if (this->frames >= 8) {
+        entityDelete(&this->entity);
+    } else {
+        this->ticked = 1;
+        this->radius[0] += 46;
+        this->radius[1] += 51;
+        this->frames++;
+    }
+}
 
-INCLUDE_ASM("game/nonmatchings/fighters/patamon", func_800A2870);
+INCLUDE_ASM("game/nonmatchings/fighters/patamon", PatamonSpecial1Effect_draw);
 
 INCLUDE_ASM("game/nonmatchings/fighters/patamon", func_800A2C70);
 
@@ -268,6 +363,6 @@ INCLUDE_RODATA("game/nonmatchings/fighters/patamon", D_8006A754);
 INCLUDE_RODATA("game/nonmatchings/fighters/patamon", PATAMON_FACES);
 INCLUDE_RODATA("game/nonmatchings/fighters/patamon", D_8006A774);
 INCLUDE_RODATA("game/nonmatchings/fighters/patamon", D_8006A784);
-INCLUDE_RODATA("game/nonmatchings/fighters/patamon", D_8006A7AC);
+INCLUDE_RODATA("game/nonmatchings/fighters/patamon", PATAMON_SPECIAL1_EFFECT_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/fighters/patamon", PATAMON_SPECIAL1_HITBOX_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/fighters/patamon", PATAMON_VTABLE);

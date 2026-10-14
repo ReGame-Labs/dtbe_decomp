@@ -308,7 +308,7 @@ void Gokumon_spawnSpecial3Burst(Fighter *this) {
 
 /* A point of Unk800C0298's trail. */
 typedef struct Unk800C0298Point {
-    /* 0x0 */ Vec3 pos;
+    /* 0x0 */ Vec3 position;
     /* 0xC */ s32 unkC;
 } Unk800C0298Point;
 
@@ -347,7 +347,7 @@ Unk800C0298 *func_800C0298(Unk800C0298 *this, Fighter *owner) {
     Fighter_getPosition(owner, &position);
     point = this->trail;
     for (i = 0; i < 8; i++) {
-        point->pos = position;
+        point->position = position;
         point++;
     }
     return this;
@@ -363,7 +363,7 @@ void func_800C0344(Unk800C0298 *this) {
         if (++this->count >= 8) {
             this->count = 8;
         }
-        Fighter_getPosition(this->owner, &this->trail[this->newest].pos);
+        Fighter_getPosition(this->owner, &this->trail[this->newest].position);
         if (++this->frames >= 9) {
             this->fading++;
         }

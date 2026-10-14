@@ -33,6 +33,8 @@ extern VECTOR ZERO_VECTOR;
 /* the unit y and z axes, in 4.12 fixed point */
 extern VECTOR AXIS_Y; /* the y axis */
 extern VECTOR AXIS_Z; /* the z axis */
+/* the corners of a square of side 2, centered, in 4.12 fixed point (spriteAnimBuildShape's shape) */
+extern SVECTOR SQUARE_CORNERS[4];
 
 void lightsReset(Lights *lights);
 void lightsSetColor0(Lights *lights, VECTOR *color);

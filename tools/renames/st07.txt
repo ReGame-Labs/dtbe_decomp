@@ -45,3 +45,6 @@ func_800D4B0C St07Ball_tick
 func_800D4F68 St07Ball_draw
 func_800D4AB8 St07Ball_destroy
 func_800D4C64 St07Ball_testGoal
+# the fixed view StageBallShoot_tick sets while the HUD is shown
+D_800D3824 ST07_VIEW_TARGET
+D_800D3834 ST07_VIEW_EYE

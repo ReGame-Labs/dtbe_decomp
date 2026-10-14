@@ -6,6 +6,7 @@
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 #include "psyq.h"
+#include "engine/math/sin_cos.h"
 #include "engine/math/vector.h"
 #include "engine/task/entity.h"
 #include "engine/gfx/scene_graph.h"
@@ -26,9 +27,20 @@ typedef struct StageMachine {
     /* 0xEB0 */ u8 unkEB0[0xEC4 - 0xEB0];
     /* 0xEC4 */ MeshScene *meshScene; /* the stage's meshes */
     /* 0xEC8 */ u32 angle; /* 0..0xFFF, stepped by st00_turnAngle */
-    /* 0xECC */ u8 unkECC[0xEF4 - 0xECC];
+    /* 0xECC */ s32 turnFrames; /* the frames st00_turnAngle has run since func_800D5A68 cleared it */
+    /* 0xED0 */ u8 unkED0[0xEF4 - 0xED0];
     /* 0xEF4 */ s16 unkEF4;
-    /* 0xEF6 */ u8 unkEF6[0x1020 - 0xEF6];
+    /* 0xEF6 */ u8 unkEF6[0xF08 - 0xEF6];
+    /* The four falling objects (st00_resetFallingObject resets one, func_800D70E4 drops it): */
+    /* 0xF08 */ s32 unkF08[4];
+    /* 0xF18 */ s32 unkF18[4];
+    /* 0xF28 */ s16 unkF28[4];
+    /* 0xF30 */ VECTOR position[4];
+    /* 0xF70 */ VECTOR force[4];    /* func_80079C1C's force: gravity 0x71C, cleared after each step */
+    /* 0xFB0 */ VECTOR velocity[4]; /* func_80079C1C's velocity, cleared on landing */
+    /* 0xFF0 */ s32 unkFF0[4];
+    /* 0x1000 */ s32 groundFrames[4]; /* the frames on the ground, up to 10 */
+    /* 0x1010 */ s32 inAir[4];        /* set while func_80072FE0 finds no ground under it */
     /* 0x1020 */ u32 unk1020[4]; /* func_800D5A34 counts the non-zero ones */
     /* 0x1030 */ s32 unk1030;
     /* 0x1034 */ s32 unk1034[4]; /* func_800D59CC fills them with (r + i) & 3 */
@@ -51,7 +63,7 @@ extern EntityVtable ST00_CROSSING_SPRITES_VTABLE;
 extern EntityVtable ST00_COLOR_QUAD_VTABLE;
 extern EntityVtable ST00_SIGNAL_QUADS_VTABLE;
 extern EntityVtable D_800D39C4;
-extern EntityVtable D_800D39EC;
+extern EntityVtable ST00_GLOW_QUAD_VTABLE;
 extern EntityVtable D_800D3A14;
 extern EntityVtable D_800D3A3C;
 extern EntityVtable ST00_GROUP_DRAWER_VTABLE;
@@ -184,7 +196,28 @@ void st00_turnAngle(StageMachine *this) {
     this->angle = (this->angle + 0x40) & 0xFFF;
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D7064);
+/* vector_ops.c's vecClear, inlined: the match depends on clearing through a pointer. */
+static inline VECTOR *clearVector(VECTOR *v) {
+    v->vx = 0;
+    v->vy = 0;
+    v->vz = 0;
+    v->pad = 0;
+    return v;
+}
+
+/* Puts falling object `index` back at its start, high over the arena's left side, at rest. */
+void st00_resetFallingObject(StageMachine *this, s32 index) {
+    this->unkF08[index] = 0;
+    clearVector(&this->force[index]);
+    clearVector(&this->velocity[index]);
+    this->unkF28[index] = 0;
+    this->groundFrames[index] = 0;
+    this->inAir[index] = 0;
+    this->position[index].vx = -0xC80;
+    this->position[index].vy = -0xA40;
+    this->position[index].vz = 0;
+    this->position[index].pad = 0;
+}
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D70E4);
 
@@ -249,20 +282,20 @@ INCLUDE_ASM("st00/nonmatchings/st00", func_800D7F88);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D7FDC);
 
-/* An entity of the stage (func_800D819C, vtable D_800D39EC; 0x60 bytes): a 1024-wide quad of the owner, from
- * height -0xA8E to -0x68E. */
-typedef struct Unk800D819C {
+/* A screen-wide translucent tile and a 1024-wide quad of the owner, from height -0xA8E to -0x68E, that glow
+ * while the stage's angle turns (St00GlowQuad_tick). */
+typedef struct St00GlowQuad {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Fight *owner;
-    /* 0x1C */ u8 unk1C;
+    /* 0x1C */ u8 brightness; /* the tile's red, and the quad's (half of it in green and blue) */
     /* 0x1D */ u8 unk1D[0x40 - 0x1D];
     /* 0x40 */ SVECTOR corners[4];
-} Unk800D819C; /* size 0x60 */
+} St00GlowQuad; /* size 0x60 */
 
 /* Constructs the stage's quad entity of owner: corners from (-0x200, -0xA8E) to (0x200, -0x68E). */
-Unk800D819C *func_800D819C(Unk800D819C *this, Fight *owner) {
+St00GlowQuad *St00GlowQuad_init(St00GlowQuad *this, Fight *owner) {
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_800D39EC;
+    this->entity.vtable = &ST00_GLOW_QUAD_VTABLE;
     this->owner = owner;
     /* The match depends on these chained assignments, as in st07's BonusThrower_init. */
     this->corners[0].vx = this->corners[2].vx = -0x200;
@@ -270,22 +303,32 @@ Unk800D819C *func_800D819C(Unk800D819C *this, Fight *owner) {
     this->corners[0].vy = this->corners[1].vy = -0xA8E;
     this->corners[2].vy = this->corners[3].vy = -0x68E;
     this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = 0;
-    this->unk1C = 0;
+    this->brightness = 0;
     return this;
 }
 
-/* The destructor of the entity class of vtable D_800D39EC, which func_800D819C installs. */
-void func_800D8228(Entity *this, s32 flags) {
-    this->vtable = &D_800D39EC;
+/* St00GlowQuad's destructor. */
+void St00GlowQuad_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST00_GLOW_QUAD_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D827C);
+/* St00GlowQuad's tick: while the stage's angle turns, the brightness follows the sine of that angle (0 to 64);
+ * otherwise it is dark. */
+void St00GlowQuad_tick(St00GlowQuad *this) {
+    StageMachine *stage = (StageMachine *)this->owner;
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D82D4);
+    if (stage->turnFrames != 0) {
+        this->brightness = ((COS_SIN_TABLE[stage->angle & 0xFFF].sin >> 5) + 0x80) >> 2;
+    } else {
+        this->brightness = 0;
+    }
+}
+
+INCLUDE_ASM("st00/nonmatchings/st00", St00GlowQuad_draw);
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D8470);
 

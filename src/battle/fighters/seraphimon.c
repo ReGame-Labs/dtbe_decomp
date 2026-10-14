@@ -4,10 +4,10 @@
 #include "common.h"
 #include "battle/game_classes.h"
 
-SeraphimonSpecial2Effect *SeraphimonSpecial2Effect_init(SeraphimonSpecial2Effect *this, Fighter *chara);
-Unk800AFD78 *func_800AFD78(Unk800AFD78 *this, Fighter *chara, Fight *fight);
-Unk800B01AC *func_800B01AC(Unk800B01AC *this, Fighter *chara, Fight *fight);
-Unk800B050C *func_800B050C(Unk800B050C *this, Fighter *chara, Fight *fight);
+SeraphimonSpecial2Effect *SeraphimonSpecial2Effect_init(SeraphimonSpecial2Effect *this, Fighter *fighter);
+Unk800AFD78 *func_800AFD78(Unk800AFD78 *this, Fighter *fighter, Fight *fight);
+Unk800B01AC *func_800B01AC(Unk800B01AC *this, Fighter *fighter, Fight *fight);
+Unk800B050C *func_800B050C(Unk800B050C *this, Fighter *fighter, Fight *fight);
 extern EntityVtable D_8006B5FC;
 extern EntityVtable D_8006B624;
 extern EntityVtable D_8006B64C;
@@ -51,10 +51,31 @@ void Seraphimon_endMove(Fighter *this) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", Seraphimon_throw);
 
-INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", Seraphimon_special2);
-
 void Seraphimon_spawnSpecial2Effect(Fighter *this);
 void Seraphimon_spawnSpecial2Hitbox(Fighter *this, s32 arg, s32 index);
+
+/* Special move 2: as in the air, but the hitboxes get -0x200, with no push back, and until frame 11 the force brakes
+ * only a sixteenth of the horizontal velocity. */
+void Seraphimon_special2(Fighter *this, s32 frame) {
+    s32 i;
+
+    Fighter_special2(this, frame);
+    func_80079AE4(this);
+    if (frame == 1) {
+        Seraphimon_spawnSpecial2Effect(this);
+        Fighter_playVoice(this, 0xE8);
+    }
+    if (frame == 10) {
+        for (i = 0; i < 7; i++) {
+            Seraphimon_spawnSpecial2Hitbox(this, -0x200, i);
+        }
+        Fighter_playSound(this, 0xE2);
+    }
+    if (frame < 11) {
+        /* The match depends on adding the negated velocity (negu, sra, addu), not subtracting it. */
+        this->force.vx += -this->velocity.vx >> 4;
+    }
+}
 
 /* Special move 2 in the air: Fighter's; the effect and the voice at frame 1, seven hitboxes (0x200, 0 to 6), a push
  * back by 0x3000 and sound 0xE2 at frame 10; until frame 11 the force brakes a sixteenth of the horizontal velocity and
@@ -177,32 +198,32 @@ typedef struct SeraphimonSpecial2Hitbox {
     /* 0x00 */ UnkPartsEntity38 parts;
     /* 0x80 */ Fighter *owner;
     /* 0x84 */ Fight *list; /* the part goes into one of its two lists (Fighter_getSide picks which) */
-    /* 0x88 */ Vec3 pos;
+    /* 0x88 */ Vec3 position;
     /* 0x94 */ s32 unk94;
     /* 0x98 */ Vec3 start;
     /* 0xA4 */ s32 unkA4;
-    /* 0xA8 */ Vec3 vel;
+    /* 0xA8 */ Vec3 velocity;
     /* 0xB4 */ s32 unkB4;
     /* 0xB8 */ s32 unkB8;
     /* 0xBC */ s32 unkBC;
-    /* 0xC0 */ s32 speed; /* vecGetLength of vel */
+    /* 0xC0 */ s32 speed; /* vecGetLength of velocity */
     /* 0xC4 */ s32 unkC4;
     /* 0xC8 */ s32 unkC8;
     /* 0xCC */ s16 vramY; /* Fighter_getVramY of the owner */
     /* 0xCE */ s16 unkCE;
 } SeraphimonSpecial2Hitbox;
 
-/* Builds a special move 2 hitbox for chara at position, moving by velocity (its knockback: velocity's x and z times 8,
- * y less 0xC00), and adds its sphere to chara's side of list (Fighter_getSide). */
-SeraphimonSpecial2Hitbox *SeraphimonSpecial2Hitbox_init(SeraphimonSpecial2Hitbox *this, Fighter *chara, Vec3 *position,
-                                                        VECTOR *velocity, Fight *list, s32 arg5) {
+/* Builds a special move 2 hitbox for fighter at position, moving by velocity (its knockback: velocity's x and z times
+ * 8, y less 0xC00), and adds its sphere to fighter's side of list (Fighter_getSide). */
+SeraphimonSpecial2Hitbox *SeraphimonSpecial2Hitbox_init(SeraphimonSpecial2Hitbox *this, Fighter *fighter,
+                                                        Vec3 *position, VECTOR *velocity, Fight *list, s32 arg5) {
     VECTOR v;
     s32 x, y, z;
     s32 sx, sy, sz;
     s32 vx, vy, vz;
 
     entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
-    Hit_init(&this->parts.base, chara, 0x7AC0800, (Vec3 *)velocity, 1);
+    Hit_init(&this->parts.base, fighter, 0x7AC0800, (Vec3 *)velocity, 1);
     this->parts.base.vtable = SERAPHIMON_SPECIAL2_HITBOX_HIT_VTABLE;
     this->parts.entity.vtable = &SERAPHIMON_SPECIAL2_HITBOX_VTABLE;
     CollisionSphere_init(&this->parts.part, position, 0x80, &this->parts.base);
@@ -211,16 +232,16 @@ SeraphimonSpecial2Hitbox *SeraphimonSpecial2Hitbox_init(SeraphimonSpecial2Hitbox
     v.vy -= 0xC00;
     v.vz <<= 3;
     Hit_setKnockback(&this->parts.base, &v);
-    this->owner = chara;
+    this->owner = fighter;
     this->list = list;
     /* The match depends on reading each vector's three words before storing any, as vecCopy does, with
      * locals of its own for each vector */
     x = position->vx;
     y = position->vy;
     z = position->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     sx = position->vx;
     sy = position->vy;
     sz = position->vz;
@@ -230,16 +251,16 @@ SeraphimonSpecial2Hitbox *SeraphimonSpecial2Hitbox_init(SeraphimonSpecial2Hitbox
     vx = velocity->vx;
     vy = velocity->vy;
     vz = velocity->vz;
-    this->vel.vx = vx;
-    this->vel.vy = vy;
-    this->vel.vz = vz;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
     this->unkB8 = 0;
     this->unkBC = 0;
     this->speed = vecGetLength(velocity);
     this->unkC4 = 0;
     this->unkC8 = 0;
     this->unkCE = arg5;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     this->parts.part.entity = &this->parts.entity;
     if (Fighter_getSide(this->owner) == 0) {
         Fight_addSide0Shape(list, &this->parts.part.link);
@@ -275,18 +296,18 @@ INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", SeraphimonSpecial2Hitbox_ti
 
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", SeraphimonSpecial2Hitbox_draw);
 
-/* Builds the special move 2's effect for chara at its position (Fighter_getPosition). */
-SeraphimonSpecial2Effect *SeraphimonSpecial2Effect_init(SeraphimonSpecial2Effect *this, Fighter *chara) {
+/* Builds the special move 2's effect for fighter at its position (Fighter_getPosition). */
+SeraphimonSpecial2Effect *SeraphimonSpecial2Effect_init(SeraphimonSpecial2Effect *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &SERAPHIMON_SPECIAL2_EFFECT_VTABLE;
-    this->chara = chara;
-    Fighter_getPosition(chara, &this->position);
+    this->fighter = fighter;
+    Fighter_getPosition(fighter, &this->position);
     this->unk2C = -0x180;
     this->unk30 = 0x80;
     this->unk34 = 0;
     this->ticks = 0;
     this->unk3C = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -299,13 +320,13 @@ void SeraphimonSpecial2Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-/* Follows the character's position for 16 updates, then deletes itself. */
+/* Follows the character's position for 16 ticks, then deletes itself. */
 void SeraphimonSpecial2Effect_tick(SeraphimonSpecial2Effect *this, s32 arg) {
     if (this->ticks >= 16) {
         entityDelete(&this->entity);
     } else {
         this->ticks++;
-        Fighter_getPosition(this->chara, &this->position);
+        Fighter_getPosition(this->fighter, &this->position);
     }
 }
 
@@ -356,7 +377,7 @@ void func_800AF134(Entity *this, s32 flags) {
     }
 }
 
-/* The update of func_800AF0A0's entity: for 8 frames the vector at 0x1C moves by the one at 0x2C, then the
+/* The tick of func_800AF0A0's entity: for 8 frames the vector at 0x1C moves by the one at 0x2C, then the
  * entity deletes itself. */
 void func_800AF188(Unk800AF0A0 *this) {
     s32 x, y, z;
@@ -386,7 +407,7 @@ typedef struct SeraphimonSpecial1Hitbox {
     /* 0x018 */ Hit unk18;
     /* 0x034 */ u8 unk34[0x38 - 0x34];
     /* 0x038 */ CollisionSphere unk38;
-    /* 0x080 */ Fighter *chara;
+    /* 0x080 */ Fighter *fighter;
     /* 0x084 */ Fight *list;
     /* 0x088 */ Vec3 position;
     /* 0x094 */ u8 unk94[0x98 - 0x94];
@@ -403,16 +424,16 @@ typedef struct SeraphimonSpecial1Hitbox {
     /* 0x154 */ s32 unk154;
 } SeraphimonSpecial1Hitbox;
 
-/* Builds the special move 1's hitbox for chara at position, flying at velocity, and adds its sphere, disabled, to
- * chara's side of list (Fighter_getSide). */
-SeraphimonSpecial1Hitbox *SeraphimonSpecial1Hitbox_init(SeraphimonSpecial1Hitbox *this, Fighter *chara, Vec3 *position,
-                                                        VECTOR *velocity, Fight *list) {
+/* Builds the special move 1's hitbox for fighter at position, flying at velocity, and adds its sphere, disabled, to
+ * fighter's side of list (Fighter_getSide). */
+SeraphimonSpecial1Hitbox *SeraphimonSpecial1Hitbox_init(SeraphimonSpecial1Hitbox *this, Fighter *fighter,
+                                                        Vec3 *position, VECTOR *velocity, Fight *list) {
     VECTOR v;
     s32 x, y, z;
     s32 vx, vy, vz;
 
     entityInit(&this->entity, ENTITY_KIND_FIGHTER_OBJECT);
-    Hit_init(&this->unk18, chara, 0x7A83000, (Vec3 *)velocity, 3);
+    Hit_init(&this->unk18, fighter, 0x7A83000, (Vec3 *)velocity, 3);
     this->unk18.vtable = SERAPHIMON_SPECIAL1_HITBOX_HIT_VTABLE;
     this->entity.vtable = &SERAPHIMON_SPECIAL1_HITBOX_VTABLE;
     CollisionSphere_init(&this->unk38, position, 0x100, &this->unk18);
@@ -421,7 +442,7 @@ SeraphimonSpecial1Hitbox *SeraphimonSpecial1Hitbox_init(SeraphimonSpecial1Hitbox
     v.vy -= 0x3000;
     v.vz <<= 5;
     Hit_setKnockback(&this->unk18, &v);
-    this->chara = chara;
+    this->fighter = fighter;
     this->list = list;
     /* The match depends on reading each vector's three words before storing any, as vecCopy does, with
      * locals of its own for each vector */
@@ -437,16 +458,16 @@ SeraphimonSpecial1Hitbox *SeraphimonSpecial1Hitbox_init(SeraphimonSpecial1Hitbox
     this->velocity.vx = vx;
     this->velocity.vy = vy;
     this->velocity.vz = vz;
-    this->facing = Fighter_getFacing(chara);
+    this->facing = Fighter_getFacing(fighter);
     this->unk138 = 0;
     this->unk13C = 0;
     this->speed = vecGetLength(velocity);
     this->unk148 = 0;
     this->unk14C = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     this->unk154 = 0;
     this->unk38.entity = &this->entity;
-    if (Fighter_getSide(this->chara) == 0) {
+    if (Fighter_getSide(this->fighter) == 0) {
         Fight_addSide0Shape(list, &this->unk38.link);
     } else {
         Fight_addSide1Shape(list, &this->unk38.link);
@@ -506,7 +527,7 @@ void SeraphimonSpecial1Hitbox_hit(SeraphimonSpecial1Hitbox *this, CollisionSpher
         this->unk154 = 1;
         this->unk38.flags |= COLLISION_SHAPE_DISABLED;
         /* The match depends on the two news as inlines taking the owner (a ternary of their results). */
-        entityAddSibling(&this->entity, Fighter_isGuarding(Fighter_getOpponent(this->chara))
+        entityAddSibling(&this->entity, Fighter_isGuarding(Fighter_getOpponent(this->fighter))
                                             ? func_800AF5A4_newFlash(this)
                                             : func_800AF5A4_newBurst(this, this->velocity.vx >> 2));
     }
@@ -516,16 +537,16 @@ INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", SeraphimonSpecial1Hitbox_ti
 
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", SeraphimonSpecial1Hitbox_draw);
 
-/* Builds a special move 3 effect (virtual table D_8006B64C) for chara and its fight. */
-Unk800AFD78 *func_800AFD78(Unk800AFD78 *this, Fighter *chara, Fight *fight) {
+/* Builds a special move 3 effect (virtual table D_8006B64C) for fighter and its fight. */
+Unk800AFD78 *func_800AFD78(Unk800AFD78 *this, Fighter *fighter, Fight *fight) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006B64C;
-    this->chara = chara;
+    this->fighter = fighter;
     this->unk1C = fight;
     this->unk30 = 0;
     this->unk34 = 0;
     this->unk38 = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -542,16 +563,16 @@ INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", func_800AFE3C);
 
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", func_800AFF40);
 
-/* Builds a special move 3 effect (virtual table D_8006B624) for chara and its fight. */
-Unk800B01AC *func_800B01AC(Unk800B01AC *this, Fighter *chara, Fight *fight) {
+/* Builds a special move 3 effect (virtual table D_8006B624) for fighter and its fight. */
+Unk800B01AC *func_800B01AC(Unk800B01AC *this, Fighter *fighter, Fight *fight) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006B624;
-    this->chara = chara;
+    this->fighter = fighter;
     this->unk1C = fight;
     this->unk30 = 0;
     this->ticks = 0;
     this->unk38 = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -564,7 +585,7 @@ void func_800B021C(Entity *this, s32 flags) {
     }
 }
 
-/* Moves 0x24 down by 0x120 for 24 updates, then deletes itself. */
+/* Moves 0x24 down by 0x120 for 24 ticks, then deletes itself. */
 void func_800B0270(Unk800B01AC *this, s32 arg) {
     if (this->ticks >= 24) {
         entityDelete(&this->entity);
@@ -576,17 +597,17 @@ void func_800B0270(Unk800B01AC *this, s32 arg) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", func_800B02E0);
 
-/* Builds a special move 3 effect (virtual table D_8006B5FC) for chara and its fight; the same fields as
+/* Builds a special move 3 effect (virtual table D_8006B5FC) for fighter and its fight; the same fields as
  * func_800B01AC's. */
-Unk800B050C *func_800B050C(Unk800B050C *this, Fighter *chara, Fight *fight) {
+Unk800B050C *func_800B050C(Unk800B050C *this, Fighter *fighter, Fight *fight) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006B5FC;
-    this->chara = chara;
+    this->fighter = fighter;
     this->unk1C = fight;
     this->unk30 = 0;
     this->ticks = 0;
     this->unk38 = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -599,7 +620,7 @@ void func_800B057C(Entity *this, s32 flags) {
     }
 }
 
-/* Moves 0x24 down by 0x120 for 16 updates, then deletes itself. */
+/* Moves 0x24 down by 0x120 for 16 ticks, then deletes itself. */
 void func_800B05D0(Unk800B01AC *this, s32 arg) {
     if (this->ticks >= 16) {
         entityDelete(&this->entity);

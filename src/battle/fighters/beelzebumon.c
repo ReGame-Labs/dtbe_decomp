@@ -5,14 +5,14 @@
 #include "common.h"
 #include "battle/game_classes.h"
 
-struct Unk800971E0 *func_800971E0(struct Unk800971E0 *this, Fighter *chara, s32 arg2, Fight *fight);
-Entity *BeelzebumonSpecial2Hitbox_init(Entity *this, Fighter *chara, Fight *fight, s32 side);
+struct Unk800971E0 *func_800971E0(struct Unk800971E0 *this, Fighter *fighter, s32 arg2, Fight *fight);
+Entity *BeelzebumonSpecial2Hitbox_init(Entity *this, Fighter *fighter, Fight *fight, s32 side);
 struct BeelzebumonSpecial1Projectile *BeelzebumonSpecial1Projectile_init(struct BeelzebumonSpecial1Projectile *this,
                                                                          Fighter *owner, Fight *fight, VECTOR *pos,
                                                                          VECTOR *vel);
-struct Unk80096F6C *func_80096F6C(struct Unk80096F6C *this, Fighter *chara);
+struct Unk80096F6C *func_80096F6C(struct Unk80096F6C *this, Fighter *fighter);
 Entity *func_80097FA0(Entity *this, Fighter *arg, Fight *arg2);
-struct Unk80098720 *func_80098720(struct Unk80098720 *this, Fighter *chara, Vec3 *position);
+struct Unk80098720 *func_80098720(struct Unk80098720 *this, Fighter *fighter, Vec3 *position);
 extern VECTOR D_80069964;
 extern EntityVtable BEELZEBUMON_SPECIAL3_EFFECT_VTABLE;
 extern EntityVtable D_80069A04;
@@ -32,7 +32,7 @@ typedef struct Beelzebumon {
     /* 0x4A8 */ s32 unk4A8;
     /* 0x4AC */ s32 unk4AC; /* Beelzebumon_endMove sets it */
 } Beelzebumon;
-Entity *func_80098A78(Entity *this, Fighter *chara, Fight *unk228, Vec3 *position, Vec3 *velocity);
+Entity *func_80098A78(Entity *this, Fighter *fighter, Fight *unk228, Vec3 *position, Vec3 *velocity);
 
 /* Builds Beelzebumon: a Fighter with its own vtable. */
 Beelzebumon *Beelzebumon_init(Beelzebumon *this) {
@@ -87,7 +87,7 @@ void Beelzebumon_upAttack(Fighter *this, s32 frame) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", Beelzebumon_throw);
 
-struct BeelzebumonThrowEffect *BeelzebumonThrowEffect_init(struct BeelzebumonThrowEffect *this, Fighter *chara,
+struct BeelzebumonThrowEffect *BeelzebumonThrowEffect_init(struct BeelzebumonThrowEffect *this, Fighter *fighter,
                                                            Vec3 *position, s32 facing, s32 arg4);
 
 /* Spawns the throw's effect 0x133 above the fighter, with its facing and arg. */
@@ -144,7 +144,7 @@ void Beelzebumon_spawnSpecial1Projectile(Fighter *this) {
 }
 
 extern VECTOR D_80069974;
-Entity *func_80096CFC(void *this, Fighter *chara, VECTOR *pos, s32 angle);
+Entity *func_80096CFC(void *this, Fighter *fighter, VECTOR *pos, s32 angle);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/beelzebumon", D_80069974);
 
@@ -294,27 +294,27 @@ void func_80095E8C(Fighter *this) {
     }
 }
 
-/* The throw's effect (0x40 bytes) at a position: 0x34 drops by 15 at each of its three updates. */
+/* The throw's effect (0x40 bytes) at a position: 0x34 drops by 15 at each of its three ticks. */
 typedef struct BeelzebumonThrowEffect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Vec3 position;
     /* 0x28 */ s32 unk28;
     /* 0x2C */ s32 facing; /* Fighter_getFacing of the character */
     /* 0x30 */ s32 unk30;
-    /* 0x34 */ s32 unk34; /* 60, less 15 at each update */
-    /* 0x38 */ s32 ticks;  /* updates so far */
+    /* 0x34 */ s32 unk34; /* 60, less 15 at each tick */
+    /* 0x38 */ s32 ticks;  /* ticks so far */
     /* 0x3C */ s16 vramY;  /* Fighter_getVramY of the character */
 } BeelzebumonThrowEffect;
 
-/* Builds the throw's effect for chara at position, with its facing and arg4. */
-BeelzebumonThrowEffect *BeelzebumonThrowEffect_init(BeelzebumonThrowEffect *this, Fighter *chara, Vec3 *position,
+/* Builds the throw's effect for fighter at position, with its facing and arg4. */
+BeelzebumonThrowEffect *BeelzebumonThrowEffect_init(BeelzebumonThrowEffect *this, Fighter *fighter, Vec3 *position,
                                                     s32 facing, s32 arg4) {
     s32 vx, vy, vz;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &BEELZEBUMON_THROW_EFFECT_VTABLE;
-    this->chara = chara;
+    this->fighter = fighter;
     vx = position->vx;
     vy = position->vy;
     vz = position->vz;
@@ -325,7 +325,7 @@ BeelzebumonThrowEffect *BeelzebumonThrowEffect_init(BeelzebumonThrowEffect *this
     this->position.vy = vy;
     this->position.vz = vz;
     this->unk30 = arg4;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -338,7 +338,7 @@ void BeelzebumonThrowEffect_destroy(Entity *this, s32 flags) {
     }
 }
 
-/* Takes 15 off 0x34 at each of its 3 updates, then deletes itself. The match depends on the unit's
+/* Takes 15 off 0x34 at each of its 3 ticks, then deletes itself. The match depends on the unit's
  * -fno-cse-follow-jumps (Makefile): the else block reloads 0x38. */
 void BeelzebumonThrowEffect_tick(BeelzebumonThrowEffect *this, s32 arg) {
     if (this->ticks >= 3) {
@@ -415,7 +415,7 @@ void BeelzebumonSpecial1Projectile_hit(BeelzebumonSpecial1Projectile *this, Coll
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", BeelzebumonSpecial1Projectile_draw);
 
-struct Unk800969E0 *func_800969E0(struct Unk800969E0 *this, Fighter *chara);
+struct Unk800969E0 *func_800969E0(struct Unk800969E0 *this, Fighter *fighter);
 
 /* Spawns the flash of vtable D_80069B6C for the owner, as a sibling. */
 void func_80096984(BeelzebumonSpecial1Projectile *this) {
@@ -431,7 +431,7 @@ void func_80096984(BeelzebumonSpecial1Projectile *this) {
  * func_8007A650 gives for the partner of a character for 11 frames, cycling unk38 through 0..2. */
 typedef struct Unk800969E0 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Vec3 position; /* func_8007A650 of Fighter_getOpponent's character */
     /* 0x28 */ s32 unk28;
     /* 0x2C */ u32 color;     /* 0xC0C0C0 */
@@ -443,15 +443,15 @@ typedef struct Unk800969E0 {
 } Unk800969E0;
 
 /* Constructs the entity of vtable D_80069B6C for a character. */
-Unk800969E0 *func_800969E0(Unk800969E0 *this, Fighter *chara) {
+Unk800969E0 *func_800969E0(Unk800969E0 *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_80069B6C;
-    this->chara = chara;
+    this->fighter = fighter;
     this->color = 0xC0C0C0;
     this->unk30 = 0xB3;
     this->unk34 = 0;
     this->unk38 = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     this->frames = 0;
     return this;
 }
@@ -465,10 +465,10 @@ void func_80096A54(Entity *this, s32 flags) {
     }
 }
 
-/* Unk800969E0's update: follows the partner's position (func_8007A650 of Fighter_getOpponent's character); after
+/* Unk800969E0's tick: follows the partner's position (func_8007A650 of Fighter_getOpponent's character); after
  * 11 frames it deletes itself, before that unk38 cycles 0..2. */
 void func_80096AA8(Unk800969E0 *this) {
-    func_8007A650(Fighter_getOpponent(this->chara), &this->position);
+    func_8007A650(Fighter_getOpponent(this->fighter), &this->position);
     if (this->frames > 10) {
         entityDelete(&this->entity);
     } else {
@@ -483,7 +483,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80096B54);
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80096CFC);
 
-/* The update of func_80096CFC's sprite entity: moves by the vector at 0x44 in color 0xA02828 for 5 frames,
+/* The tick of func_80096CFC's sprite entity: moves by the vector at 0x44 in color 0xA02828 for 5 frames,
  * then deletes itself (Particle).
  * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads 0x54,
  * and on the position read before any of it is stored. */
@@ -491,17 +491,17 @@ void func_80096DC4(Particle *this) {
     if (this->age > 4) {
         entityDelete(&this->entity);
     } else {
-        s32 x = this->sprite.pos.vx;
-        s32 y = this->sprite.pos.vy;
-        s32 z = this->sprite.pos.vz;
+        s32 x = this->sprite.position.vx;
+        s32 y = this->sprite.position.vy;
+        s32 z = this->sprite.position.vz;
 
         this->sprite.color = 0xA02828;
-        x += this->vel.vx;
-        y += this->vel.vy;
-        z += this->vel.vz;
-        this->sprite.pos.vx = x;
-        this->sprite.pos.vy = y;
-        this->sprite.pos.vz = z;
+        x += this->velocity.vx;
+        y += this->velocity.vy;
+        z += this->velocity.vz;
+        this->sprite.position.vx = x;
+        this->sprite.position.vy = y;
+        this->sprite.position.vz = z;
         this->age++;
     }
 }
@@ -524,17 +524,17 @@ INCLUDE_RODATA("game/nonmatchings/fighters/beelzebumon", D_80069998);
 
 /* Constructs the sprite of D_80069B1C for a character: Particle_init with frame D_80069984, no motion, size
  * 0x33, color 0x646464 and the character's 0x440 (Fighter_getVramY) as flags. */
-Unk80096F6C *func_80096F6C(Unk80096F6C *this, Fighter *chara) {
+Unk80096F6C *func_80096F6C(Unk80096F6C *this, Fighter *fighter) {
     Particle_init(&this->base, D_80069984, &ZERO_VECTOR, &ZERO_VECTOR, 0x33, 0x646464,
-                  Fighter_getVramY(chara));
+                  Fighter_getVramY(fighter));
     this->base.entity.vtable = &D_80069B1C;
-    Fighter_getNodePosition(chara, &this->base.sprite.pos, 6, &D_80069998);
-    this->facing = Fighter_getFacing(chara);
+    Fighter_getNodePosition(fighter, &this->base.sprite.position, 6, &D_80069998);
+    this->facing = Fighter_getFacing(fighter);
     return this;
 }
 
-/* Unk80096F6C's update (over Particle_tick): after 5 steps it deletes itself, before that its color darkens
- * with unk54 and the sprite grows by 0x33, then the base update.
+/* Unk80096F6C's tick (over Particle_tick): after 5 steps it deletes itself, before that its color darkens
+ * with unk54 and the sprite grows by 0x33, then the base tick.
  * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads 0x54. */
 void func_80097008(Unk80096F6C *this, s32 arg) {
     s32 level;
@@ -556,7 +556,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_800970A8);
 /* The entity class of virtual table D_80069AF4 (constructor func_800971E0). */
 typedef struct Unk800971E0 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ s32 unk1C;
     /* 0x20 */ s32 unk20;
     /* 0x24 */ s32 unk24;
@@ -564,18 +564,18 @@ typedef struct Unk800971E0 {
     /* 0x2C */ s16 vramY; /* Fighter_getVramY of the character */
 } Unk800971E0;
 
-/* Constructs the entity of virtual table D_80069AF4 for chara with arg2 (fight, which its spawner passes, is
+/* Constructs the entity of virtual table D_80069AF4 for fighter with arg2 (fight, which its spawner passes, is
  * not read). */
-Unk800971E0 *func_800971E0(Unk800971E0 *this, Fighter *chara, s32 arg2, Fight *fight) {
+Unk800971E0 *func_800971E0(Unk800971E0 *this, Fighter *fighter, s32 arg2, Fight *fight) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_80069AF4;
-    this->chara = chara;
+    this->fighter = fighter;
     this->unk1C = 0;
     this->unk20 = 0;
     /* The match depends on storing arg2 after 0x28 (it fills the call's delay slot). */
     this->unk28 = 0;
     this->unk24 = arg2;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -588,7 +588,7 @@ void func_80097250(Entity *this, s32 flags) {
     }
 }
 
-/* Unk800971E0's update: once unk28 counts past unk24 it deletes itself; before that unk1C cycles 0..2,
+/* Unk800971E0's tick: once unk28 counts past unk24 it deletes itself; before that unk1C cycles 0..2,
  * unk20 falls by 0x180 and unk28 counts up. */
 void func_800972A4(Unk800971E0 *this) {
     if (this->unk28 > this->unk24) {
@@ -671,15 +671,15 @@ void BeelzebumonSpecial2Particle_tick(BeelzebumonSpecial2Particle *this) {
         if (this->base.sprite.size > 25) {
             this->base.sprite.size = 25;
         }
-        x = this->base.sprite.pos.vx;
-        y = this->base.sprite.pos.vy;
-        z = this->base.sprite.pos.vz;
-        x += this->base.vel.vx;
-        y += this->base.vel.vy;
-        z += this->base.vel.vz;
-        this->base.sprite.pos.vx = x;
-        this->base.sprite.pos.vy = y;
-        this->base.sprite.pos.vz = z;
+        x = this->base.sprite.position.vx;
+        y = this->base.sprite.position.vy;
+        z = this->base.sprite.position.vz;
+        x += this->base.velocity.vx;
+        y += this->base.velocity.vy;
+        z += this->base.velocity.vz;
+        this->base.sprite.position.vx = x;
+        this->base.sprite.position.vy = y;
+        this->base.sprite.position.vz = z;
         level = 120 - this->base.age * 10;
         low = level >> 2;
         this->base.sprite.color = low | (low << 8) | (level << 16);
@@ -728,24 +728,24 @@ void func_800986C0(Unk80097FA0 *this) {
  * position. */
 typedef struct Unk80098720 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Vec3 position;
     /* 0x28 */ s32 unk28;
     /* 0x2C */ s32 unk2C; /* 0x320 */
     /* 0x30 */ s32 unk30;
     /* 0x34 */ s32 unk34; /* 0x5A00 */
     /* 0x38 */ s32 unk38; /* 20 */
-    /* 0x3C */ s32 unk3C;
+    /* 0x3C */ s32 frames;
     /* 0x40 */ s16 vramY; /* Fighter_getVramY of the character */
 } Unk80098720;
 
 /* Constructs the entity of vtable D_80069A54 for a character at a position. */
-Unk80098720 *func_80098720(Unk80098720 *this, Fighter *chara, Vec3 *position) {
+Unk80098720 *func_80098720(Unk80098720 *this, Fighter *fighter, Vec3 *position) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_80069A54;
-    this->chara = chara;
+    this->fighter = fighter;
     x = position->vx;
     y = position->vy;
     z = position->vz;
@@ -753,11 +753,11 @@ Unk80098720 *func_80098720(Unk80098720 *this, Fighter *chara, Vec3 *position) {
     this->unk30 = 0;
     this->unk34 = 0x5A00;
     this->unk38 = 20;
-    this->unk3C = 0;
+    this->frames = 0;
     this->position.vx = x;
     this->position.vy = y;
     this->position.vz = z;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -770,7 +770,19 @@ void func_800987B8(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_8009880C);
+/* The tick of the entity of vtable D_80069A54: for 11 frames unk2C falls by 45, unk30 grows by 48, unk34 falls by
+ * 1500 and unk38 grows by 5; then it deletes itself. */
+void func_8009880C(Unk80098720 *this) {
+    if (this->frames > 10) {
+        entityDelete(&this->entity);
+    } else {
+        this->unk2C -= 45;
+        this->unk38 += 5;
+        this->unk34 -= 1500;
+        this->unk30 += 48;
+        this->frames++;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_800988A4);
 
@@ -802,14 +814,14 @@ INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80098ECC);
 /* The UnkPartsEntity3C class func_80098A78 constructs (0xC8 bytes, virtual table D_80069A2C). */
 typedef struct Unk80098A78 {
     /* 0x00 */ UnkPartsEntity3C parts;
-    /* 0x84 */ Fighter *chara;
+    /* 0x84 */ Fighter *fighter;
     /* 0x88 */ Fight *unk228;
-    /* 0x8C */ Vec3 pos;
+    /* 0x8C */ Vec3 position;
     /* 0x98 */ s32 unk98;
-    /* 0x9C */ Vec3 vel;
+    /* 0x9C */ Vec3 velocity;
     /* 0xA8 */ s32 unkA8;
     /* 0xAC */ s32 unkAC;
-    /* 0xB0 */ s32 direction; /* 1, or -1 when vel.vx is negative */
+    /* 0xB0 */ s32 direction; /* 1, or -1 when velocity.vx is negative */
     /* 0xB4 */ s16 vramY;     /* Fighter_getVramY of the character */
     /* 0xB6 */ s16 unkB6;
     /* 0xB8 */ s32 unkB8;
@@ -821,7 +833,7 @@ typedef struct Unk80098A78 {
 /* The entity class of vtable D_80069A04 (0x54 bytes, func_8009918C spawns it, constructor func_8009921C). */
 typedef struct Unk8009921C {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Fight *unk228;
     /* 0x20 */ Vec3 position;
     /* 0x2C */ s32 unk2C;
@@ -829,16 +841,16 @@ typedef struct Unk8009921C {
     /* 0x34 */ Vec3 velocity; /* vx: 12 along direction */
     /* 0x40 */ s32 unk40;
     /* 0x44 */ s16 vramY; /* Fighter_getVramY of the character */
-    /* 0x46 */ u16 unk46; /* toggled every update */
+    /* 0x46 */ u16 unk46; /* toggled every tick */
     /* 0x48 */ s32 unk48;
     /* 0x4C */ s32 unk4C; /* 0x20 */
-    /* 0x50 */ s32 ticks; /* updates so far */
+    /* 0x50 */ s32 ticks; /* ticks so far */
 } Unk8009921C;
 
-Unk8009921C *func_8009921C(Unk8009921C *this, Fighter *chara, Fight *unk228, Vec3 *position,
+Unk8009921C *func_8009921C(Unk8009921C *this, Fighter *fighter, Fight *unk228, Vec3 *position,
                            s32 direction, s32 unk48);
 
-/* Spawns func_8009921C's entity (0x54 bytes) at pos as a sibling, with the direction and unkBC (at least
+/* Spawns func_8009921C's entity (0x54 bytes) at position as a sibling, with the direction and unkBC (at least
  * 300). */
 void func_8009918C(Unk80098A78 *this) {
     s32 unk48 = this->unkBC;
@@ -849,21 +861,21 @@ void func_8009918C(Unk80098A78 *this) {
     }
     child = allocEntityMemory(0x54);
     if (child != NULL) {
-        func_8009921C(entityOperatorNewAt(0x54, child), this->chara, this->unk228, &this->pos, this->direction,
+        func_8009921C(entityOperatorNewAt(0x54, child), this->fighter, this->unk228, &this->position, this->direction,
                       unk48);
     }
     entityAddSibling(&this->parts.entity, child);
 }
 
 /* Constructs the entity of vtable D_80069A04 for a character at a position, its step 12 along direction. */
-Unk8009921C *func_8009921C(Unk8009921C *this, Fighter *chara, Fight *unk228, Vec3 *position,
+Unk8009921C *func_8009921C(Unk8009921C *this, Fighter *fighter, Fight *unk228, Vec3 *position,
                            s32 direction, s32 unk48) {
     s32 x, y, z;
     s32 step;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_80069A04;
-    this->chara = chara;
+    this->fighter = fighter;
     this->unk228 = unk228;
     x = position->vx;
     y = position->vy;
@@ -883,7 +895,7 @@ Unk8009921C *func_8009921C(Unk8009921C *this, Fighter *chara, Fight *unk228, Vec
         step = 12;
     }
     this->velocity.vx = step;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     this->unk46 = 0;
     this->unk4C = 0x20;
     this->ticks = 0;
@@ -935,7 +947,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80099410);
  * size 0x58): a line (buildLineG2) whose two ends start at one position and move by the velocity and by twice it. */
 typedef struct BeelzebumonSpecial3Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Fight *unk1C;
     /* 0x20 */ Vec3 position;
     /* 0x2C */ s32 unk2C;
@@ -944,16 +956,16 @@ typedef struct BeelzebumonSpecial3Effect {
     /* 0x40 */ Vec3 velocity;
     /* 0x4C */ s32 unk4C;
     /* 0x50 */ s32 unk50;
-    /* 0x54 */ s32 ticks; /* updates so far */
+    /* 0x54 */ s32 ticks; /* ticks so far */
 } BeelzebumonSpecial3Effect;
 
-/* Constructs the line entity of virtual table BEELZEBUMON_SPECIAL3_EFFECT_VTABLE for chara, with both ends at position.
- */
-BeelzebumonSpecial3Effect *BeelzebumonSpecial3Effect_init(BeelzebumonSpecial3Effect *this, Fighter *chara, Fight *unk1C,
-                                                          Vec3 *position, Vec3 *velocity) {
+/* Constructs the line entity of virtual table BEELZEBUMON_SPECIAL3_EFFECT_VTABLE for fighter, with both ends at
+ * position. */
+BeelzebumonSpecial3Effect *BeelzebumonSpecial3Effect_init(BeelzebumonSpecial3Effect *this, Fighter *fighter,
+                                                          Fight *unk1C, Vec3 *position, Vec3 *velocity) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &BEELZEBUMON_SPECIAL3_EFFECT_VTABLE;
-    this->chara = chara;
+    this->fighter = fighter;
     this->unk1C = unk1C;
     /* The match depends on each copy having locals of its own (three words read before any is stored) */
     {

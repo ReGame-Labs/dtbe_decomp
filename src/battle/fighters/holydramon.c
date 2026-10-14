@@ -4,9 +4,9 @@
 #include "common.h"
 #include "battle/game_classes.h"
 
-struct HolydramonSpecial1Hitbox *HolydramonSpecial1Hitbox_init(struct HolydramonSpecial1Hitbox *this, Fighter *chara,
+struct HolydramonSpecial1Hitbox *HolydramonSpecial1Hitbox_init(struct HolydramonSpecial1Hitbox *this, Fighter *fighter,
                                                                Vec3 *position, VECTOR *velocity, Fight *fight);
-struct HolydramonSpecial1Effect *HolydramonSpecial1Effect_init(struct HolydramonSpecial1Effect *this, Fighter *chara);
+struct HolydramonSpecial1Effect *HolydramonSpecial1Effect_init(struct HolydramonSpecial1Effect *this, Fighter *fighter);
 extern EntityVtable D_80068D84;
 extern EntityVtable D_80068DAC;
 extern EntityVtable D_80068DD4;
@@ -173,7 +173,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/holydramon", Holydramon_spawnSpecial2Hit
 
 INCLUDE_ASM("game/nonmatchings/fighters/holydramon", Holydramon_special3);
 
-struct Unk8008B62C *func_8008B62C(struct Unk8008B62C *this, Fighter *chara, Vec3 *position);
+struct Unk8008B62C *func_8008B62C(struct Unk8008B62C *this, Fighter *fighter, Vec3 *position);
 
 /* Spawns a special3 effect (vtable D_80068DAC) at the opponent, up to 0x120 to either side at random. */
 void func_8008A91C(Holydramon *this) {
@@ -196,7 +196,7 @@ typedef struct HolydramonSpecial1Hitbox {
     /* 0x018 */ Hit hit;
     /* 0x034 */ u8 unk34[0x38 - 0x34];
     /* 0x038 */ CollisionSphere sphere;
-    /* 0x080 */ Fighter *chara;
+    /* 0x080 */ Fighter *fighter;
     /* 0x084 */ Vec3 position;
     /* 0x090 */ u8 unk90[0x2A4 - 0x90];
     /* 0x2A4 */ Vec3 velocity;
@@ -209,16 +209,16 @@ typedef struct HolydramonSpecial1Hitbox {
     /* 0x2C8 */ s16 vramY; /* Fighter_getVramY of the character */
 } HolydramonSpecial1Hitbox;
 
-/* Builds the special move 1's hitbox for chara at position, flying at velocity, its sphere in its side's list of fight.
- */
-HolydramonSpecial1Hitbox *HolydramonSpecial1Hitbox_init(HolydramonSpecial1Hitbox *this, Fighter *chara, Vec3 *position,
-                                                        VECTOR *velocity, Fight *fight) {
+/* Builds the special move 1's hitbox for fighter at position, flying at velocity, its sphere in its side's list of
+ * fight. */
+HolydramonSpecial1Hitbox *HolydramonSpecial1Hitbox_init(HolydramonSpecial1Hitbox *this, Fighter *fighter,
+                                                        Vec3 *position, VECTOR *velocity, Fight *fight) {
     VECTOR v;
     s32 x, y, z;
     s32 vx, vy, vz;
 
     entityInit(&this->entity, ENTITY_KIND_FIGHTER_OBJECT);
-    Hit_init(&this->hit, chara, 0x6A81800, (Vec3 *)velocity, 2);
+    Hit_init(&this->hit, fighter, 0x6A81800, (Vec3 *)velocity, 2);
     this->hit.vtable = HOLYDRAMON_SPECIAL1_HITBOX_HIT_VTABLE;
     this->entity.vtable = &HOLYDRAMON_SPECIAL1_HITBOX_VTABLE;
     CollisionSphere_init(&this->sphere, position, 0xC0, &this->hit);
@@ -227,7 +227,7 @@ HolydramonSpecial1Hitbox *HolydramonSpecial1Hitbox_init(HolydramonSpecial1Hitbox
     v.vy -= 0x3000;
     v.vz <<= 5;
     Hit_setKnockback(&this->hit, &v);
-    this->chara = chara;
+    this->fighter = fighter;
     /* The match depends on reading each vector's three words before storing any, as vecCopy does, with
      * locals of its own for each vector */
     x = position->vx;
@@ -245,11 +245,11 @@ HolydramonSpecial1Hitbox *HolydramonSpecial1Hitbox_init(HolydramonSpecial1Hitbox
     this->unk2B4 = 0;
     this->unk2B8 = 0;
     this->speed = vecGetLength(velocity);
-    this->facing = Fighter_getFacing(this->chara);
+    this->facing = Fighter_getFacing(this->fighter);
     this->age = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     this->sphere.entity = &this->entity;
-    if (Fighter_getSide(this->chara) == 0) {
+    if (Fighter_getSide(this->fighter) == 0) {
         Fight_addSide0Shape(fight, &this->sphere.link);
     } else {
         Fight_addSide1Shape(fight, &this->sphere.link);
@@ -341,7 +341,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/holydramon", HolydramonSpecial1Hitbox_dr
 /* The special move 1's effect, at the fighter for 11 frames. */
 typedef struct HolydramonSpecial1Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Vec3 position; /* the character's (Fighter_getPosition) */
     /* 0x28 */ s32 unk28;
     /* 0x2C */ s32 unk2C;
@@ -353,19 +353,19 @@ typedef struct HolydramonSpecial1Effect {
     /* 0x44 */ s16 vramY; /* Fighter_getVramY of the character */
 } HolydramonSpecial1Effect;
 
-/* Builds the special move 1's effect for chara, at its position. */
-HolydramonSpecial1Effect *HolydramonSpecial1Effect_init(HolydramonSpecial1Effect *this, Fighter *chara) {
+/* Builds the special move 1's effect for fighter, at its position. */
+HolydramonSpecial1Effect *HolydramonSpecial1Effect_init(HolydramonSpecial1Effect *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &HOLYDRAMON_SPECIAL1_EFFECT_VTABLE;
-    this->chara = chara;
-    Fighter_getPosition(chara, &this->position);
+    this->fighter = fighter;
+    Fighter_getPosition(fighter, &this->position);
     this->unk2C = 0x40;
     this->unk30 = 0x40;
     this->unk34 = 0x80;
     this->unk38 = 0;
     this->age = 0;
     this->unk40 = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -398,17 +398,17 @@ INCLUDE_ASM("game/nonmatchings/fighters/holydramon", HolydramonSpecial1Effect_dr
 /* The entity class of virtual table D_80068DAC (constructor func_8008B62C, made by func_8008A91C). */
 typedef struct Unk8008B62C {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Vec3 position;
     /* 0x28 */ u8 unk28[0x30 - 0x28];
     /* 0x30 */ s32 unk30;
     /* 0x34 */ s16 unk34; /* Fighter_getVramY of the character */
 } Unk8008B62C;
 
-/* Constructs the entity of virtual table D_80068DAC for chara at position. The match depends on reading
- * the three words before storing any, as vecCopy does, and on storing chara between the reads and the
+/* Constructs the entity of virtual table D_80068DAC for fighter at position. The match depends on reading
+ * the three words before storing any, as vecCopy does, and on storing fighter between the reads and the
  * writes. */
-Unk8008B62C *func_8008B62C(Unk8008B62C *this, Fighter *chara, Vec3 *position) {
+Unk8008B62C *func_8008B62C(Unk8008B62C *this, Fighter *fighter, Vec3 *position) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
@@ -416,12 +416,12 @@ Unk8008B62C *func_8008B62C(Unk8008B62C *this, Fighter *chara, Vec3 *position) {
     x = position->vx;
     y = position->vy;
     z = position->vz;
-    this->chara = chara;
+    this->fighter = fighter;
     this->position.vx = x;
     this->position.vy = y;
     this->position.vz = z;
     this->unk30 = 0;
-    this->unk34 = Fighter_getVramY(chara);
+    this->unk34 = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -441,7 +441,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/holydramon", func_8008B860);
 /* The entity of func_8008BE04 (vtable D_80068D84, 0x34 bytes): a character's, with its 0x440 (Fighter_getVramY). */
 typedef struct Unk8008BE04 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Vec3 position; /* the character's (Fighter_getPosition) */
     /* 0x28 */ u8 unk28[0x2C - 0x28];
     /* 0x2C */ s32 unk2C;
@@ -449,12 +449,12 @@ typedef struct Unk8008BE04 {
 } Unk8008BE04; /* size 0x34 */
 
 /* Constructs the character's entity of vtable D_80068D84. */
-Unk8008BE04 *func_8008BE04(Unk8008BE04 *this, Fighter *chara) {
+Unk8008BE04 *func_8008BE04(Unk8008BE04 *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_80068D84;
-    this->chara = chara;
+    this->fighter = fighter;
     this->unk2C = 0;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -467,11 +467,11 @@ void func_8008BE5C(Entity *this, s32 flags) {
     }
 }
 
-/* The update of D_80068D84's entity: follows the character's position, and deletes itself after 24
+/* The tick of D_80068D84's entity: follows the character's position, and deletes itself after 24
  * frames (count at 0x2C).
  * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads 0x2C. */
 void func_8008BEB0(Unk8008BE04 *this) {
-    Fighter_getPosition(this->chara, &this->position);
+    Fighter_getPosition(this->fighter, &this->position);
     if (this->unk2C >= 24) {
         entityDelete(&this->entity);
     } else {
@@ -486,9 +486,9 @@ typedef struct HolydramonSpecial2Hitbox {
     /* 0x00 */ UnkPartsEntity38 parts;
     /* 0x80 */ Holydramon *owner;
     /* 0x84 */ Fight *fight; /* the part goes into its side's list of it */
-    /* 0x88 */ Vec3 pos;
+    /* 0x88 */ Vec3 position;
     /* 0x94 */ s32 unk94;
-    /* 0x98 */ Vec3 vel;
+    /* 0x98 */ Vec3 velocity;
     /* 0xA4 */ u8 unkA4[0xB4 - 0xA4];
     /* 0xB4 */ s32 age;
     /* 0xB8 */ s16 vramY;   /* Fighter_getVramY of the owner */
@@ -496,16 +496,16 @@ typedef struct HolydramonSpecial2Hitbox {
                              * 32 frames; it then slows by a quarter a frame */
 } HolydramonSpecial2Hitbox;
 
-/* Builds a hitbox of the special move 2 for chara at position, moving by velocity (its knockback 4 times that), its
- * part in its side's list of fight; stopped if chara's 0x4A8 is set. */
-HolydramonSpecial2Hitbox *HolydramonSpecial2Hitbox_init(HolydramonSpecial2Hitbox *this, Holydramon *chara,
+/* Builds a hitbox of the special move 2 for fighter at position, moving by velocity (its knockback 4 times that), its
+ * part in its side's list of fight; stopped if fighter's 0x4A8 is set. */
+HolydramonSpecial2Hitbox *HolydramonSpecial2Hitbox_init(HolydramonSpecial2Hitbox *this, Holydramon *fighter,
                                                         Vec3 *position, VECTOR *velocity, Fight *fight) {
     VECTOR v;
     s32 x, y, z;
     s32 vx, vy, vz;
 
     entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
-    Hit_init(&this->parts.base, &chara->base, 0x2AC0D00, (Vec3 *)velocity, 0);
+    Hit_init(&this->parts.base, &fighter->base, 0x2AC0D00, (Vec3 *)velocity, 0);
     this->parts.base.vtable = HOLYDRAMON_SPECIAL2_HITBOX_HIT_VTABLE;
     this->parts.entity.vtable = &HOLYDRAMON_SPECIAL2_HITBOX_VTABLE;
     CollisionSphere_init(&this->parts.part, position, 0x80, &this->parts.base);
@@ -514,25 +514,25 @@ HolydramonSpecial2Hitbox *HolydramonSpecial2Hitbox_init(HolydramonSpecial2Hitbox
     v.vy <<= 2;
     v.vz <<= 2;
     Hit_setKnockback(&this->parts.base, &v);
-    this->owner = chara;
+    this->owner = fighter;
     this->fight = fight;
     /* The match depends on reading each vector's three words before storing any, as vecCopy does, with
      * locals of its own for each vector */
     x = position->vx;
     y = position->vy;
     z = position->vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     vx = velocity->vx;
     vy = velocity->vy;
     vz = velocity->vz;
-    this->vel.vx = vx;
-    this->vel.vy = vy;
-    this->vel.vz = vz;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
     this->age = 0;
     this->stopped = 0;
-    this->vramY = Fighter_getVramY(&chara->base);
+    this->vramY = Fighter_getVramY(&fighter->base);
     this->parts.part.entity = &this->parts.entity;
     if (Fighter_getSide(&this->owner->base) == 0) {
         Fight_addSide0Shape(fight, &this->parts.part.link);
@@ -579,19 +579,19 @@ void HolydramonSpecial2Hitbox_tick(HolydramonSpecial2Hitbox *this) {
         this->parts.part.flags |= COLLISION_SHAPE_DISABLED;
     }
     if (this->stopped) {
-        this->vel.vx -= this->vel.vx >> 2;
-        this->vel.vy -= this->vel.vy >> 2;
-        this->vel.vz -= this->vel.vz >> 2;
+        this->velocity.vx -= this->velocity.vx >> 2;
+        this->velocity.vy -= this->velocity.vy >> 2;
+        this->velocity.vz -= this->velocity.vz >> 2;
     }
-    x = this->pos.vx;
-    y = this->pos.vy;
-    z = this->pos.vz;
-    x += this->vel.vx;
-    y += this->vel.vy;
-    z += this->vel.vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->parts.part.position.vx = x;
     this->parts.part.position.vy = y;
     this->parts.part.position.vz = z;
@@ -615,12 +615,12 @@ typedef struct Unk8008C94C {
     /* 0x2C */ s16 vramY; /* the character's 0x440 (Fighter_getVramY) */
 } Unk8008C94C;
 
-/* Constructs the entity of virtual table D_80068DFC for chara, at func_8007A6CC's position. */
-Unk8008C94C *func_8008C94C(Unk8008C94C *this, Fighter *chara) {
+/* Constructs the entity of virtual table D_80068DFC for fighter, at func_8007A6CC's position. */
+Unk8008C94C *func_8008C94C(Unk8008C94C *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_80068DFC;
-    func_8007A6CC(chara, &this->position);
-    this->vramY = Fighter_getVramY(chara);
+    func_8007A6CC(fighter, &this->position);
+    this->vramY = Fighter_getVramY(fighter);
     this->unk28 = 0;
     return this;
 }
@@ -634,7 +634,7 @@ void func_8008C9AC(Entity *this, s32 flags) {
     }
 }
 
-/* The update of D_80068DFC's entity: deletes itself after 24 frames (count at 0x28).
+/* The tick of D_80068DFC's entity: deletes itself after 24 frames (count at 0x28).
  * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads 0x28. */
 void func_8008CA00(Unk8008C94C *this) {
     if (this->unk28 >= 24) {
@@ -651,26 +651,24 @@ typedef struct Unk8008CE68 {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Vec3 position; /* func_8007A6CC of the character */
     /* 0x24 */ u8 unk24[0x28 - 0x24];
-    /* 0x28 */ s32 unk28;
-    /* 0x2C */ s32 unk2C;
-    /* 0x30 */ s32 unk30;
+    /* 0x28 */ Vec3 velocity; /* x and y random, z 0; loses a quarter every tick */
     /* 0x34 */ u8 unk34[0x38 - 0x34];
-    /* 0x38 */ s32 unk38;
+    /* 0x38 */ s32 frames;
     /* 0x3C */ s16 vramY; /* the character's 0x440 (Fighter_getVramY) */
 } Unk8008CE68;
 
-/* Constructs the entity of virtual table D_80068DD4 for chara, at func_8007A6CC's position, with 0x28 and
- * 0x2C random in -0x40 to 0x3E (fight's generator). It reads the character's 0x440 twice. */
-Unk8008CE68 *func_8008CE68(Unk8008CE68 *this, Fighter *chara, Fight *fight) {
+/* Constructs the entity of virtual table D_80068DD4 for fighter, at func_8007A6CC's position, with a velocity of x
+ * and y random in -0x40 to 0x3E (fight's generator). It reads the character's 0x440 twice. */
+Unk8008CE68 *func_8008CE68(Unk8008CE68 *this, Fighter *fighter, Fight *fight) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_80068DD4;
-    func_8007A6CC(chara, &this->position);
-    this->vramY = Fighter_getVramY(chara);
-    this->unk28 = ((s32)(mersenneTwisterGenerate(&fight->random) & 0x3F) - 0x20) * 2;
-    this->unk2C = ((s32)(mersenneTwisterGenerate(&fight->random) & 0x3F) - 0x20) * 2;
-    this->unk30 = 0;
-    this->unk38 = 0;
-    this->vramY = Fighter_getVramY(chara);
+    func_8007A6CC(fighter, &this->position);
+    this->vramY = Fighter_getVramY(fighter);
+    this->velocity.vx = ((s32)(mersenneTwisterGenerate(&fight->random) & 0x3F) - 0x20) * 2;
+    this->velocity.vy = ((s32)(mersenneTwisterGenerate(&fight->random) & 0x3F) - 0x20) * 2;
+    this->velocity.vz = 0;
+    this->frames = 0;
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
@@ -683,7 +681,31 @@ void func_8008CF18(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/holydramon", func_8008CF6C);
+/* The tick of func_8008CE68's entity: for 24 frames it drifts by its velocity, which loses a quarter every frame; then
+ * it deletes itself. */
+void func_8008CF6C(Unk8008CE68 *this) {
+    s32 x, y, z;
+
+    if (this->frames >= 24) {
+        entityDelete(&this->entity);
+    } else {
+        /* The match depends on counting the frame first, and on the velocity slowing in place before the
+         * position is read whole (HolydramonSpecial2Hitbox_tick's shape). */
+        this->frames++;
+        this->velocity.vx -= this->velocity.vx >> 2;
+        this->velocity.vy -= this->velocity.vy >> 2;
+        this->velocity.vz -= this->velocity.vz >> 2;
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        x += this->velocity.vx;
+        y += this->velocity.vy;
+        z += this->velocity.vz;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/holydramon", func_8008D028);
 

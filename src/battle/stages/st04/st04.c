@@ -28,7 +28,7 @@ typedef struct StageIceberg {
     /* 0xD3C */ s32 roundsStarted; /* StageIceberg_startRound copies VRAM with func_800D5598 the first time */
     /* 0xD40 */ u8 unkD40[0x1D68 - 0xD40];
     /* 0x1D68 */ RECT clutRect;     /* 16 by 1 pixels at (0x330, 0xE6): a CLUT */
-    /* 0x1D70 */ u8 unk1D70[0x1D90 - 0x1D70];
+    /* 0x1D70 */ u16 shownClut[16]; /* clut with entry 15 pulsing, loaded to VRAM each frame (st04_loadPulsingClut) */
     /* 0x1D90 */ u16 clut[16]; /* that CLUT, read back from VRAM by st04_readClut */
     /* 0x1DB0 */ u8 unk1DB0[0x1DC8 - 0x1DB0];
     /* 0x1DC8 */ MeshScene *meshScene; /* Fight_getMeshScene's, at init (StageIceberg_startRound) */
@@ -150,7 +150,7 @@ void StageIceberg_startRound(StageIceberg *this) {
 /* the scenery's own steps */
 void st04_scrollTexture(StageIceberg *this);
 void func_800D3FC8(StageIceberg *this);
-void func_800D4104(StageIceberg *this);
+void st04_loadPulsingClut(StageIceberg *this);
 void st04_checkPlunge(StageIceberg *this);
 void func_800D44D4(StageIceberg *this);
 void func_800D4700(StageIceberg *this);
@@ -174,7 +174,7 @@ void StageIceberg_tickScenery(StageIceberg *this) {
             func_800D58C0(this);
             st04_scrollTexture(this);
             func_800D3FC8(this);
-            func_800D4104(this);
+            st04_loadPulsingClut(this);
             st04_tickLiftBack(this);
             st04_checkPlunge(this);
             func_800D4700(this);
@@ -218,8 +218,8 @@ void st04_copyTexturesA(StageIceberg *this) {
     MoveImage(&rect, 0x2E0, 0x40);
 }
 
-/* On even updates, copies the 16 by 64 pixels at (0x2E0, 63 - update % 64) in VRAM to (0x358, 0x30): a
- * texture that scrolls one line per two updates. The even test is written "(count ^ 1) & 1" (xori, andi). */
+/* On even ticks, copies the 16 by 64 pixels at (0x2E0, 63 - update % 64) in VRAM to (0x358, 0x30): a
+ * texture that scrolls one line per two ticks. The even test is written "(count ^ 1) & 1" (xori, andi). */
 void st04_scrollTexture(StageIceberg *this) {
     s32 count = this->frames;
     RECT rect;
@@ -246,7 +246,21 @@ void st04_readClut(StageIceberg *this) {
     StoreImage(&this->clutRect, (u_long *)this->clut);
 }
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D4104);
+/* Loads the CLUT back to VRAM with entry 15 pulsing: a grey-blue level that follows the sine of frames * 64. The
+ * copy goes a word (two colours) at a time; the match depends on the do/while and on end set before dst. */
+void st04_loadPulsingClut(StageIceberg *this) {
+    u32 *src = (u32 *)this->clut;
+    u32 *end = (u32 *)&this->clut[16];
+    u32 *dst = (u32 *)this->shownClut;
+    u8 level;
+
+    do {
+        *dst++ = *src++;
+    } while (src != end);
+    level = (COS_SIN_TABLE[(this->frames << 6) & 0xFFF].sin >> 9) + 0x10;
+    this->shownClut[15] = level | ((level >> 2) << 5) | ((level >> 1) << 10);
+    LoadImage(&this->clutRect, (u_long *)this->shownClut);
+}
 
 /* Clears the stage's plunged flags. */
 void st04_clearPlunged(StageIceberg *this) {
@@ -320,7 +334,7 @@ void st04_tickLiftBack(StageIceberg *this) {
 
     for (side = 0; side < 2; side++) {
 #if VERSION_US
-        Fighter *chara = Fight_getFighter(&this->base, side);
+        Fighter *fighter = Fight_getFighter(&this->base, side);
 
 #endif
         switch (this->unk1DEC[side]) {
@@ -345,20 +359,20 @@ void st04_tickLiftBack(StageIceberg *this) {
             this->unk1DFC[side].vy += this->unk1DF4[side] * 2;
             if (!Fight_isRoundOver(&this->base)) {
                 Fight_unfreezeFighters(&this->base);
-                Fighter_setPosition(chara, (Vec3 *)&this->unk1DFC[side]);
+                Fighter_setPosition(fighter, (Vec3 *)&this->unk1DFC[side]);
             } else {
                 this->unk1DEC[side]++;
             }
 #else
-            Fighter *chara;
+            Fighter *fighter;
             Vec3 position;
 
             this->unk1DFC[side].vy += this->unk1DF4[side] * 2;
-            chara = Fight_getFighter(&this->base, side);
+            fighter = Fight_getFighter(&this->base, side);
             position.vx = this->unk1DFC[side].vx;
             position.vy = this->unk1DFC[side].vy;
             position.vz = this->unk1DFC[side].vz;
-            Fighter_setPosition(chara, &position);
+            Fighter_setPosition(fighter, &position);
             Fighter_hold(Fight_getFighter(&this->base, side), 1);
             func_80079AE4(Fight_getFighter(&this->base, side));
 #endif

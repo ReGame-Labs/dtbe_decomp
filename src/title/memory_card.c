@@ -82,8 +82,8 @@ extern MemoryCardTask *MEMORY_CARD_TASK;
 
 /* The buttons that confirm a choice: start or the menus' confirm button. */
 #define MEMORY_CARD_CONFIRM (PADstart | PAD_CONFIRM)
-/* start, triangle, circle, cross or square */
-#define MEMORY_CARD_ANY_BUTTON 0x8F0
+/* The buttons that go on past a message: start or any face button (the same in every version). */
+#define MEMORY_CARD_ANY_BUTTON (PADstart | PADRup | PADRright | PADRdown | PADRleft)
 
 /* A TextPrinter's setColor, inlined as the game has it (its virtual table read from the stack). */
 #define TEXT_SET_COLOR(printer, color) \

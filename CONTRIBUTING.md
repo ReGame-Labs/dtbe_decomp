@@ -224,6 +224,11 @@ game.bin's names for the stages' addresses (their constructors, where they
 load) are in `config/<version>/imports_game.txt`, which only game.bin reads,
 as each stage has its own symbols there: a stage's list doesn't reach it, so
 a constructor renamed again is renamed there, and in `game_main.c`, by hand.
+A splat label that names a different symbol in each version (hud.c's
+strings: JP `D_8006DE30` is "EVOLUTION_", US `D_8006DE30` is "KO") can't be
+a line of a list, which renames in every version: such names go in each
+version's symbol file by hand, at that version's address, with a `#` note in
+the list.
 
 ## Clean code
 

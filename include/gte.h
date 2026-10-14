@@ -13,6 +13,19 @@
 #define gte_leadingZeros(in, out) \
     __asm__ volatile("mtc2 %1, $30; nop; nop; mfc2 %0, $31; nop" : "=r"(out) : "r"(in))
 
+/* RTPT: rotates, translates and projects V0-V2 (sf 1). The two nops let the
+ * last lwc2 reach the GTE (rotNclip3). PsyQ's gte_rtpt emits a placeholder
+ * word for DMPSX instead of the instruction. */
+#define gte_rotTransPers3() __asm__ volatile("nop; nop; cop2 0x280030")
+
+/* NCLIP: MAC0 = the normal clip value (twice the signed area) of the three
+ * projected points SXY0-SXY2. The two nops wait for the command before it
+ * (rotNclip3). PsyQ's gte_nclip emits a placeholder word for DMPSX. */
+#define gte_normalClip() __asm__ volatile("nop; nop; cop2 0x1400006")
+
+/* out = MAC0 (rotNclip3). */
+#define gte_getMac0(out) __asm__ volatile("mfc2 %0, $24" : "=r"(out))
+
 /* Loads the rotation and the translation of the MATRIX m, eight words, into
  * the GTE's control registers 0-7, four loads then four ctc2 through $2-$5
  * (setModelMatrixAndLights, setModelMatrix, setGteViewMatrix). No nop: each register is
@@ -25,6 +38,14 @@
     "lw $5, 16(%0); lw $4, 20(%0); lw $3, 24(%0); lw $2, 28(%0);"           \
     "ctc2 $5, $4; ctc2 $4, $5; ctc2 $3, $6; ctc2 $2, $7"                    \
     : : "r"(m) : "$2", "$3", "$4", "$5")
+
+/* The same through $7, $6, $3 and $2, which leaves $a0 and $a1 to a call after it (Trail_draw). */
+#define gte_loadRotTransKeepArgs(m) __asm__ volatile(                       \
+    "lw $7, 0(%0); lw $6, 4(%0); lw $3, 8(%0); lw $2, 12(%0);"              \
+    "ctc2 $7, $0; ctc2 $6, $1; ctc2 $3, $2; ctc2 $2, $3;"                   \
+    "lw $7, 16(%0); lw $6, 20(%0); lw $3, 24(%0); lw $2, 28(%0);"           \
+    "ctc2 $7, $4; ctc2 $6, $5; ctc2 $3, $6; ctc2 $2, $7"                    \
+    : : "r"(m) : "$2", "$3", "$6", "$7")
 
 /* Loads x, y and z into the GTE's IR1-IR3 (vecNormalize). */
 #define gte_loadIR(x, y, z) \

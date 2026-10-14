@@ -27,7 +27,7 @@ typedef struct StingmonSpecial3Hitbox {
     /* 0x018 */ Hit unk18;
     /* 0x034 */ u8 unk34[0x38 - 0x34];
     /* 0x038 */ CollisionSphere part;
-    /* 0x080 */ Fighter *chara;
+    /* 0x080 */ Fighter *fighter;
     /* 0x084 */ u8 unk84[0x8A - 0x84];
     /* 0x08A */ u16 holdingOpponent; /* while set, the destructor releases the opponent (Fighter_hold(0)) */
     /* 0x08C */ u8 unk8C[0xAC - 0x8C];
@@ -111,7 +111,7 @@ void Stingmon_special1(Fighter *this, s32 frame) {
 
 void Stingmon_spawnSpecial2Hitbox(Fighter *this, s32 arg);
 void Stingmon_spawnSpecial2Effect(Fighter *this, s32 arg);
-struct Unk800B25CC *func_800B25CC(struct Unk800B25CC *this, Fighter *chara, Vec3 *position);
+struct Unk800B25CC *func_800B25CC(struct Unk800B25CC *this, Fighter *fighter, Vec3 *position);
 
 /* Special move 2: frame 0 plays its clip and the voice, stops the horizontal velocity and spawns the hitbox; frame 4
  * the effect func_800B25CC at the fighter's position; even frames 6-14 the effect; frames 5-17 accelerate by 0x71C0
@@ -228,7 +228,7 @@ Unk8008E9B4 *func_800B146C(Unk8008E9B4 *this, Fighter *owner, s32 arg2, Vec3 *po
     return this;
 }
 
-/* The update of the Unk8008E9B4 of D_8006BC7C: func_800C3E64, then puts the world position of the
+/* The tick of the Unk8008E9B4 of D_8006BC7C: func_800C3E64, then puts the world position of the
  * owner's point 3 (Fighter_getNodePosition) at 0x28. */
 void func_800B14D0(Unk8008E9B4 *this, s32 arg) {
     VECTOR origin;
@@ -248,7 +248,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_spawnSpecial1Project
 
 INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_spawnSpecial2Hitbox);
 
-struct StingmonSpecial2Effect *StingmonSpecial2Effect_init(struct StingmonSpecial2Effect *this, Fighter *chara,
+struct StingmonSpecial2Effect *StingmonSpecial2Effect_init(struct StingmonSpecial2Effect *this, Fighter *fighter,
                                                            Vec3 *position, s32 arg3);
 
 /* Spawns the special move 2's effect at the fighter's point 20, 128 ahead and 0x40 up (with arg, 0x1B down), z 0. */
@@ -282,7 +282,7 @@ INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006B93C);
 
 INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_spawnSpecial3Hitbox);
 
-Entity *StingmonSpecial3Effect_init(Entity *this, Fighter *chara, Vec3 *position);
+Entity *StingmonSpecial3Effect_init(Entity *this, Fighter *fighter, Vec3 *position);
 
 /* Spawns the special move 3's effect 640 ahead of the fighter and 0xF0 up. */
 void Stingmon_spawnSpecial3Effect(Fighter *this) {
@@ -327,7 +327,7 @@ void StingmonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
  * STINGMON_SPECIAL2_HITBOX_HIT_VTABLE). */
 typedef struct StingmonSpecial2Hitbox {
     /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Fighter *chara;
+    /* 0x80 */ Fighter *fighter;
     /* 0x84 */ u16 frame;
     /* 0x86 */ s16 facing; /* the character's (Fighter_getFacing) */
     /* 0x88 */ u8 unk88;   /* 10, or 3: the frames state 2 waits */
@@ -340,7 +340,7 @@ typedef struct StingmonSpecial2Hitbox {
 
 extern VECTOR D_800D344C;
 
-/* The special move 2 hitbox's update: states 0-3 fade unk89 in, hold it unk88 frames and fade it out, then it
+/* The special move 2 hitbox's tick: states 0-3 fade unk89 in, hold it unk88 frames and fade it out, then it
  * deletes itself; with unk88 10, frame 7 launches it (Hit_set and a velocity from the character's unk3C4
  * and side). Its part follows the character's point 20; flag 1 of the part is set from frame 16 (23 with 10).
  * The match depends on: the two flag clears as two statements (the game ands with -3 and -2, one store); vx and
@@ -385,9 +385,9 @@ void StingmonSpecial2Hitbox_tick(StingmonSpecial2Hitbox *this) {
 
         this->parts.part.flags &= ~2;
         Hit_set(&this->parts.base, 0x47AC1FD9, 2);
-        speed = ((s64)this->chara->mass * 0x1554) >> 16;
-        vx = (s32)speed * Fighter_getFacing(this->chara);
-        vy = -(s32)(((s64)this->chara->mass * 0x4718) >> 16);
+        speed = ((s64)this->fighter->mass * 0x1554) >> 16;
+        vx = (s32)speed * Fighter_getFacing(this->fighter);
+        vy = -(s32)(((s64)this->fighter->mass * 0x4718) >> 16);
         velocity.vx = vx;
         velocity.vy = vy;
         velocity.vz = 0;
@@ -401,7 +401,7 @@ void StingmonSpecial2Hitbox_tick(StingmonSpecial2Hitbox *this) {
     } else if (this->frame >= 16) {
         this->parts.part.flags |= COLLISION_SHAPE_DISABLED;
     }
-    Fighter_getNodePosition(this->chara, &this->position, 20, &D_800D344C);
+    Fighter_getNodePosition(this->fighter, &this->position, 20, &D_800D344C);
     this->parts.part.position.vx = this->position.vx;
     this->parts.part.position.vy = this->position.vy;
     this->parts.part.position.vz = this->position.vz;
@@ -421,7 +421,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial2Hitbox_draw);
 /* The entity class of vtable STINGMON_SPECIAL2_EFFECT_VTABLE (0x3C bytes), made for a character at a position. */
 typedef struct StingmonSpecial2Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ s16 unk1C;
     /* 0x1E */ u16 frames; /* counts the frames of StingmonSpecial2Effect_tick */
     /* 0x20 */ s16 facing; /* Fighter_getFacing of the character: 1 or -1 */
@@ -434,16 +434,16 @@ typedef struct StingmonSpecial2Effect {
     /* 0x38 */ u8 unk38[4];
 } StingmonSpecial2Effect;
 
-/* Builds the special move 2's effect for chara at position, with arg3 at 0x1C. */
-StingmonSpecial2Effect *StingmonSpecial2Effect_init(StingmonSpecial2Effect *this, Fighter *chara, Vec3 *position,
+/* Builds the special move 2's effect for fighter at position, with arg3 at 0x1C. */
+StingmonSpecial2Effect *StingmonSpecial2Effect_init(StingmonSpecial2Effect *this, Fighter *fighter, Vec3 *position,
                                                     s32 arg3) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &STINGMON_SPECIAL2_EFFECT_VTABLE;
-    this->vramY = Fighter_getVramY(chara);
-    this->facing = Fighter_getFacing(chara);
-    this->chara = chara;
+    this->vramY = Fighter_getVramY(fighter);
+    this->facing = Fighter_getFacing(fighter);
+    this->fighter = fighter;
     this->phase = 0;
     this->unk22 = 0x80;
     this->frames = 0;
@@ -468,7 +468,7 @@ void StingmonSpecial2Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-/* The special move 2 effect's update: in phase 0, 0x28 grows by frames * 128 up to 0x2000 while 0x22 fades
+/* The special move 2 effect's tick: in phase 0, 0x28 grows by frames * 128 up to 0x2000 while 0x22 fades
  * by an eighth; once 0x22 is down to 8 the entity deletes itself. */
 void StingmonSpecial2Effect_tick(StingmonSpecial2Effect *this) {
     switch (this->phase) {
@@ -497,7 +497,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial2Effect_draw);
 /* The entity class of vtable D_8006BBE4 (0x3C bytes), made for a character at a position. */
 typedef struct Unk800B25CC {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ u16 frames; /* counts the frames of func_800B26B8 */
     /* 0x1E */ s16 facing; /* Fighter_getFacing of the character: 1 or -1 */
     /* 0x20 */ u8 unk20;
@@ -511,14 +511,14 @@ typedef struct Unk800B25CC {
 } Unk800B25CC;
 
 /* Constructs the entity of vtable D_8006BBE4 for a character at a position. */
-Unk800B25CC *func_800B25CC(Unk800B25CC *this, Fighter *chara, Vec3 *position) {
+Unk800B25CC *func_800B25CC(Unk800B25CC *this, Fighter *fighter, Vec3 *position) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006BBE4;
-    this->vramY = Fighter_getVramY(chara);
-    this->facing = Fighter_getFacing(chara);
-    this->chara = chara;
+    this->vramY = Fighter_getVramY(fighter);
+    this->facing = Fighter_getFacing(fighter);
+    this->fighter = fighter;
     this->unk22 = 0;
     this->unk20 = 0x80;
     this->frames = 0;
@@ -542,7 +542,7 @@ void func_800B2664(Entity *this, s32 flags) {
     }
 }
 
-/* The update of func_800B25CC's entity: 0x28 eases halfway to 0x1020 (at most 0x1000) every frame while 0x20
+/* The tick of func_800B25CC's entity: 0x28 eases halfway to 0x1020 (at most 0x1000) every frame while 0x20
  * fades by an eighth; once 0x20 is down to 8 the entity deletes itself. */
 void func_800B26B8(Unk800B25CC *this) {
     this->unk28 += (0x1020 - this->unk28) >> 1;
@@ -561,9 +561,65 @@ INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006BA30);
 
 INCLUDE_ASM("game/nonmatchings/fighters/stingmon", func_800B275C);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial1Projectile_init);
+extern VtableEntry STINGMON_SPECIAL1_PROJECTILE_HIT_VTABLE[];
+extern EntityVtable STINGMON_SPECIAL1_PROJECTILE_VTABLE;
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial1Projectile_tick);
+/* The special move 1's projectile (a Projectile, 0xE0 bytes). */
+typedef struct StingmonSpecial1Projectile {
+    /* 0x00 */ Projectile base;
+    /* 0xC0 */ s32 cell;   /* the tick counts it up to 6, then loops 4 to 6 */
+    /* 0xC4 */ s32 angle;  /* ratan2 of the velocity */
+    /* 0xC8 */ Vec3 start; /* the position it was fired from */
+    /* 0xD4 */ s32 unkD4;
+    /* 0xD8 */ s32 fade;   /* 0x80, down by 16 a tick to 0 */
+    /* 0xDC */ s32 length; /* 0, up by 0x30 a tick */
+} StingmonSpecial1Projectile;
+
+/* Builds the special move 1's projectile, a Projectile of radius 0x90 and speed 0xD00, aimed by its velocity. */
+StingmonSpecial1Projectile *StingmonSpecial1Projectile_init(StingmonSpecial1Projectile *this, Fighter *fighter,
+                                                            Vec3 *position, Vec3 *velocity) {
+    s32 x, y, z;
+
+    Projectile_init(&this->base, fighter, position, velocity, 0x90, 0x7A82100, 0xD00, 3);
+    this->base.parts.base.vtable = STINGMON_SPECIAL1_PROJECTILE_HIT_VTABLE;
+    this->base.parts.entity.vtable = &STINGMON_SPECIAL1_PROJECTILE_VTABLE;
+    this->cell = 0;
+    this->angle = ratan2(velocity->vy, velocity->vx);
+    /* The match depends on reading the position whole before storing it (a struct copy: 13 diffs). */
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->start.vx = x;
+    this->start.vy = y;
+    this->start.vz = z;
+    this->fade = 0x80;
+    this->length = 0;
+    return this;
+}
+
+/* Loops the cell, fades and lengthens; once faded out with its sphere in no list it deletes itself, else it flies
+ * as a Projectile. */
+void StingmonSpecial1Projectile_tick(StingmonSpecial1Projectile *this, s32 arg) {
+    s32 alone;
+
+    if (++this->cell >= 7) {
+        this->cell = 4;
+    }
+    if ((this->fade -= 16) <= 0) {
+        this->fade = 0;
+    }
+    this->length += 0x30;
+    if (this->fade <= 0) {
+        /* listIsAlone(&this->base.parts.part.link), as in the draw */
+        alone = this->base.parts.part.link.next == &this->base.parts.part.link
+                && &this->base.parts.part.link == this->base.parts.part.link.prev;
+        if (alone) {
+            entityDelete(&this->base.parts.entity);
+            return;
+        }
+    }
+    Projectile_tick(&this->base, arg);
+}
 
 void func_800B2BA8(Projectile *this, s32 arg);
 void func_800B2D10(Projectile *this, s32 arg);
@@ -572,7 +628,7 @@ void func_800B2D10(Projectile *this, s32 arg);
 void StingmonSpecial1Projectile_draw(Projectile *this, s32 arg) {
     s32 alone;
 
-    /* listIsAlone(&this->parts.part.node), reading at offsets from this (as entity.c's update) */
+    /* listIsAlone(&this->parts.part.node), reading at offsets from this (as entity.c's tick) */
     alone = this->parts.part.link.next == &this->parts.part.link
             && &this->parts.part.link == this->parts.part.link.prev;
     if (!alone) {
@@ -601,7 +657,7 @@ void StingmonSpecial3Hitbox_destroy(StingmonSpecial3Hitbox *this, s32 flags) {
     this->unk18.vtable = STINGMON_SPECIAL3_HITBOX_HIT_VTABLE;
     this->entity.vtable = &STINGMON_SPECIAL3_HITBOX_VTABLE;
     if (this->holdingOpponent != 0) {
-        Fighter_hold(Fighter_getOpponent(this->chara), 0);
+        Fighter_hold(Fighter_getOpponent(this->fighter), 0);
     }
     this->part.vtable = COLLISION_SHAPE_VTABLE;
     /* listRemove(&this->part.node), in the access order the game's compiler used */

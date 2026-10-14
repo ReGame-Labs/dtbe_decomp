@@ -5,9 +5,11 @@
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
 #include "engine/game/character.h"
+#include "engine/gfx/prim/alloc_dr_move.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
+#include "gte.h"
 
 extern VtableEntry TRACKED_HIT_VTABLE[];
 s32 Fighter_getPartMask(Fighter *this, s32 parts);
@@ -130,8 +132,8 @@ void Fighter_addScore(Fighter *this, s32 points) {
     Fight_addScore(this->fight, this->side, points);
 }
 
-/* Adds amount to the side's HP (BattleSide_addLife on the side object). */
-void Fighter_addHp(Fighter *this, s32 amount) {
+/* Adds amount to the side's life (BattleSide_addLife on the side object). */
+void Fighter_addLife(Fighter *this, s32 amount) {
     BattleSide_addLife(this->battleSide, amount);
 }
 
@@ -854,11 +856,11 @@ s32 Fighter_isActionClipDone(Fighter *this) {
     return modelGetClip(model) != this->actionClip;
 }
 
-/* Freezes the fighter: sets a flag, adds 1 HP, stops it (velocity and force), and resets its body state
+/* Freezes the fighter: sets a flag, adds 1 to its life, stops it (velocity and force), and resets its body state
  * (FighterStateGround_init with 1) and its attack state (FighterAttackIdle_init). */
 void Fighter_freeze(Fighter *this) {
     this->flags |= 1 << FIGHTER_FLAG_FROZEN_BIT;
-    Fighter_addHp(this, 1);
+    Fighter_addLife(this, 1);
     this->force.vx = 0;
     this->force.vy = 0;
     this->force.vz = 0;
@@ -910,7 +912,31 @@ void Fighter_setFace(Fighter *this, s32 face) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_move);
+/* A step of the fighter's motion: keeps the position as the last one, adds force / mass to the velocity
+ * (func_80079C1C), clears the force and moves the position by what func_80079C1C returns. */
+void Fighter_move(Fighter *this) {
+    Vec3 step;
+    s32 x;
+    s32 y;
+    s32 z;
+
+    this->lastPosition = this->position;
+    func_80079C1C(&step, &this->velocity, &this->force, this->mass);
+    this->force.vx = 0;
+    this->force.vy = 0;
+    this->force.vz = 0;
+    this->forcePad = 0;
+    /* The match depends on the position read into locals before the step is added (all loads first). */
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    x += step.vx;
+    y += step.vy;
+    z += step.vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+}
 
 /* Adds force / mass to the velocity (func_80079C1C), then clears the force. */
 void Fighter_applyImpulse(Fighter *this) {
@@ -973,9 +999,33 @@ s32 func_80079E2C(Fighter *this) {
 
 INCLUDE_ASM("game/nonmatchings/fighter", func_80079E50);
 
-INCLUDE_ASM("game/nonmatchings/fighter", func_80079FEC);
+/* The model part of the highest of attack bits `parts`, or -1 when there is none. */
+s32 Fighter_getPart(Fighter *this, s32 parts) {
+    s8 *map = Fighter_getPartMap(this);
+    s32 zeros;
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_getPartMask);
+    if (parts == 0) {
+        return -1;
+    }
+    gte_leadingZeros(parts, zeros);
+    return map[31 - zeros];
+}
+
+/* The model part bits of attack bits `parts`: one bit per part, through the part map. */
+s32 Fighter_getPartMask(Fighter *this, s32 parts) {
+    s8 *map = Fighter_getPartMap(this);
+    s32 mask = 0;
+    s32 zeros;
+    s32 bit;
+
+    while (parts != 0) {
+        gte_leadingZeros(parts, zeros);
+        bit = 31 - zeros;
+        mask |= 1 << map[bit];
+        parts ^= 1 << bit;
+    }
+    return mask;
+}
 
 /* Adds the model parts of attack bits `parts` (Fighter_getPartMask) to the parts that hit. */
 void Fighter_addAttackParts(Fighter *this, s32 parts) {
@@ -1159,8 +1209,6 @@ typedef struct FaceMove {
     /* 0x0 */ DVECTOR *position;
     /* 0x4 */ RECT *rect;
 } FaceMove;
-
-DR_MOVE *allocDrMove(RECT *rect, s32 x, s32 y);
 
 /* Draws the fighter's face once it changes (then marks it drawn by complementing it): a frame buffer copy
  * (DR_MOVE) for each of its moves, 0x100 lower in both rectangle and position for side 1's VRAM half. */

@@ -6,6 +6,7 @@
 #include "engine/cd/file_load.h"
 #include "engine/gfx/display.h"
 #include "engine/gfx/fade.h"
+#include "engine/gfx/ordering_table.h"
 #include "engine/gfx/prim/alloc_poly_ft4.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/pad/pad.h"
@@ -188,7 +189,38 @@ INCLUDE_ASM("title/nonmatchings/ranking", RankingTask_initLines);
 
 INCLUDE_ASM("title/nonmatchings/ranking", RankingTask_drawLines);
 
-INCLUDE_ASM("title/nonmatchings/ranking", RankingTask_drawFace);
+/* Draws character's face at (x, y), near the front of the frame: its 48 by 28 cell of page 0x9C (4 faces a
+ * row), clut 0x7EB0, shrunk to 37 by 20, in neutral gray. */
+void RankingTask_drawFace(RankingTask *this, s32 character, s32 x, s32 y) {
+    u_long *ot = FRAME_OT.firstDrawn + 5;
+    s32 u = (character & 3) * 48;
+    s32 v = (u8)((character >> 2) * 28); /* The match depends on the byte cast here (andi 0xFF). */
+    POLY_FT4 *poly = allocPolyFT4();
+
+    poly->r0 = 0x80;
+    poly->g0 = 0x80;
+    poly->b0 = 0x80;
+    poly->x0 = x;
+    poly->y0 = y;
+    poly->x1 = x + 37;
+    poly->y1 = y;
+    poly->x2 = x;
+    poly->y2 = y + 20;
+    poly->x3 = x + 37;
+    poly->y3 = y + 20;
+    poly->u0 = u;
+    poly->v0 = v;
+    poly->u1 = u + 47;
+    poly->v1 = v;
+    poly->u2 = u;
+    poly->v2 = v + 27;
+    poly->u3 = u + 47;
+    poly->v3 = v + 27;
+    /* The match depends on setting tpage before clut. */
+    poly->tpage = 0x9C;
+    poly->clut = 0x7EB0;
+    AddPrim(ot, poly);
+}
 
 INCLUDE_ASM("title/nonmatchings/ranking", RankingTask_drawLineBar);
 

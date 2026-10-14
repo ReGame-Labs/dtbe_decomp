@@ -285,7 +285,27 @@ s32 Fight_isFallen(Fight *this, Vec3 *position) {
     return this->boundBottom + 0x1000 < position->vy;
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_respawnFighter);
+/* Puts side's fighter back at the arena's respawn position (ARENA_RESPAWN_POSITIONS), at rest, invulnerable for 3
+ * frames. */
+void Fight_respawnFighter(Fight *this, s32 side) {
+    DVECTOR *spawn = &ARENA_RESPAWN_POSITIONS[this->arena][side];
+    Fighter *fighter = this->sides[side]->current;
+    Vec3 position;
+
+    fighter->velocity.vx = 0;
+    fighter->velocity.vy = 0;
+    fighter->velocity.vz = 0;
+    fighter->velocityPad = 0;
+    fighter->force.vx = 0;
+    fighter->force.vy = 0;
+    fighter->force.vz = 0;
+    fighter->forcePad = 0;
+    position.vx = spawn->vx;
+    position.vy = spawn->vy;
+    position.vz = 0;
+    Fighter_setPosition(fighter, &position);
+    fighter->invulnerableFrames = 3;
+}
 
 /* Runs func_8007A158 on both sides' fighters. */
 void func_800708C4(Fight *this) {
@@ -293,8 +313,6 @@ void func_800708C4(Fight *this) {
 }
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_800708F4);
-
-void Fight_applyView(Fight *this);
 
 /* Counts the step, updates the camera (Fight_updateCamera), then applies its view. */
 void Fight_finishStep(Fight *this) {

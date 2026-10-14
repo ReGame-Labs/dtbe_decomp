@@ -208,7 +208,12 @@ void BattleMessage_tickEvolution(BattleMessage *this) {
 }
 #endif
 
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_drawEvolution);
+/* The EVOLUTION draw (BATTLE_MESSAGE_DRAWS): the typed text, then the shade bands (func_800CF2A4) in the next slot
+ * of ot, their brightness rising and falling with half a turn of the sine over the message's 45 frames. */
+void BattleMessage_drawEvolution(BattleMessage *this, u_long *ot) {
+    BattleMessage_drawTyped(this, ot);
+    func_800CF2A4(ot + 1, (COS_SIN_TABLE[((this->frame << 11) / 45) & 0xFFF].sin * 255) >> 12);
+}
 
 /* The KO tick (BATTLE_MESSAGE_TICKS): in state 0 copies the text into the hud text and moves its two letters apart;
  * in 1 brings them in by quarters while the gray goes up to 0xFF, in 2 dims it from 0xFF down to 0x80, waits 17
@@ -471,7 +476,17 @@ void BattleMessage_tickGameOver(BattleMessage *this) {
     this->frame++;
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_drawGameOver);
+/* The GAME OVER draw (BATTLE_MESSAGE_DRAWS): the text centred at its scale, until 2 frames after it has burst into
+ * shards (state 4). */
+void BattleMessage_drawGameOver(BattleMessage *this, u_long *ot) {
+    if (this->state < 4 || this->frame < 2) {
+        s32 width = (this->hudText.length - 1) * this->hudText.step;
+
+        /* The match depends on width scaled in place (one expression ties the product to the other register). */
+        width = (width * this->hudText.scale) >> 12;
+        hudTextDraw(&this->hudText, ot, (320 - width) / 2, 0x50);
+    }
+}
 
 /* How many characters BattleMessage_tickDemonstration shows in the visible half of its blink. */
 #if VERSION_JP
@@ -527,7 +542,17 @@ void hudTextSetOffsetRange(HudText *this, s32 dx, s32 dy, s32 start, s32 count) 
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", hudTextArrangeOnCircle);
+/* Puts the characters on a circle of radius: the first at angle, each next one step further (dx the sine, dy the
+ * cosine). */
+void hudTextArrangeOnCircle(HudText *this, s32 radius, s32 angle, s32 step) {
+    s32 i;
+
+    for (i = 0; i < this->length; i++) {
+        this->chars[i].dx = (radius * COS_SIN_TABLE[angle & 0xFFF].sin) >> 12;
+        this->chars[i].dy = (radius * COS_SIN_TABLE[angle & 0xFFF].cos) >> 12;
+        angle += step;
+    }
+}
 
 /* Sets every character's palette. */
 void hudTextSetPalettes(HudText *this, s32 palette) {
@@ -973,38 +998,17 @@ INCLUDE_RODATA("game/nonmatchings/hud", SCORE_TALLY_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/hud", CONTINUE_PROMPT_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/hud", BATTLE_MESSAGE_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/hud", EVOLUTION_MESSAGE_PALETTES);
-#if VERSION_JP
 INCLUDE_RODATA("game/nonmatchings/hud", STR_READY_FIGHT);
-#else
-INCLUDE_RODATA("game/nonmatchings/hud", STR_READY_FIGHT);
-#endif
 INCLUDE_RODATA("game/nonmatchings/hud", STR_NEW_CHALLENGER);
-#if VERSION_US
-INCLUDE_RODATA("game/nonmatchings/hud", D_8006DE20);
-#endif
-INCLUDE_RODATA("game/nonmatchings/hud", D_8006DE30);
-#if VERSION_JP
-INCLUDE_RODATA("game/nonmatchings/hud", D_8006DE3C);
-#else
-INCLUDE_RODATA("game/nonmatchings/hud", D_8006DE34);
-#endif
-INCLUDE_RODATA("game/nonmatchings/hud", D_8006DE40);
-INCLUDE_RODATA("game/nonmatchings/hud", D_8006DE4C);
-#if VERSION_JP
-INCLUDE_RODATA("game/nonmatchings/hud", D_8006DE58);
+INCLUDE_RODATA("game/nonmatchings/hud", STR_EVOLUTION);
+INCLUDE_RODATA("game/nonmatchings/hud", STR_KO);
+INCLUDE_RODATA("game/nonmatchings/hud", STR_YOU_WIN);
+INCLUDE_RODATA("game/nonmatchings/hud", STR_YOU_LOSE);
+INCLUDE_RODATA("game/nonmatchings/hud", STR_1P_WIN);
 INCLUDE_RODATA("game/nonmatchings/hud", STR_2P_WIN);
 INCLUDE_RODATA("game/nonmatchings/hud", STR_TIME_UP);
 INCLUDE_RODATA("game/nonmatchings/hud", STR_DRAW_GAME);
-#else
-INCLUDE_RODATA("game/nonmatchings/hud", STR_2P_WIN);
-INCLUDE_RODATA("game/nonmatchings/hud", STR_TIME_UP);
-INCLUDE_RODATA("game/nonmatchings/hud", STR_DRAW_GAME);
-#endif
 INCLUDE_RODATA("game/nonmatchings/hud", STR_DOUBLE_KO);
 INCLUDE_RODATA("game/nonmatchings/hud", STR_GAME_OVER);
-#if VERSION_JP
 INCLUDE_RODATA("game/nonmatchings/hud", STR_DEMONSTRATION);
-#else
-INCLUDE_RODATA("game/nonmatchings/hud", STR_DEMONSTRATION);
-#endif
 INCLUDE_RODATA("game/nonmatchings/hud", BATTLE_MESSAGE_LAYOUTS);

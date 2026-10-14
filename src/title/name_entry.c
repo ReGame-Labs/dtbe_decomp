@@ -2,6 +2,7 @@
  * options open. */
 
 #include "common.h"
+#include "engine/game/game_state.h"
 #include "engine/cd/file_load.h"
 #include "engine/gfx/fade.h"
 #include "engine/gfx/ordering_table.h"
@@ -42,6 +43,8 @@ s32 RankingTable_check(RankingTable *this);
 void computeRecordDigest(RankingRecord *entry, u8 *digest);
 void RankingTable_reset(RankingTable *this);
 RankingRecord *RankingTable_sort(RankingTable *this);
+RankingRecord *RankingTable_first(RankingTable *this);
+RankingRecord *RankingTable_next(RankingTable *this);
 s32 compareRankingRecords(RankingRecord *a, RankingRecord *b);
 
 /* The name entry's constructor: the character grid of mode (NAME_GRID for a name, CODE_GRID for a code),
@@ -220,7 +223,28 @@ void NameEntry_draw(NameEntry *this) {
     NameEntry_drawGrid(this, ot);
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_openForScore);
+/* Opens the entry for the player's side when its score ranks 1 to 7 in table (RankingTable_insertScore), keeping
+ * the score, character and rank; returns whether it opened. */
+s32 NameEntry_openForScore(NameEntry *this, RankingTable *table) {
+    s32 side = gameStateGetPlayerSide(&GAME_STATE);
+
+    this->port = side;
+    if (side < 0 || side >= FIGHTER_COUNT) {
+        this->port = 0;
+        this->active = 0;
+        return 0;
+    }
+    this->score = GAME_STATE.fighters[side].score;
+    this->character = GAME_STATE.fighters[side].character;
+    this->rank = RankingTable_insertScore(table, this->score);
+    if (this->rank >= 1 && this->rank <= 7) {
+        this->active = 1;
+    } else {
+        this->active = 0;
+        this->rank = 0;
+    }
+    return this->active;
+}
 
 /* Stores the name (STR_EMPTY_NAME when it is empty) and the character in the table's pending record
  * (RankingTable_fillPending). */
@@ -363,7 +387,27 @@ void NameEntry_scrollToCursor(NameEntry *this) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_snapCursor);
+/* While no direction is held and the cursor is on a character or a button, moves the cursor halfway to the
+ * center of its cell on screen (20-pixel cells, scrolled, in the window). */
+void NameEntry_snapCursor(NameEntry *this) {
+    /* The match depends on one test per direction: or-ed in one if, GCC merges them into one mask. */
+    if (this->held & PADLleft) {
+        return;
+    }
+    if (this->held & PADLright) {
+        return;
+    }
+    if (this->held & PADLup) {
+        return;
+    }
+    if (this->held & PADLdown) {
+        return;
+    }
+    if (this->cellCode != 0 || this->cellButton != 0) {
+        this->cursorX += (this->column * 20 + 10 - this->scrollX + this->windowX - this->cursorX) >> 1;
+        this->cursorY += (this->row * 20 + 10 - this->scrollY + this->windowY - this->cursorY) >> 1;
+    }
+}
 
 /* Starts a move of the cursor from the middle of its cell (20 pixels a cell) and holds the pad 22 frames. */
 void NameEntry_moveCursorToEnd(NameEntry *this) {
@@ -436,7 +480,34 @@ void NameEntry_drawName(NameEntry *this, u_long *ot) {
 
 INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawGrid);
 
-INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawButton);
+/* Draws in ot button index (0 for A, 1 for B, 2 for C) of the grid as a 64 by 21 POLY_FT4 at (x, y): the
+ * texels (0x80, 0x60 + index * 21) to (0xBF, 0x74 + index * 21) of page 12, clut 0x3CE8, in the gray shade. */
+void NameEntry_drawButton(NameEntry *this, u_long *ot, s32 x, s32 y, s32 shade, s32 index) {
+    POLY_FT4 *poly = allocPolyFT4();
+
+    poly->r0 = shade;
+    poly->g0 = shade;
+    poly->b0 = shade;
+    poly->x0 = x;
+    poly->y0 = y;
+    poly->x1 = x + 64;
+    poly->y1 = y;
+    poly->x2 = x;
+    poly->y2 = y + 21;
+    poly->x3 = x + 64;
+    poly->y3 = y + 21;
+    poly->u0 = 0x80;
+    poly->v0 = index * 21 + 0x60;
+    poly->u1 = 0xBF;
+    poly->v1 = index * 21 + 0x60;
+    poly->u2 = 0x80;
+    poly->v2 = index * 21 + 0x74;
+    poly->u3 = 0xBF;
+    poly->v3 = index * 21 + 0x74;
+    poly->tpage = 0xC;
+    poly->clut = 0x3CE8;
+    AddPrim(ot, poly);
+}
 
 /* Tiles the window with the grid's background, 64 pixels a tile (texels (0x80, 0x20) to (0xBF, 0x5F) of
  * page 12, clut 0x3C28), offset by half the scroll. */
@@ -483,7 +554,35 @@ void NameEntry_drawGridBackground(NameEntry *this, u_long *ot) {
 
 INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawBackground);
 
-INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawTitle);
+/* Draws in ot the entry's title for mode: the 104 by 16 texel row mode * 16 at u 0x80 of page 12, clut row
+ * 252 + mode (x 640), at (108, 24) in neutral gray. */
+void NameEntry_drawTitle(NameEntry *this, u_long *ot, s32 mode) {
+    POLY_FT4 *poly = allocPolyFT4();
+
+    poly->r0 = 0x80;
+    poly->g0 = 0x80;
+    poly->b0 = 0x80;
+    poly->x0 = 108;
+    poly->y0 = 24;
+    poly->x1 = 212;
+    poly->y1 = 24;
+    poly->x2 = 108;
+    poly->y2 = 40;
+    poly->x3 = 212;
+    poly->y3 = 40;
+    poly->u0 = 0x80;
+    poly->v0 = mode * 16;
+    poly->u1 = 0xE7;
+    poly->v1 = mode * 16;
+    poly->u2 = 0x80;
+    poly->v2 = mode * 16 + 15;
+    poly->u3 = 0xE7;
+    poly->v3 = mode * 16 + 15;
+    poly->tpage = 0xC;
+    poly->clut = ((252 + mode) << 6) | (640 >> 4);
+    AddPrim(ot, poly);
+}
+
 
 INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawMessage);
 
@@ -561,7 +660,21 @@ void NameEntry_drawButtonHighlight(void *this, u_long *ot, s32 x, s32 y, s32 w, 
     AddPrim(ot, poly);
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawHighlight);
+/* Highlights the cell under the cursor in ot, in gray 0x60, around its center on screen: a button's
+ * 39 by 17 frame (2 pixels to the right), or a character's 14 by 14 one; a blank cell gets none. */
+void NameEntry_drawHighlight(NameEntry *this, u_long *ot) {
+    s32 x = this->column * 20 + 10 - this->scrollX + this->windowX;
+    s32 y = this->row * 20 + 10 - this->scrollY + this->windowY;
+
+    /* The match depends on testing for no button first: the character case comes first in the code. */
+    if (this->cellButton == 0) {
+        if (this->cellCode > 0) {
+            NameEntry_drawCharHighlight(this, ot, x, y, 14, 14, 0x60);
+        }
+    } else {
+        NameEntry_drawButtonHighlight(this, ot, x + 2, y, 39, 17, 0x60);
+    }
+}
 
 /* Draws in ot a semi-transparent line from (x0, y0) to (x1, y1) of the colour (r, g, b). */
 void NameEntry_drawLine(NameEntry *this, u_long *ot, s32 x0, s32 y0, s32 x1, s32 y1, s32 r, s32 g, s32 b) {
@@ -622,11 +735,30 @@ RankingTable *RankingTable_init(RankingTable *this, RankingRecord *entries, u32 
     return this;
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", RankingTable_destroy);
+/* The ranking table's destructor: writes the records back in sorted order, each with a fresh digest
+ * (computeRecordDigest), and frees the table with DESTROY_FREE. */
+void RankingTable_destroy(RankingTable *this, s32 flags) {
+    RankingRecord *sorted = operatorVecNew(this->count * sizeof(RankingRecord));
+    RankingRecord *out = sorted;
+    RankingRecord *entry;
 
-/* Sorts the records (RankingTable_sort) and starts the cursor at the first. */
-void RankingTable_first(RankingTable *this) {
-    this->cursor = RankingTable_sort(this);
+    for (entry = RankingTable_first(this); entry != NULL; entry = RankingTable_next(this)) {
+        *out = *entry;
+        computeRecordDigest(out, out->digest);
+        out++;
+    }
+    memcpy(this->entries, sorted, this->count * sizeof(RankingRecord));
+    if (sorted != NULL) {
+        operatorVecDelete(sorted);
+    }
+    if (flags & DESTROY_FREE) {
+        operatorDelete(this);
+    }
+}
+
+/* Sorts the records (RankingTable_sort), starts the cursor at the first and returns it. */
+RankingRecord *RankingTable_first(RankingTable *this) {
+    return this->cursor = RankingTable_sort(this);
 }
 
 /* Steps the cursor to the next record and returns it (NULL at the end). */
@@ -641,7 +773,31 @@ RankingRecord *RankingTable_next(RankingTable *this) {
     return entry;
 }
 
-INCLUDE_ASM("title/nonmatchings/name_entry", RankingTable_insertScore);
+/* Ranks score among the sorted records: when it beats one, the last record takes the score and becomes the
+ * pending one (RankingTable_fillPending), and the 1-based rank is returned; 0 when it beats none. */
+s32 RankingTable_insertScore(RankingTable *this, s32 score) {
+    s32 rank = 1;
+    RankingRecord *entry = RankingTable_first(this);
+
+    /* The match depends on the goto: the game places the found code after the loop, whose end returns 0 (an
+     * if inside the loop keeps it inline; a break needs a second NULL test). */
+    while (entry != NULL) {
+        if (entry->score < score) {
+            goto found;
+        }
+        entry = entry->next;
+        rank++;
+    }
+    return 0;
+
+found:
+    while (entry->next != NULL) {
+        entry = entry->next;
+    }
+    entry->score = score;
+    this->pending = entry;
+    return rank;
+}
 
 /* Fills the pending record with a name (when it is shorter than 0x24 bytes) and character, and returns 0;
  * -1 when no record is pending or the name is too long. */

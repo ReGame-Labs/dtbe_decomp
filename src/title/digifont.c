@@ -23,9 +23,31 @@ typedef struct DigifontCache {
     /* 0x48 */ u8 color[4];   /* r, g, b and alpha, 0x80 each at first; an alpha of 0 hides the print */
 } DigifontCache;
 
+/* a glyph's width and height, in pixels */
+#define DIGIFONT_CHAR_SIZE 24
+
 extern CacheVtable DIGIFONT_CACHE_VTABLE;
 
-INCLUDE_ASM("title/nonmatchings/digifont", DigifontCache_init);
+void DigifontCache_loadFile(DigifontCache *this, char *path);
+
+/* The digifont cache's constructor: a Cache of one VRAM area of 6 by 24 cells (a 24-pixel glyph at 4 bits),
+ * the area's x aligned down to a 64-halfword texture page and its y to 256, characters drawn 24 by 24 in
+ * neutral gray, and the font file at path loaded. */
+DigifontCache *DigifontCache_init(DigifontCache *this, RECT *area, char *path) {
+    cacheInit(&this->cache, area, 1, 6, DIGIFONT_CHAR_SIZE);
+    this->cache.vtable = &DIGIFONT_CACHE_VTABLE;
+    this->area = *area;
+    this->area.x &= ~0x3F;
+    this->area.y &= ~0xFF;
+    this->unk3C = 0;
+    this->charRect.x = 0;
+    this->charRect.y = 0;
+    this->charRect.w = DIGIFONT_CHAR_SIZE;
+    this->charRect.h = DIGIFONT_CHAR_SIZE;
+    *(u32 *)this->color = 0x80808080; /* the four bytes at once, in one word store */
+    DigifontCache_loadFile(this, path);
+    return this;
+}
 
 /* The digifont cache's destructor: frees the font file, then destroys the Cache. */
 void DigifontCache_destroy(DigifontCache *this, s32 flags) {
@@ -45,7 +67,25 @@ void DigifontCache_selectGlyph(DigifontCache *this, u16 code) {
 
 INCLUDE_ASM("title/nonmatchings/digifont", DigifontCache_load);
 
-INCLUDE_ASM("title/nonmatchings/digifont", DigifontCache_getSlot);
+/* Finds code's cell in the cache, loading its glyph if needed, and puts its VRAM place (x in pixels, 23 by 23)
+ * in rect; alternate 1 takes the glyph 0x300 codes higher. Returns 0, or -1 with no glyph (no font loaded). */
+s32 DigifontCache_getSlot(DigifontCache *this, RECT *rect, u32 code, s32 alternate) {
+    CacheSlot *slot;
+
+    if (alternate == 1) {
+        code += 0x300;
+    }
+    DigifontCache_selectGlyph(this, code);
+    if (this->glyph == NULL) {
+        return -1;
+    }
+    slot = cacheGetSlot(&this->cache, code);
+    rect->x = slot->x * 4;
+    rect->y = slot->y;
+    rect->w = 23;
+    rect->h = 23;
+    return 0;
+}
 
 INCLUDE_ASM("title/nonmatchings/digifont", DigifontCache_print);
 

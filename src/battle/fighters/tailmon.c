@@ -5,9 +5,9 @@
 #include "battle/game_classes.h"
 #include "engine/sound/sound_control.h"
 
-struct TailmonSpecial1Effect *TailmonSpecial1Effect_init(struct TailmonSpecial1Effect *this, Fighter *chara,
+struct TailmonSpecial1Effect *TailmonSpecial1Effect_init(struct TailmonSpecial1Effect *this, Fighter *fighter,
                                                          Fight *fight, VECTOR *position);
-Entity *TailmonSpecial1Hitbox_init(Entity *this, Fighter *chara, Vec3 *position, Vec3 *velocity, Fight *fight);
+Entity *TailmonSpecial1Hitbox_init(Entity *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *fight);
 extern FaceEntry TAILMON_FACES[];
 extern EntityVtable TAILMON_SPECIAL2_EFFECT_VTABLE;
 extern EntityVtable TAILMON_SPECIAL1_EFFECT_VTABLE;
@@ -19,7 +19,7 @@ typedef struct TailmonSpecial1Hitbox {
     /* 0x018 */ Hit unk18;
     /* 0x034 */ u8 unk34[0x38 - 0x34];
     /* 0x038 */ CollisionSphere unk38;
-    /* 0x080 */ Fighter *chara;
+    /* 0x080 */ Fighter *fighter;
     /* 0x084 */ u8 unk84[0xC8 - 0x84];
     /* 0x0C8 */ Vec3 unkC8;
     /* 0x0D4 */ u8 unkD4[0x118 - 0xD4];
@@ -110,7 +110,7 @@ void Tailmon_airSpecial1(Fighter *this, s32 frame) {
     }
 }
 
-struct TailmonSpecial2Effect *TailmonSpecial2Effect_init(struct TailmonSpecial2Effect *this, Fighter *chara,
+struct TailmonSpecial2Effect *TailmonSpecial2Effect_init(struct TailmonSpecial2Effect *this, Fighter *fighter,
                                                          Vec3 *position);
 
 /* Spawns the special move 2's effect 0xF5 behind the fighter. */
@@ -227,7 +227,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Hitbox_draw);
 /* The special move 1's effect, made for a character at a position. */
 typedef struct TailmonSpecial1Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Fight *fight;
     /* 0x20 */ u8 unk20;
     /* 0x21 */ u8 unk21;
@@ -243,17 +243,17 @@ typedef struct TailmonSpecial1Effect {
     /* 0x54 */ SVECTOR corners[4];
 } TailmonSpecial1Effect;
 
-/* Builds the special move 1's effect for chara and fight at position, with the corners of a 180 by 180 square 16 in
+/* Builds the special move 1's effect for fighter and fight at position, with the corners of a 180 by 180 square 16 in
  * front. */
-TailmonSpecial1Effect *TailmonSpecial1Effect_init(TailmonSpecial1Effect *this, Fighter *chara, Fight *fight,
+TailmonSpecial1Effect *TailmonSpecial1Effect_init(TailmonSpecial1Effect *this, Fighter *fighter, Fight *fight,
                                                   VECTOR *position) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &TAILMON_SPECIAL1_EFFECT_VTABLE;
-    this->chara = chara;
+    this->fighter = fighter;
     this->fight = fight;
-    this->facing = Fighter_getFacing(chara);
+    this->facing = Fighter_getFacing(fighter);
     this->unk24 = 0;
     this->unk28 = 0;
     this->unk2A = 0;
@@ -270,7 +270,7 @@ TailmonSpecial1Effect *TailmonSpecial1Effect_init(TailmonSpecial1Effect *this, F
     this->position.vx = x;
     this->position.vy = y;
     this->position.vz = z;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     /* The match depends on these chains: they store from right to left */
     this->corners[0].vy = this->corners[1].vy = this->corners[0].vx = this->corners[2].vx = -90;
     this->corners[2].vy = this->corners[3].vy = this->corners[1].vx = this->corners[3].vx = 90;
@@ -305,14 +305,14 @@ typedef struct TailmonSpecial2Effect {
     /* 0x30 */ s32 unk30;
 } TailmonSpecial2Effect;
 
-/* Builds the special move 2's effect for chara at position. */
-TailmonSpecial2Effect *TailmonSpecial2Effect_init(TailmonSpecial2Effect *this, Fighter *chara, Vec3 *position) {
+/* Builds the special move 2's effect for fighter at position. */
+TailmonSpecial2Effect *TailmonSpecial2Effect_init(TailmonSpecial2Effect *this, Fighter *fighter, Vec3 *position) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &TAILMON_SPECIAL2_EFFECT_VTABLE;
-    this->vramY = Fighter_getVramY(chara);
-    this->facing = Fighter_getFacing(chara);
+    this->vramY = Fighter_getVramY(fighter);
+    this->facing = Fighter_getFacing(fighter);
     x = position->vx;
     y = position->vy;
     z = position->vz;

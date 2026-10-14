@@ -1,11 +1,11 @@
-/* A side's HUD at the bottom of the screen: the health and evolution gauges, the score, the timer, the round wins,
+/* A side's HUD at the bottom of the screen: the life and evolution gauges, the score, the timer, the round wins,
  * the hit counter and the portrait; drawn on the left and mirrored on the right. */
 
 #include "common.h"
 #include "battle/game_classes.h"
 #include "engine/text/console.h"
 
-/* A gauge of the side HUD (its health and its evolution gauge), each set up by sideGaugeInit with 0x10000 at 0xC. */
+/* A gauge of the side HUD (its life and its evolution gauge), each set up by sideGaugeInit with 0x10000 at 0xC. */
 typedef struct SideGauge {
     /* 0x0 */ s32 value;  /* 0 to 0x10000 for all of it */
     /* 0x4 */ s32 target; /* the length the value gives */
@@ -59,7 +59,7 @@ typedef struct HitCounter {
 /* A side's HUD (SideHud_init, made twice by Fight): its tick reads the side each frame, its draw draws it. */
 typedef struct SideHud {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ SideGauge health;         /* the side's life, 120 px */
+    /* 0x18 */ SideGauge life;           /* the side's life, 120 px */
     /* 0x28 */ SideGauge evolutionGauge; /* the side's gauge, 70 px */
     /* 0x38 */ BattleSide *owner;
     /* 0x3C */ s32 character;         /* Fighter_getCharacter of the side's current fighter */

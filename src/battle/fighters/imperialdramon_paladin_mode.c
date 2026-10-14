@@ -5,13 +5,13 @@
 #include "common.h"
 #include "battle/game_classes.h"
 
-Entity *ImperialdramonPaladinModeIntroEffect_init(Entity *this, Fighter *chara, Vec3 *position);
+Entity *ImperialdramonPaladinModeIntroEffect_init(Entity *this, Fighter *fighter, Vec3 *position);
 extern TrailPoint D_800694B4[];
 extern EntityVtable IMPERIALDRAMON_PALADIN_MODE_INTRO_EFFECT_VTABLE;
 extern VtableEntry IMPERIALDRAMON_PALADIN_MODE_SPECIAL3_HITBOX_HIT_VTABLE[];
 extern EntityVtable IMPERIALDRAMON_PALADIN_MODE_SPECIAL3_HITBOX_VTABLE;
 extern EntityVtable IMPERIALDRAMON_PALADIN_MODE_VTABLE;
-Entity *ImperialdramonPaladinModeSpecial3Hitbox_init(void *this, Fighter *chara, Vec3 *position, Vec3 *velocity,
+Entity *ImperialdramonPaladinModeSpecial3Hitbox_init(void *this, Fighter *fighter, Vec3 *position, Vec3 *velocity,
                                                      Fight *unk228);
 
 /* Builds Imperialdramon Paladin Mode: an Imperialdramon with its own vtable. */

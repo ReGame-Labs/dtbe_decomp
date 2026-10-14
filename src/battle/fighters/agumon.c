@@ -4,7 +4,7 @@
 #include "common.h"
 #include "battle/game_classes.h"
 
-struct AgumonSpecial2Effect *AgumonSpecial2Effect_init(struct AgumonSpecial2Effect *this, Fighter *chara);
+struct AgumonSpecial2Effect *AgumonSpecial2Effect_init(struct AgumonSpecial2Effect *this, Fighter *fighter);
 struct AgumonSpecial1Effect *AgumonSpecial1Effect_init(struct AgumonSpecial1Effect *this, Vec3 *position, s32 arg2,
                                                        s32 maxSize, s32 vramY);
 extern FaceEntry AGUMON_FACES[];
@@ -208,9 +208,9 @@ INCLUDE_ASM("game/nonmatchings/fighters/agumon", ThrowLaunch_init);
 INCLUDE_ASM("game/nonmatchings/fighters/agumon", ThrowLaunch_tick);
 
 /* Builds the special move 1's projectile, a Projectile of radius 0x80 and speed 0xA00. */
-AgumonSpecial1Projectile *AgumonSpecial1Projectile_init(AgumonSpecial1Projectile *this, Fighter *chara,
+AgumonSpecial1Projectile *AgumonSpecial1Projectile_init(AgumonSpecial1Projectile *this, Fighter *fighter,
                                                         Vec3 *position, Vec3 *velocity) {
-    Projectile_init(&this->base, chara, position, velocity, 0x80, 0x5A81C00, 0xA00, 3);
+    Projectile_init(&this->base, fighter, position, velocity, 0x80, 0x5A81C00, 0xA00, 3);
     this->base.parts.base.vtable = AGUMON_SPECIAL1_PROJECTILE_HIT_VTABLE;
     this->base.parts.entity.vtable = &AGUMON_SPECIAL1_PROJECTILE_VTABLE;
     this->cell = 0;
@@ -232,7 +232,8 @@ void AgumonSpecial1Projectile_hit(AgumonSpecial1Projectile *this, CollisionSpher
     Entity *child = allocEntityMemory(0x38);
 
     if (child != NULL) {
-        AgumonSpecial1Effect_init(entityOperatorNewAt(0x38, child), &this->base.pos, 0x180, 0xC0, this->base.unkBC);
+        AgumonSpecial1Effect_init(entityOperatorNewAt(0x38, child), &this->base.position, 0x180, 0xC0,
+                                  this->base.unkBC);
     }
     entityAddSibling(&this->base.parts.entity, child);
     Projectile_hit(&this->base, sum);
@@ -288,7 +289,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/agumon", AgumonSpecial1Effect_draw);
 /* The special move 2's effect, at the fighter's node 2. */
 typedef struct AgumonSpecial2Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ VECTOR position; /* the character's node 2 (Fighter_getNodePosition) */
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30;
@@ -302,12 +303,12 @@ typedef struct AgumonSpecial2Effect {
 
 extern EntityVtable AGUMON_SPECIAL2_EFFECT_VTABLE;
 
-/* Builds the special move 2's effect for chara, at its node 2. */
-AgumonSpecial2Effect *AgumonSpecial2Effect_init(AgumonSpecial2Effect *this, Fighter *chara) {
+/* Builds the special move 2's effect for fighter, at its node 2. */
+AgumonSpecial2Effect *AgumonSpecial2Effect_init(AgumonSpecial2Effect *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &AGUMON_SPECIAL2_EFFECT_VTABLE;
-    this->chara = chara;
-    Fighter_getNodePosition(chara, &this->position, 2, &ZERO_VECTOR);
+    this->fighter = fighter;
+    Fighter_getNodePosition(fighter, &this->position, 2, &ZERO_VECTOR);
     this->unk2C = 0x80;
     this->unk30 = 0x180;
     this->unk34 = 0;
@@ -315,7 +316,7 @@ AgumonSpecial2Effect *AgumonSpecial2Effect_init(AgumonSpecial2Effect *this, Figh
     this->unk3C = 0;
     this->unk40 = 0;
     this->unk44 = 0;
-    this->unk48 = Fighter_getVramY(chara);
+    this->unk48 = Fighter_getVramY(fighter);
     return this;
 }
 

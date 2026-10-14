@@ -3,10 +3,35 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/game/game_state.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 
-INCLUDE_ASM("game/nonmatchings/game_0e", BattleSide_init);
+extern VtableEntry BATTLE_SIDE_VTABLE[];
+
+/* Constructs the side with its two forms, fighter fighting first; its life starts full, (versusGauge + 1) * 0x2000
+ * from the side's setup. */
+BattleSide *BattleSide_init(BattleSide *this, Fighter *fighter, Fighter *evolution) {
+    s32 lifeMax;
+
+    this->vtable = BATTLE_SIDE_VTABLE;
+    this->unkC = 0;
+    this->unk10 = 0;
+    this->swapDelay = 0;
+    this->fighter = fighter;
+    this->evolution = evolution;
+    this->current = fighter;
+    lifeMax = (GAME_STATE.fighters[Fighter_getSide(fighter)].versusGauge + 1) << 13;
+    this->gauge = 0;
+    this->stun = 0;
+    this->unk18 = 0;
+    this->frozen = 0;
+    this->unk30 = 0;
+    this->unk34 = 0;
+    this->lifeMax = lifeMax;
+    this->life = lifeMax;
+    return this;
+}
 
 /* Takes the side's fighter out of its entity list, and its evolution when it has one. */
 void BattleSide_unlinkCharacters(BattleSide *this) {
@@ -15,8 +40,6 @@ void BattleSide_unlinkCharacters(BattleSide *this) {
         listRemove(&this->evolution->entity.link);
     }
 }
-
-extern VtableEntry BATTLE_SIDE_VTABLE[];
 
 /* BattleSide's destructor: deletes the side's fighter, and its evolution when it has one. */
 void BattleSide_destroy(BattleSide *this, s32 flags) {

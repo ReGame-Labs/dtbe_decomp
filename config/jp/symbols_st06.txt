@@ -12,6 +12,7 @@ StageBoss_createNodeEntity = 0x800D3ED8; // type:func
 StageBoss_tickScenery = 0x800D4008; // type:func
 StageBoss_tick = 0x800D41BC; // type:func
 StageBoss_drawWorld = 0x800D433C; // type:func
+st06_applyLevel = 0x800D43A4; // type:func
 st06_setLevel = 0x800D4434; // type:func
 St06SpinGroup_init = 0x800D4D8C; // type:func
 St06SpinGroup_setLevel = 0x800D4E64; // type:func

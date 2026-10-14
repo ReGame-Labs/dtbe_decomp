@@ -9,7 +9,7 @@
 #include "engine/math/sin_cos.h"
 #include "engine/math/vector.h"
 
-Entity *ImperialdramonSpecial1Effect_init(Entity *this, Fighter *chara, VECTOR *pos, Fight *fight);
+Entity *ImperialdramonSpecial1Effect_init(Entity *this, Fighter *fighter, VECTOR *pos, Fight *fight);
 extern VECTOR D_800690E0;
 extern TrailPoint D_800690F0[];
 extern EntityVtable D_800691EC;
@@ -39,9 +39,9 @@ void Imperialdramon_spawnSpecial1Hitbox(Fighter *this);
 void Imperialdramon_spawnSpecial1Effect(Fighter *this, s32 air);
 void Imperialdramon_spawnAttackBurst(Fighter *this);
 /* the constructors of the entities spawned below */
-Entity *ImperialdramonSpecial1Hitbox_init(void *this, Fighter *chara, Vec3 *position, Vec3 *velocity, Fight *unk228);
-Entity *ImperialdramonSpecial3Effect_init(void *this, Fighter *chara, Vec3 *position, Vec3 *velocity, Fight *unk228);
-struct Unk80091498 *func_80091498(struct Unk80091498 *this, Fighter *chara, Vec3 *position, Fight *obj);
+Entity *ImperialdramonSpecial1Hitbox_init(void *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *unk228);
+Entity *ImperialdramonSpecial3Effect_init(void *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *unk228);
+struct Unk80091498 *func_80091498(struct Unk80091498 *this, Fighter *fighter, Vec3 *position, Fight *obj);
 extern VECTOR D_800690D0;
 
 /* Builds Imperialdramon: a Fighter with its own vtable and its hold state from 0x4A6 cleared. */
@@ -202,7 +202,6 @@ void Imperialdramon_upAttack(Fighter *this, s32 frame) {
 INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", func_8008DD50);
 
 s32 Fighter_isInvulnerable(Fighter *this);
-Fighter *Fighter_getOpponentInReach(Fighter *this, s32 index);
 VECTOR *func_8008DD50(VECTOR *out, Imperialdramon *this);
 Unk8008E9B4 *func_8008E9B4(Unk8008E9B4 *this, Fighter *owner, Fight *unk228, Vec3 *pos, s32 size);
 Unk8008E9B4 *func_8008EA58(Unk8008E9B4 *this, Fighter *owner, Fight *unk228, Vec3 *pos, s32 size);
@@ -498,7 +497,7 @@ void Imperialdramon_spawnSpecial1Effect(Fighter *this, s32 air) {
     Fighter_addEntity(this, child);
 }
 
-Entity *ImperialdramonSpecial2Hitbox_init(void *this, Fighter *chara, Vec3 *position, Vec3 *velocity, Fight *unk228);
+Entity *ImperialdramonSpecial2Hitbox_init(void *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *unk228);
 
 /* Spawns the special move 2's hitbox at the fighter's node 12, 64 a frame forward. */
 void Imperialdramon_spawnSpecial2Hitbox(Fighter *this) {
@@ -554,7 +553,7 @@ void Imperialdramon_spawnSpecial3Effect(Fighter *this) {
 }
 
 extern VECTOR D_80069138;
-Entity *ImperialdramonSpecial3Hitbox_init(void *this, Fighter *chara, Vec3 *position, Vec3 *velocity, Vec3 *unk4);
+Entity *ImperialdramonSpecial3Hitbox_init(void *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Vec3 *unk4);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/imperialdramon", D_80069138);
 
@@ -657,13 +656,13 @@ INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial1H
 
 /* On a hit: Hit_apply; when it struck a fighter it takes its position (unused) and disables its sphere. */
 void ImperialdramonSpecial1Hitbox_hit(UnkPartsEntity38 *this, CollisionSphere *sum) {
-    Entity *chara;
+    Entity *fighter;
     Vec3 position;
 
     Hit_apply(&this->base, sum);
-    chara = getHitFighter(sum);
-    if (chara != NULL) {
-        Fighter_getPosition((Fighter *)chara, &position);
+    fighter = getHitFighter(sum);
+    if (fighter != NULL) {
+        Fighter_getPosition((Fighter *)fighter, &position);
         this->part.flags |= COLLISION_SHAPE_DISABLED;
     }
 }
@@ -741,7 +740,7 @@ void ImperialdramonSpecial3Effect_destroy(Entity *this, s32 flags) {
  * corners. */
 typedef struct ImperialdramonSpecial3Effect {
     /* 0x000 */ Entity entity;
-    /* 0x018 */ Fighter *chara;
+    /* 0x018 */ Fighter *fighter;
     /* 0x01C */ Fight *obj;    /* ImperialdramonSpecial3Effect_init's fifth argument; Fight_random draws numbers from
                                 * it */
     /* 0x020 */ s16 unk20;           /* frames in state 2 */
@@ -797,7 +796,7 @@ void ImperialdramonSpecial3Effect_tick(ImperialdramonSpecial3Effect *this) {
     Entity *child;
     s32 i;
 
-    Fighter_getNodePosition(this->chara, &this->position, 1, &offset);
+    Fighter_getNodePosition(this->fighter, &this->position, 1, &offset);
     this->unk58.vy = this->position.vy;
     this->unk58.vz = this->position.vz;
     this->unk58.vx = this->position.vx + (this->side << 7);
@@ -835,9 +834,9 @@ void ImperialdramonSpecial3Effect_tick(ImperialdramonSpecial3Effect *this) {
         child = allocEntityMemory(0x38);
         if (child != NULL) {
             /* position is a VECTOR here, a Vec3 to func_80091498 (it reads the three words) */
-            func_80091498(entityOperatorNewAt(0x38, child), this->chara, (Vec3 *)&this->position, this->obj);
+            func_80091498(entityOperatorNewAt(0x38, child), this->fighter, (Vec3 *)&this->position, this->obj);
         }
-        Fighter_addEntity(this->chara, child);
+        Fighter_addEntity(this->fighter, child);
         this->state++;
         /* fallthrough */
     case 1:
@@ -894,16 +893,16 @@ void ImperialdramonSpecial3Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
-/* The special move 3's hitbox (0xAC bytes): parts that move from pos by vel every frame until they have gone
+/* The special move 3's hitbox (0xAC bytes): parts that move from position by velocity every frame until they have gone
  * 0x3000. */
 typedef struct ImperialdramonSpecial3Hitbox {
     /* 0x00 */ UnkPartsEntity38 parts;
     /* 0x80 */ Imperialdramon *owner;
-    /* 0x84 */ s32 speed;    /* vel's length (vecGetLength) */
+    /* 0x84 */ s32 speed;    /* velocity's length (vecGetLength) */
     /* 0x88 */ s32 distance; /* grows by speed every frame */
-    /* 0x8C */ Vec3 vel;
+    /* 0x8C */ Vec3 velocity;
     /* 0x98 */ s32 unk98;
-    /* 0x9C */ Vec3 pos;
+    /* 0x9C */ Vec3 position;
     /* 0xA8 */ s32 unkA8;
 } ImperialdramonSpecial3Hitbox;
 
@@ -911,16 +910,16 @@ typedef struct ImperialdramonSpecial3Hitbox {
  * ended, or once it has gone over 0x3000. */
 void ImperialdramonSpecial3Hitbox_tick(ImperialdramonSpecial3Hitbox *this) {
     /* The match depends on the vector sum reading everything before writing (as vecAddInPlace). */
-    s32 x = this->pos.vx;
-    s32 y = this->pos.vy;
-    s32 z = this->pos.vz;
+    s32 x = this->position.vx;
+    s32 y = this->position.vy;
+    s32 z = this->position.vz;
 
-    x += this->vel.vx;
-    y += this->vel.vy;
-    z += this->vel.vz;
-    this->pos.vx = x;
-    this->pos.vy = y;
-    this->pos.vz = z;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
     this->parts.part.position.vx = x;
     this->parts.part.position.vy = y;
     this->parts.part.position.vz = z;
@@ -941,7 +940,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", func_80091328);
 /* The entity class of vtable D_800691EC (0x38 bytes), made for a character 0x40 below a position. */
 typedef struct Unk80091498 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ s16 facing; /* Fighter_getFacing of the character: 1 or -1 */
     /* 0x1E */ u16 age;   /* frames: func_80091584 counts it up to 41 */
     /* 0x20 */ u8 unk20;
@@ -953,16 +952,16 @@ typedef struct Unk80091498 {
 
 /* Constructs the entity of vtable D_800691EC for a character, 0x40 below position. obj is not read
  * (ImperialdramonSpecial3Effect_tick passes it). */
-Unk80091498 *func_80091498(Unk80091498 *this, Fighter *chara, Vec3 *position, Fight *obj) {
+Unk80091498 *func_80091498(Unk80091498 *this, Fighter *fighter, Vec3 *position, Fight *obj) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_800691EC;
-    this->vramY = Fighter_getVramY(chara);
-    this->chara = chara;
+    this->vramY = Fighter_getVramY(fighter);
+    this->fighter = fighter;
     this->age = 0;
     this->unk20 = 0;
-    this->facing = Fighter_getFacing(chara);
+    this->facing = Fighter_getFacing(fighter);
     this->unk24 = 0x1C00;
     x = position->vx;
     y = position->vy + 0x40;
@@ -983,7 +982,7 @@ void func_80091530(Entity *this, s32 flags) {
     }
 }
 
-/* Its update: unk20 eases a quarter of the way to 0x80, after 10 frames unk24 eases a quarter of the way to 0, and
+/* Its tick: unk20 eases a quarter of the way to 0x80, after 10 frames unk24 eases a quarter of the way to 0, and
  * after 40 frames it deletes itself. */
 void func_80091584(Unk80091498 *this) {
     this->unk20 += (0x80 - this->unk20) >> 2;

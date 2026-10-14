@@ -296,6 +296,7 @@ func_80079BD8 Fighter_applyImpulse
 func_80079CF4 Fighter_getOpponentInReach
 func_80079D94 Fighter_isThrowable
 func_80079E10 Fighter_getFacing
+func_80079FEC Fighter_getPart
 func_8007A044 Fighter_getPartMask
 func_8007A0B4 Fighter_addAttackParts
 func_8007A0E4 Fighter_setAttackParts
@@ -675,6 +676,10 @@ func_800C83D4 ItemSpawner_tick
 func_800C8380 ItemSpawner_destroy
 func_800C84C8 ItemSpawner_countSpawnPoints
 func_800C85C4 ItemSpawner_spawnItem
+func_800C8658 ItemSpawner_addItem
+func_800C8520 ItemSpawner_canSpawn
+func_800C8C40 Item_hitsMap
+func_800C8F9C Item_knockAway
 func_800C86E4 ItemSpawner_removeItem
 func_800C8718 rotNclip3
 func_800C8778 Item_init
@@ -810,6 +815,8 @@ D_8006DE7C STR_DOUBLE_KO
 D_8006DE88 STR_GAME_OVER
 D_8006DE94 STR_DEMONSTRATION
 D_8006DE84 STR_DEMONSTRATION
+# STR_EVOLUTION, STR_KO, STR_YOU_WIN, STR_YOU_LOSE, STR_1P_WIN are in config/<version>/symbols_game.txt by hand:
+# one splat label names another of them in each version (D_8006DE30: JP "EVOLUTION_", US "KO"), so no list line fits
 # side_hud.c: a side's bottom HUD, made twice by Fight; its tick reads the BattleSide's life and gauge, the score,
 # the wins and the combo hits; its draw calls the left or the mirrored right layout
 Unk800733C4 SideHud
@@ -861,6 +868,30 @@ D_8006E0DC BONUS_TIMER_VTABLE
 D_8006DFCC STR_FORMAT_6D
 D_8006DFD4 STR_FORMAT_3D
 D_8006DFDC STR_FORMAT_2D
+# game_0k.c: BonusFight_endWithWinner's confetti at the winner's position: 128 triangles of 4 colors that fall,
+# spin and start again at the top (slots 0x08 tick, 0x10 draw, 0x18 destroy)
+func_800D29C8 Confetti_init
+func_800D2B94 Confetti_destroy
+func_800D2BE8 Confetti_tick
+func_800D2C64 Confetti_draw
+D_8006E03C CONFETTI_VTABLE
 # battle_scene.c: sets an arena's bit of the save's bonusGamesUnlocked; BonusFight_endWithWinner passes the fight's
 # arena when a bonus game ends with a winner (the main menu's bonus items and the select scene's pick read the bits)
 func_8006EFC0 unlockBonusGame
+# game_0i.c: the item's shot is a Projectile (ItemShot_init runs Projectile_init on its base), as the fighters'
+# special projectiles; fireItemShot allocates it and hands it to Fighter_addEntity, which the battle code calls spawn
+ItemShot ItemProjectile
+ItemShot_init ItemProjectile_init
+ItemShot_tick ItemProjectile_tick
+ItemShot_draw ItemProjectile_draw
+ItemShot_hit ItemProjectile_hit
+ItemShot_destroy ItemProjectile_destroy
+ItemShot_throwPiece ItemProjectile_throwPiece
+ITEM_SHOT_ATTACKS ITEM_PROJECTILE_ATTACKS
+ITEM_SHOT_PIECE_ANIMS ITEM_PROJECTILE_PIECE_ANIMS
+ITEM_SHOT_VTABLE ITEM_PROJECTILE_VTABLE
+ITEM_SHOT_HIT_VTABLE ITEM_PROJECTILE_HIT_VTABLE
+fireItemShot spawnItemProjectile
+fireItemShots spawnItemProjectiles
+# fighter.c: adds to the side's life (BattleSide_addLife); the battle code says life, not HP
+Fighter_addHp Fighter_addLife

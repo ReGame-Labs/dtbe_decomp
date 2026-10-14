@@ -30,7 +30,20 @@ void ZasciiPrinter_setColor(ZasciiPrinter *this, u32 color) {
     this->color = (color & 0xFFFFFF) | 0x2000000;
 }
 
-INCLUDE_ASM("title/nonmatchings/zascii_printer", ZasciiPrinter_putChar);
+/* Prints code at (x, y) and moves the cursor past it: 16 pixels for a two-byte character (the two-byte space
+ * draws nothing), 8 for a one-byte one, which it does not draw. */
+void ZasciiPrinter_putChar(ZasciiPrinter *this, s32 x, s32 y, u32 code) {
+    s32 width = TEXT_KANJI_WIDTH;
+
+    if (code >= SJIS_FIRST) {
+        if (code != SJIS_SPACE) {
+            ZasciiPrinter_drawChar(this, x, y, code);
+        }
+    } else {
+        width = TEXT_ASCII_WIDTH;
+    }
+    this->printer.x = x + width;
+}
 
 /* Draws character code at (x, y): a 16 by 16 sprite from the texture cell getZasciiUv finds, CLUT 0x742C. */
 void ZasciiPrinter_drawChar(ZasciiPrinter *this, s32 x, s32 y, u32 code) {

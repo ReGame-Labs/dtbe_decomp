@@ -43,9 +43,9 @@ typedef struct St00GroupDrawer {
 typedef struct StageMeshMover {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Mesh *mesh;
-    /* 0x1C */ Vec3 pos;
+    /* 0x1C */ Vec3 position;
     /* 0x28 */ s32 unk28;
-    /* 0x2C */ s32 motion; /* st02: the angle about z, 0xC0 more each tick; st03: the height added to pos */
+    /* 0x2C */ s32 motion; /* st02: the angle about z, 0xC0 more each tick; st03: the height added to position */
     /* 0x30 */ s32 frame;  /* its ticks */
 } StageMeshMover; /* size 0x34 */
 
@@ -64,14 +64,14 @@ typedef struct BonusThrower {
 } BonusThrower; /* size 0x54 */
 
 /* The mark a thrown object leaves where it lands (BonusLandingMark_init, st07 and st09): a 512 by 512 square at
- * pos. Its tick counts frame and deletes it after BONUS_LANDING_MARK_FRAMES. */
+ * position. Its tick counts frame and deletes it after BONUS_LANDING_MARK_FRAMES. */
 typedef struct BonusLandingMark {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Fight *owner;
     /* 0x1C */ u16 frame; /* unsigned: the ticks compare it with andi 0xFFFF and sltiu */
     /* 0x1E */ s16 unk1E;
     /* 0x20 */ SVECTOR corners[4];
-    /* 0x40 */ Vec3 pos;
+    /* 0x40 */ Vec3 position;
     /* 0x4C */ s32 unk4C;
 } BonusLandingMark; /* size 0x50 */
 

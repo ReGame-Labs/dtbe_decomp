@@ -1,10 +1,12 @@
 /* The battle's items: the stage's item spawner, the pickup items and what they give a fighter, their HUD popup
- * and icon, and the item shot (virtual tables D_8006D980 to ITEM_SPAWNER_VTABLE). */
+ * and icon, and the item projectile (virtual tables D_8006D980 to ITEM_SPAWNER_VTABLE). */
 
 #include "common.h"
 #include "battle/game_classes.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
+#include "gte.h"
+#include "inline_c.h"
 
 struct ItemSpawner *ItemSpawner_init(struct ItemSpawner *this, Fight *scene, void *spawnPoints, s32 arg3);
 Unk800C3CFC *func_800CAEF0(Unk800C3CFC *this, Vec3 *pos, s32 arg2, s32 arg3);
@@ -12,7 +14,7 @@ Entity *Item_init(Entity *this, struct ItemSpawner *arg1, s32 arg2, Fight *arg3,
                       s32 arg6);
 struct ItemPopup *ItemPopup_init(struct ItemPopup *this, Fighter *fighter, s32 itemKind);
 struct ItemEffectIcon *ItemEffectIcon_init(struct ItemEffectIcon *this, Fighter *fighter, s32 itemKind);
-struct Unk800CAACC *func_800CAACC(struct Unk800CAACC *this, Fighter *chara, s32 arg2, s32 arg3, s32 arg4,
+struct Unk800CAACC *func_800CAACC(struct Unk800CAACC *this, Fighter *fighter, s32 arg2, s32 arg3, s32 arg4,
                                   s32 arg5);
 extern EntityVtable D_8006D9F0;
 extern EntityVtable D_8006DA18;
@@ -53,13 +55,11 @@ typedef struct Item {
     /* 0x68 */ s32 kind;     /* ITEM_KIND_POOLS resolved (resolveItemKind): its effect (Item_giveTo) */
     /* 0x6C */ Vec3 position;
     /* 0x78 */ u8 unk78[0x7C - 0x78];
-    /* 0x7C */ s32 unk7C;
-    /* 0x80 */ s32 unk80;
-    /* 0x84 */ s32 unk84;
-    /* 0x88 */ s32 unk88;
+    /* 0x7C */ Vec3 velocity; /* added to the position each frame (func_800C8B0C) */
+    /* 0x88 */ s32 velocityPad;
     /* 0x8C */ s32 slot;     /* its slot of ITEM_SLOTS (ItemSpawner_removeItem) */
     /* 0x90 */ u8 unk90[0xA4 - 0x90];
-    /* 0xA4 */ void *spawner; /* the ItemSpawner it came from, or NULL (func_800C8658) */
+    /* 0xA4 */ void *spawner; /* the ItemSpawner it came from, or NULL (ItemSpawner_addItem) */
     /* 0xA8 */ u8 unkA8[0xAC - 0xA8];
     /* 0xAC */ s32 life;     /* frames; the item box's opening adds 150 */
     /* 0xB0 */ s32 unkB0;
@@ -75,6 +75,7 @@ void func_800C9288(Item *this, s32 arg);
 void Item_destroy(Item *this, s32 flags);
 void Item_callTouch(Unk800C8DFC *object, s32 arg);
 void Item_tick(void *this);
+void Item_syncSlot(Item *this);
 
 /* A slot of ITEM_SLOTS: where an item of the spawner is. */
 typedef struct ItemSlot {
@@ -93,11 +94,14 @@ typedef struct ItemSlots {
 
 extern ItemSlots ITEM_SLOTS;
 
-/* A spawn point of the stage's list (ItemSpawner_init): the list ends at one whose first halfword is -1; then
+/* A spawn point of the stage's list (ItemSpawner_init): the list ends at one whose flags are -1; then
  * the kind (negative for a pool of ITEM_KIND_POOLS) and the position, x, y and z. */
 typedef struct ItemSpawnPoint {
-    /* 0x0 */ s16 unk0;
-    /* 0x2 */ s16 unk2[4];
+    /* 0x0 */ s16 flags; /* -1 ends the list; bit 4 goes to the slot's flags (ItemSpawner_addItem) */
+    /* 0x2 */ s16 kind; /* negative: a pool of ITEM_KIND_POOLS (resolveItemKind) */
+    /* 0x4 */ s16 x;
+    /* 0x6 */ s16 y;
+    /* 0x8 */ s16 z;
 } ItemSpawnPoint;
 
 /* The stage's item spawner (ItemSpawner_init, virtual table ITEM_SPAWNER_VTABLE): its spawn points, one slot of
@@ -368,9 +372,9 @@ s32 getAngleTo(Vec3 *from, Vec3 *to) {
     return ratan2(y - from->vy, x - from->vx) & 0xFFF;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", fireItemShot);
+INCLUDE_ASM("game/nonmatchings/game_0i", spawnItemProjectile);
 
-INCLUDE_ASM("game/nonmatchings/game_0i", fireItemShots);
+INCLUDE_ASM("game/nonmatchings/game_0i", spawnItemProjectiles);
 
 /* Puffs a grey particle of SPIN_PARTICLE_VTABLE (0x80 big) from the character's point (func_8007A650), moved by -32 to
  * 31 in x and y, at a random velocity (x and y -32 to 31): its frame is 0, 1 or 2 for the kind 1, 2 or 3 of 0x478, none
@@ -447,17 +451,87 @@ void ItemSpawner_countSpawnPoints(ItemSpawner *this) {
 
     this->spawnPointCount = 0;
     if (list != NULL) {
-        while (list[this->spawnPointCount].unk0 != -1) {
+        while (list[this->spawnPointCount].flags != -1) {
             this->spawnPointCount++;
         }
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8520);
+/* The two stage fields the spawn points wait on (the whole stages are in st00.c and st01.c). */
+typedef struct St00SignalView {
+    /* 0x0000 */ u8 unk0[0x1050];
+    /* 0x1050 */ s32 signalRed; /* while set, St00SignalQuads turn red */
+} St00SignalView;
 
-INCLUDE_ASM("game/nonmatchings/game_0i", ItemSpawner_spawnItem);
+typedef struct St01FallingView {
+    /* 0x000 */ u8 unk0[0xF7C];
+    /* 0xF7C */ s16 fallingCount; /* the St01FallingObjects alive */
+} St01FallingView;
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8658);
+/* Whether the spawn point index may spawn an item: its slot must be free; in arena 0 a point with flag 8 waits
+ * for the red signal, in arena 1 a point with flag 0x10 for two falling objects. The match depends on the point
+ * taken in a local (the offset added into the table's register). */
+s32 ItemSpawner_canSpawn(ItemSpawner *this, s32 index) {
+    s32 flags;
+    Fight *scene;
+    ItemSpawnPoint *point;
+
+    if (this->slots->slots[index].flags != 0) {
+        return 0;
+    }
+    point = &this->spawnPoints[index];
+    scene = this->scene;
+    flags = point->flags;
+    switch (scene->arena) {
+    case 0:
+        if ((flags & 8) && ((St00SignalView *)scene)->signalRed == 0) {
+            return 0;
+        }
+        break;
+    case 1:
+        if ((flags & 0x10) && ((St01FallingView *)scene)->fallingCount < 2) {
+            return 0;
+        }
+        break;
+    }
+    return 1;
+}
+
+/* Spawns an item at the spawn point index when ItemSpawner_canSpawn allows it: an item of the point's kind at its
+ * position, a sibling of the spawner. */
+void ItemSpawner_spawnItem(ItemSpawner *this, s32 index) {
+    ItemSpawnPoint *point;
+    Vec3 position;
+
+    if (ItemSpawner_canSpawn(this, index)) {
+        point = &this->spawnPoints[index];
+        position.vx = point->x;
+        position.vy = point->y;
+        position.vz = point->z;
+        entityAddSibling(&this->entity, createItem(this, index, this->scene, point->kind, &position, 0x1C2));
+    }
+}
+
+/* Takes item into the spawner's slots (Item_init, for an item with a spawner): restarts the spawn timer, counts
+ * it, marks its slot used (1) with bit 4 of its spawn point's flags, keeps its kind there and syncs the slot. */
+void ItemSpawner_addItem(ItemSpawner *this, Item *item) {
+    s32 index;
+    ItemSlot *slot;
+    s32 pointFlags;
+
+    this->spawnTimer = 90;
+    this->slots->count++;
+    index = item->slot;
+    slot = &this->slots->slots[index];
+    /* The match depends on the spawn point's flags read before the slot's are set (lh, before the stores). */
+    pointFlags = this->spawnPoints[index].flags;
+    slot->flags |= 1;
+    if (pointFlags & 4) {
+        slot->flags |= 4;
+    }
+    slot->unk1 = item->kind;
+    Item_syncSlot(item);
+}
 
 /* Takes an item off the spawner: one fewer in ITEM_SLOTS, its slot's flags cleared, and the spawn timer back
  * to 90. */
@@ -467,7 +541,17 @@ void ItemSpawner_removeItem(ItemSpawner *this, Item *object) {
     this->slots->slots[object->slot].flags = 0;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", rotNclip3);
+/* RTPT of the triangle of the three SVECTORs at v, then NCLIP: its normal clip value, whose sign tells which way
+ * the triangle faces on screen. */
+s32 rotNclip3(SVECTOR *v) {
+    s32 clip;
+
+    gte_ldv3c(v);
+    gte_rotTransPers3();
+    gte_normalClip();
+    gte_getMac0(clip);
+    return clip;
+}
 
 /* An item's listener's hit (slot 0x08): the item is touched (Item_callTouch). */
 void ItemHitListener_onHit(ItemHitListener *this, s32 arg) {
@@ -502,7 +586,26 @@ INCLUDE_ASM("game/nonmatchings/game_0i", Item_tick);
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8B0C);
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8C40);
+/* Whether the item's next step hits the map: a ray from its position to the position plus its velocity, reaching
+ * 0xB3 further ahead in x; 0 when it does not move in x or y. The match depends on the position's y and z read
+ * into locals before the velocity's (loaded first). */
+s32 Item_hitsMap(Item *this) {
+    Vec3 to;
+    s32 reach;
+    s32 y;
+    s32 z;
+
+    if (this->velocity.vx == 0 && this->velocity.vy == 0) {
+        return 0;
+    }
+    reach = this->velocity.vx >= 0 ? 0xB3 : -0xB3;
+    to.vx = reach + this->position.vx + this->velocity.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    to.vy = y + this->velocity.vy;
+    to.vz = z + this->velocity.vz;
+    return castMapRay(&to, &this->position);
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8CD0);
 
@@ -523,20 +626,20 @@ s32 getToucherKind(void *this, CollisionSphere *arg) {
     return result;
 }
 
-/* Stops the part's motion: 0x7C..0x88 cleared, then 0x7C set to +-0x133 by the sign of its x speed, which is cleared
- * with the rest. */
+/* Stops the part's motion: the velocity cleared, then its x set to +-0x133 by the sign of the knockback's x, which is
+ * cleared with the rest. */
 void func_800C8F34(Item *this) {
     s32 speed = this->part.hitKnockback.vx;
 
-    this->unk7C = 0;
-    this->unk80 = 0;
-    this->unk84 = 0;
-    this->unk88 = 0;
+    this->velocity.vx = 0;
+    this->velocity.vy = 0;
+    this->velocity.vz = 0;
+    this->velocityPad = 0;
     if (speed > 0) {
-        this->unk7C = 0x133;
+        this->velocity.vx = 0x133;
     }
     if (this->part.hitKnockback.vx < 0) {
-        this->unk7C = -0x133;
+        this->velocity.vx = -0x133;
     }
     this->part.hitKnockback.vx = 0;
     this->part.hitKnockback.vy = 0;
@@ -544,12 +647,28 @@ void func_800C8F34(Item *this) {
     this->part.hitKnockbackPad = 0;
 }
 
-/* Whether Fighter_isAttackIdle is false for the target (a chara). */
+/* Whether Fighter_isAttackIdle is false for the target (a fighter). */
 s32 func_800C8F7C(Item *this, Entity *target) {
     return Fighter_isAttackIdle((Fighter *)target) ^ 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8F9C);
+/* Knocks the item away from fighter: along the fighter's knockback when its body clip is 5 to 10 or 31 (and that
+ * knockback moves in x), else away from the fighter's top; the x velocity becomes +-0x133. */
+void Item_knockAway(Item *this, Fighter *fighter) {
+    s32 direction = 0;
+    s32 clip;
+    Vec3 top;
+
+    clip = func_80079E2C(fighter);
+    if (clip >= 5 && (clip < 11 || clip == 31)) {
+        direction = fighter->hitKnockback.vx;
+    }
+    if (direction == 0) {
+        func_8007A650(fighter, &top);
+        direction = this->position.vx - top.vx;
+    }
+    this->velocity.vx = direction > 0 ? 0x133 : -0x133;
+}
 
 /* Copies the item's position into its slot of ITEM_SLOTS, when it came from a spawner. */
 void Item_syncSlot(Item *this) {
@@ -598,78 +717,78 @@ INCLUDE_ASM("game/nonmatchings/game_0i", func_800C9288);
 /* Gives the fighter what the item's kind holds, unless the round is over: 500 score, then by kind 0 to 13 a
  * change to its side's gauge or life, or an item effect (Fighter.itemEffect, with its HUD icon), with a sound;
  * kinds 0 to 10 then show their popup. */
-void Item_giveTo(Item *this, Fighter *chara) {
-    if (Fight_isRoundOver(Fighter_getScene(chara)) != 0) {
+void Item_giveTo(Item *this, Fighter *fighter) {
+    if (Fight_isRoundOver(Fighter_getScene(fighter)) != 0) {
         return;
     }
-    Fighter_addScore(chara, 500);
+    Fighter_addScore(fighter, 500);
     switch (this->kind) {
     case 0:
-        Fighter_addGauge(chara, 0x2000);
-        throwSparkles(chara, 0, 10, 0xC8C8C8);
+        Fighter_addGauge(fighter, 0x2000);
+        throwSparkles(fighter, 0, 10, 0xC8C8C8);
         soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
         break;
     case 1:
-        Fighter_addGauge(chara, -0x2000);
-        throwSparkles(chara, 0, 15, 0xC82020);
+        Fighter_addGauge(fighter, -0x2000);
+        throwSparkles(fighter, 0, 15, 0xC82020);
         soundControlPlaySound(&SOUND_CONTROL, 0x4A, 0);
         break;
     case 2:
-        Fighter_addGauge(chara, 0x10000);
-        throwSparkles(chara, 0, 15, 0xFFFFFF);
+        Fighter_addGauge(fighter, 0x10000);
+        throwSparkles(fighter, 0, 15, 0xFFFFFF);
         soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
         break;
     case 3:
         soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
-        Fighter_evolveIfReady(chara);
+        Fighter_evolveIfReady(fighter);
         break;
     case 4:
-        Fighter_startItemEffect(chara, 1, 300, 0x200);
-        showItemEffectIcon(chara, 4);
+        Fighter_startItemEffect(fighter, 1, 300, 0x200);
+        showItemEffectIcon(fighter, 4);
         soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
         break;
     case 5:
-        Fighter_startItemEffect(chara, 2, 300, 0x80);
-        showItemEffectIcon(chara, 5);
+        Fighter_startItemEffect(fighter, 2, 300, 0x80);
+        showItemEffectIcon(fighter, 5);
         soundControlPlaySound(&SOUND_CONTROL, 0x49, 0);
         break;
     case 6:
-        Fighter_startItemEffect(chara, 3, 150, 0);
-        showItemEffectIcon(chara, 6);
+        Fighter_startItemEffect(fighter, 3, 150, 0);
+        showItemEffectIcon(fighter, 6);
         soundControlPlaySound(&SOUND_CONTROL, 0x4B, 0);
         break;
     case 7:
-        Fighter_startItemEffect(chara, 3, 240, 0);
-        showItemEffectIcon(chara, 7);
+        Fighter_startItemEffect(fighter, 3, 240, 0);
+        showItemEffectIcon(fighter, 7);
         soundControlPlaySound(&SOUND_CONTROL, 0x4B, 0);
         break;
     case 8:
-        Fighter_startItemEffect(chara, 4, 300, 0);
-        showItemEffectIcon(chara, 8);
+        Fighter_startItemEffect(fighter, 4, 300, 0);
+        showItemEffectIcon(fighter, 8);
         soundControlPlaySound(&SOUND_CONTROL, 0x4E, 0);
         break;
     case 9:
-        Fighter_startItemEffect(chara, 5, 300, 0);
-        showItemEffectIcon(chara, 9);
+        Fighter_startItemEffect(fighter, 5, 300, 0);
+        showItemEffectIcon(fighter, 9);
         soundControlPlaySound(&SOUND_CONTROL, 0x4E, 0);
         break;
     case 10:
-        Fighter_startItemEffect(chara, 6, 300, 0);
-        showItemEffectIcon(chara, 10);
+        Fighter_startItemEffect(fighter, 6, 300, 0);
+        showItemEffectIcon(fighter, 10);
         soundControlPlaySound(&SOUND_CONTROL, 0x4E, 0);
         break;
     case 11:
     case 12:
     case 13:
-        Fighter_addHp(chara, 0x2000);
-        throwSparkles(chara, 0, 10, 0x20C820);
+        Fighter_addLife(fighter, 0x2000);
+        throwSparkles(fighter, 0, 10, 0x20C820);
         soundControlPlaySound(&SOUND_CONTROL, 0x4C, 0);
         return;
     case 14:
     default:
         return;
     }
-    showItemPopup(chara, this->kind);
+    showItemPopup(fighter, this->kind);
 }
 
 /* Runs the fighter's item effect (Fighter.itemEffect): counts it down and clears it at 0; otherwise, unless the
@@ -723,7 +842,7 @@ INCLUDE_ASM("game/nonmatchings/game_0i", func_800C9938);
 
 void func_800C811C(Fighter *this);
 
-/* Runs the chara's timed thing at 0x478: counts it down and clears it at 0, or as soon as func_80079E2C is not
+/* Runs the fighter's timed thing at 0x478: counts it down and clears it at 0, or as soon as func_80079E2C is not
  * 13, 14, 16 or 17; else on even frames, while its kind is 1 to 3, calls func_800C811C. */
 void func_800C99B0(Fighter *this) {
     s32 timer = this->unk478.timer;
@@ -945,7 +1064,7 @@ INCLUDE_ASM("game/nonmatchings/game_0i", ItemPopup_draw);
  * (0x2C or 0x114, 0xAC) by the side of the fighter it keeps the handle of, while that fighter lives. */
 typedef struct ItemEffectIcon {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ u32 charaHandle;
+    /* 0x18 */ u32 fighterHandle;
     /* 0x1C */ s32 itemKind;
     /* 0x20 */ s16 x;
     /* 0x22 */ s16 y;
@@ -960,7 +1079,7 @@ ItemEffectIcon *ItemEffectIcon_init(ItemEffectIcon *this, Fighter *fighter, s32 
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &ITEM_EFFECT_ICON_VTABLE;
-    this->charaHandle = entityGetHandle(&fighter->entity);
+    this->fighterHandle = entityGetHandle(&fighter->entity);
     this->itemKind = itemKind;
     if (Fighter_getSide(fighter) == 0) {
         x = 0x2C;
@@ -988,11 +1107,11 @@ INCLUDE_ASM("game/nonmatchings/game_0i", ItemEffectIcon_tick);
 
 INCLUDE_ASM("game/nonmatchings/game_0i", ItemEffectIcon_draw);
 
-/* The entity class of virtual table D_8006DA18 (func_800CAACC): follows the point (func_8007A650) of the chara it
+/* The entity class of virtual table D_8006DA18 (func_800CAACC): follows the point (func_8007A650) of the fighter it
  * keeps the handle of for 8 frames, while 0x3C and 0x40 move in opposite directions (which by unk1C). */
 typedef struct Unk800CAACC {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ u32 charaHandle;
+    /* 0x18 */ u32 fighterHandle;
     /* 0x1C */ s32 unk1C;
     /* 0x20 */ s32 unk20;
     /* 0x24 */ s32 unk24;
@@ -1004,17 +1123,17 @@ typedef struct Unk800CAACC {
     /* 0x44 */ s32 frame;
 } Unk800CAACC;
 
-/* Constructs an entity of D_8006DA18 for chara at its point, 0x3C and 0x40 starting at 0 and
+/* Constructs an entity of D_8006DA18 for fighter at its point, 0x3C and 0x40 starting at 0 and
  * 0x80 when arg2 is 0, else at 0x140 and 0. */
-Unk800CAACC *func_800CAACC(Unk800CAACC *this, Fighter *chara, s32 arg2, s32 arg3, s32 arg4, s32 arg5) {
+Unk800CAACC *func_800CAACC(Unk800CAACC *this, Fighter *fighter, s32 arg2, s32 arg3, s32 arg4, s32 arg5) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006DA18;
-    this->charaHandle = entityGetHandle(&chara->entity);
+    this->fighterHandle = entityGetHandle(&fighter->entity);
     this->unk1C = arg2;
     this->unk20 = arg3;
     this->unk24 = arg4;
     this->unk28 = arg5;
-    func_8007A650(chara, &this->position);
+    func_8007A650(fighter, &this->position);
     this->frame = 0;
     if (this->unk1C == 0) {
         this->unk3C = 0;
@@ -1035,12 +1154,12 @@ void func_800CAB94(Entity *this, s32 flags) {
     }
 }
 
-/* The update of Unk800CAACC: deletes it once its chara is gone or after 8 frames, else moves 0x3C by 0x28 and 0x40
- * by 0x10 (in opposite directions, by unk1C) and takes the chara's point again. */
+/* The tick of Unk800CAACC: deletes it once its fighter is gone or after 8 frames, else moves 0x3C by 0x28 and 0x40
+ * by 0x10 (in opposite directions, by unk1C) and takes the fighter's point again. */
 void func_800CABE8(Unk800CAACC *this) {
-    Fighter *chara = (Fighter *)getEntityByHandle(this->charaHandle);
+    Fighter *fighter = (Fighter *)getEntityByHandle(this->fighterHandle);
 
-    if (chara == NULL || this->frame >= 8) {
+    if (fighter == NULL || this->frame >= 8) {
         entityDelete(&this->entity);
     } else {
         if (this->unk1C == 0) {
@@ -1050,7 +1169,7 @@ void func_800CABE8(Unk800CAACC *this) {
             this->unk3C -= 0x28;
             this->unk40 += 0x10;
         }
-        func_8007A650(chara, &this->position);
+        func_8007A650(fighter, &this->position);
         this->frame++;
     }
 }
@@ -1065,44 +1184,45 @@ Unk800C3CFC *func_800CAEF0(Unk800C3CFC *this, Vec3 *pos, s32 arg2, s32 arg3) {
     return this;
 }
 
-/* The class of virtual tables ITEM_SHOT_VTABLE (and ITEM_SHOT_HIT_VTABLE for the base at 0x18), derived from
- * Projectile: its index picks the word passed to Projectile_init (ITEM_SHOT_ATTACKS) and the frame of the pieces
- * ItemShot_throwPiece throws. */
-typedef struct ItemShot {
+/* The class of virtual tables ITEM_PROJECTILE_VTABLE (and ITEM_PROJECTILE_HIT_VTABLE for the base at 0x18), derived
+ * from Projectile: its index picks the word passed to Projectile_init (ITEM_PROJECTILE_ATTACKS) and the frame of the
+ * pieces ItemProjectile_throwPiece throws. */
+typedef struct ItemProjectile {
     /* 0x00 */ Projectile base;
     /* 0xC0 */ s32 index;
     /* 0xC4 */ s32 angle;
     /* 0xC8 */ s32 pieceFrame; /* the frame of the pieces it throws, 0 to 3 */
-} ItemShot;
+} ItemProjectile;
 
-extern u32 ITEM_SHOT_ATTACKS[];
-extern VtableEntry ITEM_SHOT_HIT_VTABLE[];
-extern EntityVtable ITEM_SHOT_VTABLE;
+extern u32 ITEM_PROJECTILE_ATTACKS[];
+extern VtableEntry ITEM_PROJECTILE_HIT_VTABLE[];
+extern EntityVtable ITEM_PROJECTILE_VTABLE;
 
-/* Constructs Projectile_init's entity with 0xC0, entry index of ITEM_SHOT_ATTACKS, 0xA00 and 2, then the virtual tables
- * ITEM_SHOT_VTABLE (and ITEM_SHOT_HIT_VTABLE for the base at 0x18). */
-ItemShot *ItemShot_init(ItemShot *this, Fighter *chara, Vec3 *position, Vec3 *velocity, s32 index,
-                           s32 angle) {
-    Projectile_init(&this->base, chara, position, velocity, 0xC0, ITEM_SHOT_ATTACKS[index], 0xA00, 2);
-    this->base.parts.base.vtable = ITEM_SHOT_HIT_VTABLE;
-    this->base.parts.entity.vtable = &ITEM_SHOT_VTABLE;
+/* Constructs Projectile_init's entity with 0xC0, entry index of ITEM_PROJECTILE_ATTACKS, 0xA00 and 2, then the
+ * virtual tables ITEM_PROJECTILE_VTABLE (and ITEM_PROJECTILE_HIT_VTABLE for the base at 0x18). */
+ItemProjectile *ItemProjectile_init(ItemProjectile *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, s32 index,
+                                    s32 angle) {
+    Projectile_init(&this->base, fighter, position, velocity, 0xC0, ITEM_PROJECTILE_ATTACKS[index], 0xA00, 2);
+    this->base.parts.base.vtable = ITEM_PROJECTILE_HIT_VTABLE;
+    this->base.parts.entity.vtable = &ITEM_PROJECTILE_VTABLE;
     this->index = index;
     this->angle = angle & 0xFFF;
     this->pieceFrame = 0;
     return this;
 }
-void ItemShot_throwPiece(ItemShot *this);
+void ItemProjectile_throwPiece(ItemProjectile *this);
 
-/* The update of ItemShot: throws a piece (ItemShot_throwPiece), steps 0xC8 through 0 to 3, then the base's update. */
-void ItemShot_tick(ItemShot *this, s32 arg) {
-    ItemShot_throwPiece(this);
+/* The tick of ItemProjectile: throws a piece (ItemProjectile_throwPiece), steps 0xC8 through 0 to 3, then the
+ * base's tick. */
+void ItemProjectile_tick(ItemProjectile *this, s32 arg) {
+    ItemProjectile_throwPiece(this);
     this->pieceFrame = (this->pieceFrame + 1) & 3;
     Projectile_tick(&this->base, arg);
 }
 
 /* Projectile_hit for a derived class of Projectile: only when getHitFighter finds an entity in sum, which also
  * gets Fighter_addScore with 50 on its character (Fighter_getOpponent). */
-void ItemShot_hit(Projectile *this, CollisionSphere *sum) {
+void ItemProjectile_hit(Projectile *this, CollisionSphere *sum) {
     Entity *target;
 
     Hit_apply(&this->parts.base, sum);
@@ -1115,52 +1235,53 @@ void ItemShot_hit(Projectile *this, CollisionSphere *sum) {
     entityDelete(&this->parts.entity);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", ItemShot_draw);
+INCLUDE_ASM("game/nonmatchings/game_0i", ItemProjectile_draw);
 
 struct Unk800CB338 *func_800CB338(struct Unk800CB338 *this, VECTOR *position, VECTOR *velocity, s32 index,
                                   s32 angle);
 
 /* Throws a piece (func_800CB338, 0x60 bytes) from the position, a quarter of the velocity backwards in x and y with
  * up to 8 either way at random, as a sibling. */
-void ItemShot_throwPiece(ItemShot *this) {
+void ItemProjectile_throwPiece(ItemProjectile *this) {
     VECTOR velocity;
     Entity *child;
     s32 vx;
 
-    /* The match depends on vel.vx read into a local before the other words are copied (the game loads it first). */
-    vx = this->base.vel.vx;
-    velocity.vz = this->base.vel.vz;
-    velocity.pad = this->base.velPad;
+    /* The match depends on velocity.vx read into a local before the other words are copied (the game loads it
+     * first). */
+    vx = this->base.velocity.vx;
+    velocity.vz = this->base.velocity.vz;
+    velocity.pad = this->base.velocityPad;
     velocity.vx = -vx >> 2;
-    velocity.vy = -this->base.vel.vy >> 2;
+    velocity.vy = -this->base.velocity.vy >> 2;
     velocity.vx += (mersenneTwisterGenerate(&RANDOM) & 0xF) - 8;
     velocity.vy += (mersenneTwisterGenerate(&RANDOM) & 0xF) - 8;
     child = allocEntityMemory(0x60);
     if (child != NULL) {
-        func_800CB338(entityOperatorNewAt(0x60, child), (VECTOR *)&this->base.pos, &velocity, this->index,
+        func_800CB338(entityOperatorNewAt(0x60, child), (VECTOR *)&this->base.position, &velocity, this->index,
                       this->angle);
     }
     entityAddSibling(&this->base.parts.entity, child);
 }
 
 /* The entity class of virtual table D_8006D980 (func_800CB338): a sprite of Particle with a frame of
- * ITEM_SHOT_PIECE_ANIMS and an angle. */
+ * ITEM_PROJECTILE_PIECE_ANIMS and an angle. */
 typedef struct Unk800CB338 {
     /* 0x00 */ Particle base;
     /* 0x58 */ s32 index;
     /* 0x5C */ s32 angle;
 } Unk800CB338;
 
-extern u16 ITEM_SHOT_PIECE_ANIMS[][10];
+extern u16 ITEM_PROJECTILE_PIECE_ANIMS[][10];
 extern EntityVtable D_8006D980;
 
-INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_SHOT_PIECE_ANIMS);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_PROJECTILE_PIECE_ANIMS);
 
-/* Constructs an entity of D_8006D980: Particle_init with frame index of ITEM_SHOT_PIECE_ANIMS, size 0x80 and color
- * 0x404040. */
+/* Constructs an entity of D_8006D980: Particle_init with frame index of ITEM_PROJECTILE_PIECE_ANIMS, size 0x80 and
+ * color 0x404040. */
 Unk800CB338 *func_800CB338(Unk800CB338 *this, VECTOR *position, VECTOR *velocity, s32 index, s32 angle) {
     /* The match depends on the table's address taken into a local first (the game computes it before index * 20). */
-    u16 (*frames)[10] = ITEM_SHOT_PIECE_ANIMS;
+    u16 (*frames)[10] = ITEM_PROJECTILE_PIECE_ANIMS;
 
     Particle_init(&this->base, frames[index], position, velocity, 0x80, 0x404040, 0);
     this->base.entity.vtable = &D_8006D980;
@@ -1228,7 +1349,7 @@ void func_800CB674(Entity *this, s32 flags) {
 
 /* A copy of the destructor of the UnkPartsEntity38 class of vtables PROJECTILE_VTABLE and PROJECTILE_HIT_VTABLE,
  * which Projectile_init installs: game has 11 identical ones. */
-void ItemShot_destroy(UnkPartsEntity38 *this, s32 flags) {
+void ItemProjectile_destroy(UnkPartsEntity38 *this, s32 flags) {
     ListNode *node;
 
     this->base.vtable = PROJECTILE_HIT_VTABLE;
@@ -1258,8 +1379,8 @@ void func_800CB75C(Entity *this, s32 flags) {
 }
 
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D980);
-INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_SHOT_HIT_VTABLE);
-INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_SHOT_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_PROJECTILE_HIT_VTABLE);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_PROJECTILE_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006D9F0);
 INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DA18);
 INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_EFFECT_ICON_VTABLE);
@@ -1271,4 +1392,4 @@ INCLUDE_RODATA("game/nonmatchings/game_0i", D_8006DB20);
 INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_HIT_LISTENER_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_SPAWNER_VTABLE);
-INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_SHOT_ATTACKS);
+INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_PROJECTILE_ATTACKS);

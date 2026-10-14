@@ -31,3 +31,4 @@ D_800D3AA4 ST06_SPINNER_VTABLE
 func_800D4EC0 St06Spinner_init
 func_800D4F9C St06Spinner_tick
 func_800D59F4 St06Spinner_destroy
+func_800D43A4 st06_applyLevel

@@ -9,8 +9,8 @@ extern FaceEntry WORMMON_FACES[];
 extern VtableEntry WORMMON_SPECIAL1_HITBOX_HIT_VTABLE[];
 extern EntityVtable WORMMON_SPECIAL1_HITBOX_VTABLE;
 extern EntityVtable WORMMON_VTABLE;
-Entity *WormmonSpecial1Hitbox_init(Entity *this, Fighter *chara, Vec3 *position, Vec3 *velocity, Fight *fight);
-Entity *WormmonGuardEffect_init(void *this, Fighter *chara, s32 arg);
+Entity *WormmonSpecial1Hitbox_init(Entity *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *fight);
+Entity *WormmonGuardEffect_init(void *this, Fighter *fighter, s32 arg);
 
 /* Builds Wormmon: a Fighter with its own vtable and faces, no guard effect out. */
 Wormmon *Wormmon_init(Wormmon *this) {
@@ -310,11 +310,11 @@ typedef struct Unk800BA734 {
 } Unk800BA734;
 extern EntityVtable D_8006C6F4;
 
-/* Constructs an Unk800BA734 for chara and owner: func_800C4F74's entity, with 0x488 cut to 5/6. */
-Unk800BA734 *func_800BA734(Unk800BA734 *this, Fighter *chara, BattleSide *owner) {
+/* Constructs an Unk800BA734 for fighter and owner: func_800C4F74's entity, with 0x488 cut to 5/6. */
+Unk800BA734 *func_800BA734(Unk800BA734 *this, Fighter *fighter, BattleSide *owner) {
     func_800C4F74(&this->base, owner);
     this->base.entity.vtable = &D_8006C6F4;
-    this->vramY = Fighter_getVramY(chara);
+    this->vramY = Fighter_getVramY(fighter);
     this->base.unk488 = this->base.unk488 * 5 / 6;
     return this;
 }
@@ -326,7 +326,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/wormmon", func_800BA8AC);
 /* The guard's effect, one at a time for a Wormmon (guardEffectActive). */
 typedef struct WormmonGuardEffect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Wormmon *chara;
+    /* 0x18 */ Wormmon *fighter;
     /* 0x1C */ u32 handle; /* the character's (entityGetHandle) */
     /* 0x20 */ s16 unk20;
     /* 0x22 */ s16 facing; /* Fighter_getFacing */
@@ -342,7 +342,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonGuardEffect_init);
 /* The guard effect's destructor: clears the character's guardEffectActive, so that it can make another. */
 void WormmonGuardEffect_destroy(WormmonGuardEffect *this, s32 flags) {
     this->entity.vtable = &WORMMON_GUARD_EFFECT_VTABLE;
-    this->chara->guardEffectActive = 0;
+    this->fighter->guardEffectActive = 0;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);

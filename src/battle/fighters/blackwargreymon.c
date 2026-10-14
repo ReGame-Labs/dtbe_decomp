@@ -16,6 +16,7 @@ typedef struct BlackWarGreymon {
 
 Unk800BDA50 *func_800C2264(Unk800BDA50 *this, Fighter *owner, Vec3 *pos, s32 arg3, s32 arg4);
 extern CVECTOR D_8006CFA8;
+extern VECTOR D_8006CF98;
 void func_800C1CE0(BlackWarGreymon *this);
 
 /* Builds BlackWarGreymon: a WarGreymon with its own vtable, 0x4C4 0. */
@@ -71,7 +72,28 @@ void func_800C1CE0(BlackWarGreymon *this) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/blackwargreymon", D_8006CF98);
 
-INCLUDE_ASM("game/nonmatchings/fighters/blackwargreymon", func_800C1DBC);
+/* Whether point 10 moved by D_8006CF98 is nearer the opponent's top (func_8007A6CC) than its height plus 512. */
+s32 func_800C1DBC(Fighter *this) {
+    s32 reach;
+    VECTOR node;
+    VECTOR way;
+    s32 x, y, z;
+
+    reach = Fighter_getParams(Fighter_getOpponent(this))->height + 512;
+    Fighter_getNodePosition(this, &node, 10, &D_8006CF98);
+    func_8007A6CC(this, (Vec3 *)&way);
+    /* The match depends on the vecSubInPlace shape: read way whole, subtract, then store. */
+    x = way.vx;
+    y = way.vy;
+    z = way.vz;
+    x -= node.vx;
+    y -= node.vy;
+    z -= node.vz;
+    way.vx = x;
+    way.vy = y;
+    way.vz = z;
+    return vecGetLength(&way) < reach;
+}
 
 /* Creates an entity of the class of vtable D_8006D01C (0x120 bytes) with g++'s new, and hands it
  * to Fighter_addEntity. Its constructor func_800C27E4 is inlined. */

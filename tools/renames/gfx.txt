@@ -369,3 +369,6 @@ func_80076A5C moveCollisionLinkToBack
 
 # the RECT {0, 0, 256, 256} buildPolyFT4Windowed sets in its first DR_TWIN: the whole texture page
 D_8006434C DEFAULT_TEX_WINDOW
+
+# the four corners of a centered square of side 2 (4.12), the corners spriteAnimBuildShape draws
+D_80010894 SQUARE_CORNERS

@@ -4,9 +4,9 @@
 #include "common.h"
 #include "battle/game_classes.h"
 
-struct VMonSpecial2Effect *VMonSpecial2Effect_init(struct VMonSpecial2Effect *this, Fighter *chara, Vec3 *position,
+struct VMonSpecial2Effect *VMonSpecial2Effect_init(struct VMonSpecial2Effect *this, Fighter *fighter, Vec3 *position,
                                                    Fight *fight);
-struct VMonSpecial1Effect *VMonSpecial1Effect_init(struct VMonSpecial1Effect *this, Fighter *chara, VECTOR *pos,
+struct VMonSpecial1Effect *VMonSpecial1Effect_init(struct VMonSpecial1Effect *this, Fighter *fighter, VECTOR *pos,
                                                    Fight *fight);
 extern FaceEntry V_MON_FACES[];
 extern EntityVtable V_MON_SPECIAL2_EFFECT_VTABLE;
@@ -110,7 +110,7 @@ void VMon_spawnSpecial2Effect(Fighter *this) {
  * vector. */
 typedef struct VMonSpecial1Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Fight *fight;
     /* 0x20 */ s16 unk20; /* the pad of the position (VMon_spawnSpecial1Effect's arg) */
     /* 0x22 */ s16 vramY; /* Fighter_getVramY of the character */
@@ -120,15 +120,15 @@ typedef struct VMonSpecial1Effect {
     /* 0x48 */ VECTOR position; /* the character's point 2 (Fighter_getNodePosition) */
 } VMonSpecial1Effect;
 
-/* Builds the special move 1's effect for chara: a square from (-0x80, -0x80) to (0x80, 0x80) at z -0x80. */
-VMonSpecial1Effect *VMonSpecial1Effect_init(VMonSpecial1Effect *this, Fighter *chara, VECTOR *pos, Fight *fight) {
+/* Builds the special move 1's effect for fighter: a square from (-0x80, -0x80) to (0x80, 0x80) at z -0x80. */
+VMonSpecial1Effect *VMonSpecial1Effect_init(VMonSpecial1Effect *this, Fighter *fighter, VECTOR *pos, Fight *fight) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &V_MON_SPECIAL1_EFFECT_VTABLE;
-    this->chara = chara;
+    this->fighter = fighter;
     this->fight = fight;
     this->frames = 0;
-    this->vramY = Fighter_getVramY(this->chara);
-    this->unk24 = -Fighter_getFacing(this->chara);
+    this->vramY = Fighter_getVramY(this->fighter);
+    this->unk24 = -Fighter_getFacing(this->fighter);
     this->unk20 = pos->pad;
     /* The match depends on these chained assignments, as in st07's BonusThrower_init. */
     this->corners[0].vx = this->corners[2].vx = -0x80;
@@ -150,10 +150,10 @@ void VMonSpecial1Effect_destroy(Entity *this, s32 flags) {
 
 extern VECTOR D_800D349C;
 
-/* The update of VMonSpecial1Effect_init's entity: puts it at the character's point 2 moved by D_800D349C, and deletes
+/* The tick of VMonSpecial1Effect_init's entity: puts it at the character's point 2 moved by D_800D349C, and deletes
  * it after 11 frames. The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads 0x26. */
 void VMonSpecial1Effect_tick(VMonSpecial1Effect *this) {
-    Fighter_getNodePosition(this->chara, &this->position, 2, &D_800D349C);
+    Fighter_getNodePosition(this->fighter, &this->position, 2, &D_800D349C);
     if (this->frames > 10) {
         entityDelete(&this->entity);
     } else {
@@ -166,7 +166,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMonSpecial1Effect_draw);
 /* The special move 2's effect: a flat square of side 0x140 facing the character's way, at a position. */
 typedef struct VMonSpecial2Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Fighter *chara;
+    /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Fight *fight;
     /* 0x20 */ s16 vramY; /* Fighter_getVramY of the character */
     /* 0x22 */ s16 unk22; /* minus the character's facing */
@@ -179,18 +179,18 @@ typedef struct VMonSpecial2Effect {
     /* 0x50 */ Vec3 position;
 } VMonSpecial2Effect;
 
-/* Builds the special move 2's effect for chara: a square from (-0xA0, -0xA0) to (0xA0, 0xA0) at z 0, at position raised
- * by 0x80. */
-VMonSpecial2Effect *VMonSpecial2Effect_init(VMonSpecial2Effect *this, Fighter *chara, Vec3 *position, Fight *fight) {
+/* Builds the special move 2's effect for fighter: a square from (-0xA0, -0xA0) to (0xA0, 0xA0) at z 0, at position
+ * raised by 0x80. */
+VMonSpecial2Effect *VMonSpecial2Effect_init(VMonSpecial2Effect *this, Fighter *fighter, Vec3 *position, Fight *fight) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
     this->entity.vtable = &V_MON_SPECIAL2_EFFECT_VTABLE;
-    this->chara = chara;
+    this->fighter = fighter;
     this->fight = fight;
     this->frames = 0;
-    this->vramY = Fighter_getVramY(this->chara);
-    this->unk22 = -Fighter_getFacing(this->chara);
+    this->vramY = Fighter_getVramY(this->fighter);
+    this->unk22 = -Fighter_getFacing(this->fighter);
     x = position->vx;
     y = position->vy - 0x80;
     z = position->vz;
@@ -219,12 +219,12 @@ void VMonSpecial2Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-/* The update of VMonSpecial2Effect_init's entity: follows the character (Fighter_getPosition) 0x80 higher, fades in to
+/* The tick of VMonSpecial2Effect_init's entity: follows the character (Fighter_getPosition) 0x80 higher, fades in to
  * 0x80, holds 22 frames, fades out and deletes itself; it also goes when the character's state ends. */
 void VMonSpecial2Effect_tick(VMonSpecial2Effect *this) {
     s32 state;
 
-    Fighter_getPosition(this->chara, &this->position);
+    Fighter_getPosition(this->fighter, &this->position);
     this->position.vy -= 0x80;
     switch (this->phase) {
     case 0:
@@ -249,8 +249,8 @@ void VMonSpecial2Effect_tick(VMonSpecial2Effect *this) {
         entityDelete(&this->entity);
         return;
     }
-    state = Fighter_getBodyState(this->chara)->state;
-    if (Fighter_isAttackIdle(this->chara) || state == 0x13) {
+    state = Fighter_getBodyState(this->fighter)->state;
+    if (Fighter_isAttackIdle(this->fighter) || state == 0x13) {
         entityDelete(&this->entity);
         return;
     }
