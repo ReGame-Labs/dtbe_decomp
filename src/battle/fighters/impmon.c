@@ -4,6 +4,9 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "gte.h"
 
 struct ImpmonIntroEffect *ImpmonIntroEffect_init(struct ImpmonIntroEffect *this, Fighter *fighter, Fight *fight);
 struct ImpmonSpecial1Projectile *ImpmonSpecial1Projectile_init(struct ImpmonSpecial1Projectile *this, Fighter *fighter,
@@ -303,7 +306,33 @@ void ImpmonThrowParticle_tick(Particle *this, s32 arg) {
     Particle_tick(this, arg);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/impmon", ImpmonThrowParticle_draw);
+/* The throw's particle draw: the sprite in the camera as a rectangle of half width size / 2 and half height size
+ * around its position, turned to the side it flies to, one OT slot further, with buildPolyFT4.
+ * The match depends on taking the camera as the s32 the vtable passes and casting it in a local: the param's
+ * REG_EQUIV would double its live length, and global-alloc would give ot $s1 before the camera. */
+void ImpmonThrowParticle_draw(Particle *this, s32 arg) {
+    Camera *camera = (Camera *)arg;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 size;
+    s32 side;
+    s32 halfWidth;
+
+    gte_loadRotTrans(SCRATCH_VIEW_MATRIX);
+    ot = camera->ot.slots;
+    side = this->velocity.vx > 0 ? 1 : -1;
+    shape.flags = 0;
+    size = this->sprite.size;
+    halfWidth = (size >> 1) * side;
+    corners[0].vx = corners[2].vx = this->sprite.position.vx - halfWidth;
+    corners[1].vx = corners[3].vx = this->sprite.position.vx + halfWidth;
+    corners[0].vy = corners[1].vy = this->sprite.position.vy - size;
+    corners[2].vy = corners[3].vy = this->sprite.position.vy + size;
+    corners[0].vz = corners[2].vz = corners[1].vz = corners[3].vz = this->sprite.position.vz;
+    Particle_buildShape(this, &shape, corners);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift + 1);
+}
 
 /* The special move 1's projectile (0xD4 bytes, a Projectile): every other frame it sheds func_800938A4's
  * particles. */

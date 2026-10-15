@@ -54,10 +54,10 @@ typedef struct TitleChara {
     /* 0x28 */ s16 action;     /* the action playing (TitleChara_getAction) */
     /* 0x2A */ u8 unk2A[0x2C - 0x2A];
     /* 0x2C */ s32 unk2C;
-    /* 0x30 */ s16 eyes;       /* the eye picture (TITLE_CHARA_EYES) */
-    /* 0x32 */ s16 blinkState; /* 0 while blinking, 1 while waiting for the next blink */
-    /* 0x34 */ s16 blinkWait;  /* frames until the next blink, random */
-    /* 0x36 */ s16 blinkTimer;
+    /* 0x30 */ u16 eyes;       /* the eye picture (TITLE_CHARA_EYES) */
+    /* 0x32 */ u16 blinkState; /* 0 while blinking, 1 while waiting for the next blink */
+    /* 0x34 */ u16 blinkWait;  /* frames until the next blink, random */
+    /* 0x36 */ u16 blinkTimer;
     /* 0x38 */ s32 interruptible; /* set: a new action cuts the one playing and its voice */
     /* 0x3C */ s32 voice;      /* the handle of the voice line playing (TitleChara_setVoice) */
 } TitleChara; /* size 0x40 */

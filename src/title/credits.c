@@ -98,7 +98,39 @@ void CreditsTask_destroy(CreditsTask *this, s32 flags) {
 INCLUDE_ASM("title/nonmatchings/credits", CreditsTask_tick);
 
 #if VERSION_JP
-INCLUDE_ASM("title/nonmatchings/credits", func_80076B0C);
+/* Draws a 408 x 88 picture of texture page 0x9A, only in the Japanese release, as two 204 x 88 halves stacked
+ * in the texture (v 0 and 88) side by side from x - 204, y, as bright as brightness; nothing at brightness 0. */
+void func_80076B0C(u_long *ot, s32 x, s32 y, s32 brightness) {
+    if (brightness != 0) {
+        DR_TPAGE *tpage = allocDrTpage(0x9A);
+        SPRT *sprt = allocSprt();
+
+        sprt->x0 = x - 204;
+        sprt->r0 = brightness;
+        sprt->g0 = brightness;
+        sprt->b0 = brightness;
+        sprt->y0 = y;
+        sprt->u0 = 0;
+        sprt->v0 = 0;
+        sprt->w = 204;
+        sprt->h = 88;
+        sprt->clut = 0x3E20;
+        AddPrim(ot, sprt);
+        sprt = allocSprt();
+        sprt->r0 = brightness;
+        sprt->g0 = brightness;
+        sprt->b0 = brightness;
+        sprt->x0 = x;
+        sprt->y0 = y;
+        sprt->u0 = 0;
+        sprt->v0 = 88;
+        sprt->w = 204;
+        sprt->h = 88;
+        sprt->clut = 0x3DE0;
+        AddPrim(ot, sprt);
+        AddPrim(ot, tpage);
+    }
+}
 #endif
 
 /* Draws the credits' end picture (256 x 120 from texture page 13) at x - 128, y, as bright as brightness;

@@ -18,6 +18,8 @@ typedef struct AgumonSpecial1Projectile {
 
 extern EntityVtable AGUMON_SPECIAL1_PROJECTILE_VTABLE;
 extern VtableEntry AGUMON_SPECIAL1_PROJECTILE_HIT_VTABLE[];
+AgumonSpecial1Projectile *AgumonSpecial1Projectile_init(AgumonSpecial1Projectile *this, Fighter *fighter,
+                                                        Vec3 *position, Vec3 *velocity);
 void Agumon_spawnSpecial1Projectile(Fighter *this);
 void Agumon_startSpecial2Hit(Fighter *this, s32 hit);
 void Agumon_spawnSpecial2Effect(Fighter *this);
@@ -117,7 +119,36 @@ void Agumon_airSpecial1(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/agumon", Agumon_spawnSpecial1Projectile);
+/* Spawns the special move 1's projectile 64 in front of the fighter and 0xA0 up, 96 a frame forward, calls
+ * func_80079B0C(15), and puts its burst 64 further ahead. */
+void Agumon_spawnSpecial1Projectile(Fighter *this) {
+    s32 facing = Fighter_getFacing(this);
+    Vec3 position;
+    Vec3 velocity;
+    /* The match depends on a variable of its own for each spawn */
+    Entity *projectile;
+    Entity *burst;
+
+    Fighter_getPosition(this, &position);
+    velocity.vx = facing * 96;
+    velocity.vy = 0;
+    velocity.vz = 0;
+    position.vx += facing * 64;
+    position.vy -= 0xA0;
+    projectile = allocEntityMemory(sizeof(AgumonSpecial1Projectile));
+    if (projectile != NULL) {
+        AgumonSpecial1Projectile_init(entityOperatorNewAt(sizeof(AgumonSpecial1Projectile), projectile), this,
+                                      &position, &velocity);
+    }
+    Fighter_addEntity(this, projectile);
+    func_80079B0C(this, 15);
+    position.vx += facing * 64;
+    burst = allocEntityMemory(0x38);
+    if (burst != NULL) {
+        AgumonSpecial1Effect_init(entityOperatorNewAt(0x38, burst), &position, 0x40, 0x80, Fighter_getVramY(this));
+    }
+    Fighter_addEntity(this, burst);
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/agumon", D_8006818C);
 INCLUDE_RODATA("game/nonmatchings/fighters/agumon", D_80068194);

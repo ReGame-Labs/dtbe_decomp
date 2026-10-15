@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/math/divide.h"
 #include "engine/math/sin_cos.h"
 #include "engine/system/memory.h"
 
@@ -398,7 +399,26 @@ void initTerrainLine(TerrainLine *this, DVECTOR *from, DVECTOR *to) {
     this->offset = -(normalX * this->x0 + normalY * this->y0);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0c", func_80076BB4);
+/* Fills out with the hit line's normal scaled by run * endDistance / ((endDistance - startDistance) / 2), run
+ * being the x extent of the segment in the link's space (no caller in the game). The match depends on x and y
+ * each computed in place, product, quotient, then scaled: written as one expression per component, cse shares
+ * the product and the quotient between them. */
+void func_80076BB4(TerrainProbe *this, VECTOR *out) {
+    s32 run = this->localEnd.vx - this->localStart.vx;
+    s32 half = (this->endDistance - this->startDistance) / 2;
+    s32 x;
+    s32 y;
+
+    x = run * this->endDistance;
+    x /= half;
+    y = run * this->endDistance;
+    y /= half;
+    x = mul12(x, this->line.normalX);
+    y = mul12(y, this->line.normalY);
+    out->vx = x;
+    out->vy = y;
+    out->vz = 0;
+}
 
 /* Turns the angle from toward target by at most step (12-bit angles, the short way round). */
 s32 turnAngleToward(s32 target, s32 from, s32 step) {

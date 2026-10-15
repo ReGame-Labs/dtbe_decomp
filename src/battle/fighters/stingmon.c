@@ -4,8 +4,12 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/math/matrix.h"
 
-void Stingmon_spawnSpecial1Projectile(Fighter *this, s32 arg);
+void Stingmon_spawnSpecial1Projectile(Fighter *this, s32 air);
 extern VtableEntry STINGMON_ATTACK3_HITBOX_HIT_VTABLE[];
 extern EntityVtable STINGMON_ATTACK3_HITBOX_VTABLE;
 extern EntityVtable STINGMON_SPECIAL3_EFFECT_VTABLE;
@@ -109,7 +113,7 @@ void Stingmon_special1(Fighter *this, s32 frame) {
     }
 }
 
-void Stingmon_spawnSpecial2Hitbox(Fighter *this, s32 arg);
+void Stingmon_spawnSpecial2Hitbox(Fighter *this, s32 air);
 void Stingmon_spawnSpecial2Effect(Fighter *this, s32 arg);
 struct Unk800B25CC *func_800B25CC(struct Unk800B25CC *this, Fighter *fighter, Vec3 *position);
 
@@ -242,11 +246,61 @@ void func_800B14D0(Unk8008E9B4 *this, s32 arg) {
     Fighter_getNodePosition(this->unk54, &this->base.unk28, 3, &origin);
 }
 
-INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006B92C);
+extern VECTOR STINGMON_SPECIAL1_PROJECTILE_OFFSET;
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_spawnSpecial1Projectile);
+INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", STINGMON_SPECIAL1_PROJECTILE_OFFSET);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_spawnSpecial2Hitbox);
+struct StingmonSpecial1Projectile *StingmonSpecial1Projectile_init(struct StingmonSpecial1Projectile *this,
+                                                                   Fighter *fighter, Vec3 *position, Vec3 *velocity);
+
+/* Spawns the special move 1's projectile at the fighter's point 20 (moved by STINGMON_SPECIAL1_PROJECTILE_OFFSET):
+ * forward at 112 per frame, or in the air (1 from airSpecial1) forward and down at 90. */
+void Stingmon_spawnSpecial1Projectile(Fighter *this, s32 air) {
+    VECTOR offset = STINGMON_SPECIAL1_PROJECTILE_OFFSET;
+    VECTOR position;
+    Vec3 velocity;
+    Entity *child;
+
+    Fighter_getNodePosition(this, &position, 20, &offset);
+    if (air == 0) {
+        velocity.vx = Fighter_getFacing(this) * 112;
+        velocity.vy = 0;
+    } else {
+        velocity.vx = Fighter_getFacing(this) * 90;
+        velocity.vy = 90;
+    }
+    velocity.vz = 0;
+    child = allocEntityMemory(0xE0);
+    if (child != NULL) {
+        StingmonSpecial1Projectile_init(entityOperatorNewAt(0xE0, child), this, (Vec3 *)&position, &velocity);
+    }
+    Fighter_addEntity(this, child);
+}
+
+struct StingmonSpecial2Hitbox *StingmonSpecial2Hitbox_init(struct StingmonSpecial2Hitbox *this, Fighter *fighter,
+                                                           Vec3 *position, VECTOR *velocity, Fight *list);
+
+/* Spawns the special move 2's hitbox at the fighter's position, flying forward at 0x4718 times the mass (16.16). Its
+ * velocity's z carries air (1 from airSpecial2), which StingmonSpecial2Hitbox_init reads. */
+void Stingmon_spawnSpecial2Hitbox(Fighter *this, s32 air) {
+    Vec3 position;
+    VECTOR velocity;
+    Fight *list;
+    s64 speed;
+    Entity *child;
+
+    list = Fighter_getScene(this);
+    Fighter_getPosition(this, &position);
+    speed = ((s64)this->mass * 0x4718) >> 16;
+    velocity.vx = (s32)speed * Fighter_getFacing(this);
+    velocity.vy = 0;
+    velocity.vz = air;
+    child = allocEntityMemory(0xC0);
+    if (child != NULL) {
+        StingmonSpecial2Hitbox_init(entityOperatorNewAt(0xC0, child), this, &position, &velocity, list);
+    }
+    Fighter_addEntity(this, child);
+}
 
 struct StingmonSpecial2Effect *StingmonSpecial2Effect_init(struct StingmonSpecial2Effect *this, Fighter *fighter,
                                                            Vec3 *position, s32 arg3);
@@ -299,7 +353,30 @@ void Stingmon_spawnSpecial3Effect(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_spawnAttack3Hitbox);
+UnkPartsEntity38 *StingmonAttack3Hitbox_init(UnkPartsEntity38 *this, Fighter *fighter, Vec3 *position, VECTOR *velocity,
+                                             Fight *list);
+
+/* Spawns the attack 3's hitbox at the fighter's position, flying forward at 0x38E0 and up at 0x1C70 times the mass
+ * (16.16). */
+void Stingmon_spawnAttack3Hitbox(Stingmon *this) {
+    Vec3 position;
+    VECTOR velocity;
+    Fight *list;
+    s64 speed;
+    Entity *child;
+
+    list = Fighter_getScene(&this->base);
+    Fighter_getPosition(&this->base, &position);
+    speed = ((s64)this->base.mass * 0x38E0) >> 16;
+    velocity.vx = (s32)speed * Fighter_getFacing(&this->base);
+    velocity.vy = -(s32)(((s64)this->base.mass * 0x1C70) >> 16);
+    velocity.vz = 0;
+    child = allocEntityMemory(0xBC);
+    if (child != NULL) {
+        StingmonAttack3Hitbox_init(entityOperatorNewAt(0xBC, child), &this->base, &position, &velocity, list);
+    }
+    Fighter_addEntity(&this->base, child);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial2Hitbox_init);
 
@@ -621,10 +698,10 @@ void StingmonSpecial1Projectile_tick(StingmonSpecial1Projectile *this, s32 arg) 
     Projectile_tick(&this->base, arg);
 }
 
-void func_800B2BA8(Projectile *this, s32 arg);
-void func_800B2D10(Projectile *this, s32 arg);
+void StingmonSpecial1Projectile_drawHead(StingmonSpecial1Projectile *this, Camera *camera);
+void StingmonSpecial1Projectile_drawStart(StingmonSpecial1Projectile *this, Camera *camera);
 
-/* Draws the projectile: func_800B2BA8 while its sphere is in a list, then func_800B2D10. */
+/* Draws the projectile: its head while its sphere is in a list, then its start. */
 void StingmonSpecial1Projectile_draw(Projectile *this, s32 arg) {
     s32 alone;
 
@@ -632,18 +709,112 @@ void StingmonSpecial1Projectile_draw(Projectile *this, s32 arg) {
     alone = this->parts.part.link.next == &this->parts.part.link
             && &this->parts.part.link == this->parts.part.link.prev;
     if (!alone) {
-        func_800B2BA8(this, arg);
+        StingmonSpecial1Projectile_drawHead((StingmonSpecial1Projectile *)this, (Camera *)arg);
     }
-    func_800B2D10(this, arg);
+    StingmonSpecial1Projectile_drawStart((StingmonSpecial1Projectile *)this, (Camera *)arg);
 }
 
-INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006BA50);
+INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", STINGMON_SPECIAL1_PROJECTILE_HEAD_CORNERS);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", func_800B2BA8);
+/* PolyFT4Shape's uv words as their u and v bytes (as in saintgargomon.c): game_classes.h types them u16, and the game
+ * stores the bytes. */
+#define UV_BYTES(uv) ((u8 *)&(uv))
 
-INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006BA70);
+/* The corners of the rectangle StingmonSpecial1Projectile_drawHead draws. */
+extern SVECTOR STINGMON_SPECIAL1_PROJECTILE_HEAD_CORNERS[4];
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", func_800B2D10);
+/* Draws the projectile's head: the rectangle STINGMON_SPECIAL1_PROJECTILE_HEAD_CORNERS turned by its angle, scaled
+ * by its radius and placed at its position, with the 48 by 48 picture of cell (cell >> 1) & 3 in grey,
+ * semi-transparent, with buildPolyFT4.
+ * The match depends on the matrix built as matrixInitTranslationVec does, reading the position through a pointer,
+ * and on a pointer to it for the three calls (the game keeps it in $s1). */
+void StingmonSpecial1Projectile_drawHead(StingmonSpecial1Projectile *this, Camera *camera) {
+    MatrixWords m;
+    MATRIX *matrix;
+    PolyFT4Shape shape;
+    Vec3 *position;
+    s32 x, y, z;
+    u8 u;
+
+    position = &this->base.position;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    m.words[0] = ONE;
+    m.words[1] = 0;
+    m.words[2] = ONE;
+    m.words[3] = 0;
+    m.words[4] = ONE;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    matrix = &m.m;
+    matrixSetRotationZ(matrix, this->angle);
+    matrixScale(matrix, this->base.radius, this->base.radius, this->base.radius);
+    setModelMatrix(matrix);
+    shape.corners[0] = &STINGMON_SPECIAL1_PROJECTILE_HEAD_CORNERS[0];
+    shape.corners[1] = &STINGMON_SPECIAL1_PROJECTILE_HEAD_CORNERS[1];
+    shape.corners[2] = &STINGMON_SPECIAL1_PROJECTILE_HEAD_CORNERS[2];
+    shape.corners[3] = &STINGMON_SPECIAL1_PROJECTILE_HEAD_CORNERS[3];
+    shape.color = 0x808080;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0xA0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xCF;
+    shape.flags = 9;
+    u = ((this->cell >> 1) & 3) * 48 + 0x40;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = u + 0x2F;
+    shape.tpage = getTPage(0, 1, 0x1C0, this->base.unkBC);
+    shape.clut = getClut(0x1C0, this->base.unkBC + 0xFA);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+}
+
+INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", STINGMON_SPECIAL1_PROJECTILE_START_CORNERS);
+
+/* The corners of the square StingmonSpecial1Projectile_drawStart draws. */
+extern SVECTOR STINGMON_SPECIAL1_PROJECTILE_START_CORNERS[4];
+
+/* Draws the projectile's start: the square STINGMON_SPECIAL1_PROJECTILE_START_CORNERS turned by its angle, scaled by
+ * its length and placed where it was fired from, with a 64 by 32 picture in its fade's grey (red at half),
+ * semi-transparent, with buildPolyFT4.
+ * The match depends on the matrix built as matrixInitTranslationVec does, reading the start through a pointer, and on
+ * a pointer to it for the three calls (the game keeps it in $s1). */
+void StingmonSpecial1Projectile_drawStart(StingmonSpecial1Projectile *this, Camera *camera) {
+    MatrixWords m;
+    MATRIX *matrix;
+    PolyFT4Shape shape;
+    Vec3 *start;
+    s32 x, y, z;
+
+    start = &this->start;
+    x = start->vx;
+    y = start->vy;
+    z = start->vz;
+    m.words[0] = ONE;
+    m.words[1] = 0;
+    m.words[2] = ONE;
+    m.words[3] = 0;
+    m.words[4] = ONE;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    matrix = &m.m;
+    matrixSetRotationZ(matrix, this->angle);
+    matrixScale(matrix, this->length, this->length, this->length);
+    setModelMatrix(matrix);
+    shape.corners[0] = &STINGMON_SPECIAL1_PROJECTILE_START_CORNERS[0];
+    shape.corners[1] = &STINGMON_SPECIAL1_PROJECTILE_START_CORNERS[1];
+    shape.corners[2] = &STINGMON_SPECIAL1_PROJECTILE_START_CORNERS[2];
+    shape.corners[3] = &STINGMON_SPECIAL1_PROJECTILE_START_CORNERS[3];
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv1)[0] = 0xBF;
+    UV_BYTES(shape.uv2)[0] = UV_BYTES(shape.uv3)[0] = 0x80;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv2)[1] = 0;
+    UV_BYTES(shape.uv1)[1] = UV_BYTES(shape.uv3)[1] = 0x1F;
+    shape.flags = 9;
+    shape.color = (this->fade >> 1) | (this->fade << 8) | (this->fade << 16);
+    shape.tpage = getTPage(0, 1, 0x1C0, this->base.unkBC);
+    shape.clut = getClut(0x1C0, this->base.unkBC + 0x7C);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Hitbox_init);
 

@@ -1,6 +1,7 @@
 /* The character and stage selection (the task "Character Select", charasel.tim and mapsel.tim). */
 
 #include "common.h"
+#include <stdio.h>
 #include "engine/cd/file_load.h"
 #include "engine/debug/system_menu.h"
 #include "engine/game/game_state.h"
@@ -13,6 +14,7 @@
 #include "engine/pad/pad.h"
 #include "engine/sound/sound.h"
 #include "engine/sound/sound_control.h"
+#include "engine/system/memory.h"
 #include "engine/task/entity.h"
 #include "title/title_classes.h"
 #include "psyq.h"
@@ -183,6 +185,7 @@ void uploadTimAt(u32 *tims, RECT *places, s32 index) {
 INCLUDE_ASM("title/nonmatchings/chara_select", uploadSidePictures);
 
 INCLUDE_ASM("title/nonmatchings/chara_select", uploadRunPictures);
+void uploadRunPictures(void *file, s32 character, s32 tamer);
 
 /* Whether side's tamer picture is the 64-pixel-wide one (WIDE_TAMER_PICTURE_PLACES): tamer 0 of Holydramon and
  * Tailmon, tamer 1 of Stingmon and Wormmon. */
@@ -197,6 +200,7 @@ s32 CharacterSelectTask_isTamerPictureWide(CharacterSelectTask *this, s32 side) 
 }
 
 INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_loadTamerVoice);
+void CharacterSelectTask_loadTamerVoice(CharacterSelectTask *this, s32 side, s32 tamer);
 
 void CharacterSelectTask_stepEnter(CharacterSelectTask *this);
 void CharacterSelectTask_stepPick(CharacterSelectTask *this);
@@ -384,7 +388,38 @@ s32 CharacterSelectTask_isBackedOut(CharacterSelectTask *this) {
     return this->backedOut;
 }
 
-INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_checkChallenger);
+extern s32 D_8007B230;
+
+void CharacterSelectTask_joinSide(CharacterSelectTask *this, s32 character, s32 side);
+
+/* A challenger joins by Start on the pad of a side no player is picking: side 0 joins on Agumon (Gabumon when
+ * side 1 has Agumon), side 1 on V-mon (Wormmon when side 0 has V-mon), unless D_8007B230 is set. Returns
+ * whether one joined. Nothing in the game calls it. */
+s32 CharacterSelectTask_checkChallenger(CharacterSelectTask *this) {
+    PadManager *pads = PAD_MANAGER_INSTANCE;
+    s32 start0 = padManagerGetPressed(pads, 0) & PADstart;
+    s32 start1 = padManagerGetPressed(pads, 1) & PADstart;
+
+    if ((this->selectFlags & (SELECT_SIDE_0 | SELECT_COMPUTER_0)) != SELECT_SIDE_0 && start0) {
+        if (D_8007B230 == 0 && this->characters[1] == CHARACTER_AGUMON) {
+            this->characters[0] = CHARACTER_GABUMON;
+        } else {
+            this->characters[0] = CHARACTER_AGUMON;
+        }
+        CharacterSelectTask_joinSide(this, this->characters[0], 0);
+        return 1;
+    }
+    if ((this->selectFlags & (SELECT_SIDE_1 | SELECT_COMPUTER_1)) != SELECT_SIDE_1 && start1) {
+        if (D_8007B230 == 0 && this->characters[0] == CHARACTER_V_MON) {
+            this->characters[1] = CHARACTER_WORMMON;
+        } else {
+            this->characters[1] = CHARACTER_V_MON;
+        }
+        CharacterSelectTask_joinSide(this, this->characters[1], 1);
+        return 1;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_joinSide);
 
@@ -412,7 +447,36 @@ void CharacterSelectTask_stepRunExit(CharacterSelectTask *this) {
 INCLUDE_RODATA("title/nonmatchings/chara_select", PATH_MAPSEL_TIM);
 INCLUDE_RODATA("title/nonmatchings/chara_select", PATH_LEFT_PICTURES_TIM);
 
-INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_loadRunPictures);
+extern char PATH_MAPSEL_TIM[];
+extern char PATH_LEFT_PICTURES_TIM[]; /* a format: the picked character's pictures file */
+
+/* Loads the run's pictures: unloads sound 0x17 and the host's first line (0x23), uploads MAPSEL.TIM, then the
+ * picked side's pictures file (side 1's when it picks, else side 2's) and its tamer's voice; goes to the show
+ * step. */
+void CharacterSelectTask_loadRunPictures(CharacterSelectTask *this) {
+    char path[64];
+    void *file;
+
+    soundControlUnloadSound(&SOUND_CONTROL, 0x17);
+    soundControlUnloadSound(&SOUND_CONTROL, 0x23);
+    file = loadFile(PATH_MAPSEL_TIM);
+    uploadTims(file);
+    mainHeapFree(file);
+    if (this->selectFlags & SELECT_SIDE_0) {
+        sprintf(path, PATH_LEFT_PICTURES_TIM, this->characters[0]);
+        file = loadFile(path);
+        uploadRunPictures(file, this->characters[0], this->tamers[0]);
+        mainHeapFree(file);
+        CharacterSelectTask_loadTamerVoice(this, 0, this->tamers[0]);
+    } else {
+        sprintf(path, PATH_LEFT_PICTURES_TIM, this->characters[1]);
+        file = loadFile(path);
+        uploadRunPictures(file, this->characters[1], this->tamers[1]);
+        mainHeapFree(file);
+        CharacterSelectTask_loadTamerVoice(this, 1, this->tamers[1]);
+    }
+    this->step = CHARACTER_SELECT_STEP_RUN_SHOW;
+}
 
 
 /* The end of the run's pictures steps: the confirm button on any pad goes to the fade. */
@@ -509,7 +573,36 @@ void getCellPosition(DVECTOR *pos, s32 x, s32 y, s32 cell) {
 
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006DA20);
 
-INCLUDE_ASM("title/nonmatchings/chara_select", func_8006DBA4);
+/* Draws the grid's scrolling strip: a 112x16 strip (v 0xEC of the page at (640, 256), semi-transparent) moving
+ * left with frame (a pixel a frame from x + 0xBD, wrapping every 256 frames), clipped to the 160x16 window at
+ * (x + 0x40, y + 0x14); the draw area is set back to the whole buffer after it. */
+void drawScrollingStrip(u_long *ot, s32 x, s32 y, u8 frame) {
+    /* The match depends on the scroll in its own variable (one expression folds to x + 0xBD - frame) and on the
+     * order of the SPRT's fields below. */
+    s32 scroll = frame - 0xBD;
+    s32 left = x - scroll;
+    RECT area;
+    RECT window;
+    DR_TPAGE *tpage;
+    SPRT *sprt;
+
+    getDrawBufferRect(&area);
+    AddPrim(ot, allocDrArea(&area));
+    tpage = allocDrTpage(getTPage(0, 1, 640, 0));
+    sprt = allocSprt();
+    setRGB0(sprt, 0x80, 0x80, 0x80);
+    setXY0(sprt, left, y + 0x14);
+    setUV0(sprt, 0, 0xEC);
+    sprt->clut = 0x3D72;
+    setWH(sprt, 0x70, 0x10);
+    setSemiTrans(sprt, 1);
+    AddPrim(ot, sprt);
+    AddPrim(ot, tpage);
+    getDrawBufferSubRect(&window, x + 0x40, y + 0x14, 0xA0, 0x10);
+    if (window.h > 0) {
+        AddPrim(ot, allocDrArea(&window));
+    }
+}
 
 INCLUDE_ASM("title/nonmatchings/chara_select", func_8006DCCC);
 

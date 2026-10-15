@@ -2,6 +2,7 @@
  * with, the continue screen and the score tally after a won round. */
 
 #include "common.h"
+#include "strings.h"
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
 #include "engine/gfx/box.h"
@@ -515,7 +516,33 @@ void BattleMessage_tickDemonstration(BattleMessage *this) {
     this->frame++;
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", hudTextSetText);
+/* Sets *length to the text's length, at most HUD_TEXT_MAX. */
+static inline void setClampedLength(s32 *length, u8 *text) {
+    *length = strlen(text) < HUD_TEXT_MAX ? strlen(text) : HUD_TEXT_MAX;
+}
+
+/* Copies text (at most HUD_TEXT_MAX characters) and resets every character: no offset, size 0x20, grey color,
+ * palette 0; the step is 0x20 and the scale 1.
+ * The match depends on the length being set by an inline that takes its address (setClampedLength): the game
+ * computes &this->length into a saved register before the first strlen and reloads the field for strncpy. A plain
+ * field store puts it in strncpy's delay slot and passes the value instead. */
+void hudTextSetText(HudText *this, u8 *text) {
+    s32 i;
+
+    setClampedLength(&this->length, text);
+    strncpy(this->text, text, this->length);
+    for (i = 0; i < this->length; i++) {
+        this->chars[i].dx = 0;
+        this->chars[i].dy = 0;
+        this->chars[i].w = 0x20;
+        this->chars[i].h = 0x20;
+        *(u32 *)&this->chars[i].color = 0x80808080; /* the color and cd, a word at once */
+        this->chars[i].palette = 0;
+        this->chars[i].unk10 = 0;
+    }
+    this->step = 0x20;
+    this->scale = 0x1000;
+}
 
 /* Sets every character's offset. */
 void hudTextSetOffsets(HudText *this, s32 dx, s32 dy) {
@@ -878,7 +905,32 @@ INCLUDE_ASM("game/nonmatchings/hud", func_800CE388);
 
 INCLUDE_RODATA("game/nonmatchings/hud", D_8006DCB8);
 
-INCLUDE_ASM("game/nonmatchings/hud", func_800CEA40);
+extern RECT D_8006DCB8; /* the panel's texture rectangle (u, v, w, h) */
+
+/* Draws a semi-transparent textured quad over rect (tpage 0x1E) from the texture rectangle uv with clut. */
+void drawSemiTransQuad(u_long *ot, RECT *rect, RECT *uv, u16 clut);
+
+/* The rectangle of the tally's panel, whose x and y are its centre. */
+static inline RECT getPanelRect(ScoreTally *this) {
+    RECT rect;
+
+    memset(&rect, 0, sizeof(rect));
+    rect.x = this->panel.x - (this->panel.w >> 1);
+    rect.y = this->panel.y - (this->panel.h >> 1);
+    rect.w = this->panel.w;
+    rect.h = this->panel.h;
+    return rect;
+}
+
+/* Draws the tally's panel. The match depends on the rectangle copied twice before the call (getPanelRect's
+ * result into rect, then into box, declared first): the game builds it at sp+0x20 and passes sp+0x10. */
+void ScoreTally_drawPanel(ScoreTally *this, u_long *ot) {
+    RECT box;
+    RECT rect = getPanelRect(this);
+
+    box = rect;
+    drawSemiTransQuad(ot, &box, &D_8006DCB8, 0x7BBB);
+}
 
 INCLUDE_RODATA("game/nonmatchings/hud", SCORE_TALLY_DECIMAL_PLACES);
 
@@ -907,7 +959,7 @@ void drawSemiTransSprite(u_long *ot, RectWords *rect, u32 *uvClut) {
     AddPrim(ot, sprite);
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", func_800CF124);
+INCLUDE_ASM("game/nonmatchings/hud", drawSemiTransQuad);
 
 INCLUDE_RODATA("game/nonmatchings/hud", D_8006DCEC);
 

@@ -36,7 +36,7 @@ typedef struct Fight {
     /* 0x12C */ LookAt lookAt;
     /* 0x180 */ u8 unk180[0x1B0 - 0x180];
     /* 0x1B0 */ Camera camera;
-    /* 0x1EC */ u8 unk1EC[0x228 - 0x1EC];
+    /* 0x1EC */ Camera camera2; /* cameraInitShared on camera: the same view, its own ordering table */
     /* 0x228 */ ListNode side1Shapes; /* the collision shapes of side 1's fighter */
     /* 0x230 */ ListNode side0Shapes;
     /* 0x238 */ ListNode stageShapes; /* the stage's and the items' */
@@ -216,7 +216,7 @@ void BonusFight_prepareNextRound(BonusFight *this);
 /* the ends of a bonus game, and holding a side's fighter in place while its clip plays */
 void BonusFight_endWithWinner(BonusFight *this, struct Fighter *winner, struct Fighter *loser);
 void BonusFight_endInDraw(BonusFight *this);
-void BonusFight_holdFighter(BonusFight *this, s32 side);
+void BonusFight_holdFighter(BonusFight *this, u16 side);
 void BonusFight_addMark(BonusFight *this, s16 side);
 Controller *Controller_init(Controller *this, struct BattleSide *side);
 void Controller_destroy(Controller *this, s32 flags);

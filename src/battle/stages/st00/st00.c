@@ -19,8 +19,8 @@ typedef struct StageMachine {
     /* 0xD3C */ s32 frames; /* the scenery's frames (StageMachine_tickScenery) */
     /* 0xD40 */ u8 unkD40[0xD4C - 0xD40];
     /* 0xD4C */ u32 sound; /* a sound's handle, stopped before the next round */
-    /* 0xD50 */ ListNode unkD50; /* a list node the destructor unlinks */
-    /* 0xD58 */ u8 unkD58[0xDA8 - 0xD58];
+    /* 0xD50 */ MeshSceneLink collisionLink; /* lines of the arena itself, in COLLISION_LINKS (StageMachine_init) */
+    /* 0xD68 */ u8 unkD68[0xDA8 - 0xD68];
     /* 0xDA8 */ RECT clutRect; /* 16 by 1 pixels at (0x300, 0xFE): a CLUT */
     /* 0xDB0 */ u8 unkDB0[0xE90 - 0xDB0];
     /* 0xE90 */ u16 clut[16]; /* that CLUT, read back from VRAM by st00_readClut */
@@ -70,20 +70,46 @@ extern EntityVtable ST00_GROUP_DRAWER_VTABLE;
 extern VtableEntry STAGE_HIT_VTABLE[];
 extern VtableEntry STAGE_MACHINE_VTABLE[];
 
-INCLUDE_ASM("st00/nonmatchings/st00", StageMachine_init);
+/* An arena collision line as the stage defines it: its ends (the rest of each entry is zero). */
+typedef struct St00LineEnds {
+    /* 0x00 */ DVECTOR from;
+    /* 0x04 */ DVECTOR to;
+    /* 0x08 */ u8 unk8[0x18 - 0x8];
+} St00LineEnds;
 
-/* The stage's destructor: its virtual table, the group, unlinks the node at 0xD50, then Fight's destructor. */
+extern St00LineEnds ST00_TERRAIN_LINE_ENDS[6];
+extern TerrainLine ST00_TERRAIN_LINES[6];
+
+/* Constructs the stage: Fight, with virtual table STAGE_MACHINE_VTABLE, its group, and its six collision lines,
+ * built from ST00_TERRAIN_LINE_ENDS and linked into COLLISION_LINKS. */
+StageMachine *StageMachine_init(StageMachine *this) {
+    s32 i;
+
+    Fight_init(&this->base);
+    this->base.vtable = STAGE_MACHINE_VTABLE;
+    this->collisionLink.link.next = &this->collisionLink.link;
+    this->collisionLink.link.prev = &this->collisionLink.link;
+    groupInit(&this->group);
+    for (i = 0; i < 6; i++) {
+        initTerrainLine(&ST00_TERRAIN_LINES[i], &ST00_TERRAIN_LINE_ENDS[i].from, &ST00_TERRAIN_LINE_ENDS[i].to);
+    }
+    /* MeshSceneLink.lines is typed by the engine's own lines; the stage's are TerrainLines */
+    addCollisionLink(&this->collisionLink, (s32 *)ST00_TERRAIN_LINES, 6);
+    return this;
+}
+
+/* The stage's destructor: its virtual table, the group, unlinks its collision link, then Fight's destructor. */
 void StageMachine_destroy(StageMachine *this, s32 flags) {
     ListNode *node;
 
     this->base.vtable = STAGE_MACHINE_VTABLE;
     groupDestroy(&this->group, DESTROY_BASES);
-    /* listRemove(&this->unkD50), in the access order the game's compiler used */
-    node = &this->unkD50;
-    this->unkD50.next->prev = this->unkD50.prev;
-    node->prev->next = this->unkD50.next;
-    this->unkD50.next = node;
-    this->unkD50.prev = node;
+    /* listRemove(&this->collisionLink.link), in the access order the game's compiler used */
+    node = &this->collisionLink.link;
+    this->collisionLink.link.next->prev = this->collisionLink.link.prev;
+    node->prev->next = this->collisionLink.link.next;
+    this->collisionLink.link.next = node;
+    this->collisionLink.link.prev = node;
     Fight_destroy(&this->base, flags);
 }
 
@@ -267,7 +293,36 @@ void func_800D7BCC(void) {
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D7BD4);
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D7E90);
+/* A row of four textured quads (5 by 2 vertices, 0x600 to each side at depth -0x300) whose colour pulses red with
+ * the sine of phase (func_800D7F88). */
+typedef struct St00PulseStrip {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Fight *owner;
+    /* 0x1C */ u32 color;  /* r | (r / 4) << 8 | (r / 4) << 16 */
+    /* 0x20 */ u16 phase;  /* + 8 per frame, the COS_SIN_TABLE index */
+    /* 0x22 */ u8 unk22[0x24 - 0x22];
+    /* 0x24 */ GridVertex vertices[2][5];
+} St00PulseStrip; /* size 0x74 */
+
+/* Constructs the strip of owner: vertex (row, column) at (column * 0x300 - 0x600, row * 0x100, -0x300). */
+St00PulseStrip *func_800D7E90(St00PulseStrip *this, Fight *owner) {
+    s32 row;
+    s32 column;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3A14;
+    this->owner = owner;
+    for (row = 0; row < 2; row++) {
+        for (column = 0; column < 5; column++) {
+            this->vertices[row][column].vx = column * 0x300 - 0x600;
+            this->vertices[row][column].vy = row << 8;
+            this->vertices[row][column].vz = -0x300;
+        }
+    }
+    this->color = 0;
+    this->phase = 0;
+    return this;
+}
 
 /* The destructor of the entity class of vtable D_800D3A14, which func_800D7E90 installs. */
 void func_800D7F34(Entity *this, s32 flags) {

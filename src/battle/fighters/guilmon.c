@@ -70,7 +70,33 @@ INCLUDE_ASM("game/nonmatchings/fighters/guilmon", Guilmon_airSpecial2);
 
 INCLUDE_ASM("game/nonmatchings/fighters/guilmon", Guilmon_spawnSpecial1Hitbox);
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", Guilmon_spawnSpecial2Hitbox);
+UnkPartsEntity38 *GuilmonSpecial2Hitbox_init(UnkPartsEntity38 *this, Fighter *fighter, Vec3 *position, VECTOR *velocity,
+                                             Fight *list);
+extern VECTOR GUILMON_SPECIAL2_HITBOX_OFFSET;
+
+/* Spawns the special move 2's hitbox at the fighter's point 16 (moved by GUILMON_SPECIAL2_HITBOX_OFFSET), flying
+ * forward at 80 per frame. Its velocity's z is air (1 from airSpecial2). The top of the fighter, 64 forward, is
+ * computed first and then overwritten by the point. */
+void Guilmon_spawnSpecial2Hitbox(Fighter *this, s32 air) {
+    VECTOR offset = GUILMON_SPECIAL2_HITBOX_OFFSET;
+    Vec3 position;
+    VECTOR velocity;
+    Fight *list;
+    Entity *child;
+
+    list = Fighter_getScene(this);
+    func_8007A650(this, &position);
+    position.vx += Fighter_getFacing(this) * 64;
+    Fighter_getNodePosition(this, (VECTOR *)&position, 16, &offset);
+    velocity.vx = Fighter_getFacing(this) * 80;
+    velocity.vy = 0;
+    velocity.vz = air;
+    child = allocEntityMemory(0xF4);
+    if (child != NULL) {
+        GuilmonSpecial2Hitbox_init(entityOperatorNewAt(0xF4, child), this, &position, &velocity, list);
+    }
+    Fighter_addEntity(this, child);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/guilmon", GuilmonSpecial1Hitbox_init);
 
@@ -169,7 +195,7 @@ INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", D_80068B44);
 INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", D_80068B4C);
 INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", D_80068B5C);
 INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", GUILMON_FACES);
-INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", D_80068B7C);
+INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", GUILMON_SPECIAL2_HITBOX_OFFSET);
 INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", D_80068B8C);
 INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", GUILMON_SPECIAL2_HITBOX_HIT_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", GUILMON_SPECIAL2_HITBOX_VTABLE);

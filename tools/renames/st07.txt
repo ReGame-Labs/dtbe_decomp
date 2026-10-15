@@ -48,3 +48,9 @@ func_800D4C64 St07Ball_testGoal
 # the fixed view StageBallShoot_tick sets while the HUD is shown
 D_800D3824 ST07_VIEW_TARGET
 D_800D3834 ST07_VIEW_EYE
+# St07Board: the board st07_createBoard puts on the stage's mesh, sixteen falling pieces
+D_800D3874 ST07_BOARD_VTABLE
+func_800D5910 St07Board_init
+func_800D59B4 St07Board_destroy
+func_800D5A08 St07Board_tick
+func_800D5AFC St07Board_draw

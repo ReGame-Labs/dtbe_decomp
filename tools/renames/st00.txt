@@ -64,3 +64,5 @@ func_800D827C St00GlowQuad_tick
 func_800D82D4 St00GlowQuad_draw
 func_800D8228 St00GlowQuad_destroy
 func_800D7064 st00_resetFallingObject
+D_800D3838 ST00_TERRAIN_LINE_ENDS
+D_800DA2BC ST00_TERRAIN_LINES

@@ -501,11 +501,13 @@ func_8007A6A0 DigifontCache_selectGlyph
 func_8007A6EC DigifontCache_load
 func_8007A82C DigifontCache_getSlot
 func_8007A8C4 DigifontCache_print
+func_8007A9C8 DigifontCache_printInBox
 func_8007ABB0 DigifontCache_drawChar
 func_8007AF88 DigifontCache_getClutRect
 func_8007B008 DigifontCache_setColor
 func_8007B020 DigifontCache_setColorAlpha
 func_8007B038 DigifontCache_setAlpha
+func_8007B040 DigifontCache_setAlternate
 D_80066B60 DIGIFONT_CLUT
 D_80066B68 DIGIFONT_CACHE_VTABLE
 
@@ -573,3 +575,4 @@ D_80065DCC GUIDE_PICTURE_CLUTS
 D_80065DD8 GUIDE_WINDOW_CORNERS
 D_80065EC4 GUIDE_LOGO_TASK_VTABLE
 D_80065EF4 GUIDE_IMAGES
+func_8006DBA4 drawScrollingStrip

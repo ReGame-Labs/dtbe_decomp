@@ -290,7 +290,36 @@ InputHistory *Fighter_getInput(Fighter *this) {
     return this->input;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_destroy);
+/* Destroys a scene object and frees it, as `delete` does: nothing for NULL (scene_graph.c's inline). */
+static inline void sceneObjectDelete(SceneObject *object) {
+    if (object != NULL) {
+        object->vtable->destroy.func((u8 *)object + object->vtable->destroy.delta, DESTROY_DELETE);
+    }
+}
+
+/* Fighter's destructor: frees the body boxes and deletes the model, takes the collider out of its list (its
+ * destructor inlined), then destroys the entity. */
+void Fighter_destroy(Entity *entity, s32 flags) {
+    Fighter *this = (Fighter *)entity; /* the fighters' destructors pass their Entity */
+    ListNode *node;
+
+    this->entity.vtable = &FIGHTER_VTABLE.entity;
+    if (this->bodyBoxes != 0) {
+        operatorVecDelete((void *)this->bodyBoxes); /* a Box[], typed s32 as its getter returns it */
+    }
+    sceneObjectDelete(&this->model->group.object);
+    this->collider.vtable = COLLISION_SHAPE_VTABLE;
+    /* listRemove(&this->collider.link), in the access order the game's compiler used */
+    node = &this->collider.link;
+    this->collider.link.next->prev = this->collider.link.prev;
+    node->prev->next = this->collider.link.next;
+    this->collider.link.next = node;
+    this->collider.link.prev = node;
+    entityDestroy(&this->entity, 0);
+    if (flags & DESTROY_FREE) {
+        entityOperatorDelete(this);
+    }
+}
 
 /* Whether the fighter's character can evolve (FIGHTER_PARAM_EVOLVED clear). */
 s32 Fighter_canEvolve(Fighter *this) {

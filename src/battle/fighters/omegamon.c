@@ -14,7 +14,7 @@ struct OmegamonSpecial1Projectile *OmegamonSpecial1Projectile_init(struct Omegam
                                                                    VECTOR *vel);
 Entity *OmegamonSpecial2Hitbox_init(Entity *this, Fighter *owner, Fight *fight, Vec3 *pos, s32 side, s32 arg5);
 struct Unk800A0054 *func_800A0054(struct Unk800A0054 *this, Fighter *owner, Fight *fight, Vec3 *pos,
-                                  Vec3 *vel, s32 arg5);
+                                  Vec3 *vel, s32 index);
 struct Unk800A0830 *func_800A0830(struct Unk800A0830 *this, Fighter *owner, Fight *fight, Vec3 *pos,
                                   Vec3 *vel, s32 index);
 Unk8009F248 *func_8009F248(Unk8009F248 *this, Fighter *owner);
@@ -581,11 +581,10 @@ typedef struct Unk800A0054 {
     /* 0x88 */ Fight *fight; /* the part goes into one of its two lists (Fighter_getSide picks which) */
     /* 0x8C */ Vec3 position;
     /* 0x98 */ s32 unk98;
-    /* 0x9C */ Vec3 start;
-    /* 0xA8 */ s32 unkA8;
+    /* 0x9C */ VECTOR start; /* the next link copies its four words */
     /* 0xAC */ Vec3 velocity;
     /* 0xB8 */ s32 unkB8;
-    /* 0xBC */ s32 unkBC;
+    /* 0xBC */ s32 index; /* its place in the chain (func_800A0680 spawns the next one below 15) */
     /* 0xC0 */ s32 unkC0; /* random, 0 to 3 */
     /* 0xC4 */ s32 unkC4; /* random, 0 to 0x7F */
     /* 0xC8 */ s32 unkC8;
@@ -594,10 +593,10 @@ typedef struct Unk800A0054 {
     /* 0xD4 */ s16 vramY; /* the owner's 0x440 (Fighter_getVramY) */
 } Unk800A0054;
 
-/* Constructs Unk800A0054 for owner at pos, moving at vel, with arg5, and adds its part to one of fight's two lists
- * (Fighter_getSide picks which). */
+/* Constructs link index of the Unk800A0054 chain for owner at pos, moving at vel, and adds its part to one of fight's
+ * two lists (Fighter_getSide picks which). */
 Unk800A0054 *func_800A0054(Unk800A0054 *this, Fighter *owner, Fight *fight, Vec3 *pos, Vec3 *vel,
-                           s32 arg5) {
+                           s32 index) {
     VECTOR v;
     s32 x, y, z;
     s32 sx, sy, sz;
@@ -635,7 +634,7 @@ Unk800A0054 *func_800A0054(Unk800A0054 *this, Fighter *owner, Fight *fight, Vec3
     this->velocity.vx = vx;
     this->velocity.vy = vy;
     this->velocity.vz = vz;
-    this->unkBC = arg5;
+    this->index = index;
     this->unkC0 = mersenneTwisterGenerate(&fight->random) & 3;
     this->unkC4 = mersenneTwisterGenerate(&fight->random) & 0x7F;
     this->unkC8 = 300;
@@ -673,7 +672,32 @@ INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A02A8);
 
 INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A04BC);
 
-INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A0680);
+/* Hands parent the next link of its chain (func_800A0054) at position, moved up to 31 forward at random, moving by
+ * velocity. The match depends on the random step being in the inline: the copies of both pointers are then made
+ * before its calls (spawnNextLink's shape). */
+static inline void spawnNextParticleLink(Unk800A0054 *parent, VECTOR *position, Vec3 *velocity) {
+    s32 facing = Fighter_getFacing(parent->owner);
+    Entity *child;
+
+    position->vx += (mersenneTwisterGenerate(&parent->fight->random) & 0x1F) * facing;
+    child = allocEntityMemory(0xD8);
+    if (child != NULL) {
+        func_800A0054(entityOperatorNewAt(0xD8, child), parent->owner, parent->fight, (Vec3 *)position, velocity,
+                      parent->index + 1);
+    }
+    entityAddSibling(&parent->parts.entity, child);
+}
+
+/* Spawns the next link of the chain one velocity step ahead of start. */
+void func_800A0680(Unk800A0054 *this) {
+    VECTOR position;
+
+    position = this->start;
+    position.vx += this->velocity.vx;
+    position.vy += this->velocity.vy;
+    position.vz += this->velocity.vz;
+    spawnNextParticleLink(this, &position, &this->velocity);
+}
 
 /* Hands parent a new ParticleSpray (0x48 bytes) of one pink particle (kind 6, size 0x60) at position, moving by
  * velocity. The match depends on this being an inline: its copy of position (the frame's first local) stays in a
@@ -719,7 +743,8 @@ typedef struct Unk800A0830 {
     /* 0xD0 */ s16 vramY; /* the owner's 0x440 (Fighter_getVramY) */
 } Unk800A0830;
 
-/* Constructs link index of the Unk800A0830 chain for owner at pos, moving at vel (links past 0 disable the part), and adds its part to one of fight's two lists (Fighter_getSide picks which). */
+/* Constructs link index of the Unk800A0830 chain for owner at pos, moving at vel (links past 0 disable the part), and
+ * adds its part to one of fight's two lists (Fighter_getSide picks which). */
 Unk800A0830 *func_800A0830(Unk800A0830 *this, Fighter *owner, Fight *fight, Vec3 *pos, Vec3 *vel,
                            s32 index) {
     VECTOR v;

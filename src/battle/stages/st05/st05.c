@@ -3,6 +3,9 @@
 #include "battle/stage_objects.h"
 #include "battle/game_classes.h"
 #include "engine/gfx/look_at.h"
+#include "engine/gfx/prim/alloc_sprt.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/gfx/sprite.h"
 #include "engine/math/random.h"
 #include "engine/math/vector.h"
 #include "engine/sound/sound_control.h"
@@ -16,7 +19,12 @@ typedef struct StageVolcano {
     /* 0xD38 */ u8 unkD38[0xD7C - 0xD38];
     /* 0xD7C */ s32 riseBoost; /* adds 4 per unit to the embers' rise (St05Ember_tick) */
     /* 0xD80 */ u32 sound; /* sound 0x67's handle (st05_startSound, st05_stopSound) */
-} StageVolcano;
+    /* 0xD84 */ Sprite unkD84; /* drawn at the scenery's screen height (func_800D4D3C) */
+    /* 0xD9C */ Sprite unkD9C; /* drawn 0x1F below unkD84, tinted by glowRed and glowGreen */
+    /* 0xDB4 */ u8 glowRed;   /* unkD9C's red and green: they fade (by 4 and 2 a frame) after a random flash */
+    /* 0xDB5 */ u8 glowGreen; /* (StageVolcano_tickScenery) */
+    /* 0xDB6 */ u8 unkDB6[0xF58 - 0xDB6];
+} StageVolcano; /* size 0xF58 (game_main.c) */
 
 void func_800D4BB4(void *this);
 
@@ -140,7 +148,23 @@ INCLUDE_ASM("st05/nonmatchings/st05", func_800D4B10);
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D4BB4);
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D4D3C);
+/* Draws the backdrop at the scenery's screen height y: unkD9C (tinted by the glow) 0x1F below unkD84, then a dark red
+ * tile from 0x7B below y down to the bottom of the screen. */
+void func_800D4D3C(StageVolcano *this, u_long *ot, s32 y) {
+    TILE *tile;
+    s32 top;
+
+    this->unkD9C.y = y + 0x1F;
+    this->unkD9C.color = this->glowRed | (this->glowGreen << 8);
+    this->unkD84.y = y;
+    PRIM_BUFFER_FREE = spriteDraw(&this->unkD84, spriteDraw(&this->unkD9C, PRIM_BUFFER_FREE, ot), ot);
+    top = y + 0x7B;
+    tile = allocTile();
+    setRGB0(tile, 8, 0, 0);
+    setXY0(tile, 0, top);
+    setWH(tile, 0x140, 0x100 - top);
+    AddPrim(ot, tile);
+}
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D4E04);
 
@@ -168,18 +192,41 @@ void st05_stopSound(StageVolcano *this) {
     }
 }
 
-/* The entity class func_800D53E4 constructs (virtual table D_800D3BE4): tables of halfwords from 0x47E,
- * then the handle of sound 0x66. */
+/* The entity class func_800D53E4 constructs (virtual table D_800D3BE4): a 14x10 grid of vertices that the tick
+ * waves, the colour tint of each vertex, then the handle of sound 0x66. A tint is a GridVertex too: vx and vy are
+ * the vertex's wave offset at a smaller scale (set by the tick), pad its shade; the draw subtracts vx and vy from the
+ * red and green and the shade as a grey. */
 typedef struct Unk800D53E4 {
     /* 0x000 */ Entity entity;
-    /* 0x018 */ u8 unk18[0x8D8 - 0x18];
+    /* 0x018 */ GridVertex vertices[14][10];
+    /* 0x478 */ GridVertex tints[14][10];
     /* 0x8D8 */ u32 sound; /* soundControlPlaySound's handle */
     /* 0x8DC */ s32 unk8DC;
 } Unk800D53E4;
 
 extern EntityVtable D_800D3BE4;
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D53E4);
+/* Constructs an Unk800D53E4: the inner rows shade from 200 at column 0 down to 0 at column 9, the first and last
+ * rows unshaded; then starts sound 0x66. */
+Unk800D53E4 *func_800D53E4(Unk800D53E4 *this) {
+    s32 row;
+    s32 column;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3BE4;
+    for (row = 1; row < 13; row++) {
+        for (column = 0; column < 10; column++) {
+            this->tints[row][column].pad = (0x708 - column * 0xC8) / 9; /* the shade */
+        }
+    }
+    for (column = 0; column < 10; column++) {
+        this->tints[0][column].pad = 0;
+        this->tints[13][column].pad = 0;
+    }
+    this->sound = soundControlPlaySound(&SOUND_CONTROL, 0x66, 0);
+    this->unk8DC = 0;
+    return this;
+}
 
 /* The destructor of func_800D53E4's class: stops its sound. */
 void func_800D54B8(Unk800D53E4 *this, s32 flags) {
@@ -351,7 +398,61 @@ void St05Shard_tick(St05Shard *this) {
 
 INCLUDE_ASM("st05/nonmatchings/st05", St05Shard_draw);
 
-INCLUDE_ASM("st05/nonmatchings/st05", func_800D6740);
+/* The entity class of virtual table D_800D3B1C (func_800D6740, 0x48 bytes): a sprite of one of two kinds at random,
+ * turned and scaled (func_800D6814, func_800D68A4). */
+typedef struct Unk800D6740 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Vec3 position;
+    /* 0x24 */ u8 unk24[4];
+    /* 0x28 */ Vec3 unk28;
+    /* 0x34 */ u8 unk34[4];
+    /* 0x38 */ s32 kind; /* 0 or 1 at random: the row of D_800D3B0C */
+    /* 0x3C */ s16 size; /* four times the row's third byte, at least 0x80 */
+    /* 0x3E */ u8 pad3E[2];
+    /* 0x40 */ s32 unk40; /* random */
+    /* 0x44 */ s32 unk44;
+} Unk800D6740;
+
+extern EntityVtable D_800D3B1C;
+extern u8 D_800D3B0C[2][3];
+
+/* Constructs an Unk800D6740 at position with unk28 (each read whole before it is stored, as vecCopy does), a random
+ * kind and its size, and a random unk40. */
+Unk800D6740 *func_800D6740(Unk800D6740 *this, Vec3 *position, Vec3 *unk28) {
+    s32 kind;
+    s32 size;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3B1C;
+    {
+        s32 x = position->vx;
+        s32 y = position->vy;
+        s32 z = position->vz;
+
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+    }
+    {
+        s32 x = unk28->vx;
+        s32 y = unk28->vy;
+        s32 z = unk28->vz;
+
+        this->unk28.vx = x;
+        this->unk28.vy = y;
+        this->unk28.vz = z;
+    }
+    kind = mersenneTwisterGenerate(&RANDOM) & 1;
+    size = D_800D3B0C[kind][2] * 4;
+    this->kind = kind;
+    if (size < 0x80) {
+        size = 0x80;
+    }
+    this->size = size;
+    this->unk40 = mersenneTwisterGenerate(&RANDOM);
+    this->unk44 = 0;
+    return this;
+}
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D6814);
 

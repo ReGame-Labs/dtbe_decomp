@@ -10,6 +10,7 @@
 #include "engine/gfx/prim/alloc_poly_ft4.h"
 #include "engine/lib/md5.h"
 #include "engine/pad/pad.h"
+#include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 #include "engine/task/entity.h"
 #include "engine/text/font.h"
@@ -28,6 +29,7 @@ void NameEntry_reset(NameEntry *this);
 void NameEntry_setGrid(NameEntry *this, u8 **grid);
 u8 *NameEntry_getName(NameEntry *this);
 void NameEntry_readPad(NameEntry *this);
+void NameEntry_showMessage(NameEntry *this, s32 message, s32 count);
 void NameEntry_scrollToCursor(NameEntry *this);
 s32 NameEntry_readCell(NameEntry *this);
 s32 NameEntry_input(NameEntry *this);
@@ -318,9 +320,35 @@ void NameEntry_readPad(NameEntry *this) {
     this->repeated = padManagerGetRepeated(padManager, this->port);
 }
 
-INCLUDE_RODATA("title/nonmatchings/name_entry", NAME_ENTRY_CODE_CHARACTERS);
+/* Tries the code entered: a wrong one plays the refused sound and returns -1. A right one unlocks its
+ * character (gameStateUnlockByCode) and shows message 0 for 300 frames when that character was already pickable,
+ * else message code + 1 with the pad held off for 10 frames. Returns the code's number. */
+s32 NameEntry_tryCode(NameEntry *this) {
+    /* game_state.cpp's CODE_CHARACTERS, the character of each code */
+    u8 characters[CODE_COUNT] = {
+        CHARACTER_OMEGAMON, CHARACTER_IMPERIALDRAMON_PALADIN_MODE, CHARACTER_WARGREYMON, CHARACTER_IMPERIALDRAMON,
+        CHARACTER_DUKEMON, CHARACTER_SAKUYAMON, CHARACTER_SAINTGARGOMON,
+    };
+    u32 pickable;
+    s32 code;
 
-INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_tryCode);
+    pickable = gameStateGetPickableCharacters(&GAME_STATE);
+    code = gameStateUnlockByCode(&GAME_STATE, this->name);
+    if (code < 0) {
+        soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_REFUSE, 0);
+        return -1;
+    }
+    soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CODE, 0);
+    if (code < CODE_COUNT) {
+        if (pickable & CHARACTER_BIT(characters[code])) {
+            NameEntry_showMessage(this, 0, 300);
+            return code;
+        }
+        NameEntry_showMessage(this, code + 1, 300);
+        this->padDelay = 10;
+    }
+    return code;
+}
 
 /* Shows input.tim's message for count frames. */
 void NameEntry_showMessage(NameEntry *this, s32 message, s32 count) {
@@ -584,7 +612,46 @@ void NameEntry_drawTitle(NameEntry *this, u_long *ot, s32 mode) {
 }
 
 
-INCLUDE_ASM("title/nonmatchings/name_entry", NameEntry_drawMessage);
+/* Draws in ot the message of NameEntry_showMessage: one of input.tim's eight 192 by 48 images (0 to 4 on page
+ * 0x19, 5 to 7 on page 0x1A), clut row 0x1F8 + message (x 576), at (64, 96) in neutral gray. */
+void NameEntry_drawMessage(NameEntry *this, u_long *ot, s32 message) {
+    POLY_FT4 *poly = allocPolyFT4();
+
+    poly->r0 = 0x80;
+    poly->g0 = 0x80;
+    poly->b0 = 0x80;
+    poly->x0 = 64;
+    poly->y0 = 96;
+    poly->x1 = 256;
+    poly->y1 = 96;
+    poly->x2 = 64;
+    poly->y2 = 144;
+    poly->x3 = 256;
+    poly->y3 = 144;
+    if (message < 5) {
+        poly->u0 = 0;
+        poly->v0 = message * 48;
+        poly->u1 = 0xBF;
+        poly->v1 = message * 48;
+        poly->u2 = 0;
+        poly->v2 = message * 48 + 47;
+        poly->u3 = 0xBF;
+        poly->v3 = message * 48 + 47;
+        poly->tpage = 0x19;
+    } else {
+        poly->u0 = 0;
+        poly->v0 = (message - 5) * 48;
+        poly->u1 = 0xBF;
+        poly->v1 = (message - 5) * 48;
+        poly->u2 = 0;
+        poly->v2 = (message - 5) * 48 + 47;
+        poly->u3 = 0xBF;
+        poly->v3 = (message - 5) * 48 + 47;
+        poly->tpage = 0x1A;
+    }
+    poly->clut = ((0x1F8 + message) << 6) | (576 >> 4);
+    AddPrim(ot, poly);
+}
 
 /* Draws in ot a POLY_FT4 of the texels (0xC0, 0x35) to (0xCF, 0x44) of page 12, clut 0x3C68, w and h to each
  * side of (x, y), all its corners of the gray shade (NameEntry_drawHighlight passes its object as this,

@@ -1,6 +1,7 @@
 // st00.bin's own names (config/jp/st00.yaml)
 
 // the names tools/rename.py gave (tools/renames/), in address order
+ST00_TERRAIN_LINE_ENDS = 0x800D3838;
 ST00_SLIDING_SPRITES_VTABLE = 0x800D3924;
 ST00_CROSSING_SPRITES_VTABLE = 0x800D394C;
 ST00_COLOR_QUAD_VTABLE = 0x800D3974;
@@ -47,3 +48,4 @@ StageHit_apply = 0x800D99AC; // type:func
 StageHit_destroy = 0x800DA14C; // type:func
 StageHit_setKnockback = 0x800DA180; // type:func
 StageHit_setDamage = 0x800DA19C; // type:func
+ST00_TERRAIN_LINES = 0x800DA2BC;

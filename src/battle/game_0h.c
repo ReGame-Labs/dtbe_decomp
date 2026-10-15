@@ -32,7 +32,34 @@ s32 Projectile_getBurstKind(Projectile *this) {
     return 3;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0h", Projectile_spawnBurst);
+/* Spawns a burst of 6 particles of kind (ParticleBurst_init, one a frame, size 0x50, grey) at position, spread by
+ * a quarter of the projectile's speed, as a sibling. */
+static inline void spawnBurstAt(Projectile *this, s32 kind, Vec3 *position) {
+    Entity *burst = allocEntityMemory(0x3C);
+
+    if (burst != NULL) {
+        ParticleBurst_init(entityOperatorNewAt(0x3C, burst), kind, position, this->speed >> 2, 0x50, 6, 0x808080);
+    }
+    entityAddSibling(&this->parts.entity, burst);
+}
+
+/* Spawns the projectile's burst of kind a step ahead of it (position + velocity). The match depends on the spawn
+ * as an inline taking &ahead (the address stays in a saved register across allocEntityMemory) and on the
+ * position read whole, then the velocity added in place. */
+void Projectile_spawnBurst(Projectile *this, s32 kind) {
+    Vec3 ahead;
+    s32 x = this->position.vx;
+    s32 y = this->position.vy;
+    s32 z = this->position.vz;
+
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    ahead.vx = x;
+    ahead.vy = y;
+    ahead.vz = z;
+    spawnBurstAt(this, kind, &ahead);
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0h", Projectile_spawnHitSpark);
 

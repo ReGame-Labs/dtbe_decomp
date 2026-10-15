@@ -316,7 +316,60 @@ s32 OptionScreenItem::confirm(s32 arg, s32 held, s32 own) {
     return 0;
 }
 
-INCLUDE_ASM("title/nonmatchings/option", OptionScreenItem_input);
+/* how far the screen moves from its place: x -8 to 8, y 0 to 8 */
+#define OPTION_SCREEN_LIMIT 8
+
+/* OptionItem's, then the d-pad moves the screen a pixel a frame (x -8 to 8, y 0 to 8) and applies it through the
+ * save data; returns moving, so the input stays here while the screen is moved. */
+s32 OptionScreenItem::input(s32 arg, s32 held, u32 buttons) {
+    OptionItem::input(arg, held, buttons);
+    if (buttons & PAD_LEFT) {
+        this->screenX--;
+    }
+    if (buttons & PAD_RIGHT) {
+        this->screenX++;
+    }
+    if (buttons & PAD_UP) {
+        this->screenY--;
+    }
+    if (buttons & PAD_DOWN) {
+        this->screenY++;
+    }
+    /* The match depends on a variable per bound, and on the first bound kept in the variable it is tested
+     * against (slt): a constant test, as in the other three, folds to slti -7. */
+    {
+        s32 x = -OPTION_SCREEN_LIMIT;
+        if (x < this->screenX) {
+            x = this->screenX;
+        }
+        this->screenX = x;
+    }
+    {
+        s32 x = OPTION_SCREEN_LIMIT;
+        if (this->screenX < OPTION_SCREEN_LIMIT) {
+            x = this->screenX;
+        }
+        this->screenX = x;
+    }
+    {
+        s32 y = 0;
+        if (this->screenY > 0) {
+            y = this->screenY;
+        }
+        this->screenY = y;
+    }
+    {
+        s32 y = OPTION_SCREEN_LIMIT;
+        if (this->screenY < OPTION_SCREEN_LIMIT) {
+            y = this->screenY;
+        }
+        this->screenY = y;
+    }
+    GAME_STATE.save.screenX = this->screenX;
+    GAME_STATE.save.screenY = this->screenY;
+    saveDataApplyOptions(&GAME_STATE.save);
+    return this->moving;
+}
 
 INCLUDE_RODATA("title/nonmatchings/option", OPTION_SCREEN_LINES);
 
@@ -430,7 +483,55 @@ void OptionButtonItem::refresh(s32 arg) {
     this->slots[1] = saveDataGetButtonSlot(save, 1, slot);
 }
 
-INCLUDE_ASM("title/nonmatchings/option", OptionButtonItem_input);
+/* OptionItem's, then left and right on each player's pad step that player's slot of this row (wrapping over the
+ * six), with the step sound for the given buttons or pad 2's; returns editing. */
+s32 OptionButtonItem::input(s32 arg, s32 held, u32 buttons) {
+    PadManager *padManager;
+    s32 slot0;
+    s32 slot1;
+    u32 stepped;
+
+    OptionItem::input(arg, held, buttons);
+    /* The match depends on buttons taking each pad's repeated buttons in turn (a separate variable takes other
+     * registers). */
+    stepped = buttons;
+    padManager = PAD_MANAGER_INSTANCE;
+    slot0 = this->slots[0];
+    slot1 = this->slots[1];
+    buttons = padManagerGetRepeated(padManager, 0);
+    if (buttons & PAD_LEFT) {
+        slot0--;
+    }
+    if (buttons & PAD_RIGHT) {
+        slot0++;
+    }
+    buttons = padManagerGetRepeated(padManager, 1);
+    stepped |= buttons;
+    if (stepped & (PAD_LEFT | PAD_RIGHT)) {
+        soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_STEP, 0);
+    }
+    if (buttons & PAD_LEFT) {
+        slot1--;
+    }
+    if (buttons & PAD_RIGHT) {
+        slot1++;
+    }
+    if (slot0 < 0) {
+        slot0 += BUTTON_SLOT_COUNT;
+    }
+    if (slot0 >= BUTTON_SLOT_COUNT) {
+        slot0 = 0;
+    }
+    if (slot1 < 0) {
+        slot1 += BUTTON_SLOT_COUNT;
+    }
+    if (slot1 >= BUTTON_SLOT_COUNT) {
+        slot1 = 0;
+    }
+    this->slots[0] = slot0;
+    this->slots[1] = slot1;
+    return this->editing;
+}
 
 INCLUDE_ASM("title/nonmatchings/option", OptionButtonItem_draw);
 
@@ -482,7 +583,43 @@ OptionTask::~OptionTask() {
     threadDestroy(&this->thread, DESTROY_BASES);
 }
 
-INCLUDE_ASM("title/nonmatchings/option", OptionTask_run);
+/* The task's thread: fades the screen in (10 frames), runs the options' menu until it closes (input from both
+ * pads), fades out, kills the task and stops the songs, then hands back -1 every frame. */
+void OptionTask::run() {
+    s32 closed;
+    Thread *thread;
+
+    fadeControlFadeOut(&FADE_CONTROL, 0);
+    fadeControlFadeIn(&FADE_CONTROL, 10);
+    while (!fadeControlIsDone(&FADE_CONTROL)) {
+        threadSwitchBack(&this->thread, 0);
+    }
+    /* The match depends on the thread taken into this variable only after the fade-in's wait, which uses the
+     * field directly. */
+    thread = &this->thread;
+    do {
+        PadManager *pads = PAD_MANAGER_INSTANCE;
+        u32 held = padManagerGetHeld(pads, -1);
+        u32 repeated = padManagerGetRepeated(pads, -1);
+
+        closed = ((StepperGroup *)this->menu)->stepperGroupInputIfOpen(0, held, repeated) == 0;
+        threadSwitchBack(thread, 0);
+    } while (!closed);
+    fadeControlFadeOut(&FADE_CONTROL, 10);
+    while (!fadeControlIsDone(&FADE_CONTROL)) {
+        threadSwitchBack(thread, 0);
+    }
+    taskKill(this);
+    stopSongs();
+    for (;;) {
+        threadSwitchBack(thread, -1);
+    }
+}
+
+/* The entry of the thread of optionTaskInit's task. */
+extern "C" void optionThreadEntry(s32 unused, void *object) {
+    ((OptionTask *)object)->run();
+}
 
 INCLUDE_ASM("title/nonmatchings/option", OptionTask_update);
 

@@ -19,13 +19,12 @@
  * scenery has lifts, falling blocks, bolt sources and an animated palette. */
 typedef struct StageShrine {
     /* 0x000 */ Fight base;
-    /* 0xD38 */ ListNode unkD38; /* a list node the destructor unlinks */
-    /* 0xD40 */ u8 unkD40[0xD50 - 0xD40];
+    /* 0xD38 */ MeshSceneLink collisionLink; /* lines of the arena itself, in COLLISION_LINKS (StageShrine_init) */
     /* 0xD50 */ s32 liftRaised; /* while set, the lifts move out (St03Lift_moveOffset); func_800D878C reads it */
     /* 0xD54 */ u8 unkD54[0xD58 - 0xD54];
     /* 0xD58 */ u8 unkD58; /* func_800D6A38 copies it */
     /* 0xD59 */ u8 unkD59[0xD60 - 0xD59];
-    /* 0xD60 */ Sprite unkD60;
+    /* 0xD60 */ Sprite sprite; /* the 0xA0 by 0xAE TIM image at (0x240, 0) of VRAM, dithered */
     /* 0xD78 */ Group group; /* drawn by St03GroupDrawer (st03_drawGroup) */
 } StageShrine;
 
@@ -59,7 +58,44 @@ void func_800D4640(void *this);
 /* the virtual tables the functions below install, and the data they read */
 extern EntityVtable ST03_MESH_MOVER_VTABLE;
 
-INCLUDE_ASM("st03/nonmatchings/st03", StageShrine_init);
+extern VtableEntry STAGE_SHRINE_VTABLE[];
+
+/* An arena collision line as the stage defines it: its ends. */
+typedef struct St03LineEnds {
+    /* 0x0 */ DVECTOR from;
+    /* 0x4 */ DVECTOR to;
+} St03LineEnds;
+
+extern St03LineEnds ST03_TERRAIN_LINE_ENDS[2];
+extern TerrainLine ST03_TERRAIN_LINES[2];
+extern RECT ST03_SPRITE_CLUT_RECT; /* the sprite's CLUT: 256 by 1 at (0, 0x1E0) */
+extern RECT ST03_SPRITE_IMAGE_RECT; /* its pixels: 0xA0 by 0xAE at (0x240, 0) */
+
+/* Constructs the stage: Fight, with virtual table STAGE_SHRINE_VTABLE, its sprite, its group, its two collision
+ * lines (the walls at x -0x504 and 0x3FC), built from ST03_TERRAIN_LINE_ENDS and linked into COLLISION_LINKS, and the sprite's
+ * image already in VRAM, dithered. */
+StageShrine *StageShrine_init(StageShrine *this) {
+    TIM_IMAGE tim;
+    s32 i;
+
+    Fight_init(&this->base);
+    this->base.vtable = STAGE_SHRINE_VTABLE;
+    this->collisionLink.link.next = &this->collisionLink.link;
+    this->collisionLink.link.prev = &this->collisionLink.link;
+    spriteInit(&this->sprite);
+    groupInit(&this->group);
+    for (i = 0; i < 2; i++) {
+        initTerrainLine(&ST03_TERRAIN_LINES[i], &ST03_TERRAIN_LINE_ENDS[i].from, &ST03_TERRAIN_LINE_ENDS[i].to);
+    }
+    /* MeshSceneLink.lines is typed by the engine's own lines; the stage's are TerrainLines */
+    addCollisionLink(&this->collisionLink, (s32 *)ST03_TERRAIN_LINES, 2);
+    tim.mode = 9; /* 8-bit, with a CLUT */
+    tim.crect = &ST03_SPRITE_CLUT_RECT;
+    tim.prect = &ST03_SPRITE_IMAGE_RECT;
+    spriteSetTim(&this->sprite, &tim, 0);
+    this->sprite.flags |= SPRITE_DITHER;
+    return this;
+}
 
 INCLUDE_ASM("st03/nonmatchings/st03", StageShrine_startRound);
 
@@ -1184,19 +1220,18 @@ INCLUDE_ASM("st03/nonmatchings/st03", func_800D83C0);
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D849C);
 
-/* The stage's destructor: the group, the sprite at 0xD60, unlinks the node at 0xD38, then
- * Fight's destructor. */
+/* The stage's destructor: the group, the sprite, unlinks its collision link, then Fight's destructor. */
 void StageShrine_destroy(StageShrine *this, s32 flags) {
     ListNode *node;
 
     groupDestroy(&this->group, DESTROY_BASES);
-    spriteDestroy(&this->unkD60, DESTROY_BASES);
-    /* listRemove(&this->unkD38), in the access order the game's compiler used */
-    node = &this->unkD38;
-    this->unkD38.next->prev = this->unkD38.prev;
-    node->prev->next = this->unkD38.next;
-    this->unkD38.next = node;
-    this->unkD38.prev = node;
+    spriteDestroy(&this->sprite, DESTROY_BASES);
+    /* listRemove(&this->collisionLink.link), in the access order the game's compiler used */
+    node = &this->collisionLink.link;
+    this->collisionLink.link.next->prev = this->collisionLink.link.prev;
+    node->prev->next = this->collisionLink.link.next;
+    this->collisionLink.link.next = node;
+    this->collisionLink.link.prev = node;
     Fight_destroy(&this->base, flags);
 }
 

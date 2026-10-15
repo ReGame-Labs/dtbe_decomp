@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 #include "gte.h"
@@ -372,9 +373,89 @@ s32 getAngleTo(Vec3 *from, Vec3 *to) {
     return ratan2(y - from->vy, x - from->vx) & 0xFFF;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", spawnItemProjectile);
+/* The class of virtual tables ITEM_PROJECTILE_VTABLE (and ITEM_PROJECTILE_HIT_VTABLE for the base at 0x18), derived
+ * from Projectile: its index picks the word passed to Projectile_init (ITEM_PROJECTILE_ATTACKS) and the frame of the
+ * pieces ItemProjectile_throwPiece throws. */
+typedef struct ItemProjectile {
+    /* 0x00 */ Projectile base;
+    /* 0xC0 */ s32 index;
+    /* 0xC4 */ s32 angle;
+    /* 0xC8 */ s32 pieceFrame; /* the frame of the pieces it throws, 0 to 3 */
+} ItemProjectile;
 
-INCLUDE_ASM("game/nonmatchings/game_0i", spawnItemProjectiles);
+extern u32 ITEM_PROJECTILE_ATTACKS[];
+extern VtableEntry ITEM_PROJECTILE_HIT_VTABLE[];
+extern EntityVtable ITEM_PROJECTILE_VTABLE;
+
+ItemProjectile *ItemProjectile_init(ItemProjectile *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, s32 index,
+                                    s32 angle);
+
+/* getCos and getSin (engine/math/sin_cos.c), inlined. The match depends on these s16 inlines: a table read in the
+ * expression is narrowed to lhu + sll + sra. */
+static inline s16 getCosInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].cos;
+}
+
+static inline s16 getSinInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].sin;
+}
+
+/* Throws an ItemProjectile of the item index from position, toward angle at 0x80 a frame (the table's 4.12
+ * cosine and sine >> 5), and hands it to the fighter's fight. */
+void spawnItemProjectile(Fighter *fighter, Vec3 *position, s32 index, s32 angle) {
+    Vec3 velocity;
+    Entity *projectile;
+
+    angle &= 0xFFF;
+    velocity.vx = getCosInline(angle) >> 5;
+    velocity.vy = getSinInline(angle) >> 5;
+    velocity.vz = 0;
+    projectile = NEW_ENTITY(0xCC, ItemProjectile_init, fighter, position, &velocity, index, angle);
+    Fighter_addEntity(fighter, projectile);
+}
+
+/* Fires the item index's three shots (spawnItemProjectile) at the opponent from the character's point
+ * (func_8007A650), 0x40 apart, unless the body clip is 15 to 18 (the knocked-down clips); an opponent behind the
+ * character is shot straight ahead instead. Then sound 7 and the item effect ends. US first needs the point
+ * within 8 of z = 0. The match depends on the switch: `clip < 15 || clip > 18` folds into one unsigned test. */
+void spawnItemProjectiles(Fighter *this, s32 index) {
+    Vec3 from;
+    Vec3 to;
+    s32 angle;
+
+#if VERSION_US
+    func_8007A650(this, &from);
+    if ((from.vz >= 0 ? from.vz : -from.vz) >= 8) {
+        return;
+    }
+#endif
+    switch (func_80079E2C(this)) {
+    case 15:
+    case FIGHTER_CLIP_KNOCKED_DOWN:
+    case FIGHTER_CLIP_DOWN:
+    case FIGHTER_CLIP_GET_UP:
+        break;
+    default:
+#if VERSION_JP
+        func_8007A650(this, &from);
+#endif
+        func_8007A650(Fighter_getOpponent(this), &to);
+        angle = getAngleTo(&from, &to);
+        if (Fighter_getFacing(this) > 0) {
+            if (angle > 0x300 && angle < 0xD00) {
+                angle = 0;
+            }
+        } else if (angle < 0x500 || angle > 0xB00) {
+            angle = 0x800;
+        }
+        spawnItemProjectile(this, &from, index, angle);
+        spawnItemProjectile(this, &from, index, angle - 0x40);
+        spawnItemProjectile(this, &from, index, angle + 0x40);
+        soundControlPlaySound(&SOUND_CONTROL, 7, 0);
+        Fighter_clearItemEffect(this);
+        break;
+    }
+}
 
 /* Puffs a grey particle of SPIN_PARTICLE_VTABLE (0x80 big) from the character's point (func_8007A650), moved by -32 to
  * 31 in x and y, at a random velocity (x and y -32 to 31): its frame is 0, 1 or 2 for the kind 1, 2 or 3 of 0x478, none
@@ -614,7 +695,43 @@ void Item_callTouch(Unk800C8DFC *object, s32 arg) {
     object->vtable->touch.func((u8 *)object + object->vtable->touch.delta, arg);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", Item_touch);
+s32 getToucherKind(void *this, CollisionSphere *arg);
+void func_800C8F34(Item *this);
+s32 func_800C8F7C(Item *this, Entity *target);
+void Item_knockAway(Item *this, Fighter *fighter);
+void Item_giveTo(Item *this, Fighter *fighter);
+
+/* The item's touch slot: another item's touch does nothing; a fighter's knocks it away when func_800C8F7C says so,
+ * else gives the fighter the item, takes it off its spawner and deletes it; anything else stops it
+ * (func_800C8F34).
+ * The match depends on a third case above ENTITY_KIND_ITEM that shares the default: the game's switch tree splits
+ * at ITEM (three nodes split at the middle; two split at the first, testing FIGHTER first).
+ * The kinds above ITEM are ENTITY_KIND_FIGHTER_OBJECT and ENTITY_KIND_STAGE_OBJECT (both own collision spheres),
+ * and either compiles the same; the case names the first, whose touch stops the item like the default. */
+void Item_touch(Item *this, CollisionSphere *sphere) {
+    Fighter *fighter;
+
+    switch (getToucherKind(this, sphere)) {
+    case ENTITY_KIND_ITEM:
+        break;
+    case ENTITY_KIND_FIGHTER:
+        fighter = (Fighter *)getHitFighter(sphere);
+        if (func_800C8F7C(this, &fighter->entity)) {
+            Item_knockAway(this, fighter);
+        } else {
+            Item_giveTo(this, fighter);
+            if (this->spawner != NULL) {
+                ItemSpawner_removeItem(this->spawner, this);
+            }
+            entityDelete(&this->entity);
+        }
+        break;
+    case ENTITY_KIND_FIGHTER_OBJECT:
+    default:
+        func_800C8F34(this);
+        break;
+    }
+}
 
 /* entityGetKind of the entity at 0x14 of arg, or 0 when there is none. */
 s32 getToucherKind(void *this, CollisionSphere *arg) {
@@ -926,8 +1043,10 @@ void func_800C9BA4(Unk800C9AF4 *this, CollisionSphere *arg) {
     if (this->unkC4 == 0 && this->base.unkB4 == 0) {
         /* The match depends on a switch over the entity kinds with three cases: the game's compare tree has
          * 0x20000 at its root (tests ==, then > to the default arm, then 0x10000), which gcc builds only from a
-         * third case above 0x20000 that shares the default arm. Its value is not in the code:
-         * ENTITY_KIND_FIGHTER_OBJECT is a guess. Item_touch has the same tree. */
+         * third case above 0x20000 that shares the default arm. The kinds above it are ENTITY_KIND_FIGHTER_OBJECT
+         * (0x30000) and ENTITY_KIND_STAGE_OBJECT (0x40000), both with collision spheres, and either compiles the
+         * same; the case names the first, whose touch opens the box like the default. Item_touch has the same
+         * tree. */
         switch (getToucherKind(this, arg)) {
         case ENTITY_KIND_ITEM:
             break;
@@ -1070,7 +1189,7 @@ typedef struct ItemEffectIcon {
     /* 0x22 */ s16 y;
     /* 0x24 */ s32 unk24;
     /* 0x28 */ s32 effectKind; /* the fighter's itemEffect.kind */
-    /* 0x2C */ s32 unk2C;
+    /* 0x2C */ s32 frame;
 } ItemEffectIcon;
 
 /* Constructs the effect icon of itemKind for fighter, by its side: x 0x2C for side 0, else 0x114, and y 0xAC. */
@@ -1090,7 +1209,7 @@ ItemEffectIcon *ItemEffectIcon_init(ItemEffectIcon *this, Fighter *fighter, s32 
     this->y = 0xAC;
     this->unk24 = 0;
     this->effectKind = fighter->itemEffect.kind;
-    this->unk2C = 0;
+    this->frame = 0;
     return this;
 }
 
@@ -1183,20 +1302,6 @@ Unk800C3CFC *func_800CAEF0(Unk800C3CFC *this, Vec3 *pos, s32 arg2, s32 arg3) {
     this->unk50 = 8;
     return this;
 }
-
-/* The class of virtual tables ITEM_PROJECTILE_VTABLE (and ITEM_PROJECTILE_HIT_VTABLE for the base at 0x18), derived
- * from Projectile: its index picks the word passed to Projectile_init (ITEM_PROJECTILE_ATTACKS) and the frame of the
- * pieces ItemProjectile_throwPiece throws. */
-typedef struct ItemProjectile {
-    /* 0x00 */ Projectile base;
-    /* 0xC0 */ s32 index;
-    /* 0xC4 */ s32 angle;
-    /* 0xC8 */ s32 pieceFrame; /* the frame of the pieces it throws, 0 to 3 */
-} ItemProjectile;
-
-extern u32 ITEM_PROJECTILE_ATTACKS[];
-extern VtableEntry ITEM_PROJECTILE_HIT_VTABLE[];
-extern EntityVtable ITEM_PROJECTILE_VTABLE;
 
 /* Constructs Projectile_init's entity with 0xC0, entry index of ITEM_PROJECTILE_ATTACKS, 0xA00 and 2, then the
  * virtual tables ITEM_PROJECTILE_VTABLE (and ITEM_PROJECTILE_HIT_VTABLE for the base at 0x18). */

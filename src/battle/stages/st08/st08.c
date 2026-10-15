@@ -23,7 +23,7 @@ typedef struct StageEvolution {
     /* 0xF70 */ RECT clutRect;     /* 16 by 1 pixels at (0x300, 0xFC): a CLUT */
     /* 0xF78 */ u16 clut[16];     /* that CLUT read back from VRAM (st08_readClut) */
     /* 0xF98 */ u16 clutCopy[16]; /* and a second copy */
-    /* 0xFB8 */ s16 frames; /* the scenery's frames (StageEvolution_tickScenery) */
+    /* 0xFB8 */ u16 frames; /* the scenery's frames (StageEvolution_tickScenery) */
     /* 0xFBA */ s16 endFrames; /* the frames since the race ended, from -1 (StageEvolution_tick) */
     /* 0xFBC */ s16 winner; /* the side whose meter reached 0, -1 for none (st08_checkWinner) */
     /* 0xFBE */ s16 evolutions; /* the evolutions st08_checkWinner requested: 180 frames to wait each */
@@ -224,7 +224,7 @@ void StageEvolution_tick(StageEvolution *this) {
 
 /* the stage's own steps */
 void st08_checkWinner(StageEvolution *this);
-void func_800D4018(StageEvolution *this);
+void st08_cycleClut(StageEvolution *this);
 void func_800D40DC(StageEvolution *this);
 void func_800D4590(StageEvolution *this);
 void st08_copyMeters(StageEvolution *this);
@@ -234,7 +234,7 @@ void StageEvolution_tickScenery(StageEvolution *this) {
     BonusFight_tickScenery(&this->base);
     func_800D40DC(this);
     func_800D4590(this);
-    func_800D4018(this);
+    st08_cycleClut(this);
     st08_copyMeters(this);
     st08_checkWinner(this);
     this->frames++;
@@ -297,7 +297,18 @@ void st08_readClut(StageEvolution *this) {
     StoreImage(&this->clutRect, (u_long *)this->clutCopy);
 }
 
-INCLUDE_ASM("st08/nonmatchings/st08", func_800D4018);
+/* Every other 4 frames, cycles entries 0 to 5 of the CLUT through the first five of the copy, one step a frame,
+ * and loads it back to VRAM. */
+void st08_cycleClut(StageEvolution *this) {
+    s32 i;
+
+    if (((this->frames >> 2) & 1) == 0) {
+        for (i = 0; i < 6; i++) {
+            this->clut[i] = this->clutCopy[(i + this->frames) % 5];
+        }
+        LoadImage(&this->clutRect, (u_long *)this->clut);
+    }
+}
 
 /* Clears the halfwords at 0xFDC, 0xFDE and 0xFC8-0xFCC and sets the gauge's maximum (as st07_resetCharge). */
 void st08_resetCounts(StageEvolution *this) {

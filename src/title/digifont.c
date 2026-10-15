@@ -2,9 +2,12 @@
  * builds. The boundary is unproven: the unit has no strings, only its virtual table marks it. */
 
 #include "common.h"
+#include "engine/lib/format.h"
+#include "engine/lib/string.h"
 #include "engine/system/memory.h"
 #include "engine/text/font.h"
 #include "title/title_classes.h"
+#include "strings.h"
 
 /* A Cache of glyphs (DigifontCache_init, DIGIFONT_CACHE_VTABLE) loaded from a font file: a u16 count, count
  * two-byte character codes, then a 192-byte glyph for each, the layout of the assets' title/digifont.bin. The
@@ -18,7 +21,7 @@ typedef struct DigifontCache {
     /* 0x28 */ u8 *glyph;     /* the one DigifontCache_selectGlyph picked */
     /* 0x2C */ RECT area;     /* the cache's VRAM area */
     /* 0x34 */ RECT clutRect; /* where DIGIFONT_CLUT goes in VRAM */
-    /* 0x3C */ s32 unk3C;
+    /* 0x3C */ s32 alternate; /* passed to DigifontCache_getSlot: 1 draws the glyphs 0x300 codes higher */
     /* 0x40 */ RECT charRect; /* where and how big a character is drawn: 0, 0, 24, 24 at first */
     /* 0x48 */ u8 color[4];   /* r, g, b and alpha, 0x80 each at first; an alpha of 0 hides the print */
 } DigifontCache;
@@ -39,7 +42,7 @@ DigifontCache *DigifontCache_init(DigifontCache *this, RECT *area, char *path) {
     this->area = *area;
     this->area.x &= ~0x3F;
     this->area.y &= ~0xFF;
-    this->unk3C = 0;
+    this->alternate = 0;
     this->charRect.x = 0;
     this->charRect.y = 0;
     this->charRect.w = DIGIFONT_CHAR_SIZE;
@@ -87,9 +90,79 @@ s32 DigifontCache_getSlot(DigifontCache *this, RECT *rect, u32 code, s32 alterna
     return 0;
 }
 
-INCLUDE_ASM("title/nonmatchings/digifont", DigifontCache_print);
+void DigifontCache_drawChar(DigifontCache *this, u_long *ot, RECT *rect, u8 *color, u32 code, s32 alternate);
 
-INCLUDE_ASM("title/nonmatchings/digifont", func_8007A9C8);
+/* Prints formatted text as printf does, in full-width glyphs from charRect's place, one character width
+ * (charRect.w) apart; nothing when the color's alpha is 0. */
+void DigifontCache_print(DigifontCache *this, u_long *ot, u8 *format, ...) {
+    VaList args;
+    u8 text[0x200];
+    u8 wide[0x400];
+    RECT rect;
+
+    if (this->color[3] == 0) {
+        return;
+    }
+    VA_START(args, format);
+    vsprintf(text, format, args);
+    copyFullWidth(wide, text);
+    /* The match depends on format walking the full-width text: the game keeps the pointer in format's stack
+     * slot (its address is taken by VA_START). */
+    format = wide;
+    rect = this->charRect;
+    rect.w--;
+    while (*format != '\0') {
+        DigifontCache_drawChar(this, ot, &rect, this->color, (format[0] << 8) | format[1], this->alternate);
+        rect.x += this->charRect.w;
+        format += 2;
+    }
+}
+
+/* Prints formatted text as printf does, in full-width glyphs centred in box: a glyph taller than the box takes
+ * its height, and a line wider than it is squeezed to box->w / count per glyph. Nothing when the color's alpha
+ * is 0. */
+void DigifontCache_printInBox(DigifontCache *this, u_long *ot, RECT *box, u8 *format, ...) {
+    VaList args;
+    u8 text[0x200];
+    u8 wide[0x400];
+    RECT rect;
+    s32 count;
+    s32 squeezed;
+    s32 i;
+
+    if (this->color[3] == 0) {
+        return;
+    }
+    VA_START(args, format);
+    vsprintf(text, format, args);
+    copyFullWidth(wide, text);
+    format = wide;
+    if (this->charRect.h > box->h) {
+        rect.h = box->h;
+        rect.y = box->y;
+    } else {
+        rect.h = this->charRect.h;
+        rect.y = box->y + ((box->h - this->charRect.h) >> 1);
+    }
+    count = strlen(format) / 2;
+    squeezed = count * this->charRect.w > box->w;
+    if (squeezed) {
+        rect.x = box->x;
+        rect.w = box->w / count;
+    } else {
+        rect.w = this->charRect.w - 1;
+        rect.x = box->x + ((box->w - count * this->charRect.w) >> 1);
+    }
+    for (i = 1; i <= count; i++) {
+        DigifontCache_drawChar(this, ot, &rect, this->color, (format[0] << 8) | format[1], this->alternate);
+        if (squeezed) {
+            rect.x = box->x + box->w * i / count;
+        } else {
+            rect.x += this->charRect.w;
+        }
+        format += 2;
+    }
+}
 
 INCLUDE_ASM("title/nonmatchings/digifont", DigifontCache_drawChar);
 
@@ -136,9 +209,9 @@ void DigifontCache_setAlpha(DigifontCache *this, u8 a) {
     this->color[3] = a;
 }
 
-/* Sets 0x3C. */
-void func_8007B040(DigifontCache *this, s32 value) {
-    this->unk3C = value;
+/* Sets alternate: 1 draws the glyphs 0x300 codes higher. */
+void DigifontCache_setAlternate(DigifontCache *this, s32 value) {
+    this->alternate = value;
 }
 
 INCLUDE_RODATA("title/nonmatchings/digifont", DIGIFONT_CACHE_VTABLE);

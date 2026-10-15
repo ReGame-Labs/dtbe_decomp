@@ -84,6 +84,7 @@ typedef struct SoundControl {
 #define SOUND_MENU_BACK 0x11
 #define SOUND_MENU_REFUSE 0x12  /* a locked item, a wrong code */
 #define SOUND_MENU_STEP 0x13    /* an option's value moved */
+#define SOUND_MENU_CODE 0x15    /* a right code */
 /* the sound effect of the pause */
 #define SOUND_PAUSE 0x14
 

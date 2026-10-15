@@ -153,9 +153,57 @@ void Seraphimon_airSpecial1(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_RODATA("game/nonmatchings/fighters/seraphimon", D_8006B5EC);
+/* The special move 1's hitbox (Seraphimon_spawnSpecial1Hitbox); its sphere starts disabled. */
+typedef struct SeraphimonSpecial1Hitbox {
+    /* 0x000 */ Entity entity;
+    /* 0x018 */ Hit unk18;
+    /* 0x034 */ u8 unk34[0x38 - 0x34];
+    /* 0x038 */ CollisionSphere unk38;
+    /* 0x080 */ Fighter *fighter;
+    /* 0x084 */ Fight *list;
+    /* 0x088 */ Vec3 position;
+    /* 0x094 */ u8 unk94[0x98 - 0x94];
+    /* 0x098 */ Vec3 velocity;
+    /* 0x0A4 */ u8 unkA4[0x138 - 0xA4];
+    /* 0x138 */ s32 unk138;
+    /* 0x13C */ s32 unk13C;
+    /* 0x140 */ s32 facing; /* the character's (Fighter_getFacing) */
+    /* 0x144 */ s32 speed; /* the velocity's length */
+    /* 0x148 */ s32 unk148;
+    /* 0x14C */ s32 unk14C;
+    /* 0x150 */ s16 vramY; /* the character's 0x440 (Fighter_getVramY) */
+    /* 0x152 */ u8 unk152[0x154 - 0x152];
+    /* 0x154 */ s32 unk154;
+} SeraphimonSpecial1Hitbox;
 
-INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", Seraphimon_spawnSpecial1Hitbox);
+SeraphimonSpecial1Hitbox *SeraphimonSpecial1Hitbox_init(SeraphimonSpecial1Hitbox *this, Fighter *fighter,
+                                                        Vec3 *position, VECTOR *velocity, Fight *list);
+extern VECTOR SERAPHIMON_SPECIAL1_HITBOX_OFFSET;
+
+INCLUDE_RODATA("game/nonmatchings/fighters/seraphimon", SERAPHIMON_SPECIAL1_HITBOX_OFFSET);
+
+/* Spawns the special move 1's hitbox at the character's point 9 (moved by SERAPHIMON_SPECIAL1_HITBOX_OFFSET), flying
+ * forward at 128 per frame. */
+void Seraphimon_spawnSpecial1Hitbox(Fighter *this) {
+    Vec3 position;
+    VECTOR velocity;
+    VECTOR offset = SERAPHIMON_SPECIAL1_HITBOX_OFFSET;
+    Fight *list;
+    Entity *child;
+
+    Fighter_getNodePosition(this, (VECTOR *)&position, 9, &offset);
+    velocity.vx = Fighter_getFacing(this) * 128;
+    velocity.vy = 0;
+    velocity.vz = 0;
+    list = Fighter_getScene(this);
+    child = allocEntityMemory(sizeof(SeraphimonSpecial1Hitbox));
+    if (child != NULL) {
+        SeraphimonSpecial1Hitbox_init(entityOperatorNewAt(sizeof(SeraphimonSpecial1Hitbox), child), this, &position,
+                                      &velocity, list);
+    }
+    Fighter_addEntity(this, child);
+    func_80079B0C(this, 20);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", Seraphimon_special3);
 
@@ -400,29 +448,6 @@ void func_800AF188(Unk800AF0A0 *this) {
 }
 
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", func_800AF214);
-
-/* The special move 1's hitbox (Seraphimon_spawnSpecial1Hitbox); its sphere starts disabled. */
-typedef struct SeraphimonSpecial1Hitbox {
-    /* 0x000 */ Entity entity;
-    /* 0x018 */ Hit unk18;
-    /* 0x034 */ u8 unk34[0x38 - 0x34];
-    /* 0x038 */ CollisionSphere unk38;
-    /* 0x080 */ Fighter *fighter;
-    /* 0x084 */ Fight *list;
-    /* 0x088 */ Vec3 position;
-    /* 0x094 */ u8 unk94[0x98 - 0x94];
-    /* 0x098 */ Vec3 velocity;
-    /* 0x0A4 */ u8 unkA4[0x138 - 0xA4];
-    /* 0x138 */ s32 unk138;
-    /* 0x13C */ s32 unk13C;
-    /* 0x140 */ s32 facing; /* the character's (Fighter_getFacing) */
-    /* 0x144 */ s32 speed; /* the velocity's length */
-    /* 0x148 */ s32 unk148;
-    /* 0x14C */ s32 unk14C;
-    /* 0x150 */ s16 vramY; /* the character's 0x440 (Fighter_getVramY) */
-    /* 0x152 */ u8 unk152[0x154 - 0x152];
-    /* 0x154 */ s32 unk154;
-} SeraphimonSpecial1Hitbox;
 
 /* Builds the special move 1's hitbox for fighter at position, flying at velocity, and adds its sphere, disabled, to
  * fighter's side of list (Fighter_getSide). */

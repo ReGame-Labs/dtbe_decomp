@@ -267,11 +267,11 @@ typedef struct Unk800ABE6C {
     /* 0x80 */ Fighter *fighter;
     /* 0x84 */ Vec3 position;
     /* 0x90 */ u8 unk90[0x94 - 0x90];
-    /* 0x94 */ Vec3 unk94; /* where func_800AC138 puts it: position moved by the velocity */
+    /* 0x94 */ Vec3 reach; /* position, frames * 128 ahead (func_800AC138); the burst appears there */
     /* 0xA0 */ u8 unkA0[0xA4 - 0xA0];
     /* 0xA4 */ Vec3 velocity;
     /* 0xB0 */ u8 unkB0[0xB4 - 0xB0];
-    /* 0xB4 */ s32 unkB4;
+    /* 0xB4 */ s32 frames;
     /* 0xB8 */ s16 facing; /* the character's (Fighter_getFacing) */
     /* 0xBA */ s16 vramY;  /* the character's 0x440 (Fighter_getVramY) */
     /* 0xBC */ u16 unkBC; /* 1 once func_800AC080 made its burst */
@@ -311,7 +311,7 @@ Unk800ABE6C *func_800ABE6C(Unk800ABE6C *this, Fighter *fighter, Vec3 *position, 
     this->velocity.vx = vx;
     this->velocity.vy = vy;
     this->velocity.vz = vz;
-    this->unkB4 = 0;
+    this->frames = 0;
     this->unkBC = 0;
     this->vramY = Fighter_getVramY(fighter);
     this->unk38.entity = &this->entity;
@@ -345,7 +345,7 @@ void func_800ABFE0(UnkPartsEntity38 *this, s32 flags) {
 }
 
 /* The second base's first method for func_800ABE6C's class: Hit_apply with sum; the first time (0xBC
- * still 0), adds a burst of 2 (ParticleBurst_init) at 0x94 as a sibling and sets bit 0 of the part's flags. */
+ * still 0), adds a burst of 2 (ParticleBurst_init) at its reach as a sibling and sets bit 0 of the part's flags. */
 void func_800AC080(Unk800ABE6C *this, void *sum) {
     Entity *child;
     s32 radius;
@@ -355,7 +355,7 @@ void func_800AC080(Unk800ABE6C *this, void *sum) {
         radius = this->velocity.vx >> 2;
         child = allocEntityMemory(0x3C);
         if (child != NULL) {
-            ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->unk94, radius, 0x60, 2, 0x808080);
+            ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->reach, radius, 0x60, 2, 0x808080);
         }
         entityAddSibling(&this->entity, child);
         this->unkBC = 1;
@@ -363,7 +363,26 @@ void func_800AC080(Unk800ABE6C *this, void *sum) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AC138);
+/* The tick of Unk800ABE6C: puts its reach and its part frames * 128 ahead of position; deletes itself when the fighter
+ * is gone or its attack is idle, else after 7 frames. The match depends on a return after each of the first two
+ * deletes: under the unit's -fno-cse-follow-jumps the call's block then reloads the fighter. */
+void func_800AC138(Unk800ABE6C *this) {
+    this->unk38.position.vx = this->reach.vx = this->position.vx + this->facing * (this->frames << 7);
+    this->unk38.position.vy = this->reach.vy = this->position.vy;
+    this->unk38.position.vz = this->reach.vz = this->position.vz;
+    if (this->fighter == NULL) {
+        entityDelete(&this->entity);
+        return;
+    }
+    if (Fighter_isAttackIdle(this->fighter)) {
+        entityDelete(&this->entity);
+        return;
+    }
+    this->frames++;
+    if (this->frames >= 7) {
+        entityDelete(&this->entity);
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/saintgargomon", D_8006B2D4);
 

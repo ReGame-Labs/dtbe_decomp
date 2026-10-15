@@ -13,7 +13,7 @@ BonusLandingMark *BonusLandingMark_init(BonusLandingMark *this, Fight *owner, Ve
 void BonusThrower_place(BonusThrower *this);
 
 /* the virtual tables the functions below install, and the data they read */
-extern EntityVtable D_800D3874;
+extern EntityVtable ST07_BOARD_VTABLE;
 extern EntityVtable BONUS_LANDING_MARK_VTABLE;
 extern EntityVtable BONUS_THROWER_VTABLE;
 extern EntityVtable ST07_BALL_VTABLE;
@@ -458,20 +458,83 @@ void BonusLandingMark_tick(BonusLandingMark *this, s32 arg) {
 
 INCLUDE_ASM("st07/nonmatchings/st07", BonusLandingMark_draw);
 
-INCLUDE_ASM("st07/nonmatchings/st07", func_800D5910);
+/* The board st07_createBoard puts on the stage's mesh: sixteen pieces, two more every 8 frames, each falling (its
+ * offset's vy grows by speed / 4) and fading until it is 0x100 down, then starting again (St07Board_tick). */
+typedef struct St07Board {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ StageBallShoot *owner;
+    /* 0x1C */ MeshScene *meshScene; /* the stage's, the board drawn on its node 3 */
+    /* 0x20 */ u16 frames;
+    /* 0x22 */ u16 count;           /* the pieces in play: + 2 every 8 frames, up to 16 */
+    /* 0x24 */ s16 speeds[16];      /* + 1 a frame while falling */
+    /* 0x44 */ u8 shades[16];       /* -0x80 - vy / 2: the piece's grey */
+    /* 0x54 */ u16 unk54[16];       /* while set, the piece does not fall */
+    /* 0x74 */ VECTOR offsets[16];
+} St07Board; /* size 0x174 */
 
-/* The destructor of the entity class of vtable D_800D3874, which func_800D5910 installs. */
-void func_800D59B4(Entity *this, s32 flags) {
-    this->vtable = &D_800D3874;
+/* vector_ops.c's vecClear, inlined: the match depends on clearing through a pointer. */
+static inline VECTOR *clearVector(VECTOR *v) {
+    v->vx = 0;
+    v->vy = 0;
+    v->vz = 0;
+    v->pad = 0;
+    return v;
+}
+
+/* Constructs the board of owner on meshScene, every piece at rest. */
+St07Board *St07Board_init(St07Board *this, StageBallShoot *owner, MeshScene *meshScene) {
+    s32 i;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &ST07_BOARD_VTABLE;
+    this->owner = owner;
+    this->meshScene = meshScene;
+    for (i = 0; i < 16; i++) {
+        clearVector(&this->offsets[i]);
+        this->shades[i] = 0;
+        this->speeds[i] = 0;
+        this->unk54[i] = 0;
+    }
+    this->frames = 0;
+    this->count = 0;
+    return this;
+}
+
+/* St07Board's destructor. */
+void St07Board_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST07_BOARD_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("st07/nonmatchings/st07", func_800D5A08);
+/* The board's tick: every 8 frames two more pieces come into play (up to 16); each piece not held by unk54 falls
+ * faster and fades, and starts again at rest once it is 0x100 down. */
+void St07Board_tick(St07Board *this, s32 arg) {
+    s32 i;
 
-INCLUDE_ASM("st07/nonmatchings/st07", func_800D5AFC);
+    if ((this->frames & 7) == 0) {
+        this->count += 2;
+        if (this->count > 16) {
+            this->count = 16;
+        }
+    }
+    for (i = 0; i < this->count; i++) {
+        if (this->unk54[i] == 0) {
+            this->offsets[i].vy += ++this->speeds[i] >> 2;
+            this->shades[i] = -0x80 - (this->offsets[i].vy >> 1);
+            if (this->offsets[i].vy > 0x100) {
+                clearVector(&this->offsets[i]);
+                this->shades[i] = 0;
+                this->speeds[i] = 0;
+            }
+        }
+    }
+    this->frames++;
+}
+
+INCLUDE_ASM("st07/nonmatchings/st07", St07Board_draw);
 
 /* BallShootController's destructor: Controller's. */
 void BallShootController_destroy(BallShootController *this, s32 flags) {
