@@ -7,6 +7,7 @@
 #include "engine/task/entity.h"
 #include "engine/game/character.h"
 #include "engine/math/matrix.h"
+#include "engine/math/random.h"
 #include "engine/system/memory.h"
 #include "title/title_classes.h"
 
@@ -16,6 +17,7 @@ extern RECT *TITLE_CHARA_MOUTHS[][2];
 extern EntityVtable TITLE_CHARA_VTABLE;
 
 void TitleChara_startClip(TitleChara *this, s32 clip, s32 blendFrames, s32 plays);
+void TitleChara_setEyes(TitleChara *this, s32 index);
 
 /* The title character's constructor: loads character 0x18, makes its model in clip 0 and places it at
  * position, turned by rotation about x, y and z, to be drawn in camera. */
@@ -67,7 +69,37 @@ void TitleChara_destroy(TitleChara *this, s32 flags) {
 
 INCLUDE_ASM("title/nonmatchings/title_chara", TitleChara_tick);
 
-INCLUDE_ASM("title/nonmatchings/title_chara", TitleChara_tickBlink);
+/* Blinks: every second frame shows the next of the three eye pictures until three have shown, then waits 56 to
+ * 176 frames (random, by 8) with the eyes open and starts over. */
+void TitleChara_tickBlink(TitleChara *this) {
+    s32 evenFrame; /* The match depends on the test kept as a value: an if on it gives andi + a swapped branch */
+
+    switch (this->blinkState) {
+    case 0:
+        evenFrame = (this->frame & 1) == 0;
+        if (evenFrame) {
+            this->eyes++;
+            this->eyes %= 3;
+            TitleChara_setEyes(this, this->eyes);
+            this->blinkTimer++;
+        }
+        if (this->blinkTimer < 3) {
+            break;
+        }
+        this->blinkWait = ((mersenneTwisterGenerate(&RANDOM) & 0xF) + 7) * 8;
+        this->blinkTimer = 0;
+        this->blinkState++;
+        /* fallthrough */
+    case 1:
+        if (++this->blinkTimer >= this->blinkWait) {
+            this->eyes = 0;
+            this->blinkWait = 0;
+            this->blinkTimer = 0;
+            this->blinkState = 0;
+        }
+        break;
+    }
+}
 
 /* The title character's draw (slot 0x10): animates the model and draws it in its camera. */
 void TitleChara_draw(TitleChara *this) {

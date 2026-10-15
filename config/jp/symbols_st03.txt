@@ -1,6 +1,9 @@
 // st03.bin's own names (config/jp/st03.yaml)
 
 // the names tools/rename.py gave (tools/renames/), in address order
+ST03_TERRAIN_LINE_ENDS = 0x800D3824;
+ST03_SPRITE_CLUT_RECT = 0x800D3834;
+ST03_SPRITE_IMAGE_RECT = 0x800D383C;
 ST03_PALETTE_LOADS = 0x800D3964;
 ST03_BOLT_POINTS = 0x800D39CC;
 ST03_DROP_BLOCK_VTABLE = 0x800D3BAC;
@@ -49,3 +52,4 @@ St03Hit_setKnockback = 0x800D8898; // type:func
 St03Lift_destroy = 0x800D88B4; // type:func
 St03LiftPart_destroy = 0x800D88FC; // type:func
 St03MeshMover_destroy = 0x800D899C; // type:func
+ST03_TERRAIN_LINES = 0x800D8E54;

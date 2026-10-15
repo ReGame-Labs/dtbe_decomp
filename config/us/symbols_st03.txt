@@ -3,9 +3,9 @@
 // The JP build's names that splat gave after their JP address, at their
 // US address: the sources share them (generated from config/jp/)
 D_800D3820 = 0x800D3B00;
-D_800D3824 = 0x800D3B04;
-D_800D3834 = 0x800D3B14;
-D_800D383C = 0x800D3B1C;
+ST03_TERRAIN_LINE_ENDS = 0x800D3B04;
+ST03_SPRITE_CLUT_RECT = 0x800D3B14;
+ST03_SPRITE_IMAGE_RECT = 0x800D3B1C;
 jtbl_800D3844 = 0x800D3B24;
 jtbl_800D38BC = 0x800D3B9C;
 D_800D38D4 = 0x800D3BB4;
@@ -137,4 +137,4 @@ func_800D8D24 = 0x800D9004; // type:func
 func_800D8DAC = 0x800D908C; // type:func
 func_800D8DF4 = 0x800D90D4; // type:func
 D_800D8E3C = 0x800D911C;
-D_800D8E54 = 0x800D9134;
+ST03_TERRAIN_LINES = 0x800D9134;

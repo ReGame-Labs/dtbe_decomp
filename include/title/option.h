@@ -153,6 +153,7 @@ public:
 
     OptionTask() __asm__("optionTaskInit");
     ~OptionTask();
+    void run() __asm__("OptionTask_run");
     void update(s32 arg) __asm__("OptionTask_update");
 };
 

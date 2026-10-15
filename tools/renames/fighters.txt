@@ -133,6 +133,8 @@ func_8008876C Guilmon_airSpecial1
 func_80088898 Guilmon_airSpecial2
 func_80088A64 Guilmon_spawnSpecial1Hitbox
 func_80088B1C Guilmon_spawnSpecial2Hitbox
+# the offset from point 16 of the special move 2 hitbox (Guilmon_spawnSpecial2Hitbox, its init and tick)
+D_80068B7C GUILMON_SPECIAL2_HITBOX_OFFSET
 func_80088C24 GuilmonSpecial1Hitbox_init
 Unk80088C24 GuilmonSpecial1Hitbox
 D_80068C14 GUILMON_SPECIAL1_HITBOX_VTABLE
@@ -164,6 +166,8 @@ func_8008A560 Holydramon_airSpecial2
 func_8008A384 Holydramon_spawnSpecial1Hitbox
 func_8008A44C Holydramon_spawnSpecial1Effect
 func_8008A628 Holydramon_spawnSpecial2Hitbox
+# the offset from point 12 where Holydramon_spawnSpecial2Hitbox spawns each hitbox (its only reader)
+D_80068D64 HOLYDRAMON_SPECIAL2_HITBOX_OFFSET
 func_8008A9BC HolydramonSpecial1Hitbox_init
 Unk8008A9BC HolydramonSpecial1Hitbox
 D_80068EB4 HOLYDRAMON_SPECIAL1_HITBOX_VTABLE
@@ -503,6 +507,14 @@ func_800A4A08 RenamonSpecial1Effect_draw
 func_800A53F0 RenamonSpecial1Effect_destroy
 func_800A38D8 Renamon_spawnSpecial1Hitbox
 func_800A3A40 Renamon_spawnSpecial1Effect
+# the entity Renamon_special2 spawns (Entity only, it only draws): a rising sprite drifting in x and z
+func_800A4C04 RenamonSpecial2Effect_init
+func_800A4D10 RenamonSpecial2Effect_tick
+func_800A4E1C RenamonSpecial2Effect_draw
+func_800A5438 RenamonSpecial2Effect_destroy
+D_8006A9CC RENAMON_SPECIAL2_EFFECT_VTABLE
+# the corners of the 64 by 64 square RenamonSpecial2Effect_draw draws (its only reader)
+D_8006A984 RENAMON_SPECIAL2_EFFECT_CORNERS
 
 # sakuyamon.c (the attacks call func_800A56CC at their first frame, a Trail; special3 calls func_800A6194)
 func_800A54C8 Sakuyamon_init
@@ -590,6 +602,8 @@ func_800AF5A4 SeraphimonSpecial1Hitbox_hit
 func_800AE16C Seraphimon_spawnSpecial1Hitbox
 func_800ADE90 Seraphimon_spawnSpecial2Hitbox
 func_800ADFD4 Seraphimon_spawnSpecial2Effect
+# the offset from point 9 where Seraphimon_spawnSpecial1Hitbox spawns the hitbox (its only reader)
+D_8006B5EC SERAPHIMON_SPECIAL1_HITBOX_OFFSET
 
 # stingmon.c (CHARACTER_STINGMON, createFighter case 16; vtable D_8006BCA4 slots by FighterVtable; each own class is
 # named for the move whose spawner is its only constructor call: func_800B1518 (special1, airSpecial1), func_800B1618 and
@@ -650,11 +664,19 @@ func_800B408C StingmonAttack3Hitbox_destroy
 D_8006BAE4 STINGMON_ATTACK3_HITBOX_HIT_VTABLE
 func_800B427C StingmonAttack3Hitbox_hit
 func_800B1518 Stingmon_spawnSpecial1Projectile
+# the offset from point 20 where Stingmon_spawnSpecial1Projectile spawns the projectile (its only reader)
+D_8006B92C STINGMON_SPECIAL1_PROJECTILE_OFFSET
 func_800B1618 Stingmon_spawnSpecial2Hitbox
 func_800B16F0 Stingmon_spawnSpecial2Effect
 func_800B17B4 Stingmon_spawnSpecial3Hitbox
 func_800B1938 Stingmon_spawnSpecial3Effect
 func_800B19CC Stingmon_spawnAttack3Hitbox
+# the two halves of StingmonSpecial1Projectile_draw: the head at its position (scaled by its radius, only while
+# its sphere is in a list) and the flash where it was fired from (scaled by its length), each with its corners
+func_800B2BA8 StingmonSpecial1Projectile_drawHead
+func_800B2D10 StingmonSpecial1Projectile_drawStart
+D_8006BA50 STINGMON_SPECIAL1_PROJECTILE_HEAD_CORNERS
+D_8006BA70 STINGMON_SPECIAL1_PROJECTILE_START_CORNERS
 
 # tailmon.c (CHARACTER_TAILMON, createFighter case 17; vtable D_8006BEE4 slots by FighterVtable, faces D_8006BE1C by
 # Fighter_setFaceTable; own classes by the move whose spawner is their only constructor call: func_800B4FA4 and

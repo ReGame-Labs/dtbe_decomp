@@ -7,8 +7,10 @@
 #include "engine/gfx/camera.h"
 #include "engine/gfx/display.h"
 #include "engine/gfx/fade.h"
+#include "engine/gfx/prim/build_line_g2.h"
 #include "engine/gfx/prim_buffer.h"
 #include "engine/gfx/sprite.h"
+#include "engine/math/matrix.h"
 #include "engine/math/random.h"
 #include "engine/math/sin_cos.h"
 #include "engine/math/vector.h"
@@ -186,6 +188,10 @@ void TitleLogoTask_destroy(TitleLogoTask *this, s32 flags) {
     taskDestroy(&this->task, flags);
 }
 
+/* an angle that turns by 4 a frame, and the sum of its sines (at 1/256) */
+extern s32 TITLE_SPIN_PHASE;
+extern s32 TITLE_SPIN;
+
 #if VERSION_JP
 /* A g++ 2.95 pointer to member function: index -1 for a non-virtual function, which is then func; else
  * virtual, entry index - 1 of the virtual table at vtableOffset in the object. */
@@ -207,9 +213,6 @@ typedef union VirtualFunction {
 
 /* the title logo task's step functions, by step */
 extern MemberFunction TITLE_LOGO_STEPS[];
-/* an angle that turns by 4 a frame, and the sum of its sines (at 1/256) */
-extern s32 TITLE_SPIN_PHASE;
-extern s32 TITLE_SPIN;
 
 void func_80067CC4(TitleLogoTask *this);
 void TitleLogoTask_drawLogo(TitleLogoTask *this, u_long *ot);
@@ -307,7 +310,32 @@ void TitleLogoTask_stepWait(TitleLogoTask *this) {
     this->copyrightLevel = this->shownCopyrightLevel;
 }
 
-INCLUDE_ASM("title/nonmatchings/title_logo", TitleLogoTask_stepShowLogo);
+/* The logo's entrance over 0x78 frames: on the first frame the entities go and the press Start prompt turns
+ * opaque; the logo brightens by 3 a frame and grows to 0x1000 (half of 0x1000 * frame / 60), and the copyright
+ * follows the frame (x 80 / 60). Then moves to the next step. Start or circle skips ahead
+ * (TitleLogoTask_checkSkip); the copyright takes the level. */
+void TitleLogoTask_stepShowLogo(TitleLogoTask *this) {
+    s32 frame;
+
+    if (this->stepFrame == 0) {
+        entityGroupDestroyAll(&this->group);
+        this->pressStart->flags &= ~SPRITE_SEMI_TRANS;
+    }
+    this->logoBrightness += 3;
+    if (this->logoBrightness > 0xFF) {
+        this->logoBrightness = 0xFF;
+    }
+    frame = this->stepFrame;
+    this->logoScale = ((frame << 12) / 60) >> 1;
+    this->shownCopyrightLevel = frame * 80 / 60;
+    this->stepFrame = frame + 1;
+    if (frame >= 0x78) {
+        this->stepFrame = 0;
+        this->step++;
+    }
+    TitleLogoTask_checkSkip(this);
+    this->copyrightLevel = this->shownCopyrightLevel;
+}
 #else
 /* Reads the 16-colour CLUT at (0x200, 0xFD) back from VRAM into clut. */
 void TitleLogoTask_readClut(TitleLogoTask *this) {
@@ -534,7 +562,59 @@ void TitleLogoTask_checkStart(TitleLogoTask *this) {
 }
 
 #if VERSION_JP
-INCLUDE_ASM("title/nonmatchings/title_logo", TitleLogoPiece_init);
+/* TitleLogoPiece's phases (TitleLogoPiece_tick) */
+#define TITLE_LOGO_PIECE_WAIT 0   /* until the timer, negative, reaches 0 */
+#define TITLE_LOGO_PIECE_ORBIT 1  /* circles (256, 240) for 200 frames, the radius easing to its target */
+#define TITLE_LOGO_PIECE_RETURN 2 /* flies back to its home and stops spinning */
+#define TITLE_LOGO_PIECE_REST 3   /* at home for 0x80 frames, then deleted */
+
+/* The entity class of vtable TITLE_LOGO_PIECE_VTABLE (TitleLogoPiece_init, Japan only): an 8x8 square of the
+ * logo's texture that waits, circles the screen's centre, then flies back to its place in the logo, spinning.
+ * Positions are 20.12 fixed point. */
+typedef struct TitleLogoPiece {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ union {
+        struct {
+            s32 angle;        /* about (256, 240), 0x1000 a turn */
+            s32 radius;
+            s32 speed;        /* added to the angle each frame, -15 to 15 */
+            s32 targetRadius; /* the radius eases to it, 0 to 426 */
+        } orbit;
+        struct {
+            s32 x;
+            s32 y;
+            s32 vx; /* the way home over the return's frames */
+            s32 vy;
+        } flight;
+    } move; /* by phase: the orbit, then the flight home */
+    /* 0x28 */ s32 homeX; /* its place in the logo: (u, v) from (159, 120) */
+    /* 0x2C */ s32 homeY;
+    /* 0x30 */ s16 phase; /* TITLE_LOGO_PIECE_* */
+    /* 0x32 */ s16 timer;
+    /* 0x34 */ u8 u;      /* of its square of the logo's texture */
+    /* 0x35 */ u8 v;
+    /* 0x36 */ u8 unk36[2];
+    /* 0x38 */ s32 spin;  /* the square's angle about z */
+} TitleLogoPiece; /* size 0x3C */
+
+/* The constructor of the entity class of vtable TITLE_LOGO_PIECE_VTABLE: the piece at (u, v) of the logo, with a
+ * random start angle, orbit speed and radius, and a random wait of up to 63 frames. */
+TitleLogoPiece *TitleLogoPiece_init(TitleLogoPiece *this, TitleLogoTask *owner, s16 u, s16 v) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &TITLE_LOGO_PIECE_VTABLE;
+    this->move.orbit.angle = mersenneTwisterGenerate(&owner->random) & 0xFFF;
+    this->move.orbit.radius = 0;
+    this->move.orbit.speed = (s32)mersenneTwisterGenerate(&owner->random) % 16;
+    this->move.orbit.targetRadius = mersenneTwisterGenerate(&owner->random) % (426 << 12);
+    this->homeX = (u + 159) << 12;
+    this->homeY = (v + 120) << 12;
+    this->phase = TITLE_LOGO_PIECE_WAIT;
+    this->timer = -(mersenneTwisterGenerate(&owner->random) & 0x3F);
+    this->u = u;
+    this->v = v;
+    this->spin = 0;
+    return this;
+}
 
 /* The destructor of the entity class of vtable TITLE_LOGO_PIECE_VTABLE, which TitleLogoPiece_init installs. */
 void TitleLogoPiece_destroy(Entity *this, s32 flags) {
@@ -626,7 +706,46 @@ void TitleStreak_tick(TitleStreak *this) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/title_logo", TitleStreak_draw);
+/* Draws the streak as an additive line from its position back to 8 times its position less its velocity, black
+ * to orange, in the owner's camera turned by TITLE_SPIN about z. */
+void TitleStreak_draw(TitleStreak *this) {
+    SVECTOR from;
+    SVECTOR to;
+    MATRIX rotation;
+    LineG2Shape shape;
+    u_long *ot;
+    s32 shift;
+    u8 *packet;
+    s16 x;
+    s16 y;
+
+#if VERSION_US
+    if (this->owner->unk110C == 0) {
+        return;
+    }
+#endif
+    ot = this->owner->camera.ot.slots;
+    shift = this->owner->camera.zShift;
+    packet = PRIM_BUFFER_FREE;
+    shape.flags = 0;
+    matrixInitRotationZ(&rotation, TITLE_SPIN);
+    setModelMatrix(&rotation);
+    from.vz = 0;
+    to.vz = 0;
+    shape.ends[0] = &from;
+    /* The match depends on x and y as s16 locals: they are read with lh, the line's end with lhu. */
+    x = this->position.vx;
+    y = this->position.vy;
+    from.vx = x;
+    from.vy = y;
+    shape.ends[1] = &to;
+    to.vx = (this->position.vx - this->velocity.vx) << 3;
+    to.vy = (this->position.vy - this->velocity.vy) << 3;
+    shape.colors[0] = 0;
+    shape.colors[1] = 0x806020;
+    shape.flags = (shape.flags & ~SPRITE_ABR_MASK) | SPRITE_SEMI_TRANS | 1;
+    PRIM_BUFFER_FREE = buildLineG2(&shape, packet, ot, shift);
+}
 
 /* The constructor of the entity class of vtable TITLE_SPARKLE_VTABLE: TitleStreak_init's, at 1/256 of the
  * sine and cosine, keeping the random number, the speed and a distance and frame of 0.

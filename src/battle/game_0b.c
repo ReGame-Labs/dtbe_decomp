@@ -169,7 +169,40 @@ s32 InputHistory_findHeldStrict(InputHistory *this, u32 buttons, s32 any) {
     return found;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0b", func_8007536C);
+/* InputHistory_findHeld for a run of at least frames frames holding buttons: a frame that does not hold them
+ * restarts the count, or ends the search once the run was found. Keeps the place after the run's end (the next
+ * entry, unlike InputHistory_findHeld) for the next search. Returns whether it found the run.
+ * The match depends on run declared before found (the game sets run first). */
+s32 InputHistory_findHeldFor(InputHistory *this, u32 buttons, s32 frames, s32 any) {
+    s32 run = frames;
+    s32 found = 0;
+    s32 i = this->searchIndex;
+    s32 left = this->searchFrames;
+    u32 wanted = InputHistory_mirror(this, buttons);
+    u32 mask = getButtonGroup(wanted);
+    u16 held;
+
+    for (;;) {
+        held = this->history[i] & mask;
+        i = (i - 1) & 0xFF;
+        if (--left < 0) {
+            break;
+        }
+        if (!matchButtons(held, wanted, any)) {
+            if (found) {
+                break;
+            }
+            run = frames;
+        } else if (--run <= 0) {
+            found = 1;
+        }
+    }
+    if (found) {
+        this->searchIndex = i;
+        this->searchFrames = left;
+    }
+    return found;
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0b", InputHistory_findPresses);
 

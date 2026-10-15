@@ -1,6 +1,7 @@
 // st06.bin's own names (config/jp/st06.yaml)
 
 // the names tools/rename.py gave (tools/renames/), in address order
+ST06_TERRAIN_LINE_ENDS = 0x800D3824;
 ST06_SPIN_NODES = 0x800D397C;
 ST06_SPINNER_VTABLE = 0x800D3AA4;
 ST06_SPIN_GROUP_VTABLE = 0x800D3ACC;
@@ -24,3 +25,4 @@ St06SpinGroup_tick = 0x800D58C8; // type:func
 St06SpinGroup_draw = 0x800D58D0; // type:func
 St06SpinGroup_destroy = 0x800D59AC; // type:func
 St06Spinner_destroy = 0x800D59F4; // type:func
+ST06_TERRAIN_LINES = 0x800D5B5C;

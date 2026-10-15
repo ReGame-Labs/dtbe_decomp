@@ -114,6 +114,9 @@ typedef struct TerrainLine {
     /* 0xC */ s32 offset;
 } TerrainLine;
 
+void addCollisionLink(MeshSceneLink *link, s32 *lines, s32 lineCount);
+void initTerrainLine(TerrainLine *this, DVECTOR *from, DVECTOR *to);
+
 /* Where a segment crosses the collision lines of the shown COLLISION_LINKS (TerrainProbe_cast); the fighter
  * keeps one for its floor (Fighter.floorProbe). */
 typedef struct TerrainProbe {
@@ -436,9 +439,11 @@ typedef struct HudTextChar {
     /* 0x10 */ s32 unk10;     /* only func_800CD534 sets it */
 } HudTextChar;
 
+#define HUD_TEXT_MAX 0x40
+
 typedef struct HudText {
-    /* 0x000 */ HudTextChar chars[0x40];
-    /* 0x500 */ char text[0x40];
+    /* 0x000 */ HudTextChar chars[HUD_TEXT_MAX];
+    /* 0x500 */ char text[HUD_TEXT_MAX];
     /* 0x540 */ s32 length;
     /* 0x544 */ s32 step;  /* between two characters (BattleMessage_drawCentered centres the text by it) */
     /* 0x548 */ s32 scale; /* 4.12 fixed point (0x1000 is 1): the offsets, sizes and step are multiplied by it */
@@ -846,6 +851,8 @@ typedef struct FighterVtable {
 } FighterVtable;
 
 /* A fighter's virtual table as the base class sees it. */
+extern FighterVtable FIGHTER_VTABLE;
+
 #define GET_FIGHTER_VTABLE(object) ((FighterVtable *)(object)->entity.vtable)
 
 /* WarGreymon's class (CHARACTER_WARGREYMON), also the base of BlackWarGreymon's. */
@@ -1174,7 +1181,8 @@ static inline void func_8006D4D4_init(Entity *this, VECTOR *pos) {
  * vtable. The fields from 0x4A6 are the special move 3's hold (Imperialdramon_special3Hold). */
 typedef struct Imperialdramon {
     /* 0x000 */ Fighter base;
-    /* 0x4A4 */ u16 unk4A4;          /* frame 0 of the hold clears it; while set the hold does not carry */
+    /* 0x4A4 */ u16 unk4A4;          /* frame 0 of the hold clears it; while set the hold does not carry; set when a
+                                     * special 3 hitbox hits an unguarded fighter (ImperialdramonSpecial3Hitbox_hit) */
     /* 0x4A6 */ u16 special3Parts;   /* the attack parts of the hold's current hit (Fighter_setAttackParts) */
     /* 0x4A8 */ u16 holding;         /* set when the hold grabs the opponent (Fighter_hold) */
     /* 0x4AA */ u16 hitPending;      /* set by the hold's hits, cleared once their sparks are spawned */

@@ -81,7 +81,22 @@ INCLUDE_ASM("game/nonmatchings/game_0k", bonusShowWinner);
 
 INCLUDE_RODATA("game/nonmatchings/game_0k", D_8006DF5C);
 
-INCLUDE_ASM("game/nonmatchings/game_0k", BonusFight_holdFighter);
+extern s16 D_8006DF5C[]; /* by character: the clip BonusFight_holdFighter plays (5 for every one) */
+
+/* Holds the side's fighter where it stands (BonusFight_tick keeps it at holdPos until the clip ends) and plays its
+ * character's clip of D_8006DF5C once. */
+void BonusFight_holdFighter(BonusFight *this, u16 side) {
+    Fighter *fighters[2];
+    s32 character;
+
+    fighters[0] = Fight_getFighter(&this->base, 0);
+    fighters[1] = Fight_getFighter(&this->base, 1);
+    character = Fighter_getCharacter(fighters[side]);
+    /* holdPos is a VECTOR; the position fills its first three words */
+    Fighter_getPosition(fighters[side], (Vec3 *)&this->holdPos[side]);
+    Fighter_playActionClip(fighters[side], D_8006DF5C[character], 0, 0, -1);
+    this->holding[side] = 1;
+}
 
 /* Ends the bonus game in a draw, as Fight_playDraw without its wait: plays sounds 0x8009 and 0x42, runs
  * func_80079268 on both sides' fighters, shows the DRAW GAME message and keeps its handle, freezes the fighters,

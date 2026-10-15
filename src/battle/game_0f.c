@@ -31,11 +31,17 @@ extern VtableEntry FIGHTER_STATE_GROUND_VTABLE[];
 extern VtableEntry D_800680E4[];
 extern VtableEntry D_8006811C[];
 
-/* A g++ 2.95 pointer to member function, laid out as a VtableEntry: index
- * -1 for a non-virtual function, which is then func. The game keeps such
- * constants in .rodata (D_80067C54 and the ones around it, each
- * {0xFFFF0000, function}). */
-typedef VtableEntry MemberFunction;
+/* A g++ 2.95 pointer to member function: index -1 for a non-virtual function, which is then func; else virtual,
+ * entry index - 1 of the virtual table at vtableOffset in the object. The game keeps such constants in .rodata
+ * (D_80067C54 and the ones around it, each {0xFFFF0000, function}). */
+typedef struct MemberFunction {
+    /* 0x0 */ s16 delta; /* how far to move `this` */
+    /* 0x2 */ s16 index;
+    union {
+        /* 0x4 */ void (*func)();
+        /* 0x4 */ s16 vtableOffset;
+    } u;
+} MemberFunction;
 
 typedef struct FighterStateJump {
     /* 0x00 */ FighterState base;
@@ -117,17 +123,53 @@ s32 FighterState_isGuardHeld(FighterState *this) {
     return (InputHistory_getHeld(Fighter_getInput(this->fighter)) & 0x4) != 0;
 }
 
-s32 FighterState_updateGuard(FighterState *this);
-INCLUDE_ASM("game/nonmatchings/game_0f", FighterState_updateGuard);
+FighterState *FighterStateGround_initCrouch(FighterState *this);
+FighterState *FighterStateGround_initGuard(FighterState *this);
+FighterState *FighterStateGround_initCrouchGuard(FighterState *this);
+
+/* Guards or stops guarding by the guard button (FighterState_isGuardHeld), in place, unless attacking: never in
+ * the air, flinching, down or dizzy; held, a crouch becomes a crouching guard and any other state but the guards a
+ * guard; not held, a crouching guard becomes a crouch and a guard becomes idle. Returns whether the state
+ * changed. */
+s32 FighterState_updateGuard(FighterState *this) {
+    s32 state;
+
+    if (!FighterState_isAttackIdle(this)) {
+        return 0;
+    }
+    state = this->state;
+    /* The match depends on the switch of case ranges (the game's slti tree). */
+    switch (state) {
+    case FIGHTER_STATE_JUMP ... FIGHTER_STATE_FALL:
+    case FIGHTER_STATE_FLINCH ... FIGHTER_STATE_DIZZY:
+        return 0;
+    }
+    if (FighterState_isGuardHeld(this)) {
+        if (state == FIGHTER_STATE_GUARD || state == FIGHTER_STATE_CROUCH_GUARD) {
+            return 0;
+        }
+        if (state == FIGHTER_STATE_CROUCH) {
+            FighterStateGround_initCrouchGuard(this);
+            return 1;
+        }
+        FighterStateGround_initGuard(this);
+        return 1;
+    }
+    if (state == FIGHTER_STATE_CROUCH_GUARD) {
+        FighterStateGround_initCrouch(this);
+        return 1;
+    }
+    if (state == FIGHTER_STATE_GUARD) {
+        FighterStateGround_init(this, FIGHTER_STATE_IDLE);
+        return 1;
+    }
+    return 0;
+}
 
 /* Whether the fighter's last input (InputHistory_getHeld) holds PAD_DOWN. */
 s32 FighterState_isDownHeld(FighterState *this) {
     return (InputHistory_getHeld(Fighter_getInput(this->fighter)) & PAD_DOWN) != 0;
 }
-
-FighterState *FighterStateGround_initCrouch(FighterState *this);
-FighterState *FighterStateGround_initGuard(FighterState *this);
-FighterState *FighterStateGround_initCrouchGuard(FighterState *this);
 
 /* Crouches or stands up by PAD_DOWN (FighterState_isDownHeld), in place: held, a guard becomes a crouching guard
  * and any other state but the crouches becomes a crouch; not held, a crouching guard becomes a guard and a crouch
@@ -1309,12 +1351,6 @@ void FighterStateAttack_attack(FighterState *this, s32 attack) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_8008230C);
-
-INCLUDE_ASM("game/nonmatchings/game_0f", func_800823EC);
-
-INCLUDE_ASM("game/nonmatchings/game_0f", func_800824B8);
-
 /* The attack chain's state (func_800823EC, virtual table D_80067D94): a FighterState with a flag at 0x10 and the
  * step function at 0x14. */
 typedef struct Unk800823EC {
@@ -1322,6 +1358,53 @@ typedef struct Unk800823EC {
     /* 0x10 */ s32 unk10;
     /* 0x14 */ MemberFunction step;
 } Unk800823EC;
+
+/* A virtual table entry that fits a register pair (g++ keeps the one a pointer to member function reaches in
+ * one). */
+typedef union VirtualFunction {
+    VtableEntry entry;
+    u64 pair;
+} VirtualFunction;
+
+extern VtableEntry D_80067D94[];
+/* the chain's first step: func_8008002C */
+extern const MemberFunction D_80067CFC;
+
+/* Turns the state, in place, into the attack chain (state 0x14, virtual table D_80067D94) on its first step
+ * (D_80067CFC), worth 100 as an attack (MOVE_ATTACK1); runs the step and plays sound 0.
+ * The match depends on D_80067CFC being const (.rodata: both words load before the stores) and on the step's delta
+ * read once before the two sums are chosen. */
+FighterState *func_8008230C(FighterState *this) {
+    Unk800823EC *chain = (Unk800823EC *)this;
+    VirtualFunction method;
+    void (*func)();
+    s32 index;
+    s32 delta;
+    s32 offset;
+
+    FighterState_init(&chain->base, 0x14);
+    chain->base.vtable = D_80067D94;
+    Fighter_setMoveReward(chain->base.fighter, MOVE_ATTACK1, 100);
+    chain->step = D_80067CFC;
+    chain->unk10 = 0;
+    /* (chain->*step)(), as g++ 2.95 expands it */
+    index = chain->step.index;
+    if (index >= 0) {
+        method = (*(VirtualFunction **)((u8 *)chain + chain->step.u.vtableOffset))[index - 1];
+        func = method.entry.func;
+    } else {
+        func = chain->step.u.func;
+    }
+    delta = chain->step.delta;
+    offset = index >= 0 ? method.entry.delta + delta : delta;
+    func((u8 *)chain + offset);
+    soundControlPlaySound(&SOUND_CONTROL, 0, 0);
+    return this;
+}
+
+INCLUDE_ASM("game/nonmatchings/game_0f", func_800823EC);
+
+INCLUDE_ASM("game/nonmatchings/game_0f", func_800824B8);
 
 /* The attack chain's attack (slot 0x20 of D_80067D54 and D_80067D94): for an attack (not a special), unless
  * func_8007F98C holds, sets 0x10, sets no action clip (func_8007FC50 with -1) and runs its slot 0x30, the next

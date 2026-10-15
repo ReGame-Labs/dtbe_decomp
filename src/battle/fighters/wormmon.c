@@ -9,7 +9,8 @@ extern FaceEntry WORMMON_FACES[];
 extern VtableEntry WORMMON_SPECIAL1_HITBOX_HIT_VTABLE[];
 extern EntityVtable WORMMON_SPECIAL1_HITBOX_VTABLE;
 extern EntityVtable WORMMON_VTABLE;
-Entity *WormmonSpecial1Hitbox_init(Entity *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *fight);
+struct WormmonSpecial1Hitbox *WormmonSpecial1Hitbox_init(struct WormmonSpecial1Hitbox *this, Fighter *fighter,
+                                                         Vec3 *position, Vec3 *velocity, Fight *fight);
 Entity *WormmonGuardEffect_init(void *this, Fighter *fighter, s32 arg);
 
 /* Builds Wormmon: a Fighter with its own vtable and faces, no guard effect out. */
@@ -275,6 +276,16 @@ void Wormmon_spawnSpecial1Hitbox(Fighter *this, s32 arg) {
     Fighter_addEntity(this, child);
 }
 
+/* The special move 1's hitbox (Wormmon_spawnSpecial1Hitbox). */
+typedef struct WormmonSpecial1Hitbox {
+    /* 0x000 */ UnkPartsEntity38 parts;
+    /* 0x080 */ Fighter *fighter;
+    /* 0x084 */ Fight *fight;
+    /* 0x088 */ u8 unk88[0xB4 - 0x88];
+    /* 0x0B4 */ Vec3 velocity;
+    /* 0x0C0 */ u8 unkC0[0x184 - 0xC0];
+} WormmonSpecial1Hitbox;
+
 INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonSpecial1Hitbox_init);
 
 /* The special move 1 hitbox's destructor. */
@@ -299,7 +310,35 @@ void WormmonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonSpecial1Hitbox_tick);
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonSpecial1Hitbox_hit);
+struct Unk800BA734 *func_800BA734(struct Unk800BA734 *this, Fighter *fighter, BattleSide *owner);
+
+/* On a hit: Hit_apply with sum; the fighter it hit, unless it guards, is held (Fighter_hold(25)) and gets
+ * func_800BA734's entity for its side; a guarding one gets a hit spark. Then the hitbox deletes itself. */
+void WormmonSpecial1Hitbox_hit(WormmonSpecial1Hitbox *this, CollisionSphere *sum) {
+    Fighter *target;
+    Vec3 position;
+    BattleSide *side;
+    Entity *child;
+
+    Hit_apply(&this->parts.base, sum);
+    target = (Fighter *)getHitFighter(sum);
+    if (target != NULL) {
+        /* the position is never read */
+        Fighter_getPosition(target, &position);
+        if (!Fighter_isGuarding(target)) {
+            Fighter_hold(target, 25);
+            side = func_8007758C(target);
+            child = allocEntityMemory(0x4AC);
+            if (child != NULL) {
+                func_800BA734(entityOperatorNewAt(0x4AC, child), this->fighter, side);
+            }
+            entityAddSibling(&this->parts.entity, child);
+        } else {
+            entityAddSibling(&this->parts.entity, createHitSpark(&target->entity, &this->velocity, 0x60));
+        }
+    }
+    entityDelete(&this->parts.entity);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonSpecial1Hitbox_draw);
 
@@ -332,7 +371,9 @@ typedef struct WormmonGuardEffect {
     /* 0x22 */ s16 facing; /* Fighter_getFacing */
     /* 0x24 */ s16 vramY;  /* Fighter_getVramY */
     /* 0x26 */ s16 unk26;
-    /* 0x28 */ u8 unk28[0x4C - 0x28];
+    /* 0x28 */ VECTOR unk28;
+    /* 0x38 */ VECTOR position; /* where the draw puts the rectangle */
+    /* 0x48 */ s32 scale;       /* of the rectangle, in 4096ths; 0 draws nothing */
 } WormmonGuardEffect;
 
 extern EntityVtable WORMMON_GUARD_EFFECT_VTABLE;

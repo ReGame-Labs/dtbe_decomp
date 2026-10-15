@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/text/console.h"
 
 /* A gauge of the side HUD (its life and its evolution gauge), each set up by sideGaugeInit with 0x10000 at 0xC. */
@@ -13,7 +14,85 @@ typedef struct SideGauge {
     /* 0xC */ s32 unkC;
 } SideGauge;
 
-INCLUDE_ASM("game/nonmatchings/side_hud", SideHud_init);
+/* The side HUD's combo counter: shown when the hit count rises to 2 or more, fading with its timer. */
+typedef struct HitCounter {
+    /* 0x0 */ s32 value; /* the count shown */
+    /* 0x4 */ s32 last;  /* the count of the last frame */
+    /* 0x8 */ s32 timer; /* 0x200 when shown, down to 0 */
+} HitCounter;
+
+/* A side's HUD (SideHud_init, made twice by Fight): its tick reads the side each frame, its draw draws it. */
+typedef struct SideHud {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ SideGauge life;           /* the side's life, 120 px */
+    /* 0x28 */ SideGauge evolutionGauge; /* the side's gauge, 70 px */
+    /* 0x38 */ BattleSide *owner;
+    /* 0x3C */ s32 character;         /* Fighter_getCharacter of the side's current fighter */
+    /* 0x40 */ s32 lastCharacter;     /* the character of the last frame */
+    /* 0x44 */ s32 previousCharacter; /* the one before the last change */
+    /* 0x48 */ s32 unk48;             /* SideHud_init's 4th argument */
+    /* 0x4C */ s32 changeFlash;       /* 0x80 when the character changes, -8 a frame */
+    /* 0x50 */ s32 side; /* 0: SideHud_drawLeft draws it, else SideHud_drawRight (SideHud_draw) */
+    /* 0x54 */ s32 timeLeft;  /* the fight's time (0xD28) */
+    /* 0x58 */ s32 score;     /* Fight_getScore */
+    /* 0x5C */ s32 roundWins; /* Fight_getWins */
+    /* 0x60 */ s32 frame;     /* counted every tick */
+    /* 0x64 */ HitCounter hitCounter;
+    /* 0x70 */ s32 visible; /* !Fight_isRoundOver; SideHud_draw draws nothing while 0 */
+    /* 0x74 */ s32 pulse;   /* 0x80 to 0x100 by 8 */
+} SideHud;
+
+extern EntityVtable SIDE_HUD_VTABLE;
+
+void sideGaugeInit(SideGauge *this, s32 value, s32 unkC);
+void hitCounterClear(HitCounter *counter);
+
+/* Inline copies of game_0e.c's BattleSide getters (BattleSide_getLife, _getLifeMax, _getGauge: no callers, the
+ * out-of-line copies of inline methods). */
+static inline s32 getLifeInline(BattleSide *side) {
+    return side->life;
+}
+
+static inline s32 getLifeMaxInline(BattleSide *side) {
+    return side->lifeMax;
+}
+
+static inline s32 getGaugeInline(BattleSide *side) {
+    return side->gauge;
+}
+
+/* Constructs the HUD of owner's side: its gauges from the side's life (unkC the life's maximum, 0x10000 at most)
+ * and evolution gauge, the current fighter's character, a cleared hit counter, shown, pulse 0x80.
+ * The match depends on the life read through the getter inline: a call in the arguments is evaluated first, so
+ * the life loads before the maximum's test (the field read loads it after: 2 diffs). */
+SideHud *SideHud_init(SideHud *this, BattleSide *owner, s32 side, s32 unk48) {
+    Fighter *fighter;
+    s32 lifeMax;
+    s32 character;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &SIDE_HUD_VTABLE;
+    fighter = owner->current;
+    lifeMax = getLifeMaxInline(owner);
+    sideGaugeInit(&this->life, getLifeInline(owner), lifeMax > 0x10000 ? 0x10000 : lifeMax);
+    sideGaugeInit(&this->evolutionGauge, getGaugeInline(owner), 0x10000);
+    this->owner = owner;
+    character = Fighter_getCharacter(fighter);
+    this->previousCharacter = character;
+    this->lastCharacter = character;
+    this->character = character;
+    this->unk48 = unk48;
+    this->changeFlash = 0;
+    this->side = side;
+    this->timeLeft = 0;
+    this->score = 0;
+    this->roundWins = 0;
+    this->frame = 0;
+    hitCounterClear(&this->hitCounter);
+    this->visible = 1;
+    this->pulse = 0x80;
+    return this;
+}
 
 INCLUDE_ASM("game/nonmatchings/side_hud", SideHud_tick);
 
@@ -48,34 +127,6 @@ void sideGaugeUpdate(SideGauge *this, s32 length) {
         }
     }
 }
-
-/* The side HUD's combo counter: shown when the hit count rises to 2 or more, fading with its timer. */
-typedef struct HitCounter {
-    /* 0x0 */ s32 value; /* the count shown */
-    /* 0x4 */ s32 last;  /* the count of the last frame */
-    /* 0x8 */ s32 timer; /* 0x200 when shown, down to 0 */
-} HitCounter;
-
-/* A side's HUD (SideHud_init, made twice by Fight): its tick reads the side each frame, its draw draws it. */
-typedef struct SideHud {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ SideGauge life;           /* the side's life, 120 px */
-    /* 0x28 */ SideGauge evolutionGauge; /* the side's gauge, 70 px */
-    /* 0x38 */ BattleSide *owner;
-    /* 0x3C */ s32 character;         /* Fighter_getCharacter of the side's current fighter */
-    /* 0x40 */ s32 lastCharacter;     /* the character of the last frame */
-    /* 0x44 */ s32 previousCharacter; /* the one before the last change */
-    /* 0x48 */ s32 unk48;             /* SideHud_init's 4th argument */
-    /* 0x4C */ s32 changeFlash;       /* 0x80 when the character changes, -8 a frame */
-    /* 0x50 */ s32 side; /* 0: SideHud_drawLeft draws it, else SideHud_drawRight (SideHud_draw) */
-    /* 0x54 */ s32 timeLeft;  /* the fight's time (0xD28) */
-    /* 0x58 */ s32 score;     /* Fight_getScore */
-    /* 0x5C */ s32 roundWins; /* Fight_getWins */
-    /* 0x60 */ s32 frame;     /* counted every tick */
-    /* 0x64 */ HitCounter hitCounter;
-    /* 0x70 */ s32 visible; /* !Fight_isRoundOver; SideHud_draw draws nothing while 0 */
-    /* 0x74 */ s32 pulse;   /* 0x80 to 0x100 by 8 */
-} SideHud;
 
 /* Clears the hit counter. */
 void hitCounterClear(HitCounter *counter) {
@@ -208,7 +259,35 @@ INCLUDE_ASM("game/nonmatchings/side_hud", SideHud_drawEvolutionGauge);
 
 INCLUDE_ASM("game/nonmatchings/side_hud", func_800747F8);
 
-INCLUDE_ASM("game/nonmatchings/side_hud", func_800749BC);
+/* Draws the side's 156 x 43 semi-transparent backdrop at x, y: side 0's image at u 4, v 0 of clut row 0x78, side
+ * 1's at u 0, v 0x2C of row 0x79. */
+void func_800749BC(SideHud *this, u_long *ot, s32 x, s32 y) {
+    s32 clutY = this->side + 0x78;
+    s32 u;
+    s32 v;
+    SPRT *sprt;
+
+    if (this->side == 0) {
+        u = 4;
+        v = 0;
+    } else {
+        u = 0;
+        v = 0x2C;
+    }
+    sprt = allocSprt();
+    sprt->r0 = 0x80;
+    sprt->g0 = 0x80;
+    sprt->b0 = 0x80;
+    sprt->x0 = x;
+    sprt->y0 = y;
+    sprt->u0 = u;
+    sprt->v0 = v;
+    sprt->clut = getClut(0x3C0, clutY);
+    sprt->w = 0x9C;
+    sprt->h = 0x2B;
+    setSemiTrans(sprt, 1);
+    AddPrim(ot, sprt);
+}
 
 INCLUDE_RODATA("game/nonmatchings/side_hud", D_80065098);
 

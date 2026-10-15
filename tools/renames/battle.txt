@@ -798,6 +798,10 @@ func_800CDB78 ScoreTally_destroy
 func_800CDF14 ScoreTally_skipOnPress
 func_800CDFBC ScoreTally_addAll
 D_8006DD6C SCORE_TALLY_VTABLE
+# hud.c: ScoreTally_draw draws the panel while its width is > 0, through a semi-transparent textured quad
+# (POLY_FT4 with the code's semi-transparency bit, tpage 0x1E) from a screen and a texture rectangle
+func_800CEA40 ScoreTally_drawPanel
+func_800CF124 drawSemiTransQuad
 # hud.c: the messages' strings, read by BATTLE_MESSAGE_LAYOUTS and the ticks (each version's label of the same text)
 D_8006DBD4 STR_READY
 D_8006DBDC STR_FIGHT
@@ -895,3 +899,10 @@ fireItemShot spawnItemProjectile
 fireItemShots spawnItemProjectiles
 # fighter.c: adds to the side's life (BattleSide_addLife); the battle code says life, not HP
 Fighter_addHp Fighter_addLife
+# battle_scene.c: the continue screen's darkened edges (a ring of POLY_G4 around the screen's center, abr 2)
+func_8007286C drawVignette
+D_80064E28 VIGNETTE_RING
+# battle_scene.c: Fight_playRound's win when the time ran out (timeLeft <= 0): the TIME UP message
+func_80071A8C Fight_playTimeUpWin
+# game_0b.c: InputHistory_findHeld for a run of at least n frames holding the buttons
+func_8007536C InputHistory_findHeldFor

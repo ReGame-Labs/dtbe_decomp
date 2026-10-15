@@ -4,21 +4,27 @@
 #include "common.h"
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
+#include "engine/cd/file_load.h"
 #include "engine/cd/read.h"
 #include "engine/gfx/box.h"
+#include "engine/gfx/camera.h"
 #include "engine/gfx/fade.h"
+#include "engine/gfx/prim/alloc_poly_f3.h"
 #include "engine/gfx/prim/alloc_sprt.h"
+#include "engine/gfx/prim/build_line_f2.h"
+#include "engine/gfx/prim_buffer.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 #include "engine/text/text_printer.h"
 #include "engine/system/memory.h"
+#include "stdio.h"
 
 void Fight_run(Fight *object);
 void Fight_showContinue(Fight *this);
 void Fight_playIntro(Fight *this);
 s32 Fight_playRound(Fight *this);
 void func_80071894(Fight *this, s32 side);
-void func_80071A8C(Fight *this, s32 side);
+void Fight_playTimeUpWin(Fight *this, s32 side);
 void Fight_playDoubleKnockOut(Fight *this);
 void Fight_playDraw(Fight *this);
 void Fight_playInterruption(Fight *this);
@@ -154,7 +160,30 @@ INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_loadTamerTim);
 
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064D9C);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_loadCharacterEffectTim);
+/* Puts the character's effect TIMs (effect/mon_efcNN.tim) in VRAM, 256 lines lower for side 1. */
+void Fight_loadCharacterEffectTim(s32 character, s32 side) {
+    char path[0x80];
+    TIM_IMAGE tim;
+    u_long *file;
+    s32 offset;
+
+    sprintf(path, "effect/mon_efc%02d.tim", character);
+    file = loadFile(path);
+    OpenTIM(file);
+    offset = (side != 0) << 8;
+    while (ReadTIM(&tim) != NULL) {
+        tim.crect->y += offset;
+        tim.prect->y += offset;
+        if (tim.caddr != NULL) {
+            LoadImage(tim.crect, tim.caddr);
+        }
+        if (tim.paddr != NULL) {
+            LoadImage(tim.prect, tim.paddr);
+        }
+        DrawSync(0);
+    }
+    mainHeapFree(file);
+}
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_load);
 
@@ -436,7 +465,7 @@ void Fight_run(Fight *this) {
                 func_80071894(this, side);
             } else {
                 soundControlPlaySound(&SOUND_CONTROL, gameStateGetSound(&GAME_STATE, Fighter_getCharacter(other)), 0);
-                func_80071A8C(this, side);
+                Fight_playTimeUpWin(this, side);
             }
             Fight_addScore(this, side, Fight_computeBonus(this, side));
         }
@@ -461,8 +490,31 @@ INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_playRound);
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071894);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071A8C);
+s32 Fight_waitHandle(Fight *this, u32 handle, s32 port);
 s32 Fight_waitEntity(Fight *this, Entity *entity, s32 port);
+Entity *func_80070DBC(Fight *this, s32 side, s32 lastRound);
+void Fighter_requestWinPose(Fighter *this);
+
+/* A round won on time: shows TIME UP, sets the winner's win pose (func_80079268 on the loser) and waits for the
+ * message (the winner's port can skip it); unless skipped, shows the win message (func_80070DBC), waits for it and
+ * 90 frames more. */
+void Fight_playTimeUpWin(Fight *this, s32 side) {
+    u32 handle;
+    Fighter *winner;
+    Fighter *loser;
+
+    handle = entityGetHandle(
+        Fight_addEntity(this, BattleMessage_init(entityOperatorNew(0x59C), BATTLE_MESSAGE_TIME_UP, 0)));
+    winner = this->sides[side]->current;
+    loser = this->sides[side ^ 1]->current;
+    Fighter_requestWinPose(winner);
+    func_80079268(loser);
+    if (!Fight_waitHandle(this, handle, side)) {
+        Fight_waitEntity(this, func_80070DBC(this, side, (this->flags >> 7) & 1 /* FIGHT_FLAG_LAST_ROUND */), -1);
+        Fight_waitFrames(this, 90);
+    }
+}
+
 
 /* A double KO: plays sounds 0x8009 and 0x42, then shows the DOUBLE KO message and waits for it (Fight_waitEntity). */
 void Fight_playDoubleKnockOut(Fight *this) {
@@ -506,8 +558,6 @@ void Fight_playInterruption(Fight *this) {
         -1);
     Fight_end(this);
 }
-
-s32 Fight_waitHandle(Fight *this, u32 handle, s32 port);
 
 /* Fight_waitHandle for the entity's handle: waits until it is gone or the port presses Start (0x800). */
 s32 Fight_waitEntity(Fight *this, Entity *entity, s32 port) {
@@ -579,13 +629,86 @@ INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_updatePauseMenu);
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_updateCamera);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_draw);
+void func_8007293C(Fight *this);
+void Fight_drawWipe(Fight *this);
+
+/* Draws a frame of the fight: clears both cameras' tables; on the continue screen draws func_8007293C, the
+ * fighters and the entities into camera2, else the world (slot 0x40, Fight_drawWorld); then links both tables into
+ * the frame's and draws the wipe. */
+void Fight_draw(Fight *this) {
+    cameraClearOt(&this->camera);
+    cameraClearOt(&this->camera2);
+    if ((this->flags >> 8) & 1) { /* FIGHT_FLAG_CONTINUE */
+        func_8007293C(this);
+        sceneObjectDrawInView(&this->fighterGroup.object, &this->camera2);
+        entityGroupDraw(&this->entities, (s32)&this->camera2);
+    } else {
+        this->vtable[8].func((u8 *)this + this->vtable[8].delta); /* Fight_drawWorld */
+    }
+    orderingTableLinkAfter(&this->camera.ot, FRAME_OT.firstDrawn + 2);
+    orderingTableLinkAfter(&this->camera2.ot, FRAME_OT.firstDrawn + 3);
+    Fight_drawWipe(this);
+}
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_drawWorld);
 
-INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064E28);
+INCLUDE_RODATA("game/nonmatchings/battle_scene", VIGNETTE_RING);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_8007286C);
+/* A POLY_G4 as words, to set each corner's color and position a word at a time. */
+typedef struct PolyG4Words {
+    /* 0x00 */ u_long tag;
+    /* 0x04 */ u32 rgbCode0; /* the first color, then the primitive's code */
+    /* 0x08 */ u32 xy0;      /* y in the high half */
+    /* 0x0C */ u32 rgb1;
+    /* 0x10 */ u32 xy1;
+    /* 0x14 */ u32 rgb2;
+    /* 0x18 */ u32 xy2;
+    /* 0x1C */ u32 rgb3;
+    /* 0x20 */ u32 xy3;
+} PolyG4Words;
+
+/* One spoke of the vignette ring: a screen point on its outer edge and one on its inner edge, as xy words. */
+typedef struct VignetteSpoke {
+    /* 0x0 */ u32 outer;
+    /* 0x4 */ u32 inner;
+} VignetteSpoke;
+
+#define VIGNETTE_QUADS 16
+#define VIGNETTE_EDGE_COLOR 0x404040
+
+/* The ring around the screen's center (160, 120): 16 sides, inner radius 101, outer radius 202, its first spoke
+ * repeated at the end. */
+extern VignetteSpoke VIGNETTE_RING[VIGNETTE_QUADS + 1];
+
+/* Darkens the screen's edges: a ring of quads, black inside and grey outside, subtracted from the screen.
+ * The match depends on the next spoke's address taken at the top of the loop (the game computes it into its own
+ * register before the loads and copies it at the end; spoke++ at the end gives one addiu) and on the end pointer
+ * set before the loop (else it is hoisted after the colors). Reading the corners through next puts the last load
+ * on it (7 diffs). */
+void drawVignette(u_long *ot) {
+    VignetteSpoke *spoke;
+    VignetteSpoke *next;
+    VignetteSpoke *end;
+    PolyG4Words *quad;
+
+    spoke = VIGNETTE_RING;
+    end = &VIGNETTE_RING[VIGNETTE_QUADS];
+    do {
+        next = spoke + 1;
+        quad = (PolyG4Words *)allocPolyG4();
+        quad->rgbCode0 = (((POLY_G4 *)quad)->code << 24) | (PRIM_SEMI_TRANS << 24) | VIGNETTE_EDGE_COLOR;
+        quad->rgb1 = 0;
+        quad->rgb2 = VIGNETTE_EDGE_COLOR;
+        quad->rgb3 = 0;
+        quad->xy0 = spoke[0].outer;
+        quad->xy1 = spoke[0].inner;
+        quad->xy2 = spoke[1].outer;
+        quad->xy3 = spoke[1].inner;
+        AddPrim(ot, quad);
+        spoke = next;
+    } while (spoke != end);
+    AddPrim(ot, allocDrTpage(TPAGE_SUBTRACT));
+}
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_8007293C);
 
@@ -650,9 +773,78 @@ void func_80072FE0(Vec3 *start, Vec3 *end) {
     TerrainProbe_cast(&probe, start, end);
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80073024);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80073130);
+/* The line buildLineF2 projects: its flags, its two ends and its color. */
+typedef struct LineF2Shape {
+    /* 0x0 */ u32 flags;
+    /* 0x4 */ SVECTOR *from;
+    /* 0x8 */ SVECTOR *to;
+    /* 0xC */ u32 color;
+} LineF2Shape;
+
+/* the ordering table the debug lines go into */
+extern u_long *D_8005F844;
+
+/* Sets a debug line's end to (x, y), z 0. */
+static inline void setDebugPoint(SVECTOR *point, s16 x, s16 y) {
+    point->vx = x;
+    point->vy = y;
+    point->vz = 0;
+}
+
+/* A debug drawing: a cross of random color at point's x and z under model, a line 0x80 up and one 0x80 wide.
+ * The match depends on the ordering table and the packet read before Fight_random, the shape's address taken into
+ * `shape` once its ends are set (kept in a saved register for both buildLineF2 calls), and the ends set through
+ * setDebugPoint's s16 parameters (plain copies load with lh, the sums with lhu in 16 bits; s32 parameters give lh
+ * and SImode sums). */
+void func_80073024(Fight *this, MATRIX *model, SVECTOR *point) {
+    LineF2Shape line;
+    SVECTOR start;
+    SVECTOR end;
+    LineF2Shape *shape;
+    u_long *ot;
+    u8 *packet;
+
+    line.flags = 0;
+    line.from = &start;
+    line.to = &end;
+    ot = D_8005F844;
+    packet = PRIM_BUFFER_FREE;
+    shape = &line;
+    line.color = Fight_random(this) & 0xFFFFFF;
+    setModelMatrix(model);
+    setDebugPoint(&start, point->vx, point->vz);
+    setDebugPoint(&end, point->vx, point->vz - 0x80);
+    packet = buildLineF2(shape, packet, ot, 0x10);
+    setDebugPoint(&start, point->vx - 0x40, point->vz);
+    setDebugPoint(&end, point->vx + 0x40, point->vz);
+    PRIM_BUFFER_FREE = buildLineF2(shape, packet, ot, 0x10);
+}
+
+/* A debug drawing with no caller: marks from and to (func_80073024, under model) and joins them with a line of a
+ * random color, in their x and z. Built as func_80073024 builds its lines (the same shape pointer, kept in s0
+ * across Fight_random). */
+void func_80073130(Fight *this, MATRIX *model, SVECTOR *from, SVECTOR *to) {
+    LineF2Shape line;
+    SVECTOR start;
+    SVECTOR end;
+    LineF2Shape *shape;
+    u_long *ot;
+    u8 *packet;
+
+    func_80073024(this, model, from);
+    func_80073024(this, model, to);
+    ot = D_8005F844;
+    packet = PRIM_BUFFER_FREE;
+    line.flags = 0;
+    line.from = &start;
+    line.to = &end;
+    shape = &line;
+    line.color = Fight_random(this) & 0xFFFFFF;
+    setDebugPoint(&start, from->vx, from->vz);
+    setDebugPoint(&end, to->vx, to->vz);
+    PRIM_BUFFER_FREE = buildLineF2(shape, packet, ot, 0x10);
+}
 
 /* Returns the fighter of the other side than fighter's. */
 Fighter *Fight_getOpponent(Fight *this, Fighter *fighter) {

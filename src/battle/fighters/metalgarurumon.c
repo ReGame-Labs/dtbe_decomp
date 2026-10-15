@@ -260,10 +260,26 @@ void MetalGarurumon_throwHit(Fighter *this, u32 hit, Vec3 *velocity) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", MetalGarurumon_special1);
-
 void func_8009A4D8(Fighter *this);
 void func_8009A44C(MetalGarurumon *this);
+
+/* Special move 1: Fighter's and func_80079AE4; at frame 0 the voice and the effect of func_8009A4D8, at frame 13
+ * func_8009A44C and a push back by 0x2AA8 times the mass (16.16). Always sets 0x4A0. */
+void MetalGarurumon_special1(MetalGarurumon *this, s32 frame) {
+    Fighter_special1(&this->base, frame);
+    func_80079AE4(&this->base);
+    switch (frame) {
+    case 0:
+        Fighter_playVoice(&this->base, 0xBB);
+        func_8009A4D8(&this->base);
+        break;
+    case 13:
+        func_8009A44C(this);
+        this->base.force.vx -= ((s64)(Fighter_getFacing(&this->base) * 0x2AA8) * this->base.mass) >> 16;
+        break;
+    }
+    this->base.unk4A0 = 1;
+}
 
 /* Special move 1 in the air: Fighter's and func_80079AE4; at frame 0 the voice and the effect of func_8009A4D8, at
  * frame 13 func_8009A44C and a push back by 0x1C70 times the mass (16.16); before frame 20 the force brakes half a

@@ -1,6 +1,16 @@
 // st09.bin's own names (config/jp/st09.yaml)
 
 // the names tools/rename.py gave (tools/renames/), in address order
+ST09_LIGHT_DIRECTION0 = 0x800D3830;
+ST09_LIGHT_DIRECTION1 = 0x800D3840;
+ST09_LIGHT_DIRECTION2 = 0x800D3850;
+ST09_LIGHT_COLOR0 = 0x800D3860;
+ST09_LIGHT_COLOR1 = 0x800D3870;
+ST09_LIGHT_COLOR2 = 0x800D3880;
+ST09_BACK_COLOR0 = 0x800D3890;
+ST09_BACK_COLOR1 = 0x800D38A0;
+ST09_BACK_COLOR2 = 0x800D38B0;
+ST09_TERRAIN_LINE_ENDS = 0x800D38C0;
 ST09_VIEW_TARGET = 0x800D38D0;
 ST09_VIEW_EYE = 0x800D38E0;
 JEWEL_HUNT_CONTROLLER_VTABLE = 0x800D3904;
@@ -40,3 +50,4 @@ BonusLandingMark_draw = 0x800D6538; // type:func
 StageJewelHunt_addToGroup = 0x800D66C0; // type:func
 StageJewelHunt_removeFromGroup = 0x800D66F8; // type:func
 JewelHuntController_destroy = 0x800D6724; // type:func
+ST09_TERRAIN_LINES = 0x800D67C4;

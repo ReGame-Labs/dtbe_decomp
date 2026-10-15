@@ -207,7 +207,24 @@ void st01_clearState(StageNature *this) {
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D4950);
 
-Entity *func_800D9744(Entity *this, Fight *stage, Vec3 *vec);
+/* The entity class func_800D9744 constructs (virtual table D_800D3B44, 0x3C bytes), sixteen of which
+ * func_800D4B14 spreads over the stage: each waits, rises on a sine path about baseY in its direction, and flies
+ * off when a fighter comes near (its tick, func_800D984C, steps state 0 to 3). */
+typedef struct Unk800D9744 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Fight *owner;
+    /* 0x1C */ Vec3 position;
+    /* 0x28 */ u8 unk28[0x2C - 0x28];
+    /* 0x2C */ s16 baseY;     /* the start's vy, which the sine path is about */
+    /* 0x2E */ s16 direction; /* 1 or -1 at random; turned around by the tick */
+    /* 0x30 */ u16 state;
+    /* 0x32 */ u16 frame;     /* the sprite's frame, from timer */
+    /* 0x34 */ u16 timer;     /* random at the start */
+    /* 0x36 */ s16 speed;     /* + direction a frame while flying off */
+    /* 0x38 */ u8 unk38[0x3C - 0x38];
+} Unk800D9744;
+
+Unk800D9744 *func_800D9744(Unk800D9744 *this, Fight *owner, Vec3 *start);
 
 /* Adds 16 entities of func_800D9744's class to the stage: eight with a random positive x and y -0x7D0, eight
  * with a random negative x and y -0x800. The match depends on each side's vy being a local set before the random
@@ -584,7 +601,37 @@ INCLUDE_ASM("st01/nonmatchings/st01", func_800D6E48);
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D6EA4);
 
-INCLUDE_ASM("st01/nonmatchings/st01", St01PulseGrid_init);
+/* A 3 by 9 grid of points around a position, with a pulsing level (St01PulseGrid_init, virtual table
+ * ST01_PULSE_GRID_VTABLE). */
+typedef struct St01PulseGrid {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ u16 phase;
+    /* 0x1A */ u16 level; /* 0x80 at first */
+    /* 0x1C */ GridVertex points[3][9]; /* position + (column * 0x100, row * 0xC0, 0) */
+    /* 0xF4 */ Vec3 position;
+} St01PulseGrid;
+
+/* St01PulseGrid's constructor: the grid's points from the VECTOR's position (the owner is not kept). */
+St01PulseGrid *St01PulseGrid_init(St01PulseGrid *this, Fight *owner, VECTOR position) {
+    s32 row;
+    s32 column;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &ST01_PULSE_GRID_VTABLE;
+    this->phase = 0;
+    this->position.vx = position.vx;
+    this->position.vy = position.vy;
+    this->position.vz = position.vz;
+    for (row = 0; row < 3; row++) {
+        for (column = 0; column < 9; column++) {
+            this->points[row][column].vx = this->position.vx + column * 0x100;
+            this->points[row][column].vy = this->position.vy + row * 0xC0;
+            this->points[row][column].vz = this->position.vz;
+        }
+    }
+    this->level = 0x80;
+    return this;
+}
 
 /* St01PulseGrid's destructor. */
 void St01PulseGrid_destroy(Entity *this, s32 flags) {
@@ -594,16 +641,6 @@ void St01PulseGrid_destroy(Entity *this, s32 flags) {
         entityOperatorDelete(this);
     }
 }
-
-/* A 3 by 9 grid of points around a position, with a pulsing level (St01PulseGrid_init, virtual table
- * ST01_PULSE_GRID_VTABLE). */
-typedef struct St01PulseGrid {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ u16 phase;
-    /* 0x1A */ u16 level; /* 0x80 at first */
-    /* 0x1C */ SVECTOR unk1C[3][9];
-    /* 0xF4 */ Vec3 unkF4;
-} St01PulseGrid;
 
 /* St01PulseGrid's tick: the level follows a sine of the phase (64 to 96), and the phase steps. */
 void St01PulseGrid_tick(St01PulseGrid *this) {
@@ -799,7 +836,31 @@ void func_800D8EB4(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D8F08);
+/* getSin (engine/math/sin_cos.c), inline. */
+static inline s16 getSinInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].sin;
+}
+
+/* Unk800D8E1C's tick: position sways around center by sines of the phase (x and z by direction, cut to 16 bits),
+ * unk40 follows a faster sine, and the phase steps. The match depends on the x and z sways reading the table directly
+ * (lhu, then shifts) while the others go through getSin (lh). */
+void func_800D8F08(Unk800D8E1C *this) {
+    s32 swayX;
+    s32 swayZ;
+    s32 swayY;
+    s32 sine;
+
+    sine = getSinInline(this->phase * 256) >> 2;
+    swayY = getSinInline(this->phase * 32) >> 5;
+    swayX = (COS_SIN_TABLE[(this->phase * 8) & 0xFFF].sin >> 2) * this->direction;
+    swayZ = (COS_SIN_TABLE[(this->phase * 16) & 0xFFF].sin >> 2) * this->direction;
+    this->unk40 = sine;
+    this->unk42 = -sine;
+    this->phase++;
+    this->position.vy = this->center.vy + swayY;
+    this->position.vx = this->center.vx + (s16)swayX;
+    this->position.vz = this->center.vz + (s16)swayZ;
+}
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D8FD4);
 
@@ -818,7 +879,26 @@ INCLUDE_ASM("st01/nonmatchings/st01", func_800D92D0);
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D9458);
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D9744);
+/* Constructs one of them at start, in a random direction and with a random timer. */
+Unk800D9744 *func_800D9744(Unk800D9744 *this, Fight *owner, Vec3 *start) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3B44;
+    this->owner = owner;
+    /* The match depends on a store in each arm (a ternary puts the value in another register). */
+    if ((Fight_random(owner) & 1) == 0) {
+        this->direction = -1;
+    } else {
+        this->direction = 1;
+    }
+    this->position.vx = start->vx;
+    this->position.vy = this->baseY = start->vy;
+    this->position.vz = start->vz;
+    this->timer = Fight_random(owner);
+    this->state = 0;
+    this->frame = 0;
+    this->speed = 0;
+    return this;
+}
 
 /* The destructor of the entity class of vtable D_800D3B44, which func_800D9744 installs. */
 void func_800D97F8(Entity *this, s32 flags) {

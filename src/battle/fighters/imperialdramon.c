@@ -933,7 +933,36 @@ void ImperialdramonSpecial3Hitbox_tick(ImperialdramonSpecial3Hitbox *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial3Hitbox_hit);
+/* On a hit: with no fighter hit, only Hit_apply. A fighter that does not guard stops (its velocity cleared) and sets
+ * the owner's 0x4A4; a guarding one takes no knockback. Then Hit_apply, a burst of 4 (ParticleBurst_init) at the
+ * fighter and the hitbox deletes itself. */
+void ImperialdramonSpecial3Hitbox_hit(ImperialdramonSpecial3Hitbox *this, CollisionSphere *sum) {
+    Fighter *target = (Fighter *)getHitFighter(sum);
+    Vec3 position;
+    Entity *child;
+
+    if (target == NULL) {
+        Hit_apply(&this->parts.base, sum);
+        return;
+    }
+    if (!Fighter_isGuarding(target)) {
+        this->owner->unk4A4 = 1;
+        target->velocity.vx = 0;
+        target->velocity.vy = 0;
+        target->velocity.vz = 0;
+        target->velocityPad = 0;
+    } else {
+        Hit_setKnockback(&this->parts.base, &ZERO_VECTOR);
+    }
+    Hit_apply(&this->parts.base, sum);
+    Fighter_getPosition(target, &position);
+    child = allocEntityMemory(0x3C);
+    if (child != NULL) {
+        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 4, &position, this->speed >> 1, 0x100, 4, 0x808080);
+    }
+    entityAddSibling(&this->parts.entity, child);
+    entityDelete(&this->parts.entity);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", func_80091328);
 

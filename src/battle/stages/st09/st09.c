@@ -4,6 +4,7 @@
 #include "battle/game.h"
 #include "battle/game_classes.h"
 #include "battle/stage_objects.h"
+#include "engine/gfx/camera.h"
 #include "engine/gfx/scene_graph.h"
 #include "engine/lib/list.h"
 #include "engine/system/memory.h"
@@ -50,7 +51,8 @@ JewelHuntController *JewelHuntController_init(JewelHuntController *this, BattleS
  * side holds its button to charge a throw at the mesh objects that appear; it owns a camera of its own. */
 typedef struct StageJewelHunt {
     /* 0x0000 */ BonusFight base;
-    /* 0x0F70 */ u8 unkF70[0x103C - 0xF70];
+    /* 0x0F70 */ Camera cameras[3];               /* one per group (StageJewelHunt_init) */
+    /* 0x1024 */ MeshSceneLink collisionLink;     /* lines of the arena itself, in COLLISION_LINKS (StageJewelHunt_init) */
     /* 0x103C */ s16 frames; /* the scenery's frames (StageJewelHunt_tickScenery adds 1) */
     /* 0x103E */ u8 unk103E[0x1040 - 0x103E];
     /* 0x1040 */ MeshScene *scene; /* Fight_getMeshScene's (StageJewelHunt_startRound) */
@@ -79,14 +81,112 @@ void func_800D45F8(StageJewelHunt *this);
 
 INCLUDE_ASM("st09/nonmatchings/st09", JewelHuntController_getButtons);
 
-INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_init);
+extern VtableEntry STAGE_JEWEL_HUNT_VTABLE[];
+
+/* the cameras' lights: the same directions and colours for the three, a back colour each */
+extern VECTOR ST09_LIGHT_DIRECTION0;
+extern VECTOR ST09_LIGHT_DIRECTION1;
+extern VECTOR ST09_LIGHT_DIRECTION2;
+extern VECTOR ST09_LIGHT_COLOR0;
+extern VECTOR ST09_LIGHT_COLOR1;
+extern VECTOR ST09_LIGHT_COLOR2;
+extern VECTOR ST09_BACK_COLOR0;
+extern VECTOR ST09_BACK_COLOR1;
+extern VECTOR ST09_BACK_COLOR2;
+
+typedef struct St09LineEnds {
+    /* 0x0 */ DVECTOR from;
+    /* 0x4 */ DVECTOR to;
+} St09LineEnds;
+
+extern St09LineEnds ST09_TERRAIN_LINE_ENDS[2];
+extern TerrainLine ST09_TERRAIN_LINES[2];
+
+/* Sets a group's camera up like the fight's: its field of view (kept an int until cameraSetFov narrows it), far
+ * 0x3C00, the stage's lights and a back colour. */
+static inline void setUpCamera(Camera *camera, s32 fov, VECTOR *backColor) {
+    cameraReset(camera);
+    cameraSetFov(camera, fov);
+    cameraSetFar(camera, 0x3C00);
+    cameraSetLightDirection0(camera, &ST09_LIGHT_DIRECTION0);
+    cameraSetLightDirection1(camera, &ST09_LIGHT_DIRECTION1);
+    cameraSetLightDirection2(camera, &ST09_LIGHT_DIRECTION2);
+    cameraSetLightColor0(camera, &ST09_LIGHT_COLOR0);
+    cameraSetLightColor1(camera, &ST09_LIGHT_COLOR1);
+    cameraSetLightColor2(camera, &ST09_LIGHT_COLOR2);
+    cameraSetBackColor(camera, backColor);
+}
+
+/* Constructs the stage: BonusFight, with virtual table STAGE_JEWEL_HUNT_VTABLE, three cameras and their groups, the
+ * nodes, and two collision lines. */
+StageJewelHunt *StageJewelHunt_init(StageJewelHunt *this) {
+    Group *group;
+    u32 count;
+    s32 fov;
+    s32 i;
+
+    BonusFight_init(&this->base);
+    this->base.base.vtable = STAGE_JEWEL_HUNT_VTABLE;
+    cameraInit(&this->cameras[0], 1);
+    cameraInit(&this->cameras[1], 1);
+    cameraInit(&this->cameras[2], 1);
+    this->collisionLink.link.next = &this->collisionLink.link;
+    this->collisionLink.link.prev = &this->collisionLink.link;
+    group = this->groups;
+    count = 3;
+    while (count--) {
+        groupInit(group);
+        group++;
+    }
+    fov = cameraGetFov(Fight_getCamera(&this->base.base));
+    setUpCamera(&this->cameras[0], fov, &ST09_BACK_COLOR0);
+    setUpCamera(&this->cameras[1], fov, &ST09_BACK_COLOR1);
+    setUpCamera(&this->cameras[2], fov, &ST09_BACK_COLOR2);
+    this->base.nodes[0] = 1;
+    this->base.nodes[1] = 2;
+    this->base.nodes[2] = 6;
+    this->base.nodes[3] = 3;
+    this->base.nodes[4] = 4;
+    this->base.nodes[5] = 0;
+    this->base.nodes[6] = 7;
+    this->base.nodes[7] = 8;
+    for (i = 0; i < 2; i++) {
+        initTerrainLine(&ST09_TERRAIN_LINES[i], &ST09_TERRAIN_LINE_ENDS[i].from, &ST09_TERRAIN_LINE_ENDS[i].to);
+    }
+    /* MeshSceneLink.lines is typed by the engine's own lines; the stage's are TerrainLines */
+    addCollisionLink(&this->collisionLink, (s32 *)ST09_TERRAIN_LINES, 2);
+    return this;
+}
 
 /* The stage's override of Fight_createController: a JewelHuntController for the side. */
 void *StageJewelHunt_createController(void *this, s32 unk, BattleSide *battleSide) {
     return JewelHuntController_init(operatorNew(0x20), battleSide);
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_destroy);
+/* The stage's destructor: the groups last first (through their virtual destructors, as g++ destroys an array of
+ * objects), the collision link unlinked, the cameras last first, then BonusFight's. */
+void StageJewelHunt_destroy(StageJewelHunt *this, s32 flags) {
+    Group *group;
+    ListNode *node;
+
+    this->base.base.vtable = STAGE_JEWEL_HUNT_VTABLE;
+    if (this->groups != NULL) {
+        for (group = &this->groups[3]; this->groups != group;) {
+            group--;
+            group->object.vtable->destroy.func((u8 *)group + group->object.vtable->destroy.delta, 0);
+        }
+    }
+    /* listRemove(&this->collisionLink.link), in the access order the game's compiler used */
+    node = &this->collisionLink.link;
+    this->collisionLink.link.next->prev = this->collisionLink.link.prev;
+    node->prev->next = this->collisionLink.link.next;
+    this->collisionLink.link.next = node;
+    this->collisionLink.link.prev = node;
+    cameraDestroy(&this->cameras[2], DESTROY_BASES);
+    cameraDestroy(&this->cameras[1], DESTROY_BASES);
+    cameraDestroy(&this->cameras[0], DESTROY_BASES);
+    BonusFight_destroy(&this->base, flags);
+}
 
 /* The x of the column with the most jewels (the first of the fullest, column 0 when there are none), where
  * JewelHuntController_getButtons aims. */

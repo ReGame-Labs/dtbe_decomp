@@ -26,7 +26,10 @@ typedef struct StageIceberg {
     /* 0x000 */ Fight base;
     /* 0xD38 */ s32 frames; /* the scenery's frames (StageIceberg_tickScenery) */
     /* 0xD3C */ s32 roundsStarted; /* StageIceberg_startRound copies VRAM with func_800D5598 the first time */
-    /* 0xD40 */ u8 unkD40[0x1D68 - 0xD40];
+    /* 0xD40 */ RECT imageRects[2]; /* two 32 by 32 texel 8-bit images in VRAM (func_800D3F04) */
+    /* 0xD50 */ u8 images[2][32][32]; /* sourceImages with each row shifted, loaded each frame (func_800D3FC8) */
+    /* 0x1550 */ u8 sourceImages[2][32][32]; /* the images as read back from VRAM (func_800D3F04) */
+    /* 0x1D50 */ u8 unk1D50[0x1D68 - 0x1D50];
     /* 0x1D68 */ RECT clutRect;     /* 16 by 1 pixels at (0x330, 0xE6): a CLUT */
     /* 0x1D70 */ u16 shownClut[16]; /* clut with entry 15 pulsing, loaded to VRAM each frame (st04_loadPulsingClut) */
     /* 0x1D90 */ u16 clut[16]; /* that CLUT, read back from VRAM by st04_readClut */
@@ -68,6 +71,21 @@ typedef struct St04SideSquare {
     /* 0x24 */ u8 unk24[0x34 - 0x24];
     /* 0x34 */ SVECTOR unk34[4]; /* the square's corners, in the z = 0 plane */
 } St04SideSquare;
+
+/* The class of vtable D_800D39D4 (func_800D6A9C), made by func_800D4FE0: a quad standing at a position, whose top
+ * edge func_800D6BB8 moves by state. */
+typedef struct Unk800D6A9C {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Vec3 position;
+    /* 0x24 */ u8 unk24[0x28 - 0x24];
+    /* 0x28 */ u8 unk28; /* 0x80 at construction; func_800D6BB8 fades it into unk29 */
+    /* 0x29 */ u8 unk29;
+    /* 0x2A */ u16 state; /* func_800D6BB8's switch */
+    /* 0x2C */ u16 timer; /* frames in the state */
+    /* 0x2E */ u16 unk2E; /* set to 1 and 2 by func_800D6BB8, read by the draw */
+    /* 0x30 */ SVECTOR unk30; /* the middle of the bottom edge */
+    /* 0x38 */ SVECTOR corners[4]; /* top left, top right, bottom left, bottom right */
+} Unk800D6A9C;
 
 extern VtableEntry STAGE_ICEBERG_VTABLE[];
 
@@ -233,7 +251,18 @@ void st04_scrollTexture(StageIceberg *this) {
     }
 }
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D3F04);
+/* Reads the two images at (0x340, 0x90) and (0x340, 0xB0) back from VRAM into sourceImages. */
+void func_800D3F04(StageIceberg *this) {
+    s32 i;
+
+    for (i = 0; i < 2; i++) {
+        this->imageRects[i].x = 0x340;
+        this->imageRects[i].y = 0x90 + i * 0x20;
+        this->imageRects[i].w = 0x10;
+        this->imageRects[i].h = 0x20;
+        StoreImage(&this->imageRects[i], (u_long *)this->sourceImages[i]);
+    }
+}
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D3FC8);
 
@@ -466,7 +495,28 @@ INCLUDE_ASM("st04/nonmatchings/st04", func_800D66D0);
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D6938);
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D6A9C);
+/* Constructs an Unk800D6A9C at a part's position (the stage is not kept): a 0x200 by 0x200 quad whose bottom edge
+ * is 0x180 below the position. The position is cut to 16 bits, as the quad's SVECTORs hold it. */
+Unk800D6A9C *func_800D6A9C(Unk800D6A9C *this, StageIceberg *stage, VECTOR position) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D39D4;
+    this->state = this->timer = 0;
+    this->unk2E = 0;
+    this->position.vx = (s16)position.vx;
+    this->position.vy = (s16)position.vy;
+    this->position.vz = (s16)position.vz;
+    this->unk28 = 0x80;
+    this->unk29 = 0;
+    this->unk30.vx = this->position.vx;
+    this->unk30.vy = this->position.vy + 0x180;
+    this->unk30.vz = this->position.vz;
+    this->corners[0].vx = this->corners[2].vx = this->position.vx - 0x100;
+    this->corners[1].vx = this->corners[3].vx = this->position.vx + 0x100;
+    this->corners[0].vy = this->corners[1].vy = this->unk30.vy - 0x200;
+    this->corners[2].vy = this->corners[3].vy = this->unk30.vy;
+    this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = this->unk30.vz;
+    return this;
+}
 
 /* The destructor of the entity class of vtable D_800D39D4, which func_800D6A9C installs. */
 void func_800D6B64(Entity *this, s32 flags) {

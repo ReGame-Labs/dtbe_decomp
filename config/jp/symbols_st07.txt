@@ -4,6 +4,7 @@
 ST07_VIEW_TARGET = 0x800D3824;
 ST07_VIEW_EYE = 0x800D3834;
 BALL_SHOOT_CONTROLLER_VTABLE = 0x800D3854;
+ST07_BOARD_VTABLE = 0x800D3874;
 BONUS_LANDING_MARK_VTABLE = 0x800D389C;
 BONUS_THROWER_VTABLE = 0x800D38C4;
 ST07_BALL_VTABLE = 0x800D38EC;
@@ -37,4 +38,8 @@ BonusLandingMark_init = 0x800D5630; // type:func
 BonusLandingMark_destroy = 0x800D56D8; // type:func
 BonusLandingMark_tick = 0x800D572C; // type:func
 BonusLandingMark_draw = 0x800D5794; // type:func
+St07Board_init = 0x800D5910; // type:func
+St07Board_destroy = 0x800D59B4; // type:func
+St07Board_tick = 0x800D5A08; // type:func
+St07Board_draw = 0x800D5AFC; // type:func
 BallShootController_destroy = 0x800D5E04; // type:func

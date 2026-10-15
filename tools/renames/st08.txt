@@ -26,3 +26,5 @@ func_800D47CC st08_copyMeters
 # the fixed view StageEvolution_tick sets while the race runs
 D_800D3824 ST08_VIEW_TARGET
 D_800D3834 ST08_VIEW_EYE
+# the CLUT animation (st01_cycleClut's shape: entries 0..5 from the copy, % 5)
+func_800D4018 st08_cycleClut

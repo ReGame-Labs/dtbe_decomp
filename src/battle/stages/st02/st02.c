@@ -235,11 +235,11 @@ typedef struct Unk800D554C {
     /* 0x68 */ u8 unk68[0x7C - 0x68];
     /* 0x7C */ MeshScene *scene; /* meshSceneRelocateNodeTmd, meshSceneGetMesh */
     /* 0x80 */ Mesh *mesh;
-    /* 0x84 */ Vec3 unk84;
+    /* 0x84 */ Vec3 unk84;  /* its y falls by func_800D5964's steps */
     /* 0x90 */ u8 unk90[0x94 - 0x90];
     /* 0x94 */ Vec3 position;
     /* 0xA0 */ u8 unkA0[0xA4 - 0xA0];
-    /* 0xA4 */ s32 unkA4;
+    /* 0xA4 */ s32 fallSpeed; /* func_80079C1C's velocity.vy (func_800D5964) */
     /* 0xA8 */ s32 unkA8;
     /* 0xAC */ s32 unkAC;
     /* 0xB0 */ s32 unkB0;
@@ -286,7 +286,32 @@ void func_800D56AC(Unk800D554C *this, s32 flags) {
 
 INCLUDE_ASM("st02/nonmatchings/st02", func_800D57A0);
 
-INCLUDE_ASM("st02/nonmatchings/st02", func_800D5964);
+/* One step of its fall: gravity 0x71C on a mass of 0x18000 (func_80079C1C) moves unk84's y by the step in 1/256ths
+ * and keeps the speed in fallSpeed; returns castMapRay's result for the ray from the old point 0x80 below unk84 to the
+ * new one (the vector of the step then holds the ray's end). */
+s32 func_800D5964(Unk800D554C *this) {
+    Vec3 from;
+    Vec3 move;
+    Vec3 velocity;
+    Vec3 force;
+
+    from.vx = this->unk84.vx;
+    from.vy = this->unk84.vy + 0x80;
+    from.vz = 0;
+    velocity.vx = 0;
+    velocity.vy = this->fallSpeed;
+    velocity.vz = 0;
+    force.vx = 0;
+    force.vy = 0x71C;
+    force.vz = 0;
+    func_80079C1C(&move, &velocity, &force, 0x18000);
+    this->fallSpeed = velocity.vy;
+    this->unk84.vy += move.vy >> 8;
+    move.vx = this->unk84.vx;
+    move.vy = this->unk84.vy + 0x80;
+    move.vz = 0;
+    return castMapRay(&move, &from);
+}
 
 void func_800D5A64(Unk800D554C *this);
 

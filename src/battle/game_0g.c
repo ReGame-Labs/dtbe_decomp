@@ -366,7 +366,25 @@ HitSpark *HitSpark_init(HitSpark *this, Vec3 *position, VECTOR *dir, s32 unk3, u
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", HitSpark_tick);
+/* On its first frame bursts 4 kind 9 particles from the spark (spread 0x60, an eighth of its target size each);
+ * every frame its size moves halfway to the target, and the spark is deleted at age 5. */
+void HitSpark_tick(HitSpark *this) {
+    Entity *burst;
+
+    if (this->age == 0) {
+        burst = allocEntityMemory(0x3C);
+        if (burst != NULL) {
+            ParticleBurst_init(entityOperatorNewAt(0x3C, burst), 9, (Vec3 *)&this->sprite.position, 0x60,
+                               this->targetSize >> 3, 4, 0xA0FF);
+        }
+        entityAddSibling(&this->entity, burst);
+    }
+    this->sprite.size += (this->targetSize - this->sprite.size) >> 1;
+    this->age++;
+    if (this->age >= 5) {
+        entityDelete(&this->entity);
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/game_0g", HIT_SPARK_CORNERS);
 

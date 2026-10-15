@@ -5,6 +5,10 @@
 #include "common.h"
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/math/matrix.h"
 #include "engine/sound/sound_control.h"
 
 void Gokumon_spawnTrail(Fighter *this, s32 arg1, s32 arg2, s32 rgb, s32 alt);
@@ -453,7 +457,44 @@ Particle *func_800C16F8(Particle *this, VECTOR *pos, VECTOR *vel, s32 flags) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", func_800C1758);
+/* The draw of func_800C16F8's sprite: a square of side 2 * size around the origin, placed at the sprite's position by a
+ * translation matrix, with buildPolyFT4.
+ * The match depends on the matrix built as matrixInitTranslationVec does, reading the position through a pointer. */
+void func_800C1758(Particle *this, Camera *camera) {
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 shift;
+    VECTOR *pos;
+    s32 x, y, z;
+    s32 size;
+
+    pos = &this->sprite.position;
+    x = pos->vx;
+    y = pos->vy;
+    z = pos->vz;
+    m.words[0] = ONE;
+    m.words[1] = 0;
+    m.words[2] = ONE;
+    m.words[3] = 0;
+    m.words[4] = ONE;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    ot = camera->ot.slots;
+    shift = camera->zShift;
+    setModelMatrix(&m.m);
+    size = this->sprite.size;
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = 0;
+    shape.flags = 0;
+    corners[0].vx = corners[2].vx = -size;
+    corners[1].vx = corners[3].vx = size;
+    corners[0].vy = corners[1].vy = -size;
+    corners[2].vy = corners[3].vy = size;
+    Particle_buildShape(this, &shape, corners);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, shift);
+}
 
 /* Gokumon's destructor. */
 void Gokumon_destroy(Entity *this, s32 flags) {

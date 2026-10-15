@@ -57,14 +57,15 @@ typedef struct Unk800D5040 {
 
 extern EntityVtable D_800D3A74;
 
-/* The entity class func_800D557C constructs (virtual table D_800D3A24). */
+/* The entity class func_800D557C constructs (virtual table D_800D3A24): a sprite at the stage's scroll that comes
+ * nearer, grows and spins (func_800D55D4) and adds a func_800D57C4 effect every 16 frames. */
 typedef struct Unk800D557C {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 unk18;
-    /* 0x1C */ s32 unk1C;
-    /* 0x20 */ s32 unk20;
+    /* 0x18 */ Vec3 position; /* x follows the stage's scrollX, z from 0x4000 down to 0x2000 */
     /* 0x24 */ s32 unk24;
-    /* 0x28 */ Vec3 unk28;
+    /* 0x28 */ s32 scale;     /* up to 0x480, 0x18 a frame (func_800D5690's matrixScale) */
+    /* 0x2C */ s32 angle;     /* 6 a frame (func_800D5690's matrixSetRotationZ) */
+    /* 0x30 */ s32 frames;
 } Unk800D557C;
 
 extern EntityVtable D_800D3A24;
@@ -91,9 +92,35 @@ typedef struct Unk800D4468 {
 void func_800D45BC(Unk800D4468 *this, s32 arg);
 void func_800D46C4(Unk800D4468 *this, s32 arg);
 
-INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_init);
-
 extern VtableEntry STAGE_BOSS_VTABLE[];
+
+/* An arena collision line as the stage defines it: its ends. */
+typedef struct St06LineEnds {
+    /* 0x0 */ DVECTOR from;
+    /* 0x4 */ DVECTOR to;
+} St06LineEnds;
+
+extern St06LineEnds ST06_TERRAIN_LINE_ENDS[1];
+extern TerrainLine ST06_TERRAIN_LINES[1];
+
+/* Constructs the stage: Fight, with virtual table STAGE_BOSS_VTABLE, and its one collision line (the floor, from
+ * x -0x7000 to 0x7000), built from ST06_TERRAIN_LINE_ENDS and linked into COLLISION_LINKS. */
+StageBoss *StageBoss_init(StageBoss *this) {
+    s32 i;
+
+    Fight_init(&this->base);
+    this->base.vtable = STAGE_BOSS_VTABLE;
+    this->collisionLink.link.next = &this->collisionLink.link;
+    this->collisionLink.link.prev = &this->collisionLink.link;
+    for (i = 0; i < 1; i++) {
+        initTerrainLine(&ST06_TERRAIN_LINES[i], &ST06_TERRAIN_LINE_ENDS[i].from, &ST06_TERRAIN_LINE_ENDS[i].to);
+    }
+    /* MeshSceneLink.lines is typed by the engine's own lines; the stage's are TerrainLines */
+    addCollisionLink(&this->collisionLink, (s32 *)ST06_TERRAIN_LINES, 1);
+    this->unkD70 = 0;
+    this->sound = 0;
+    return this;
+}
 
 /* The stage's destructor: stops its sound, unlinks its collision link from COLLISION_LINKS, then Fight's
  * destructor. */
@@ -398,21 +425,37 @@ INCLUDE_ASM("st06/nonmatchings/st06", func_800D51BC);
 
 INCLUDE_ASM("st06/nonmatchings/st06", func_800D5254);
 
-/* Constructs an entity of the class of virtual table D_800D3A24: 0x1C -0x200, 0x20 0x4000, the vector at
- * 0x28 zero. */
+/* Constructs the sprite at (0, -0x200, 0x4000), unscaled and unturned. */
 Unk800D557C *func_800D557C(Unk800D557C *this) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_800D3A24;
-    this->unk18 = 0;
-    this->unk1C = -0x200;
-    this->unk20 = 0x4000;
-    this->unk28.vx = 0;
-    this->unk28.vy = 0;
-    this->unk28.vz = 0;
+    this->position.vx = 0;
+    this->position.vy = -0x200;
+    this->position.vz = 0x4000;
+    this->scale = 0;
+    this->angle = 0;
+    this->frames = 0;
     return this;
 }
 
-INCLUDE_ASM("st06/nonmatchings/st06", func_800D55D4);
+Unk800C3CFC *func_800D57C4(Unk800C3CFC *this, s32 unk38, s32 color);
+
+/* The sprite's tick: follows the stage's scrollX, comes nearer (z - 3 down to 0x2000), grows (up to 0x480) and
+ * turns, and every 16 frames adds a func_800D57C4 effect beside it. */
+void func_800D55D4(Unk800D557C *this, StageBoss *stage) {
+    this->position.vx = stage->scrollX;
+    if (this->position.vz > 0x2000) {
+        this->position.vz -= 3;
+    }
+    if (this->scale < 0x480) {
+        this->scale += 0x18;
+    }
+    this->angle += 6;
+    if ((this->frames & 0xF) == 0) {
+        entityAddSibling(&this->entity, NEW_ENTITY(0x54, func_800D57C4, 0x2000, 0x801008));
+    }
+    this->frames++;
+}
 
 INCLUDE_ASM("st06/nonmatchings/st06", func_800D5690);
 

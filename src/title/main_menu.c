@@ -3,8 +3,10 @@
 #include "common.h"
 #include "engine/game/game_state.h"
 #include "engine/gfx/fade.h"
+#include "engine/gfx/ordering_table.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/gfx/prim/alloc_poly_ft4.h"
+#include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 #include "engine/system/thread.h"
@@ -172,7 +174,24 @@ void mainMenuDrawImageShadow(u_long *ot, s32 x, s32 y, TitleImage *image, s32 no
     AddPrim(ot, poly);
 }
 
-INCLUDE_ASM("title/nonmatchings/main_menu", mainMenuDrawBanners);
+/* Draws the banners at the menu's sides: two 32x480 strips (u 0x6C of the 4-bit page at x 768, clut (768, 253)) at
+ * x 16 and 464, the left one scrolled down the page by scroll and the right one up. */
+void mainMenuDrawBanners(u_long *ot, s32 scroll) {
+    SprtColorWords *sprt = (SprtColorWords *)allocSprt();
+
+    sprt->rgbCode = (((SPRT *)sprt)->code << 24) | (PRIM_SEMI_TRANS << 24) | 0x808080;
+    sprt->xy = 16;
+    sprt->uvClut = (GetClut(768, 253) << 16) | ((scroll & 0xFF) << 8) | 0x6C;
+    sprt->wh = (480 << 16) | 32;
+    AddPrim(ot, sprt);
+    sprt = (SprtColorWords *)allocSprt();
+    sprt->rgbCode = (((SPRT *)sprt)->code << 24) | (PRIM_SEMI_TRANS << 24) | 0x808080;
+    sprt->xy = 464;
+    sprt->uvClut = (GetClut(768, 253) << 16) | ((-scroll & 0xFF) << 8) | 0x6C;
+    sprt->wh = (480 << 16) | 32;
+    AddPrim(ot, sprt);
+    AddPrim(ot, allocDrTpage(getTPage(0, 0, 768, 0)));
+}
 
 /* The focus method (entry 0x18) of MAIN_MENU_ITEM_VTABLE: plays the cursor sound. */
 void MainMenuItem_focus(void) {
@@ -226,7 +245,45 @@ s32 MainMenuItem_input(MainMenuItem *this) {
     return 1;
 }
 
-INCLUDE_ASM("title/nonmatchings/main_menu", MainMenuItem_draw);
+/* the item the main menu's cursor is on, set by the current item's draw (MainMenuTask_update reads it) */
+extern s32 MAIN_MENU_CURSOR;
+
+/* the bar drawn semi-transparent and dark behind every label */
+extern TitleImage MAIN_MENU_DECOR_IMAGES[];
+
+/* The cosine of angle (0x1000 a turn), 4.12. The match depends on this s16 inline, as in option.cpp: a table read
+ * in the expression is narrowed to lhu + sll + sra. */
+static inline s16 getCosInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].cos;
+}
+
+/* The draw method of MAIN_MENU_ITEM_VTABLE: once the menu's frame passes 8 per index, eases the label an eighth
+ * of the way to its place each frame; draws it at x 128 pulsing with the flash (from 0x40, or 0x80 while current,
+ * which also sets MAIN_MENU_CURSOR), and the dark semi-transparent bar 2 right and 4 down; counts the frame. */
+void MainMenuItem_draw(MainMenuItem *this, s32 ot, s32 isCurrent, s32 active) {
+    u_long *front = FRAME_OT.firstDrawn + 5;
+    s32 index = this->index;
+    SPRT *sprt;
+    s32 brightness;
+
+    if (index * 8 < this->frame) {
+        this->y += ((getMainMenuItemY(index) << 4) - this->y) >> 3;
+    }
+    sprt = (SPRT *)mainMenuDrawImage(front, 0x80, this->y >> 4, this->label, 0);
+    brightness = getCosInline(this->flashPhase) >> 7;
+    if (isCurrent) {
+        brightness += 0x80;
+    } else {
+        brightness += 0x40;
+    }
+    setRGB0(sprt, brightness, brightness, brightness);
+    if (isCurrent) {
+        MAIN_MENU_CURSOR = index;
+    }
+    sprt = (SPRT *)mainMenuDrawImage(front, 0x82, (this->y >> 4) + 4, MAIN_MENU_DECOR_IMAGES, 1);
+    setRGB0(sprt, 0x40, 0x40, 0x40);
+    this->frame++;
+}
 
 /* Whether a bonus game is unlocked (SaveData.bonusGamesUnlocked): else the two mini game items are locked "???"
  * ones. */

@@ -4,6 +4,11 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/gfx/camera.h"
+#include "engine/math/matrix.h"
+#include "gte.h"
 
 struct Unk800971E0 *func_800971E0(struct Unk800971E0 *this, Fighter *fighter, s32 arg2, Fight *fight);
 Entity *BeelzebumonSpecial2Hitbox_init(Entity *this, Fighter *fighter, Fight *fight, s32 side);
@@ -251,7 +256,35 @@ void func_80095CB4(Fighter *this) {
     Fighter_playSound(this, 0xB0);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", Beelzebumon_spawnSpecial3Effect);
+struct BeelzebumonSpecial3Effect *BeelzebumonSpecial3Effect_init(struct BeelzebumonSpecial3Effect *this,
+                                                                 Fighter *fighter, Fight *unk1C, Vec3 *position,
+                                                                 Vec3 *velocity);
+
+/* Spawns a special move 3 effect 0x800 to 0x9FF ahead of the character's top and up to 0x400 above or below it,
+ * flying back at 192 a frame and a sixteenth of that height toward the top. */
+void Beelzebumon_spawnSpecial3Effect(Fighter *this) {
+    Fight *fight = Fighter_getScene(this);
+    s32 facing = Fighter_getFacing(this);
+    Vec3 position;
+    Vec3 velocity;
+    s32 offset;
+    Entity *child;
+
+    /* The match depends on one offset variable for both random draws */
+    func_8007A650(this, &position);
+    offset = (mersenneTwisterGenerate(&fight->random) & 0x1FF) + 0x800;
+    position.vx += offset * facing;
+    offset = (mersenneTwisterGenerate(&fight->random) & 0x7FF) - 0x400;
+    velocity.vx = -(facing * 192);
+    velocity.vy = -offset >> 4;
+    velocity.vz = 0;
+    position.vy += offset;
+    child = allocEntityMemory(0x58);
+    if (child != NULL) {
+        BeelzebumonSpecial3Effect_init(entityOperatorNewAt(0x58, child), this, fight, &position, &velocity);
+    }
+    Fighter_addEntity(this, child);
+}
 
 /* Pushes the character func_80079E50 finds (AXIS_Z, 0x640000, 0x238) along x by 0x1000 (0x400 when its
  * func_80079E2C is not 0): toward this one when it is 0x221..0x9FF ahead, away from it when 1..0x1E0 ahead,
@@ -506,7 +539,28 @@ void func_80096DC4(Particle *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80096E64);
+/* The draw of func_80096CFC's sprite entity: the sprite in the camera as a square of side 2 * size around its
+ * position, with buildPolyFT4.
+ * The match depends on taking the camera as the s32 the vtable passes and casting it in a local (func_800970A8). */
+void func_80096E64(Particle *this, s32 arg) {
+    Camera *camera = (Camera *)arg;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 size;
+
+    gte_loadRotTrans(SCRATCH_VIEW_MATRIX);
+    ot = camera->ot.slots;
+    shape.flags = 0;
+    size = this->sprite.size;
+    corners[0].vx = corners[2].vx = this->sprite.position.vx - size;
+    corners[1].vx = corners[3].vx = this->sprite.position.vx + size;
+    corners[0].vy = corners[1].vy = this->sprite.position.vy - size;
+    corners[2].vy = corners[3].vy = this->sprite.position.vy + size;
+    corners[0].vz = corners[2].vz = corners[1].vz = corners[3].vz = this->sprite.position.vz;
+    Particle_buildShape(this, &shape, corners);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift);
+}
 
 /* The sprite entity of virtual table D_80069B1C (0x5C bytes, func_800957C0 spawns it): an Particle at the
  * character's point 6 moved by D_80069998, with the character's facing. */
@@ -551,7 +605,33 @@ void func_80097008(Unk80096F6C *this, s32 arg) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_800970A8);
+/* Unk80096F6C's draw: the sprite in the camera as a rectangle of half width size / 2 and half height size around
+ * its position, mirrored by the character's facing, with buildPolyFT4.
+ * The match depends on taking the camera as the s32 the vtable passes and casting it in a local: with a Camera *
+ * param, the ot load sinks to the call and the camera and ot registers swap. */
+void func_800970A8(Unk80096F6C *this, s32 arg) {
+    Camera *camera = (Camera *)arg;
+    VECTOR pos;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 size;
+    s32 halfWidth;
+
+    gte_loadRotTrans(SCRATCH_VIEW_MATRIX);
+    ot = camera->ot.slots;
+    pos = this->base.sprite.position;
+    size = this->base.sprite.size;
+    halfWidth = (size >> 1) * this->facing;
+    corners[0].vx = corners[2].vx = pos.vx - halfWidth;
+    corners[1].vx = corners[3].vx = pos.vx + halfWidth;
+    corners[0].vy = corners[1].vy = pos.vy - size;
+    corners[2].vy = corners[3].vy = pos.vy + size;
+    corners[0].vz = corners[2].vz = corners[1].vz = corners[3].vz = pos.vz;
+    shape.flags = 0;
+    Particle_buildShape(&this->base, &shape, corners);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift);
+}
 
 /* The entity class of virtual table D_80069AF4 (constructor func_800971E0). */
 typedef struct Unk800971E0 {
@@ -687,7 +767,31 @@ void BeelzebumonSpecial2Particle_tick(BeelzebumonSpecial2Particle *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", BeelzebumonSpecial2Particle_draw);
+extern MATRIX D_800108B4;
+
+/* Draws the particle: a square of side 2 * size around the origin, placed at the sprite's position by a copy of the
+ * matrix D_800108B4 translated there, with buildPolyFT4. */
+void BeelzebumonSpecial2Particle_draw(BeelzebumonSpecial2Particle *this, Camera *camera) {
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    MATRIX m;
+    u_long *ot;
+    s32 size;
+
+    size = this->base.sprite.size;
+    corners[0].vx = corners[2].vx = -size;
+    corners[1].vx = corners[3].vx = size;
+    corners[0].vy = corners[1].vy = -size;
+    corners[2].vy = corners[3].vy = size;
+    corners[0].vz = corners[2].vz = corners[1].vz = corners[3].vz = 0;
+    shape.flags = 0;
+    ot = camera->ot.slots;
+    Particle_buildShape(&this->base, &shape, corners);
+    m = D_800108B4;
+    matrixTranslate(&m, this->base.sprite.position.vx, this->base.sprite.position.vy, this->base.sprite.position.vz);
+    setModelMatrix(&m);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80097FA0);
 
@@ -944,18 +1048,19 @@ void func_80099348(Unk8009921C *this) {
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80099410);
 
 /* The entity class of virtual table BEELZEBUMON_SPECIAL3_EFFECT_VTABLE (constructor BeelzebumonSpecial3Effect_init,
- * size 0x58): a line (buildLineG2) whose two ends start at one position and move by the velocity and by twice it. */
+ * size 0x58): a line (buildLineG2) whose two ends start at one position and move by the velocity and by half of it.
+ */
 typedef struct BeelzebumonSpecial3Effect {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Fight *unk1C;
     /* 0x20 */ Vec3 position;
     /* 0x2C */ s32 unk2C;
-    /* 0x30 */ Vec3 unk30; /* the other end, moving twice as fast */
+    /* 0x30 */ Vec3 unk30; /* the other end, moving at half the velocity */
     /* 0x3C */ s32 unk3C;
     /* 0x40 */ Vec3 velocity;
     /* 0x4C */ s32 unk4C;
-    /* 0x50 */ s32 unk50;
+    /* 0x50 */ s32 brightness; /* the near end's gray level (the draw's color) */
     /* 0x54 */ s32 ticks; /* ticks so far */
 } BeelzebumonSpecial3Effect;
 
@@ -991,7 +1096,7 @@ BeelzebumonSpecial3Effect *BeelzebumonSpecial3Effect_init(BeelzebumonSpecial3Eff
         s32 y = velocity->vy;
         s32 z = velocity->vz;
 
-        this->unk50 = 200;
+        this->brightness = 200;
         this->ticks = 0;
         this->velocity.vx = x;
         this->velocity.vy = y;
@@ -1009,7 +1114,38 @@ void BeelzebumonSpecial3Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", BeelzebumonSpecial3Effect_tick);
+/* The special move 3 effect's tick: for 8 ticks brightens by 0x20 up to 0x80, then dims by 0x30 and deletes itself
+ * once dark; its near end moves by the velocity, its far end by half of it. */
+void BeelzebumonSpecial3Effect_tick(BeelzebumonSpecial3Effect *this) {
+    s32 x, y, z;
+
+    if (this->ticks >= 8) {
+        this->brightness -= 0x30;
+        if (this->brightness <= 0) {
+            entityDelete(&this->entity);
+            return;
+        }
+    } else {
+        this->brightness += 0x20;
+        if (this->brightness >= 0x80) {
+            this->brightness = 0x80;
+        }
+    }
+    /* The match depends on reading the position whole before adding (as vecAddInPlace) */
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->unk30.vx += this->velocity.vx >> 1;
+    this->unk30.vy += this->velocity.vy >> 1;
+    this->unk30.vz += this->velocity.vz >> 1;
+    this->ticks++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", BeelzebumonSpecial3Effect_draw);
 

@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/math/sin_cos.h"
 
 struct HolydramonSpecial1Hitbox *HolydramonSpecial1Hitbox_init(struct HolydramonSpecial1Hitbox *this, Fighter *fighter,
                                                                Vec3 *position, VECTOR *velocity, Fight *fight);
@@ -167,9 +168,38 @@ void Holydramon_airSpecial2(Holydramon *this, s32 frame) {
     }
 }
 
-INCLUDE_RODATA("game/nonmatchings/fighters/holydramon", D_80068D64);
+extern VECTOR HOLYDRAMON_SPECIAL2_HITBOX_OFFSET;
 
-INCLUDE_ASM("game/nonmatchings/fighters/holydramon", Holydramon_spawnSpecial2Hitbox);
+INCLUDE_RODATA("game/nonmatchings/fighters/holydramon", HOLYDRAMON_SPECIAL2_HITBOX_OFFSET);
+
+struct HolydramonSpecial2Hitbox *HolydramonSpecial2Hitbox_init(struct HolydramonSpecial2Hitbox *this,
+                                                               Holydramon *fighter, Vec3 *position, VECTOR *velocity,
+                                                               Fight *fight);
+
+/* Spawns a special move 2 hitbox at the character's point 12 (moved by HOLYDRAMON_SPECIAL2_HITBOX_OFFSET), flying
+ * toward angle (0 right, 0x800 left) at a 180th of the circle table's unit. */
+void Holydramon_spawnSpecial2Hitbox(Holydramon *this, s32 angle) {
+    Vec3 position;
+    VECTOR velocity;
+    Fight *fight;
+    Entity *child;
+    s32 cos, sin;
+
+    Fighter_getNodePosition(&this->base, (VECTOR *)&position, 12, &HOLYDRAMON_SPECIAL2_HITBOX_OFFSET);
+    /* The match depends on reading the table into s32 locals: an s16 divided in place is shortened to a HImode
+     * division (an extra sll/sra 16 after each quotient) */
+    cos = COS_SIN_TABLE[angle & 0xFFF].cos;
+    sin = COS_SIN_TABLE[angle & 0xFFF].sin;
+    velocity.vx = cos / 180;
+    velocity.vy = sin / 180;
+    velocity.vz = 0;
+    fight = Fighter_getScene(&this->base);
+    child = allocEntityMemory(0xBC);
+    if (child != NULL) {
+        HolydramonSpecial2Hitbox_init(entityOperatorNewAt(0xBC, child), this, &position, &velocity, fight);
+    }
+    Fighter_addEntity(&this->base, child);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/holydramon", Holydramon_special3);
 
