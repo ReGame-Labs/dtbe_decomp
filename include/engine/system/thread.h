@@ -14,7 +14,12 @@ typedef struct {
     /* 0x8 */ s32 caller; /* the thread that switched to it */
 } Thread;
 
+#ifdef __cplusplus
+/* the C++ files' view: their thread entries take (unused, arg) */
+Thread *threadInit(Thread *thread, void (*func)(s32 unused, void *arg), u32 stackSize, void *arg, s32 gp);
+#else
 Thread *threadInit(Thread *thread, void (*func)(), u32 stackSize, void *arg, s32 gp);
+#endif
 void threadDestroy(Thread *thread, s32 flags);
 s32 threadSwitchTo(Thread *thread, s32 value);
 s32 threadSwitchBack(Thread *thread, s32 value);

@@ -4,6 +4,7 @@
 #include <libetc.h>
 #include <stdio.h>
 #include "engine/cd/file_load.h"
+#include "engine/game/game_state.h"
 #include "engine/gfx/display.h"
 #include "engine/gfx/fade.h"
 #include "engine/gfx/ordering_table.h"
@@ -101,17 +102,57 @@ typedef struct RankingTask {
 
 extern TickTaskVtable RANKING_TASK_VTABLE;
 
-/* name_entry.c's, as C sees them */
+/* name_entry.cpp's, as C sees them */
 void NameEntry_update(NameEntry *entry);
 void NameEntry_draw(NameEntry *entry);
 void NameEntry_storeRecord(NameEntry *entry, void *arg);
+NameEntry *NameEntry_init(NameEntry *entry, s32 mode, s32 maxLength);
+void NameEntry_open(NameEntry *entry);
+void NameEntry_close(NameEntry *entry);
+s32 NameEntry_openForScore(NameEntry *entry, RankingTable *table);
+/* name_entry.cpp defines these two without a parameter, but the ranking passes them the entry */
+void loadZasciiTim(NameEntry *entry);
+void loadInputTim(NameEntry *entry);
 
 void RankingTask_initLines(RankingTask *this);
 void RankingTask_drawLines(RankingTask *this);
 s32 RankingTask_isSkipPressed(RankingTask *this);
+void loadRankingTexture(RankingTask *this);
 void RankingTask_draw(RankingTask *this);
 
-INCLUDE_ASM("title/nonmatchings/ranking", rankingTaskInit);
+/* The ranking's task: the records of the save, a name entry of 5 characters, a white 320 by 240 screen fading
+ * in over 20 frames. With enterName the entry opens for the player's score (a sound when it does). */
+RankingTask *rankingTaskInit(RankingTask *this, s32 unused, s32 enterName) {
+    Display *display;
+
+    taskInit(&this->task, 0, "no name");
+    this->task.vtable = &RANKING_TASK_VTABLE.task;
+    RankingTable_init(&this->records, (RankingRecord *)GAME_STATE.save.records, 8);
+    NameEntry_init(&this->entry, NAME_ENTRY_MODE_NAME, 5);
+    fadeControlFadeOut(&FADE_CONTROL, 0);
+    fadeControlFadeIn(&FADE_CONTROL, 20);
+    display = CURRENT_DISPLAY;
+    displaySetSize(display, 320, 240);
+    displaySetVsyncMode(display, 0);
+    displaySetClearColor(display, 0xF0, 0xF0, 0xF0);
+    this->enterName = enterName;
+    this->frame = 0;
+    loadRankingTexture(this);
+    loadZasciiTim(&this->entry);
+    if (this->enterName) {
+        NameEntry_open(&this->entry);
+        this->entry.maxLength = 5;
+        loadInputTim(&this->entry);
+        NameEntry_openForScore(&this->entry, &this->records);
+    } else {
+        NameEntry_close(&this->entry);
+    }
+    if (this->entry.active) {
+        soundControlLoadSound(&SOUND_CONTROL, 0x8004, 1);
+        soundControlPlaySound(&SOUND_CONTROL, 0x8004, 0);
+    }
+    return this;
+}
 
 /* The destructor of the ranking's task: clears the screen to black, unloads the sounds, then destroys the
  * name entry, the records and the task. */
@@ -162,8 +203,9 @@ s32 RankingTask_isSkipPressed(RankingTask *this) {
     return (padManagerGetPressed(pads, 0) | padManagerGetPressed(pads, 1)) & (PADstart | PAD_CONFIRM);
 }
 
-/* Loads "title/ranking.tim", uploads its TIMs to VRAM and frees it. */
-void loadRankingTexture(void) {
+/* Loads "title/ranking.tim", uploads its TIMs to VRAM and frees it. The task is passed (rankingTaskInit does) but
+ * not used. */
+void loadRankingTexture(RankingTask *this) {
     u32 *file = loadFile("title/ranking.tim");
 
     uploadTims(file);
@@ -185,7 +227,33 @@ void writeWideNumber(u8 *text, s32 value, s32 digits) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/ranking", RankingTask_initLines);
+INCLUDE_RODATA("title/nonmatchings/ranking", STR_RANKING_LINE_FORMAT);
+
+extern u8 STR_RANKING_LINE_FORMAT[]; /* full-width "0.%-10s 000000": the rank, the name, and the score at
+                                       * text[0x10] */
+
+/* Prints a line for each record, in the table's order: its rank and score as full-width digits (the score
+ * capped at 999999) around its name; even lines start off the right edge, odd ones their width off the left. */
+void RankingTask_initLines(RankingTask *this) {
+    RankingRecord *record;
+    s32 i;
+
+    record = RankingTable_first(&this->records);
+    i = 0;
+    this->shownLines = 0;
+    /* The match depends on the text pointer in a local (the line's offset and text swap registers without it). */
+    while (record != NULL) {
+        u8 *text = this->lines[i].text;
+
+        sprintf(text, STR_RANKING_LINE_FORMAT, record->name);
+        writeWideNumber(text, i + 1, 1);
+        writeWideNumber(&text[0x10], record->score > 999999 ? 999999 : record->score, 6);
+        this->lines[i].character = record->character;
+        this->lines[i].x = (i & 1) ? -(strlen(text) * 16) : 0x140;
+        record = RankingTable_next(&this->records);
+        i++;
+    }
+}
 
 INCLUDE_ASM("title/nonmatchings/ranking", RankingTask_drawLines);
 

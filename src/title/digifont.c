@@ -5,6 +5,7 @@
 #include "engine/lib/format.h"
 #include "engine/lib/string.h"
 #include "engine/system/memory.h"
+#include "engine/gfx/prim/alloc_poly_ft4.h"
 #include "engine/text/font.h"
 #include "title/title_classes.h"
 #include "strings.h"
@@ -90,6 +91,7 @@ s32 DigifontCache_getSlot(DigifontCache *this, RECT *rect, u32 code, s32 alterna
     return 0;
 }
 
+
 void DigifontCache_drawChar(DigifontCache *this, u_long *ot, RECT *rect, u8 *color, u32 code, s32 alternate);
 
 /* Prints formatted text as printf does, in full-width glyphs from charRect's place, one character width
@@ -164,7 +166,51 @@ void DigifontCache_printInBox(DigifontCache *this, u_long *ot, RECT *box, u8 *fo
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/digifont", DigifontCache_drawChar);
+/* Draws character code as a POLY_FT4 over rect from its cache cell (DigifontCache_getSlot), in color: below an
+ * alpha of 0x80 the color is scaled by alpha / 0x80 and added to the screen (rate 1), then a gray of alpha is
+ * subtracted (rate 2), both semi-transparent; from 0x80 up, one opaque quad in the color. Nothing for an alpha of 0
+ * or a code without a glyph. */
+void DigifontCache_drawChar(DigifontCache *this, u_long *ot, RECT *rect, u8 *color, u32 code, s32 alternate) {
+    u8 r = color[0];
+    u8 g = color[1];
+    u8 b = color[2];
+    u8 alpha = color[3];
+    RECT cell;
+    POLY_FT4 *poly;
+
+    if (alpha == 0) {
+        return;
+    }
+    if (alpha < 0x80) {
+        r = (r * alpha) >> 7;
+        g = (g * alpha) >> 7;
+        b = (b * alpha) >> 7;
+    } else {
+        alpha = 0x80;
+    }
+    if (DigifontCache_getSlot(this, &cell, code, alternate) != 0) {
+        return;
+    }
+    poly = allocPolyFT4();
+    setRGB0(poly, r, g, b);
+    setXYWH(poly, rect->x, rect->y, rect->w, rect->h);
+    setUVWH(poly, cell.x, cell.y, cell.w, cell.h);
+    poly->tpage = getTPage(0, 1, this->area.x, this->area.y);
+    poly->clut = getClut(this->clutRect.x, this->clutRect.y);
+    SetSemiTrans(poly, alpha < 0x80);
+    AddPrim(ot, poly);
+    if (alpha >= 0x80) {
+        return;
+    }
+    poly = allocPolyFT4();
+    setRGB0(poly, alpha, alpha, alpha);
+    setXYWH(poly, rect->x, rect->y, rect->w, rect->h);
+    setUVWH(poly, cell.x, cell.y, cell.w, cell.h);
+    poly->tpage = getTPage(0, 2, this->area.x, this->area.y);
+    poly->clut = getClut(this->clutRect.x, this->clutRect.y);
+    SetSemiTrans(poly, 1);
+    AddPrim(ot, poly);
+}
 
 /* Copies the CLUT's VRAM rectangle to out. */
 void DigifontCache_getClutRect(DigifontCache *this, RECT *out) {

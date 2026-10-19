@@ -6,6 +6,7 @@
 #include "engine/game/game_state.h"
 #include "engine/game/character.h"
 #include "engine/gfx/prim/alloc_dr_move.h"
+#include "engine/math/vector.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
@@ -121,7 +122,74 @@ Fighter *createFighter(s32 character) {
     return fighter;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_init);
+/* Fighter's constructor: the entity (0x10000), the floor probe, the collider (CollisionSphere_initDisabled's body
+ * with no owner, inlined), the move rewards (MoveReward_init on each), everything else that moves cleared, the
+ * body and attack boxes (one 0x900-byte array, half each) and no face table. The match depends on the collider's
+ * unk10 cleared before its owner (the other way round from CollisionSphere_initDisabled), and on each box count
+ * cleared before its array is set. */
+Fighter *Fighter_init(Fighter *this) {
+    MoveReward *reward;
+    s32 left;
+
+    entityInit(&this->entity, 0x10000);
+    this->entity.vtable = &FIGHTER_VTABLE.entity;
+    TerrainProbe_init(&this->floorProbe);
+    this->collider.link.next = &this->collider.link;
+    this->collider.link.prev = &this->collider.link;
+    this->collider.unk10 = 0;
+    this->collider.owner = NULL;
+    this->collider.entity = NULL;
+    this->collider.hitDamage = 0;
+    this->collider.hitKind = 0;
+    this->collider.hitKnockback.vx = 0;
+    this->collider.hitKnockback.vy = 0;
+    this->collider.hitKnockback.vz = 0;
+    this->collider.hitKnockbackPad = 0;
+    this->collider.flags.bits.disabled = 0;
+    this->collider.flags.bits.touched = 0;
+    this->collider.vtable = COLLISION_SPHERE_VTABLE;
+    this->collider.flags.bits.disabled = 0;
+    this->collider.flags.bits.disabled = 1;
+    this->unk334 = 0;
+    this->unk338 = 0;
+    this->unk33C = 0;
+    for (reward = this->rewards, left = MOVE_COUNT - 1; left != -1; left--, reward++) {
+        MoveReward_init(reward);
+    }
+    this->unk48C = 0;
+    this->unk490 = 0;
+    this->unk494 = 0;
+    this->invulnerableFrames = 0;
+    this->unk49C = 0;
+    this->position.vx = 0;
+    this->position.vy = 0;
+    this->position.vz = 0;
+    this->positionPad = 0;
+    this->velocity.vx = 0;
+    this->velocity.vy = 0;
+    this->velocity.vz = 0;
+    this->velocityPad = 0;
+    this->force.vx = 0;
+    this->force.vy = 0;
+    this->force.vz = 0;
+    this->forcePad = 0;
+    this->rotation.vx = 0;
+    this->rotation.vy = 0;
+    this->rotation.vz = 0;
+    this->rotationPad = 0;
+    this->targetRotation.vx = 0;
+    this->targetRotation.vy = 0;
+    this->targetRotation.vz = 0;
+    this->targetRotationPad = 0;
+    this->bodyBoxCount = 0;
+    this->bodyBoxes = (s32)operatorVecNew(0x900);
+    this->attackBoxCount = 0;
+    this->attackBoxes = this->bodyBoxes + 0x480;
+    Fighter_setFaceTable(this, NULL);
+    this->face = -1;
+    this->unk23C = 0;
+    return this;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighter", Fighter_setUp);
 
@@ -221,7 +289,7 @@ BattleSide *func_8007758C(Fighter *this) {
 
 /* Whether the computer plays the fighter. */
 s32 Fighter_isComputer(Fighter *this) {
-    return this->flags & FIGHTER_FLAG_COMPUTER;
+    return this->flags.bits.computer;
 }
 
 /* The fighter's model. */
@@ -326,9 +394,9 @@ s32 Fighter_canEvolve(Fighter *this) {
     return !(Fighter_getParams(this)->flags & FIGHTER_PARAM_EVOLVED);
 }
 
-/* Returns bit 1 of the fighter's flags. */
+/* Returns the fighter's flag unk1. */
 s32 func_800777BC(Fighter *this) {
-    return (this->flags >> 1) & 1;
+    return this->flags.bits.unk1;
 }
 
 /* Adds the fighter's model to group. */
@@ -346,17 +414,14 @@ void Fighter_removeModel(Fighter *this) {
 
 /* Returns the flag bit func_80079AE4 sets, and clears it. */
 s32 func_8007782C(Fighter *this) {
-    u32 flags = this->flags;
-    u32 shifted = flags >> FIGHTER_FLAG_80079AE4_BIT;
+    s32 set = this->flags.bits.unk80079AE4;
 
-    /* The match depends on flags masked in place (set twice): a set-once value lets sched1 move the shift. */
-    flags &= ~(1 << FIGHTER_FLAG_80079AE4_BIT);
-    this->flags = flags;
-    return shifted & 1;
+    this->flags.bits.unk80079AE4 = 0;
+    return set;
 }
 
 /* Probes the map (TerrainProbe_cast) on the segment from 0x26 to 0x1E26 below the fighter's position (y grows
- * down); returns what TerrainProbe_cast returns. The USA release first checks bit 3 of the fighter's flags. */
+ * down); returns what TerrainProbe_cast returns. The USA release first checks that the fighter landed. */
 #if VERSION_JP
 s32 Fighter_probeFloorBelow(Fighter *this) {
     Vec3 from;
@@ -376,7 +441,7 @@ s32 Fighter_probeFloorBelow(Fighter *this) {
     Vec3 to;
     TerrainProbe probe;
 
-    if (!((this->flags >> 3) & 1)) {
+    if (!this->flags.bits.landed) {
         return 0;
     }
     Fighter_getPosition(this, &from);
@@ -388,9 +453,9 @@ s32 Fighter_probeFloorBelow(Fighter *this) {
 }
 #endif
 
-/* Whether the fighter stands on the ground (FIGHTER_FLAG_ON_GROUND). */
+/* Whether the fighter stands on the ground. */
 s32 Fighter_isOnGround(Fighter *this) {
-    return (this->flags >> 2) & 1;
+    return this->flags.bits.onGround;
 }
 
 /* Marks air move `move` used and returns 1, or returns 0 when it was used since the fighter left the ground. */
@@ -406,7 +471,69 @@ s32 Fighter_tryUseAirMove(Fighter *this, s32 move) {
 
 INCLUDE_ASM("game/nonmatchings/fighter", Fighter_tick);
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_updateModel);
+/* Takes one off a tick count down to 0. The match depends on reading the count into a local: jump threading
+ * would drop the reload of the count before the caller's own test. */
+static inline void countDown(s32 *ticks) {
+    s32 left = *ticks;
+
+    if (left > 0) {
+        *ticks = left - 1;
+    }
+}
+
+/* Turns the collider on at the fighter's height above the origin of the model's matrix; the USA release keeps it
+ * off while that point is 8 or more off the z = 0 plane. The match depends on taking the matrix as a parameter:
+ * the game keeps its address in a saved register across the call. */
+static inline void Fighter_placeCollider(Fighter *this, MATRIX *matrix) {
+    VECTOR offset;
+
+    offset.vy = -Fighter_getParams(this)->height;
+    offset.vx = 0;
+    offset.vz = 0;
+    matrixTransformVec(matrix, &offset, &offset);
+#if VERSION_JP
+    this->collider.flags.bits.disabled = 0;
+#else
+    this->collider.flags.bits.disabled = abs(offset.vz) >= 8;
+#endif
+    this->collider.position.vx = offset.vx;
+    this->collider.position.vy = offset.vy;
+    this->collider.position.vz = offset.vz;
+}
+
+/* Steps the model: a fighter out of life that fell below the stage stops; the animation waits while unk49C counts
+ * down; a free fighter (not held) puts its collider at its height point and updates its boxes, a held one turns
+ * its collider off; then the face. */
+void Fighter_updateModel(Fighter *this) {
+    Model *model;
+
+    if (!func_8007AEA8(this)) {
+        func_8007A12C(this, 1);
+    }
+    if (this->battleSide->life <= 0 && this->position.vy > (0x1E00 << 8)) {
+        this->force.vx = 0;
+        this->force.vy = 0;
+        this->force.vz = 0;
+        this->forcePad = 0;
+        this->velocity.vx = 0;
+        this->velocity.vy = 0;
+        this->velocity.vz = 0;
+        this->velocityPad = 0;
+    }
+    countDown(&this->unk49C);
+    if (this->unk49C <= 0) {
+        modelUpdateAnimation(this->model);
+    }
+    if (this->holder == NULL) {
+        model = this->model;
+        model->group.object.transform.valid = 0;
+        Fighter_placeCollider(this, &model->group.object.transform.local.m);
+        Fighter_updateBoxes(this);
+    } else {
+        this->collider.flags.bits.disabled = 1;
+    }
+    Fighter_updateFace(this);
+}
 
 /* Out of an attack, shows face 1 (hurt) while the body flinches, is knocked down or out, or is dizzy, else
  * face 0. */
@@ -419,9 +546,116 @@ void Fighter_updateFace(Fighter *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_applyPose);
+/* Once the round asked for a pose (pendingPose): a dizzy body stands up again (stun cleared, FighterStateGround_init);
+ * an idle one starts the end pose (func_80080730) or the win pose (func_800807AC) and turns as its params say. */
+void Fighter_applyPose(Fighter *this) {
+    FighterParams *params;
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_updatePhysics);
+    if (this->pendingPose == -1) {
+        return;
+    }
+    switch (this->bodyState->state) {
+    case FIGHTER_STATE_DIZZY:
+        func_8007F1B8(func_8007758C(this));
+        FighterStateGround_init(this->bodyState, 1);
+        break;
+    case FIGHTER_STATE_IDLE:
+        params = Fighter_getParams(this);
+        if (this->pendingPose != FIGHTER_STATE_END_POSE) {
+            func_800807AC(this->bodyState);
+            if (params->flags & FIGHTER_PARAM_WIN_POSE_BACK) {
+                func_80078834(this);
+            } else if (params->flags & FIGHTER_PARAM_WIN_POSE_FRONT) {
+                func_80078840(this);
+            } else if (params->flags & FIGHTER_PARAM_POSE_RIGHT) {
+                Fighter_faceRight(this, 0);
+            } else if (params->flags & FIGHTER_PARAM_POSE_LEFT) {
+                Fighter_faceLeft(this, 0);
+            }
+        } else {
+            func_80080730(this->bodyState);
+            if (params->flags & FIGHTER_PARAM_END_POSE_BACK) {
+                func_80078834(this);
+            } else if (params->flags & FIGHTER_PARAM_END_POSE_FRONT) {
+                func_80078840(this);
+            } else if (params->flags & FIGHTER_PARAM_POSE_RIGHT) {
+                Fighter_faceRight(this, 0);
+            } else if (params->flags & FIGHTER_PARAM_POSE_LEFT) {
+                Fighter_faceLeft(this, 0);
+            }
+        }
+        break;
+    }
+}
+
+#if !VERSION_JP
+/* The fighter's flag unk4 (USA only). */
+static inline s32 Fighter_getUnk4(Fighter *this) {
+    return this->flags.bits.unk4;
+}
+#endif
+
+/* The physics step: gravity (0x71C, times the mass) into the force, func_80077F80, then the ground test; on the
+ * ground a fighter not held by unk48C lands on the floor, and a landed fighter that is not dashing takes the
+ * arena's friction; a crawl under 0x100 stops. The dash flag lasts one step. The USA release skips the ground
+ * test while unk48C holds, and also runs the floor steps off the ground with unk4. The match depends on the
+ * gravity in its own local (the product first in the add). */
+void Fighter_updatePhysics(Fighter *this) {
+    s32 gravity = ((s64)this->mass * 0x71C) >> 16;
+    s32 landed;
+#if !VERSION_JP
+    s32 free;
+#endif
+
+    this->force.vy += gravity;
+#if VERSION_JP
+    func_80077F80(this);
+    this->flags.bits.onGround = Fighter_checkGround(this);
+    this->flags.bits.landed = 0;
+    if (this->flags.bits.onGround) {
+        landed = 0;
+        if (this->unk48C <= 0) {
+            landed = Fighter_landOnFloor(this);
+            this->flags.bits.landed = landed;
+        }
+#else
+    free = this->unk48C <= 0;
+    func_80077F80(this);
+    if (free) {
+        this->flags.bits.onGround = Fighter_checkGround(this);
+    } else {
+        this->flags.bits.onGround = 0;
+    }
+    this->flags.bits.landed = 0;
+    /* The match depends on reading unk4 through Fighter_getUnk4: or-ed in place, the two bit tests fold into one
+     * mask test */
+    if (this->flags.bits.onGround || Fighter_getUnk4(this)) {
+        landed = 0;
+        if (free) {
+            landed = Fighter_landOnFloor(this);
+            this->flags.bits.landed = landed;
+        }
+#endif
+        if (landed && !this->flags.bits.dashing) {
+            Vec3 friction;
+            Vec3 *force = Fighter_getFriction(this, &friction);
+            s32 x = this->force.vx;
+            s32 y = this->force.vy;
+            s32 z = this->force.vz;
+
+            x += force->vx;
+            y += force->vy;
+            z += force->vz;
+            this->force.vx = x;
+            this->force.vy = y;
+            this->force.vz = z;
+        }
+        if (abs(this->velocity.vx) < 0x100) {
+            this->velocity.vx = 0;
+        }
+    }
+    this->flags.bits.dashing = 0;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighter", func_80077F80);
 
@@ -461,7 +695,40 @@ s32 Fighter_checkGround(Fighter *this) {
     return TerrainProbe_cast(probe, &from, &to) != 0;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", func_80078254);
+Vec3 *func_80078CE0(Fighter *this, Vec3 *out);
+void Fighter_applyImpulse(Fighter *this);
+
+/* Unless the fighter moves away from the floor its probe found (velocity . normal > 0), puts it on the hit point
+ * and pushes it off the floor by the momentum's part into it (-(momentum . normal) normal, in x and y); returns
+ * whether it did. */
+s32 Fighter_landOnFloor(Fighter *this) {
+    VECTOR *normal = TerrainProbe_getNormal(&this->floorProbe);
+    VECTOR push;
+    s32 dot;
+    s32 x, y, z;
+
+    if (vecDot12(normal, (VECTOR *)&this->velocity) > 0) {
+        return 0;
+    }
+    Fighter_setPosition(this, TerrainProbe_getHitPoint(&this->floorProbe, (Vec3 *)&push));
+    func_80078CE0(this, (Vec3 *)&push);
+    dot = -vecDot12(&push, normal);
+    push.vx = ((s64)dot * normal->vx) >> 12;
+    push.vy = ((s64)dot * normal->vy) >> 12;
+    push.vz = 0;
+    /* The match depends on the force sum reading everything before writing (as vecAddInPlace). */
+    x = this->force.vx;
+    y = this->force.vy;
+    z = this->force.vz;
+    x += push.vx;
+    y += push.vy;
+    z += push.vz;
+    this->force.vx = x;
+    this->force.vy = y;
+    this->force.vz = z;
+    Fighter_applyImpulse(this);
+    return 1;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighter", Fighter_accelerateTo);
 
@@ -603,7 +870,7 @@ void Fighter_setInput(Fighter *this, struct InputHistory *input) {
 void Fighter_vibratePad(Fighter *this, s32 mode, u8 power0, u8 power1, s32 duration, s32 priority) {
     PadManager *padManager;
 
-    if (this->flags & FIGHTER_FLAG_COMPUTER) {
+    if (this->flags.bits.computer) {
         return;
     }
     if (GAME_STATE.demo != 0) {
@@ -790,7 +1057,88 @@ void Fighter_endEvolutionScene(Fighter *this) {
     this->fight->cameraFocus = 0;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_takeOverFrom);
+FighterState *FighterStateIntro_init(FighterState *this);
+
+/* Puts the fighter where from is, reading from's three words before storing any (as vecCopy does). */
+static inline void Fighter_copyPosition(Fighter *this, Fighter *from) {
+    s32 x = from->position.vx;
+    s32 y = from->position.vy;
+    s32 z = from->position.vz;
+
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+}
+
+/* Sets the fighter's last position to from's position, read first as in Fighter_copyPosition. */
+static inline void Fighter_copyLastPosition(Fighter *this, Fighter *from) {
+    s32 x = from->position.vx;
+    s32 y = from->position.vy;
+    s32 z = from->position.vz;
+
+    this->lastPosition.vx = x;
+    this->lastPosition.vy = y;
+    this->lastPosition.vz = z;
+}
+
+/* Turns the fighter the way from faces: rotation and targetRotation keep only from's y. */
+static inline void Fighter_copyFacing(Fighter *this, Fighter *from) {
+    s32 facing = from->rotation.vy;
+    s32 targetFacing;
+
+    this->rotation.vx = 0;
+    this->rotation.vy = facing;
+    this->rotation.vz = 0;
+    targetFacing = from->targetRotation.vy;
+    this->targetRotation.vx = 0;
+    this->targetRotation.vy = targetFacing;
+    this->targetRotation.vz = 0;
+}
+
+/* The fighter takes over from previous, the other form of its side (BattleSide_swapCharacter): it starts where
+ * previous is, at rest, facing its way; it joins previous's entity group in its place and its model takes the
+ * place of previous's in their group, both models hidden. previous is left in its idle states (ground, or intro
+ * for an evolved form), detached from its opponent, its collider disabled (US: both colliders) and its voice
+ * stopped. The match depends on each copy being an inline of its own (Fighter_copyPosition, ...), its words
+ * read first. */
+void Fighter_takeOverFrom(Fighter *this, Fighter *previous) {
+    Model *previousModel;
+
+    Fighter_copyPosition(this, previous);
+    Fighter_copyLastPosition(this, previous);
+    this->velocity.vx = 0;
+    this->velocity.vy = 0;
+    this->velocity.vz = 0;
+    this->velocityPad = 0;
+    this->force.vx = 0;
+    this->force.vy = 0;
+    this->force.vz = 0;
+    this->forcePad = 0;
+    Fighter_copyFacing(this, previous);
+    entityGroupAppend(func_8002BDF4(&previous->entity), &this->entity);
+    listRemove(&previous->entity.link);
+    previousModel = previous->model;
+    listInsertAfter(&previousModel->group.object.link, &this->model->group.object.link);
+    listRemove(&previousModel->group.object.link);
+    this->model->group.object.hidden = 1;
+    previousModel->group.object.hidden = 1;
+    if (Fighter_canEvolve(previous)) {
+        FighterStateGround_init(previous->bodyState, 1);
+    } else {
+        FighterStateIntro_init(previous->bodyState);
+    }
+    FighterAttackIdle_init(previous->attackState);
+    Fighter_detach(previous);
+    Fighter_detach(Fighter_getOpponent(previous));
+    previous->unk494 = 0;
+    previous->comboHits = 0;
+    previous->collider.flags.bits.disabled = 1;
+#if !VERSION_JP
+    this->collider.flags.bits.disabled = 1;
+#endif
+    stopSound(previous->voiceHandle);
+    previous->voiceHandle = 0;
+}
 
 /* Starts clip (FIGHTER_CLIP_*) with the play count of the character's .loop file, keeping clip and blendFrames,
  * when Fighter_isActionClipDone allows it; a negative clip stops the model. */
@@ -888,7 +1236,7 @@ s32 Fighter_isActionClipDone(Fighter *this) {
 /* Freezes the fighter: sets a flag, adds 1 to its life, stops it (velocity and force), and resets its body state
  * (FighterStateGround_init with 1) and its attack state (FighterAttackIdle_init). */
 void Fighter_freeze(Fighter *this) {
-    this->flags |= 1 << FIGHTER_FLAG_FROZEN_BIT;
+    this->flags.bits.frozen = 1;
     Fighter_addLife(this, 1);
     this->force.vx = 0;
     this->force.vy = 0;
@@ -902,14 +1250,14 @@ void Fighter_freeze(Fighter *this) {
     FighterAttackIdle_init(this->attackState);
 }
 
-/* Sets a flag of the fighter (bit 6, bit 7 in the USA release). */
+/* Sets the fighter's flag unk80079AE4. */
 void func_80079AE4(Fighter *this) {
-    this->flags |= 1 << FIGHTER_FLAG_80079AE4_BIT;
+    this->flags.bits.unk80079AE4 = 1;
 }
 
-/* Sets a flag of the fighter (bit 5, bit 6 in the USA release). */
+/* Sets the fighter's flag unk80079AF8. */
 void func_80079AF8(Fighter *this) {
-    this->flags |= 1 << FIGHTER_FLAG_80079AF8_BIT;
+    this->flags.bits.unk80079AF8 = 1;
 }
 
 /* Sets 0x334 to arg. */
@@ -996,12 +1344,12 @@ Fighter *Fighter_getOpponentInReach(Fighter *this, s32 index) {
     return func_80079E50(this, &AXIS_Z, distance * distance, 0x155);
 }
 
-/* Whether the fighter can be thrown: bit 3 of its flags, and not Fighter_isInvulnerable. */
+/* Whether the fighter can be thrown: landed, and not Fighter_isInvulnerable. */
 s32 Fighter_isThrowable(Fighter *this) {
     if (Fighter_isInvulnerable(this) != 0) {
         return 0;
     }
-    return (this->flags >> 3) & 1;
+    return this->flags.bits.landed;
 }
 
 /* The fighter's radius: three quarters of its params' height. */
@@ -1336,7 +1684,6 @@ void Fighter_attachToPart(Fighter *this, MeshPart *part, u32 handle) {
     }
 }
 
-void func_80077F80(Fighter *this);
 
 /* Undoes Fighter_attachToPart: detaches the model and takes its local translation (x, y, in 1/256ths, z 0) as the
  * position, then calls func_80077F80. */
@@ -1404,13 +1751,6 @@ void Fighter_walkRight(Fighter *this, s32 frame) {
     Fighter_accelerateTo(this, Fighter_getParams(this)->walkSpeed);
 }
 
-/* The flag of the fighter Fighter_dashLeft and Fighter_dashRight set: 0x80, 0x100 in the USA release. */
-#if VERSION_JP
-#define DASH_FLAG 0x80
-#else
-#define DASH_FLAG 0x100
-#endif
-
 /* Which side of the fighter func_8007A3EC finds blocked (-1 left, 1 right, 0 none); the JP release
  * does not test it, so there it is always 0. */
 static inline s32 dashBlockedSide(Fighter *this) {
@@ -1425,7 +1765,7 @@ static inline s32 dashBlockedSide(Fighter *this) {
 }
 
 /* The dashLeft slot: on its first frame, plays the dash clip, pushes left by the params' dash speed (times the
- * mass, 16.16) unless the left side is blocked, faces left and raises dust; every frame sets DASH_FLAG. */
+ * mass, 16.16) unless the left side is blocked, faces left and raises dust; every frame sets flags.bits.dashing. */
 void Fighter_dashLeft(Fighter *this, s32 frame) {
     if (frame == 0) {
         s32 delta;
@@ -1438,11 +1778,11 @@ void Fighter_dashLeft(Fighter *this, s32 frame) {
         Fighter_faceLeft(this, 0);
         Fighter_spawnDust(this, -1, 0x60, Fighter_canEvolve(this) ? 3 : 4);
     }
-    this->flags |= DASH_FLAG;
+    this->flags.bits.dashing = 1;
 }
 
 /* The dashRight slot: on its first frame, plays the dash clip, pushes right by the params' dash speed (times
- * the mass, 16.16) unless the right side is blocked, faces right and raises dust; every frame sets DASH_FLAG. */
+ * the mass, 16.16) unless the right side is blocked, faces right and raises dust; every frame sets flags.bits.dashing. */
 void Fighter_dashRight(Fighter *this, s32 frame) {
     if (frame == 0) {
         s32 delta;
@@ -1456,7 +1796,7 @@ void Fighter_dashRight(Fighter *this, s32 frame) {
         Fighter_faceRight(this, 0);
         Fighter_spawnDust(this, -1, 0x60, Fighter_canEvolve(this) ? 3 : 4);
     }
-    this->flags |= DASH_FLAG;
+    this->flags.bits.dashing = 1;
 }
 
 /* The jump slot: pushes up by the params' jump speed (times the mass, 16.16) from a standstill, plays the jump
@@ -1502,7 +1842,36 @@ void Fighter_crouchGuard(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_dizzy);
+struct Unk800C3960 *func_800C3960(struct Unk800C3960 *this, Fighter *fighter);
+
+/* The buttons that count as mashing out of a dizzy spell: the directions, L1, R1 and the four face buttons. */
+#define DIZZY_MASH_BUTTONS                                                                                       \
+    (PAD_UP | PAD_RIGHT | PAD_DOWN | PAD_LEFT | PADL1 | PADR1 | PADRup | PADRright | PADRdown | PADRleft)
+
+/* The dizzy slot: on its first frame, spawns the ring of stars over the head (func_800C3960) and plays the dizzy
+ * clip; every frame, each button mashed this frame runs the model's animation one more step. */
+void Fighter_dizzy(Fighter *this, s32 frame) {
+    Entity *child;
+    u16 steps;
+
+    if (frame == 0) {
+        child = allocEntityMemory(0xE4);
+        if (child != NULL) {
+            func_800C3960(entityOperatorNewAt(0xE4, child), this);
+        }
+        Fighter_addEntity(this, child);
+        Fighter_setClip(this, FIGHTER_CLIP_DIZZY, 6, 0);
+    }
+    /* One step per button mashed: a 16-bit population count of the presses. */
+    steps = InputHistory_getPressed(Fight_getInput(this->fight, this->side)) & DIZZY_MASH_BUTTONS;
+    steps = steps - ((steps >> 1) & 0x5555);
+    steps = ((steps >> 2) & 0x3333) + (steps & 0x3333);
+    steps = (steps + (steps >> 4)) & 0x0F0F;
+    steps = (steps >> 8) + (steps & 0xFF);
+    while (steps--) {
+        modelUpdateAnimation(this->model);
+    }
+}
 
 /* The flinch slot: on its first frame, plays the flinch clip. */
 void Fighter_flinch(Fighter *this, s32 frame) {

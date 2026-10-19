@@ -9,7 +9,7 @@ struct HolydramonSpecial1Hitbox *HolydramonSpecial1Hitbox_init(struct Holydramon
                                                                Vec3 *position, VECTOR *velocity, Fight *fight);
 struct HolydramonSpecial1Effect *HolydramonSpecial1Effect_init(struct HolydramonSpecial1Effect *this, Fighter *fighter);
 extern EntityVtable D_80068D84;
-extern EntityVtable D_80068DAC;
+extern EntityVtable HOLYDRAMON_SPECIAL3_EFFECT_VTABLE;
 extern EntityVtable D_80068DD4;
 extern EntityVtable D_80068DFC;
 extern VtableEntry HOLYDRAMON_SPECIAL2_HITBOX_HIT_VTABLE[];
@@ -27,8 +27,6 @@ typedef struct Holydramon {
 } Holydramon;
 void Holydramon_spawnSpecial1Hitbox(struct Holydramon *this);
 void Holydramon_spawnSpecial1Effect(Fighter *this);
-/* an offset from a node of the character's model */
-extern VECTOR D_80010824; /* a zero offset in the executable's .rodata */
 
 /* Builds Holydramon: a Fighter with its own vtable. */
 Holydramon *Holydramon_init(Holydramon *this) {
@@ -203,10 +201,11 @@ void Holydramon_spawnSpecial2Hitbox(Holydramon *this, s32 angle) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/holydramon", Holydramon_special3);
 
-struct Unk8008B62C *func_8008B62C(struct Unk8008B62C *this, Fighter *fighter, Vec3 *position);
+struct HolydramonSpecial3Effect *HolydramonSpecial3Effect_init(struct HolydramonSpecial3Effect *this, Fighter *fighter,
+                                                               Vec3 *position);
 
-/* Spawns a special3 effect (vtable D_80068DAC) at the opponent, up to 0x120 to either side at random. */
-void func_8008A91C(Holydramon *this) {
+/* Spawns the special move 3 effect at the opponent, up to 0x120 to either side at random. */
+void Holydramon_spawnSpecial3Effect(Holydramon *this) {
     Fight *fight = Fighter_getScene(&this->base);
     Vec3 position;
     Entity *child;
@@ -215,7 +214,7 @@ void func_8008A91C(Holydramon *this) {
     position.vx += ((s32)(mersenneTwisterGenerate(&fight->random) & 0x3F) - 0x20) * 9;
     child = allocEntityMemory(0x38);
     if (child != NULL) {
-        func_8008B62C(entityOperatorNewAt(0x38, child), &this->base, &position);
+        HolydramonSpecial3Effect_init(entityOperatorNewAt(0x38, child), &this->base, &position);
     }
     Fighter_addEntity(&this->base, child);
 }
@@ -336,7 +335,7 @@ void HolydramonSpecial1Hitbox_hit(HolydramonSpecial1Hitbox *this, CollisionSpher
     Hit_apply(&this->hit, sum);
     target = sum->entity;
     if (target != NULL && entityGetKind(target) == ENTITY_KIND_FIGHTER) {
-        this->sphere.flags |= COLLISION_SHAPE_DISABLED;
+        this->sphere.flags.bits.disabled = 1;
         /* The match depends on the two news as inlines taking the owner (a ternary of their results). */
         entityAddSibling(&this->entity, Fighter_isGuarding((Fighter *)target) ? HolydramonSpecial1Hitbox_newFlash(this)
                                                                              : HolydramonSpecial1Hitbox_newBurst(this));
@@ -425,24 +424,25 @@ INCLUDE_RODATA("game/nonmatchings/fighters/holydramon", D_80068D74);
 
 INCLUDE_ASM("game/nonmatchings/fighters/holydramon", HolydramonSpecial1Effect_draw);
 
-/* The entity class of virtual table D_80068DAC (constructor func_8008B62C, made by func_8008A91C). */
-typedef struct Unk8008B62C {
+/* The special move 3 effect (Holydramon_spawnSpecial3Effect makes it at the opponent): it hits the opponent at frame 8. */
+typedef struct HolydramonSpecial3Effect {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Vec3 position;
     /* 0x28 */ u8 unk28[0x30 - 0x28];
-    /* 0x30 */ s32 unk30;
-    /* 0x34 */ s16 unk34; /* Fighter_getVramY of the character */
-} Unk8008B62C;
+    /* 0x30 */ s32 frames;
+    /* 0x34 */ s16 vramY; /* Fighter_getVramY of the character */
+} HolydramonSpecial3Effect;
 
-/* Constructs the entity of virtual table D_80068DAC for fighter at position. The match depends on reading
+/* Constructs the special move 3 effect for fighter at position. The match depends on reading
  * the three words before storing any, as vecCopy does, and on storing fighter between the reads and the
  * writes. */
-Unk8008B62C *func_8008B62C(Unk8008B62C *this, Fighter *fighter, Vec3 *position) {
+HolydramonSpecial3Effect *HolydramonSpecial3Effect_init(HolydramonSpecial3Effect *this, Fighter *fighter,
+                                                       Vec3 *position) {
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
-    this->entity.vtable = &D_80068DAC;
+    this->entity.vtable = &HOLYDRAMON_SPECIAL3_EFFECT_VTABLE;
     x = position->vx;
     y = position->vy;
     z = position->vz;
@@ -450,23 +450,63 @@ Unk8008B62C *func_8008B62C(Unk8008B62C *this, Fighter *fighter, Vec3 *position) 
     this->position.vx = x;
     this->position.vy = y;
     this->position.vz = z;
-    this->unk30 = 0;
-    this->unk34 = Fighter_getVramY(fighter);
+    this->frames = 0;
+    this->vramY = Fighter_getVramY(fighter);
     return this;
 }
 
-/* The destructor of the entity class of vtable D_80068DAC, which func_8008B62C installs. */
-void func_8008B6A8(Entity *this, s32 flags) {
-    this->vtable = &D_80068DAC;
+/* The special move 3 effect's destructor. */
+void HolydramonSpecial3Effect_destroy(Entity *this, s32 flags) {
+    this->vtable = &HOLYDRAMON_SPECIAL3_EFFECT_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/holydramon", func_8008B6FC);
+/* Hits fighter's opponent with damage word 0x1EB01900, knocked up by 0x1554 and sideways by 0x238C: to the left when it
+ * stands right of `from`. */
+static inline void hitOpponentFrom(Fighter *fighter, Vec3 *from) {
+    Vec3 position;
+    Vec3 knockback;
+    Fighter *opponent;
+    s32 direction;
 
-INCLUDE_ASM("game/nonmatchings/fighters/holydramon", func_8008B860);
+    opponent = Fighter_getOpponent(fighter);
+    Fighter_getPosition(opponent, &position);
+    direction = 1;
+    /* The match depends on the opponent's x being the first operand */
+    if (position.vx > from->vx) {
+        direction = -1;
+    }
+    knockback.vx = direction * 0x238C;
+    knockback.vy = -0x1554;
+    knockback.vz = 0;
+    Fighter_takeHit(opponent, 0x1EB01900, &knockback, 0);
+}
+
+/* The special move 3 effect's frame: at frame 8 it hits the owner's opponent and bursts 3 sparks at its position; it
+ * deletes itself at frame 24. The match depends on the hit being an inline taking &this->position (the game computes
+ * that address before the calls and keeps it for the burst). */
+void HolydramonSpecial3Effect_tick(HolydramonSpecial3Effect *this) {
+    Entity *child;
+
+    if (this->frames >= 24) {
+        entityDelete(&this->entity);
+        return;
+    }
+    if (this->frames == 8) {
+        hitOpponentFrom(this->fighter, &this->position);
+        child = allocEntityMemory(0x3C);
+        if (child != NULL) {
+            ParticleBurst_init(entityOperatorNewAt(0x3C, child), 4, &this->position, 0x30, 0x100, 3, 0x808080);
+        }
+        entityAddSibling(&this->entity, child);
+    }
+    this->frames++;
+}
+
+INCLUDE_ASM("game/nonmatchings/fighters/holydramon", HolydramonSpecial3Effect_draw);
 
 /* The entity of func_8008BE04 (vtable D_80068D84, 0x34 bytes): a character's, with its 0x440 (Fighter_getVramY). */
 typedef struct Unk8008BE04 {
@@ -522,7 +562,7 @@ typedef struct HolydramonSpecial2Hitbox {
     /* 0xA4 */ u8 unkA4[0xB4 - 0xA4];
     /* 0xB4 */ s32 age;
     /* 0xB8 */ s16 vramY;   /* Fighter_getVramY of the owner */
-    /* 0xBA */ u16 stopped; /* set with the part's COLLISION_SHAPE_DISABLED: while the owner's 0x4A8 is set, and after
+    /* 0xBA */ u16 stopped; /* set with the part's flags.bits.disabled: while the owner's 0x4A8 is set, and after
                              * 32 frames; it then slows by a quarter a frame */
 } HolydramonSpecial2Hitbox;
 
@@ -571,7 +611,7 @@ HolydramonSpecial2Hitbox *HolydramonSpecial2Hitbox_init(HolydramonSpecial2Hitbox
     }
     if (this->owner->unk4A8 != 0) {
         this->stopped = 1;
-        this->parts.part.flags |= COLLISION_SHAPE_DISABLED;
+        this->parts.part.flags.bits.disabled = 1;
     }
     return this;
 }
@@ -606,7 +646,7 @@ void HolydramonSpecial2Hitbox_tick(HolydramonSpecial2Hitbox *this) {
 
     if (this->owner->unk4A8 != 0) {
         this->stopped = 1;
-        this->parts.part.flags |= COLLISION_SHAPE_DISABLED;
+        this->parts.part.flags.bits.disabled = 1;
     }
     if (this->stopped) {
         this->velocity.vx -= this->velocity.vx >> 2;
@@ -629,7 +669,7 @@ void HolydramonSpecial2Hitbox_tick(HolydramonSpecial2Hitbox *this) {
         entityDelete(&this->parts.entity);
     } else if (this->age > 32) {
         this->stopped = 1;
-        this->parts.part.flags |= COLLISION_SHAPE_DISABLED;
+        this->parts.part.flags.bits.disabled = 1;
     }
 }
 
@@ -740,7 +780,7 @@ void func_8008CF6C(Unk8008CE68 *this) {
 INCLUDE_ASM("game/nonmatchings/fighters/holydramon", func_8008D028);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/holydramon", D_80068D84);
-INCLUDE_RODATA("game/nonmatchings/fighters/holydramon", D_80068DAC);
+INCLUDE_RODATA("game/nonmatchings/fighters/holydramon", HOLYDRAMON_SPECIAL3_EFFECT_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/fighters/holydramon", D_80068DD4);
 INCLUDE_RODATA("game/nonmatchings/fighters/holydramon", D_80068DFC);
 INCLUDE_RODATA("game/nonmatchings/fighters/holydramon", HOLYDRAMON_SPECIAL2_HITBOX_HIT_VTABLE);

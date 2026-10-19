@@ -73,7 +73,49 @@ INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMon_throw);
 
 INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMon_special1);
 
-INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMon_airSpecial1);
+void VMon_spawnSpecial1Effect(Fighter *this, s32 arg);
+
+/* Special move 1 in the air: at frame 0 tilted 0x180 toward the facing, its clip, a push forward and down, hits of kind
+ * 3 and the voice; part 2 hits from frame 2 (0x85A81A00), the effect at 4, no part from 17; the force brakes 1/64 of the
+ * horizontal velocity after frame 0. */
+void VMon_airSpecial1(Fighter *this, s32 frame) {
+    s32 push;
+    s32 drop;
+
+    func_80079AE4(this);
+    switch (frame) {
+    case 0:
+        if (Fighter_getFacing(this) > 0) {
+            this->rotation.vz = this->targetRotation.vz = 0x180;
+        } else {
+            this->rotation.vz = this->targetRotation.vz = -0x180;
+        }
+        Fighter_playActionClip(this, FIGHTER_CLIP_AIR_SPECIAL1, 0, 0, -1);
+        this->velocity.vx = 0;
+        push = ((s64)this->mass * 0x4718) >> 16;
+        this->force.vx += push * Fighter_getFacing(this);
+        /* The match depends on the downward push in its own local, like the forward one. */
+        drop = ((s64)this->mass * 0x1C70) >> 16;
+        this->force.vy += drop;
+        func_80079B0C(this, 28);
+        this->hitKind = 3;
+        Fighter_playVoice(this, 0xFF);
+        break;
+    case 2:
+        Fighter_setAttackParts(this, 2);
+        this->hitDamage = 0x85A81A00;
+        break;
+    case 4:
+        VMon_spawnSpecial1Effect(this, 1);
+        break;
+    case 17:
+        this->attackParts = 0;
+        break;
+    }
+    if (frame > 0) {
+        this->force.vx -= this->velocity.vx >> 6;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMon_special2);
 

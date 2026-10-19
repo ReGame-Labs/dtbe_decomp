@@ -1,8 +1,10 @@
 # title.bin's names. Run with the overlay's scope, then make regenerate:
 #   python3 tools/rename.py --overlay title -f tools/renames/title.txt
-# The g++ mangled names of option.cpp's classes (_vt.<length><class>.7Stepper, _._<length><class>) are not
-# C identifiers: they were renamed by hand with their class, length prefix included, in
-# config/*/symbols_title.txt and option.cpp's INCLUDE_RODATA lines.
+# The g++ mangled names of option.cpp's, memory_card.cpp's and chara_select.cpp's classes (_vt.<length><class>.7Stepper,
+# _vt.<length><class>, _._<length><class>) are not C identifiers: they were renamed by hand with their class,
+# length prefix included, in config/*/symbols_title.txt and the INCLUDE_RODATA lines (ResetLock_destroy is
+# _._9ResetLock, MemoryCardTask_destroy _._14MemoryCardTask, MEMORY_CARD_TASK_VTABLE _vt.14MemoryCardTask,
+# CharacterSelectTask_destroy _._19CharacterSelectTask, CHARACTER_SELECT_TASK_VTABLE _vt.19CharacterSelectTask).
 
 # option.cpp: the options' rows and menus, from the rows optionTaskInit and the button menu add, the save
 # fields each row reads and writes, and the memory card task and name entry they start
@@ -86,7 +88,6 @@ D_80066A80 OPTION_IMAGE_ON
 D_80066A8C OPTION_IMAGE_OFF
 D_80066AA4 OPTION_BUTTON_MENU_TITLE
 D_80066AB0 OPTION_BUTTON_MENU_IMAGES
-D_80066AC8 OPTION_BUTTON_ICONS
 
 # shared title types (title_classes.h): the tasks whose update keeps its argument and calls their own
 # per-frame method at 0x20 of the vtable; the image record the title's pictures are tables of
@@ -129,6 +130,8 @@ func_80068320 TitleLogoTask_spawnLogoPieces
 func_80072320 TitleLogoTask_readClut
 func_80072814 TitleLogoTask_stepWait
 func_80072860 TitleLogoTask_stepShowLogo
+func_8007240C TitleLogoTask_tick
+func_80073438 TitleLogoTask_drawLogo
 # and the US data of the JP ones in the other #if branch: the same string, vectors and step table
 D_80065AF8 STR_TITLE_LOGO
 D_80065B04 TITLE_CAMERA_UP
@@ -197,10 +200,8 @@ D_800646A4 MAIN_MENU_BACKGROUND_TIM
 D_800646BC MAIN_MENU_ITEM_VTABLE
 D_8006471C MAIN_MENU_TASK_VTABLE
 D_80064744 MAIN_MENU_BUTTONS
-D_80064768 MAIN_MENU_SIDE_IMAGES
-D_80064780 MAIN_MENU_LABELS
-# D_800647BC: the labels' last two, cut off MAIN_MENU_LABELS by a rodata label (a split change, left)
-D_800647D4 MAIN_MENU_DECOR_IMAGES
+# D_80064768, D_80064780, D_800647BC and D_800647D4 were cut out of one table: MAIN_MENU_IMAGES (0x80064750,
+# size 0xA8), named by hand in both symbols_title.txt
 D_8007B338 MAIN_MENU_CURSOR
 D_8007B33C MAIN_MENU_ITEM_COUNT
 
@@ -210,7 +211,7 @@ Unk8006CC64 CharacterSelectTask
 Unk8006CC64Side CharacterSelectSide
 Unk80064C40 GridCell
 Unk80065268 SelectSprite
-func_8006B104 CharacterSelectTask_destroy
+# func_8006B104 CharacterSelectTask_destroy: now the C++ _._19CharacterSelectTask (the unit became C++)
 func_800702C4 CharacterSelectTask_update
 func_8006BD18 CharacterSelectTask_tick
 func_8006CD6C CharacterSelectTask_draw
@@ -243,6 +244,7 @@ func_8006B700 uploadTimAt
 func_8006B770 uploadSidePictures
 func_8006B924 uploadRunPictures
 func_8006D98C getCellPosition
+func_8006DCCC drawSelectSideStrips
 func_8006DFA4 drawCharacterPortrait
 func_8006E534 drawLeftCellInfo
 func_8006E6F0 drawRightCellInfo
@@ -252,7 +254,7 @@ func_8006EED4 drawSelectBackground
 func_8006FEB8 drawSelectSprite
 func_800700A4 drawSelectSpriteShaded
 func_80070298 getTriangularSum
-D_80064C10 CHARACTER_SELECT_TASK_VTABLE
+# D_80064C10 CHARACTER_SELECT_TASK_VTABLE: now the C++ _vt.19CharacterSelectTask (the unit became C++)
 D_800647F8 STR_CHARACTER_SELECT
 D_8006482C CHARACTER_SELECT_CAMERA_EYE
 D_8006481C CHARACTER_SELECT_CAMERA_TARGET
@@ -267,16 +269,13 @@ D_80064AE0 SIDE_SELECT_MASKS
 D_80064C40 GRID_CELLS
 D_80064E20 CHARACTER_CELLS
 D_80064E80 CHARACTER_TAMERS
-D_80065120 ROOKIE_PICTURE_PLACES
-D_80065140 CHARACTER_PICTURE_PLACES
-D_80065160 TAMER_PICTURE_PLACES
-D_80065180 WIDE_TAMER_PICTURE_PLACES
+D_80065120 SIDE_PICTURE_PLACES
 D_800651A0 NAME_PLATE_PLACE
 D_800651B0 SELECT_SPRITES
 D_80065268 ARENA_PICTURES
 D_8007B234 EVOLVED_ROW_PICKABLE
 
-# memory_card.c: the memory card task (memoryCardTaskInit) and its two windows, by their vtables' slots
+# memory_card.cpp: the memory card task (memoryCardTaskInit) and its two windows, by their vtables' slots
 # (0x08 tick, 0x10 draw, 0x18 destroy), the libmcrd calls each method makes and the message it shows;
 # ResetLock is the stack object whose ctor/dtor set and clear SYSTEM_CONTEXT.resetDisabled around card writes
 Unk800702F8 MessageWindow
@@ -302,10 +301,10 @@ func_8007084C YesNoWindow_draw
 func_80071C30 YesNoWindow_destroy
 # ResetLock: *flag = 1 in the ctor, 0 in the dtor; only ever over &SYSTEM_CONTEXT.resetDisabled
 func_8007096C ResetLock_init
-func_80070980 ResetLock_destroy
+# func_80070980 ResetLock_destroy: now the C++ _._9ResetLock (the unit became C++)
 # MemoryCardTask (vtable D_800656E0): the thread's mode switch and the US messages each method shows
 # (Load data? / Save data? / Formatting... / Loading... / Saving... / MEMORY CARD has been removed.)
-func_80070AEC MemoryCardTask_destroy
+# func_80070AEC MemoryCardTask_destroy: now the C++ _._14MemoryCardTask (the unit became C++)
 func_800719D8 MemoryCardTask_update
 func_80070B60 MemoryCardTask_isDone
 func_80070B8C MemoryCardTask_run
@@ -368,7 +367,7 @@ D_8006564C STR_CARD_REMOVED
 D_80065688 STR_ANY_FILE
 D_80065690 YES_NO_WINDOW_VTABLE
 D_800656B8 MESSAGE_WINDOW_VTABLE
-D_800656E0 MEMORY_CARD_TASK_VTABLE
+# D_800656E0 MEMORY_CARD_TASK_VTABLE: now the C++ _vt.14MemoryCardTask (the unit became C++)
 D_80065708 SAVE_ICON_TIM
 D_800658C8 STR_CARD_NOT_INSERTED_2
 D_800658F4 STR_SAVE_DATA_NOT_FOUND
@@ -397,7 +396,7 @@ D_80065FE8 RANKING_TASK_VTABLE
 D_80066024 RANKING_IMAGES
 D_80065FCC STR_RANKING_LINE_FORMAT
 
-# name_entry.c: the name entry the ranking and the options' code row open (no vtable; built inside the ranking
+# name_entry.cpp: the name entry the ranking and the options' code row open (no vtable; built inside the ranking
 # task and on the options' stack): its methods by what they read and draw from /title/input.tim and
 # /zascii.tim, its grids by their cells (digits, A-Z, kana / A-Z and the A/B/C buttons), the code check
 # by gameStateUnlockByCode
@@ -576,3 +575,7 @@ D_80065DD8 GUIDE_WINDOW_CORNERS
 D_80065EC4 GUIDE_LOGO_TASK_VTABLE
 D_80065EF4 GUIDE_IMAGES
 func_8006DBA4 drawScrollingStrip
+func_8006DA20 drawGridBackdrop
+D_80066660 OPTION_STRIP_WINDOW
+D_80066668 OPTION_HEADER_WINDOW
+func_80069A58 mainMenuDrawRail

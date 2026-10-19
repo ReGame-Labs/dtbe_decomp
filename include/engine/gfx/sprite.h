@@ -15,7 +15,7 @@ typedef struct {
     /* 0x08 */ RECT *pieces;
     /* 0x0C */ u32 color;
     /* 0x10 */ s8 mode; /* TIM pixel mode */
-    /* 0x11 */ u8 flags;
+    /* 0x11 */ s8 flags;
     /* 0x12 */ s16 x;
     /* 0x14 */ s16 y;
     /* 0x16 */ u16 clut;

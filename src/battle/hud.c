@@ -6,6 +6,10 @@
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
 #include "engine/gfx/box.h"
+#include "engine/gfx/display.h"
+#include "engine/gfx/prim/alloc_line_f2.h"
+#include "engine/gfx/prim/alloc_line_g2.h"
+#include "engine/gfx/prim/alloc_poly_ft4.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/math/sin_cos.h"
 #include "engine/pad/pad.h"
@@ -13,15 +17,8 @@
 #include "engine/text/console.h"
 
 extern EntityVtable SCORE_TALLY_VTABLE;
-/* adds the tally's three bonuses into its score and clears them */
-struct ScoreTally;
-void ScoreTally_addAll(struct ScoreTally *this);
 
 INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_init);
-
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_tick);
-
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_draw);
 
 /* A battle message (BattleMessage_init, 0x59C bytes): its kind's layout and text from BATTLE_MESSAGE_LAYOUTS, and
  * the kind's tick and draw members from BATTLE_MESSAGE_TICKS and BATTLE_MESSAGE_DRAWS, which the entity's own tick
@@ -39,9 +36,51 @@ typedef struct BattleMessage {
     /* 0x038 */ s32 state;
     /* 0x03C */ s32 frame;     /* counted every tick, restarted by the states */
     /* 0x040 */ HudText hudText;
-    /* 0x58C */ VtableEntry tick; /* the kind's entry of BATTLE_MESSAGE_TICKS */
-    /* 0x594 */ VtableEntry draw; /* the kind's entry of BATTLE_MESSAGE_DRAWS */
+    /* 0x58C */ MemberFunction tick; /* the kind's entry of BATTLE_MESSAGE_TICKS */
+    /* 0x594 */ MemberFunction draw; /* the kind's entry of BATTLE_MESSAGE_DRAWS */
 } BattleMessage;
+
+/* The battle message's tick: runs its kind's tick, (this->*tick)(arg) as g++ 2.95 expands it. */
+void BattleMessage_tick(BattleMessage *this, s32 arg) {
+    VirtualFunction method;
+    void (*func)();
+    s32 index;
+    s32 delta;
+    s32 offset;
+
+    index = this->tick.index;
+    if (index >= 0) {
+        method = (*(VirtualFunction **)((u8 *)this + this->tick.u.vtableOffset))[index - 1];
+        func = method.entry.func;
+    } else {
+        func = this->tick.u.func;
+    }
+    delta = this->tick.delta;
+    offset = index >= 0 ? method.entry.delta + delta : delta;
+    func((u8 *)this + offset, arg);
+}
+
+/* The battle message's draw: runs its kind's draw on the camera's last drawn slot, (this->*draw)(ot). */
+void BattleMessage_draw(BattleMessage *this, Camera *camera) {
+    /* The match depends on ot read first, before the dispatch. */
+    u_long *ot = camera->ot.lastDrawn;
+    VirtualFunction method;
+    void (*func)();
+    s32 index;
+    s32 delta;
+    s32 offset;
+
+    index = this->draw.index;
+    if (index >= 0) {
+        method = (*(VirtualFunction **)((u8 *)this + this->draw.u.vtableOffset))[index - 1];
+        func = method.entry.func;
+    } else {
+        func = this->draw.u.func;
+    }
+    delta = this->draw.delta;
+    offset = index >= 0 ? method.entry.delta + delta : delta;
+    func((u8 *)this + offset, ot);
+}
 
 /* The NEW CHALLENGER and DOUBLE KO tick (BATTLE_MESSAGE_TICKS): types the text out a character a frame, and deletes
  * the message after 91 frames. */
@@ -402,7 +441,44 @@ void BattleMessage_tickTimeUp(BattleMessage *this) {
     this->frame++;
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_drawTimeUp);
+/* The TIME UP draw (BATTLE_MESSAGE_DRAWS): the typed text while the cursor has a height; else two green lines
+ * with their dark shadows, from the cursor's centre to the right and mirrored on the screen's other half. */
+void BattleMessage_drawTimeUp(BattleMessage *this, u_long *ot) {
+    s32 x;
+    s32 y;
+    s32 start;
+    s32 end;
+    LINE_F2 *left;
+    LINE_F2 *leftShadow;
+    LINE_F2 *right;
+    LINE_F2 *rightShadow;
+
+    if (this->cursor.h > 0) {
+        BattleMessage_drawTyped(this, ot);
+        return;
+    }
+    x = this->cursor.x - (this->cursor.w >> 1);
+    y = this->cursor.y;
+    left = allocLineF2();
+    leftShadow = allocLineF2();
+    right = allocLineF2();
+    rightShadow = allocLineF2();
+    setRGB0(left, 0x6D, 0xBE, 0);
+    setRGB0(leftShadow, 0, 0x20, 0);
+    setRGB0(right, 0x6D, 0xBE, 0);
+    setRGB0(rightShadow, 0, 0x20, 0);
+    /* The match depends on the ends kept in locals, the shadow and the mirror computed from them. */
+    start = x + 1;
+    end = x + 0xCE;
+    setXY2(left, start, y, end, y);
+    setXY2(leftShadow, start + 1, y + 1, end + 1, y + 1);
+    setXY2(right, SCREEN_WIDTH - 1 - start, y, SCREEN_WIDTH - 1 - end, y);
+    setXY2(rightShadow, SCREEN_WIDTH - 1 - start + 1, y + 1, SCREEN_WIDTH - 1 - end + 1, y + 1);
+    AddPrim(ot, left);
+    AddPrim(ot, leftShadow);
+    AddPrim(ot, right);
+    AddPrim(ot, rightShadow);
+}
 
 INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_tickDrawGame);
 
@@ -686,18 +762,29 @@ void func_800CD534(HudText *this, s32 unk10, s32 step) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", hudTextDraw);
+void drawGlyph(u_long *ot, RECT *rect, s32 palette, CVECTOR *color, u8 c);
 
-/* The continue screen (ContinuePrompt_init, 0x2C bytes), which Fight_showContinue makes for the player's side:
- * "CONTINUE?" and a countdown; START continues, at 0 it shows GAME OVER. */
-typedef struct ContinuePrompt {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 side;           /* gameStateGetPlayerSide; also the pad port */
-    /* 0x1C */ s32 gameOverHandle; /* the GAME OVER message's handle, made when the countdown ends */
-    /* 0x20 */ s32 unk20;
-    /* 0x24 */ s32 framesLeft;     /* counts down a frame at a time; drawn in seconds (/ 30) */
-    /* 0x28 */ s32 unk28;
-} ContinuePrompt;
+/* Draws the text from (x, y): every character's glyph (drawGlyph) at its place plus its offset, with its size,
+ * offset and step scaled by the scale, then the font's tpage (func_800D008C). The step goes through
+ * step * length * scale / length. The match depends on place set before step. */
+void hudTextDraw(HudText *this, u_long *ot, s32 x, s32 y) {
+    s32 place = x << 12;
+    s32 step = this->step * this->length * this->scale / this->length;
+    s32 i;
+
+    for (i = 0; i < this->length; i++) {
+        HudTextChar *c = &this->chars[i];
+        RECT rect;
+
+        rect.x = ((c->dx * this->scale) >> 12) + (place >> 12);
+        rect.y = ((c->dy * this->scale) >> 12) + y;
+        rect.w = (c->w * this->scale) >> 12;
+        rect.h = (c->h * this->scale) >> 12;
+        drawGlyph(ot, &rect, c->palette, &c->color, this->text[i]);
+        place += step;
+    }
+    func_800D008C(ot);
+}
 
 extern EntityVtable CONTINUE_PROMPT_VTABLE;
 
@@ -718,19 +805,65 @@ ContinuePrompt *ContinuePrompt_init(ContinuePrompt *this, s32 side) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", ContinuePrompt_tick);
+/* The tick of the continue screen: START continues (the music stops, sounds 0x15 and 0x43, GAME_STATE.continued)
+ * and deletes it; a face button rounds the countdown down to whole seconds; when it runs out, sound 0x44 and the
+ * GAME OVER message, after which it is deleted. */
+void ContinuePrompt_tick(ContinuePrompt *this) {
+    u32 pressed;
+    Entity *message;
 
-INCLUDE_ASM("game/nonmatchings/hud", ContinuePrompt_draw);
+    if (this->gameOverHandle != 0) {
+        if (getEntityByHandle(this->gameOverHandle) == NULL) {
+            entityDelete(&this->entity);
+        }
+        return;
+    }
+    pressed = padManagerGetPressed(PAD_MANAGER_INSTANCE, this->side);
+    if (pressed & PADstart) {
+        stopSongs();
+        stopMusic();
+        soundControlPlaySound(&SOUND_CONTROL, 0x15, 0);
+        soundControlPlaySound(&SOUND_CONTROL, 0x43, 0);
+        GAME_STATE.continued = 1;
+        entityDelete(&this->entity);
+        return;
+    }
+    if (pressed & (PADRup | PADRright | PADRdown | PADRleft)) {
+        this->framesLeft = this->framesLeft / 30 * 30;
+    }
+    if (--this->framesLeft <= 0) {
+        stopSongs();
+        soundControlPlaySound(&SOUND_CONTROL, 0x44, 0);
+        message = BattleMessage_init(entityOperatorNew(0x59C), BATTLE_MESSAGE_GAME_OVER, 0);
+        this->gameOverHandle = entityGetHandle(message);
+        entityAddSibling(&this->entity, message);
+    }
+}
 
-INCLUDE_ASM("game/nonmatchings/hud", ScoreTally_init);
+/* The draw of the continue screen until GAME OVER shows: "CONTINUE?" at (0x20, 0x30) and the seconds left at
+ * (0xA0, 0xC0), on the camera's last drawn slot. */
+void ContinuePrompt_draw(ContinuePrompt *this, Camera *camera) {
+    if (this->gameOverHandle == 0) {
+        u8 text[] = "CONTINUE?";
+        u8 *c = text;
+        RECT metrics;
+        RECT cursor;
+        u_long *ot;
 
-/* Destroys the score tally: adds what is left of the bonuses into the score first (ScoreTally_addAll). */
-void ScoreTally_destroy(Entity *this, s32 flags) {
-    this->vtable = &SCORE_TALLY_VTABLE;
-    ScoreTally_addAll((struct ScoreTally *)this);
-    entityDestroy(this, 0);
-    if (flags & DESTROY_FREE) {
-        entityOperatorDelete(this);
+        metrics.x = 0x20;
+        metrics.y = 0x30;
+        metrics.w = 0x20;
+        metrics.h = 0x20;
+        ot = camera->ot.lastDrawn + 1;
+        cursor = metrics;
+        while (*c != 0) {
+            drawGlyphAtCursor(ot, &cursor, &metrics, *c, 0);
+            c++;
+        }
+        cursor.x = 0xA0;
+        cursor.y = 0xC0;
+        drawGlyphAtCursor(ot, &cursor, &cursor, this->framesLeft / 30 + '0', 0);
+        func_800D008C(ot);
     }
 }
 
@@ -755,6 +888,22 @@ typedef struct ScoreTally {
     /* 0x5C */ s32 state;
     /* 0x60 */ s32 frame; /* ScoreTally_tick counts it every frame */
 } ScoreTally;
+
+/* adds the tally's three bonuses into its score and clears them */
+void ScoreTally_addAll(ScoreTally *this);
+
+INCLUDE_ASM("game/nonmatchings/hud", ScoreTally_init);
+
+/* Destroys the score tally: adds what is left of the bonuses into the score first (ScoreTally_addAll). */
+void ScoreTally_destroy(Entity *this, s32 flags) {
+    this->vtable = &SCORE_TALLY_VTABLE;
+    ScoreTally_addAll((struct ScoreTally *)this);
+    entityDestroy(this, 0);
+    if (flags & DESTROY_FREE) {
+        entityOperatorDelete(this);
+    }
+}
+
 
 void ScoreTally_skipOnPress(ScoreTally *this);
 
@@ -897,7 +1046,49 @@ void ScoreTally_addAll(ScoreTally *this) {
 
 INCLUDE_ASM("game/nonmatchings/hud", ScoreTally_draw);
 
-INCLUDE_ASM("game/nonmatchings/hud", func_800CE240);
+void func_800CED10(u_long *ot, RECT *rect);
+void func_800CEEDC(u_long *ot, s32 arg);
+
+/* Draws the tally's frame from unk38 (which eases to 0xF2): two bars of up to 0xEA by 8 sliding in from the right
+ * at y 16 and from the left at y 40; past 0xEA, func_800CEEDC with 16 times the excess and two 0xAC-wide bands
+ * growing from the bars towards each other. One draw mode (tpage 30) goes in last, so it applies first.
+ * The match depends on the first excess left as an expression (a local keeps it in a saved register). */
+void func_800CE240(ScoreTally *this, u_long *ot) {
+    RECT rect;
+    DR_TPAGE *mode;
+    s32 length;
+    s32 extra;
+
+    if (this->unk38 - 0xEA > 0) {
+        func_800CEEDC(ot, (this->unk38 - 0xEA) << 4);
+    }
+    mode = allocDrTpageMode(0, 0, 30);
+    length = this->unk38;
+    if (length > 0xEA) {
+        length = 0xEA;
+    }
+    memset(&rect, 0, sizeof(rect));
+    rect.x = 320 - length;
+    rect.y = 16;
+    rect.w = length;
+    rect.h = 8;
+    func_800CED10(ot, &rect);
+    rect.x = 0;
+    rect.y += 24;
+    func_800CED10(ot, &rect);
+    extra = this->unk38 - 0xEA;
+    if (extra > 0) {
+        rect.x = 0x4E;
+        rect.y = 24;
+        rect.w = 0xAC;
+        rect.h = extra;
+        func_800CED10(ot, &rect);
+        rect.y = 40 - extra;
+        rect.x -= 8;
+        func_800CED10(ot, &rect);
+    }
+    AddPrim(ot, mode);
+}
 
 INCLUDE_RODATA("game/nonmatchings/hud", D_8006DC90);
 
@@ -907,7 +1098,6 @@ INCLUDE_RODATA("game/nonmatchings/hud", D_8006DCB8);
 
 extern RECT D_8006DCB8; /* the panel's texture rectangle (u, v, w, h) */
 
-/* Draws a semi-transparent textured quad over rect (tpage 0x1E) from the texture rectangle uv with clut. */
 void drawSemiTransQuad(u_long *ot, RECT *rect, RECT *uv, u16 clut);
 
 /* The rectangle of the tally's panel, whose x and y are its centre. */
@@ -959,7 +1149,33 @@ void drawSemiTransSprite(u_long *ot, RectWords *rect, u32 *uvClut) {
     AddPrim(ot, sprite);
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", drawSemiTransQuad);
+/* Draws a semi-transparent textured quad over rect (tpage 0x1E) from the texture rectangle uv with clut. */
+void drawSemiTransQuad(u_long *ot, RECT *rect, RECT *uv, u16 clut) {
+    POLY_FT4 *poly = allocPolyFT4();
+
+    /* the color with the code, in one word */
+    *(u32 *)&poly->r0 = (poly->code << 24) | 0x808080;
+    poly->x0 = rect->x;
+    poly->y0 = rect->y;
+    poly->x1 = rect->x + rect->w;
+    poly->y1 = rect->y;
+    poly->x2 = rect->x;
+    poly->y2 = rect->y + rect->h;
+    poly->x3 = rect->x + rect->w;
+    poly->y3 = rect->y + rect->h;
+    poly->u0 = uv->x;
+    poly->v0 = uv->y;
+    poly->u1 = uv->x + uv->w;
+    poly->v1 = uv->y;
+    poly->u2 = uv->x;
+    poly->v2 = uv->y + uv->h;
+    poly->u3 = uv->x + uv->w;
+    poly->v3 = uv->y + uv->h;
+    poly->tpage = 0x1E;
+    poly->clut = clut;
+    setSemiTrans(poly, 1);
+    AddPrim(ot, poly);
+}
 
 INCLUDE_RODATA("game/nonmatchings/hud", D_8006DCEC);
 
@@ -1005,16 +1221,116 @@ INCLUDE_ASM("game/nonmatchings/hud", drawGlyphAtCursor);
 
 INCLUDE_ASM("game/nonmatchings/hud", drawGlyph);
 
-INCLUDE_RODATA("game/nonmatchings/hud", D_8006DD04);
-INCLUDE_RODATA("game/nonmatchings/hud", D_8006DD14);
+/* A triangle piece of a 32x32 font glyph flying off the screen (GlyphShard_init, virtual table GLYPH_SHARD_VTABLE;
+ * spawnGlyphShards makes them from GAME OVER's letters): it waits its delay, then falls spinning, bounces off the
+ * screen's sides and once off the floor, and is deleted once it has fallen through. */
+typedef struct GlyphShard {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ VECTOR corners[3]; /* the triangle around its position */
+    /* 0x48 */ u8 uv[3][2];
+    /* 0x4E */ u8 unk4E[0x50 - 0x4E];
+    /* 0x50 */ VECTOR position; /* in 1/256 pixels */
+    /* 0x60 */ VECTOR velocity; /* (0x800, 0, random) turned by a random angle; gravity 0x80 a frame */
+    /* 0x70 */ VECTOR axis;     /* the spin's axis, random and normalized */
+    /* 0x80 */ s32 angle;       /* about axis */
+    /* 0x84 */ s32 spin;        /* added to angle each frame: random 0 to 0x1FF, reversed by the floor */
+    /* 0x88 */ s32 scale;       /* 0x1000 at first, grows by velocity.vz each frame */
+    /* 0x8C */ s32 bounces;     /* off the sides or the floor */
+    /* 0x90 */ s32 delay;       /* frames before it moves: random 0 to 3 */
+} GlyphShard; /* size 0x94 */
+
+/* the corners of a glyph's 8x8 square around its center: a shard is three of them, 0-2 or 1-3 */
+extern VECTOR GLYPH_SHARD_CORNERS[4];
+
+INCLUDE_RODATA("game/nonmatchings/hud", GLYPH_SHARD_CORNERS);
+
+GlyphShard *GlyphShard_init(GlyphShard *this, Vec3 *position, VECTOR *corners, u8 (*uv)[2]);
 
 INCLUDE_ASM("game/nonmatchings/hud", spawnGlyphShards);
 
 INCLUDE_ASM("game/nonmatchings/hud", GlyphShard_init);
 
-INCLUDE_ASM("game/nonmatchings/hud", GlyphShard_tick);
+/* Waits its delay; then moves by its velocity under gravity (0x80) and bounces off the screen's sides (x at 0 or 320
+ * pixels and past); before any bounce, the floor (y 200) bounces it up at half speed and reverses its spin; after
+ * one, it is deleted once below y 256. Then turns by its spin and grows by velocity.vz. */
+void GlyphShard_tick(GlyphShard *this) {
+    s32 x, y, z;
 
-INCLUDE_ASM("game/nonmatchings/hud", GlyphShard_draw);
+    if (this->delay > 0) {
+        this->delay--;
+        return;
+    }
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->velocity.vy += 0x80;
+    if (this->position.vx <= 0 || this->position.vx >= 320 << 8) {
+        this->velocity.vx = -this->velocity.vx;
+        this->bounces++;
+    }
+    if (this->bounces > 0) {
+        if (this->position.vy > 256 << 8) {
+            entityDelete(&this->entity);
+            return;
+        }
+    } else if (this->position.vy >= 200 << 8) {
+        this->bounces++;
+        this->velocity.vy = -this->velocity.vy >> 1;
+        this->spin = -this->spin;
+    }
+    this->angle += this->spin;
+    this->scale += this->velocity.vz;
+}
+
+/* The draw of a glyph shard: its corners turned about its axis by its angle, scaled and moved to its position (in
+ * pixels), as a grey POLY_FT3 of the font's texture (tpage 0x1E, clut 0x7AFB) on the camera's last drawn slot. */
+void GlyphShard_draw(GlyphShard *this, Camera *camera) {
+    u_long *ot = camera->ot.lastDrawn;
+    VECTOR corners[3];
+    VECTOR position;
+    MatrixWords m;
+    POLY_FT3 *poly;
+
+    m.words[0] = ONE;
+    m.words[1] = 0;
+    m.words[2] = ONE;
+    m.words[3] = 0;
+    m.words[4] = ONE;
+    position.vx = this->position.vx >> 8;
+    position.vy = this->position.vy >> 8;
+    position.vz = this->position.vz >> 8;
+    m.m.t[0] = position.vx;
+    m.m.t[1] = position.vy;
+    m.m.t[2] = position.vz;
+    matrixSetRotationAxis(&m.m, &this->axis, this->angle);
+    matrixScale(&m.m, this->scale, this->scale, this->scale);
+    matrixTransformVecs(&m.m, corners, this->corners, 3);
+    poly = allocPolyFT3();
+    poly->r0 = 0x80;
+    poly->g0 = 0x80;
+    poly->b0 = 0x80;
+    poly->x0 = corners[0].vx;
+    poly->y0 = corners[0].vy;
+    poly->x1 = corners[1].vx;
+    poly->y1 = corners[1].vy;
+    poly->x2 = corners[2].vx;
+    poly->y2 = corners[2].vy;
+    poly->u0 = this->uv[0][0];
+    poly->v0 = this->uv[0][1];
+    poly->u1 = this->uv[1][0];
+    poly->v1 = this->uv[1][1];
+    poly->u2 = this->uv[2][0];
+    poly->v2 = this->uv[2][1];
+    poly->tpage = 0x1E;
+    poly->clut = 0x7AFB;
+    AddPrim(ot, poly);
+}
 
 /* Destroys a battle message. */
 void BattleMessage_destroy(Entity *this, s32 flags) {

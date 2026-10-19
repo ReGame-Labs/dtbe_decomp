@@ -9,6 +9,7 @@
 #include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 #include "engine/text/font.h"
+#include "stdio.h"
 
 extern EntityVtable D_8006E014;
 extern EntityVtable CONFETTI_VTABLE;
@@ -64,20 +65,180 @@ void BonusFight_destroy(BonusFight *this, s32 flags) {
     Fight_destroy(&this->base, flags);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0k", BonusFight_startRound);
+void BonusFight_spawnModeHud(BonusFight *this, s32 mode);
+void BonusFight_spawnTimer(Fight *this);
+void func_800D0F7C(BonusFight *this);
+
+/* Starts a bonus game's round: the arena's bounds, the fighters' start positions, the mode's HUD and timer, the
+ * clock (3000 frames, 900 in the target game), and a full gauge for the fighters that evolve. */
+void BonusFight_startRound(BonusFight *this) {
+    Fighter *fighters[2];
+    s32 i;
+
+    Fight_startRound(&this->base);
+    this->holding[0] = 0;
+    this->holding[1] = 0;
+    this->holdPos[0].vx = 0;
+    this->holdPos[0].vy = 0;
+    this->holdPos[0].vz = 0;
+    this->holdPos[0].pad = 0;
+    this->holdPos[1].vx = 0;
+    this->holdPos[1].vy = 0;
+    this->holdPos[1].vz = 0;
+    this->holdPos[1].pad = 0;
+    Fight_setBounds(&this->base, -0xABE, 0xABE, -0xC80, 0x400, -0x200);
+    this->meshScene = Fight_getMeshScene(&this->base);
+    fighters[0] = Fight_getFighter(&this->base, 0);
+    fighters[1] = Fight_getFighter(&this->base, 1);
+    Fighter_getPosition(fighters[0], (Vec3 *)&this->startPos[0]);
+    Fighter_getPosition(fighters[1], (Vec3 *)&this->startPos[1]);
+    this->base.hasBackground = 0;
+    this->hudHidden = 0;
+    this->endWait = 0;
+    this->gauges[1] = 0;
+    this->gauges[0] = 0;
+    this->counts[1] = 0;
+    this->counts[0] = 0;
+    this->base.modeFlags |= FIGHT_MODE_BONUS;
+    func_800D0F7C(this);
+    BonusFight_spawnTimer(&this->base);
+    BonusFight_spawnModeHud(this, (u16)(this->base.arena - ARENA_BONUS)); /* the bonus game */
+    this->result = BONUS_RESULT_PLAYING;
+    this->resultFrames = 0;
+    this->messageHandle = 0;
+    switch (this->base.arena) {
+    case ARENA_BONUS + BONUS_GAME_BASKETBALL:
+    case ARENA_BONUS + BONUS_GAME_EVOLUTION_RACE:
+        this->base.timeLeft = 3000;
+        break;
+    case ARENA_BONUS + BONUS_GAME_TARGET:
+        this->base.timeLeft = 900;
+        break;
+    }
+    for (i = 0; i < 2; i++) {
+        if (FIGHTER_PARAMS[Fighter_getCharacter(fighters[i])].flags & FIGHTER_PARAM_EVOLVED) {
+            Fighter_addGauge(fighters[i], 0x10000);
+        }
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0k", BonusFight_tick);
 
-INCLUDE_ASM("game/nonmatchings/game_0k", BonusFight_tickScenery);
+void func_800D110C(BonusFight *this);
+
+/* The bonus fight's own part of a frame (FIGHT_VTABLE's tickScenery): a light grey backdrop, the base's step and
+ * func_800D110C; once there is a result the clock holds at 1 and, after resultDelay frames, the result runs: a win
+ * stops the round when its message is gone (and then goes on as a draw), a draw goes to the ending when its message
+ * is gone, the ending waits 60 frames, then the round stops. */
+void BonusFight_tickScenery(BonusFight *this) {
+    displaySetClearColor(CURRENT_DISPLAY, 0xF0, 0xF0, 0xF0);
+    Fight_tickScenery(&this->base);
+    func_800D110C(this);
+    if (this->result == BONUS_RESULT_PLAYING) {
+        return;
+    }
+    this->base.timeLeft = 1;
+    if (++this->resultFrames < this->resultDelay) {
+        return;
+    }
+    switch (this->result) {
+    case BONUS_RESULT_WON:
+        if (getEntityByHandle(this->messageHandle) == NULL) {
+            Fight_stopRound(&this->base);
+            this->result = BONUS_RESULT_OVER;
+        }
+        /* fall through */
+    case BONUS_RESULT_DRAW:
+        if (getEntityByHandle(this->messageHandle) == NULL) {
+            this->result = BONUS_RESULT_ENDING;
+        }
+        /* fall through */
+    case BONUS_RESULT_ENDING:
+        if (++this->endWait < 60) {
+            break;
+        }
+        this->result = BONUS_RESULT_OVER;
+        /* fall through */
+    case BONUS_RESULT_OVER:
+        Fight_stopRound(&this->base);
+        break;
+    }
+}
 
 /* Before the next round (slot 0x38): stops the win jingle. */
 void BonusFight_prepareNextRound(BonusFight *this) {
     stopSound(this->jingleHandle);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0k", BonusFight_endWithWinner);
+Confetti *Confetti_init(Confetti *this, Fight *scene, Vec3 *origin);
+Entity *bonusShowWinner(Fight *fight, s32 side);
 
-INCLUDE_ASM("game/nonmatchings/game_0k", bonusShowWinner);
+/* Ends the bonus game with a winner: the winner's win pose (func_80079268 on the loser), confetti at its position,
+ * its win message (bonusShowWinner) whose handle it keeps, the fighters frozen and the clock held, the result set,
+ * the arena's bonus game unlocked (USA: and the winner's bonus added to its score), the camera on the winner, and
+ * the arena's win jingle. */
+void BonusFight_endWithWinner(BonusFight *this, Fighter *winner, Fighter *loser) {
+    Vec3 position;
+    s32 side;
+
+    Fighter_requestWinPose(winner);
+    func_80079268(loser);
+    side = Fighter_getSide(winner);
+    Fight_addStageEntity(&this->base,
+                         NEW_ENTITY(sizeof(Confetti), Confetti_init, &this->base, Fighter_getPosition(winner, &position)));
+    this->messageHandle = entityGetHandle(bonusShowWinner(&this->base, side));
+    Fight_freezeFighters(&this->base);
+    Fight_holdClock(&this->base);
+    this->result = BONUS_RESULT_WON;
+    unlockBonusGame(this->base.arena);
+#if !VERSION_JP
+    Fight_addScore(&this->base, side, Fight_computeBonus(&this->base, side));
+#endif
+    if (Fighter_getSide(winner) == 0) {
+        this->base.cameraFocus = 1;
+    } else {
+        this->base.cameraFocus = 2;
+    }
+    switch (this->base.arena) {
+    case ARENA_BONUS:
+        this->jingleHandle = soundControlPlaySound(&SOUND_CONTROL, 0x6D, 0);
+        break;
+    case ARENA_BONUS + 1:
+        this->jingleHandle = soundControlPlaySound(&SOUND_CONTROL, 0x6F, 0);
+        break;
+    case ARENA_BONUS + 2:
+        this->jingleHandle = soundControlPlaySound(&SOUND_CONTROL, 0x71, 0);
+        break;
+    }
+}
+
+/* Shows the bonus game's winner: YOU WIN to a human against the computer, YOU LOSE when the computer beat a human
+ * (with sound 0x8009 instead of 0x8008), else P1/P2 WIN; a human winner also gets the score tally. Returns the
+ * tally, or the message for a computer winner. */
+Entity *bonusShowWinner(Fight *fight, s32 side) {
+    s32 otherComputer = GAME_STATE.fighters[side ^ 1].computer;
+    s32 computer = GAME_STATE.fighters[side].computer;
+    s32 kind;
+    Entity *entity;
+
+    if (!computer && otherComputer) {
+        kind = BATTLE_MESSAGE_YOU_WIN;
+        soundControlPlaySound(&SOUND_CONTROL, 0x8008, 0);
+    } else if (computer && !otherComputer) {
+        kind = BATTLE_MESSAGE_YOU_LOSE;
+        soundControlPlaySound(&SOUND_CONTROL, 0x8009, 0);
+    } else {
+        kind = BATTLE_MESSAGE_P1_WIN + side;
+        soundControlPlaySound(&SOUND_CONTROL, 0x8008, 0);
+    }
+    entity = BattleMessage_init(entityOperatorNew(0x59C), kind, 0);
+    Fight_addEntity(fight, entity);
+    if (!computer) {
+        entity = ScoreTally_init(entityOperatorNew(0x64), fight, side);
+        Fight_addEntity(fight, entity);
+    }
+    return entity;
+}
 
 INCLUDE_RODATA("game/nonmatchings/game_0k", D_8006DF5C);
 
@@ -300,10 +461,8 @@ static inline BonusFight *paletteOwner(Unk800D1F8C *this) {
     return (BonusFight *)this->owner;
 }
 
-/* A TextPrinter's virtual calls, inlined as the game has them: printerSetColor and func_80032900 on the
- * printer object itself (its virtual table read from the stack). */
-#define TEXT_SET_COLOR(printer, color) \
-    (printer).printer.vtable->setColor.func((u8 *)&(printer) + (printer).printer.vtable->setColor.delta, color)
+/* A TextPrinter's func_80032900, inlined as the game has it (its virtual table read from the printer), like
+ * TEXT_SET_COLOR. */
 #define TEXT_SET_UNK18(printer, value) \
     (printer).printer.vtable->unk18.func((u8 *)&(printer) + (printer).printer.vtable->unk18.delta, value)
 
@@ -529,7 +688,50 @@ void BonusTimer_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0k", BonusTimer_draw);
+/* Draws the bonus game's seconds left (timeLeft / 30, 0 to 99) printed "%02d" as two 12x16 digits of the HUD
+ * texture's row at v 0x58, from (148, 203); nothing while the bonus HUD is hidden. */
+void BonusTimer_draw(Unk800D1328 *this, Camera *camera) {
+    u8 text[8];
+    BonusFight *fight = (BonusFight *)this->unk18;
+    u_long *ot;
+    DR_TPAGE *mode;
+    s32 seconds;
+    s32 x;
+    s32 i;
+
+    if (fight->hudHidden) {
+        return;
+    }
+    ot = camera->ot.slots;
+    seconds = fight->base.timeLeft / 30;
+    x = 148;
+    if (seconds > 99) {
+        seconds = 99;
+    }
+    if (seconds < 0) {
+        seconds = 0;
+    }
+    sprintf((char *)text, "%02d", seconds);
+    mode = allocDrTpage(15);
+    for (i = 0; i < 2; i++) {
+        s32 u = (text[i] - '0') * 12;
+        SPRT *sprt = allocSprt();
+
+        sprt->r0 = 0x80;
+        sprt->g0 = 0x80;
+        sprt->b0 = 0x80;
+        sprt->x0 = x;
+        sprt->y0 = 203;
+        sprt->u0 = u;
+        sprt->v0 = 0x58;
+        sprt->clut = getClut(0x3C0, 0x7B);
+        sprt->w = 12;
+        sprt->h = 16;
+        AddPrim(ot, sprt);
+        x += 12;
+    }
+    AddPrim(ot, mode);
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0k", Confetti_init);
 

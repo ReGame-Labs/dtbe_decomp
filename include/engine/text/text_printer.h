@@ -17,12 +17,36 @@ typedef struct PrinterVtable {
     /* 0x20 */ VtableEntry destroy;  /* (Printer *, s32 flags) */
 } PrinterVtable;
 
+EXTERN_C_END
+
+#ifdef __cplusplus
+
+/*
+ * Prints text a character at a time at its cursor. The C files see it as the
+ * struct in the #else part. Its destructor (printerDestroy in the C files)
+ * runs at the end of the block of a printer on the stack.
+ */
+class Printer {
+public:
+    /* 0x0 */ s32 x; /* the cursor */
+    /* 0x4 */ s32 y;
+    /* 0x8 */ PrinterVtable *vtable;
+
+    ~Printer();
+};
+
+#else
+
 /* Prints text a character at a time at its cursor. */
 typedef struct Printer {
     /* 0x0 */ s32 x; /* the cursor */
     /* 0x4 */ s32 y;
     /* 0x8 */ PrinterVtable *vtable;
 } Printer;
+
+#endif /* __cplusplus */
+
+EXTERN_C_BEGIN
 
 extern u8 PRINTER_FORMAT_BUFFER[0x400]; /* where a Printer formats its text */
 

@@ -234,9 +234,76 @@ void Agumon_spawnSpecial2Effect(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/agumon", ThrowLaunch_init);
+extern EntityVtable THROW_LAUNCH_VTABLE;
 
-INCLUDE_ASM("game/nonmatchings/fighters/agumon", ThrowLaunch_tick);
+/* Builds the launch for fighter's throw: takes hold of its opponent's handle and height, stops it (velocity and force
+ * 0), hits it with 0x40000000 and vel, and turns it by side. */
+ThrowLaunch *ThrowLaunch_init(ThrowLaunch *this, Fighter *fighter, Vec3 *vel, u32 hit, s32 side) {
+    Fighter *target;
+    Vec3 position;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &THROW_LAUNCH_VTABLE;
+    target = Fighter_getOpponent(fighter);
+    this->targetHandle = entityGetHandle(&target->entity);
+    this->target = target;
+    this->fighter = fighter;
+    this->side = side;
+    this->hit = hit;
+    Fighter_getPosition(target, &position);
+    this->delay = 1;
+    this->lastY = position.vy;
+    target->velocity.vx = 0;
+    target->velocity.vy = 0;
+    target->velocity.vz = 0;
+    target->velocityPad = 0;
+    target->force.vx = 0;
+    target->force.vy = 0;
+    target->force.vz = 0;
+    target->forcePad = 0;
+    Fighter_takeHit(target, 0x40000000, vel, 0);
+    if (side > 0) {
+        Fighter_faceLeft(target, 0);
+    } else {
+        Fighter_faceRight(target, 0);
+    }
+    return this;
+}
+
+/* Turns a thrown target's angle by side: 384 a tick when it can evolve, else 192. The match depends on this inline
+ * taking the angle's address: the game keeps it in a saved register across Fighter_canEvolve. */
+static inline void spinThrown(s32 *angle, Fighter *target, s32 side) {
+    *angle += side * (Fighter_canEvolve(target) ? 384 : 192);
+}
+
+/* After the delay, follows the thrown target: while it rises or falls less than 0x800 a tick it spins (spinThrown)
+ * until it lands, which hits it (hit, kind 2). A target gone, or a fall of 0x800 or more, also ends it. At the end
+ * the target's spin stops and the launch deletes itself. */
+void ThrowLaunch_tick(ThrowLaunch *this) {
+    Fighter *target;
+    Vec3 position;
+
+    if (this->delay > 0) {
+        this->delay--;
+        return;
+    }
+    target = (Fighter *)getEntityByHandle(this->targetHandle);
+    if (target != NULL) {
+        Fighter_getPosition(target, &position);
+        if (position.vy - this->lastY >= -0x800) {
+            this->lastY = position.vy;
+            if (Fighter_isOnGround(target)) {
+                /* ZERO_VECTOR is a VECTOR; only its first three words are read here */
+                Fighter_takeHit(target, this->hit, (Vec3 *)&ZERO_VECTOR, 2);
+            } else {
+                spinThrown(&target->targetRotation.vz, target, this->side);
+                return;
+            }
+        }
+    }
+    this->target->targetRotation.vz = 0;
+    entityDelete(&this->entity);
+}
 
 /* Builds the special move 1's projectile, a Projectile of radius 0x80 and speed 0xA00. */
 AgumonSpecial1Projectile *AgumonSpecial1Projectile_init(AgumonSpecial1Projectile *this, Fighter *fighter,
@@ -322,12 +389,12 @@ typedef struct AgumonSpecial2Effect {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Fighter *fighter;
     /* 0x1C */ VECTOR position; /* the character's node 2 (Fighter_getNodePosition) */
-    /* 0x2C */ s32 unk2C;
-    /* 0x30 */ s32 unk30;
-    /* 0x34 */ s32 unk34;
-    /* 0x38 */ s32 unk38;
-    /* 0x3C */ s32 unk3C;
-    /* 0x40 */ s32 unk40;
+    /* 0x2C */ s32 unk2C;  /* 0x80, down by 0x2B a tick in state 0 */
+    /* 0x30 */ s32 unk30;  /* 0x180, down by 0x40 a tick in state 1, to 0x40 */
+    /* 0x34 */ s32 ticks;
+    /* 0x38 */ s32 unk38;  /* up by 0x20 a tick in state 1; at 0xC0 the effect ends */
+    /* 0x3C */ s32 unk3C;  /* unk38 / 48, at most 3 */
+    /* 0x40 */ s32 state;  /* 0 until unk2C runs out, then 1 */
     /* 0x44 */ s32 unk44;
     /* 0x48 */ s32 unk48; /* Fighter_getVramY of the character */
 } AgumonSpecial2Effect;
@@ -342,23 +409,56 @@ AgumonSpecial2Effect *AgumonSpecial2Effect_init(AgumonSpecial2Effect *this, Figh
     Fighter_getNodePosition(fighter, &this->position, 2, &ZERO_VECTOR);
     this->unk2C = 0x80;
     this->unk30 = 0x180;
-    this->unk34 = 0;
+    this->ticks = 0;
     this->unk38 = 0;
     this->unk3C = 0;
-    this->unk40 = 0;
+    this->state = 0;
     this->unk44 = 0;
     this->unk48 = Fighter_getVramY(fighter);
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/agumon", AgumonSpecial2Effect_tick);
+/* State 0 brings unk2C down to 0, then state 1 shrinks unk30 and grows unk38 (unk3C its step) until 0xC0, when the
+ * effect deletes itself. While it lives it follows the character's node 2. */
+void AgumonSpecial2Effect_tick(AgumonSpecial2Effect *this) {
+    switch (this->state) {
+    case 0:
+        this->unk2C -= 0x2B;
+        if (this->unk2C <= 0) {
+            this->unk2C = 0;
+            this->state = 1;
+        }
+        break;
+    case 1: {
+        s32 step;
+
+        this->unk30 -= 0x40;
+        if (this->unk30 < 0x40) {
+            this->unk30 = 0x40;
+        }
+        step = this->unk38 / 48;
+        if (step > 3) {
+            step = 3;
+        }
+        this->unk3C = step;
+        this->unk38 += 0x20;
+        if (this->unk38 >= 0xC0) {
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    }
+    this->ticks++;
+    Fighter_getNodePosition(this->fighter, &this->position, 2, &ZERO_VECTOR);
+}
 
 void func_8008391C(AgumonSpecial2Effect *this, s32 arg);
 void func_80083B90(AgumonSpecial2Effect *this, s32 arg);
 
-/* Draws by its state (0x40): func_8008391C's part, and in state 1 func_80083B90's too. */
+/* Draws by its state: func_8008391C's part, and in state 1 func_80083B90's too. */
 void AgumonSpecial2Effect_draw(AgumonSpecial2Effect *this, s32 arg) {
-    switch (this->unk40) {
+    switch (this->state) {
     case 0:
         func_8008391C(this, arg);
         break;

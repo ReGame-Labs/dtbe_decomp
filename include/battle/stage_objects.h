@@ -12,11 +12,12 @@
 
 EXTERN_C_BEGIN
 
-/* A vertex of a stage's grid of quads (st00's pulse strip, st01's pulse grid, st05's glow grid): an SVECTOR's
- * layout, but word-aligned. Evidence: st05's tick copies these vertices with lw/sw, and GCC 2.95 copies a word-aligned
- * 8-byte struct that way but an SVECTOR (halfword-aligned) with lwl/lwr; so the original element type was
- * word-aligned. The match of the grid constructors depends on it: with a halfword-aligned element gcc hoists each
- * field's base out of the loops instead of keeping the offsets in the stores. */
+/* A vertex of a stage's grid of quads (st00's pulse strip, st01's pulse grid, st05's glow grid; also the rings of
+ * StingmonSpecial3Effect): an SVECTOR's layout, but word-aligned. Evidence: st05's tick copies these vertices with
+ * lw/sw, and GCC 2.95 copies a word-aligned 8-byte struct that way but an SVECTOR (halfword-aligned) with lwl/lwr; so
+ * the original element type was word-aligned. The match of the grid constructors depends on it: with a
+ * halfword-aligned element gcc hoists each field's base out of the loops instead of keeping the offsets in the
+ * stores. */
 typedef struct GridVertex {
     s16 vx;
     s16 vy;

@@ -2,10 +2,12 @@
 
 // the names tools/rename.py gave (tools/renames/), in address order
 ST06_TERRAIN_LINE_ENDS = 0x800D3824;
+ST06_FROZEN_FRAME_RECT = 0x800D3840;
 ST06_SPIN_NODES = 0x800D397C;
 ST06_SPINNER_VTABLE = 0x800D3AA4;
 ST06_SPIN_GROUP_VTABLE = 0x800D3ACC;
 STAGE_BOSS_VTABLE = 0x800D3B8C;
+ST06_ITEM_SPAWN_POINTS = 0x800D3C04;
 StageBoss_init = 0x800D3C10; // type:func
 StageBoss_destroy = 0x800D3CD0; // type:func
 StageBoss_startRound = 0x800D3D40; // type:func

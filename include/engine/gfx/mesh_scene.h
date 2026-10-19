@@ -97,7 +97,7 @@ void meshSceneLoad(MeshScene *meshScene, char *path);
 void meshSceneInitNodes(MeshScene *meshScene);
 void meshSceneSetParent(MeshScene *meshScene, Transform *parent);
 void meshSceneSetLocalMatrix(MeshScene *meshScene, MATRIX *local, s32 node);
-void meshSceneRelocateNodeTmd(MeshScene *meshScene, s32 node);
+TmdObject *meshSceneRelocateNodeTmd(MeshScene *meshScene, s32 node);
 s32 meshSceneGetNodeCount(MeshScene *meshScene);
 s32 meshSceneGetCollisionCount(MeshScene *meshScene, s32 node);
 s32 *meshSceneGetCollisionLines(MeshScene *meshScene, s32 node);

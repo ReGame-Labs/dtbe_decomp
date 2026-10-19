@@ -1,13 +1,18 @@
 /* The memory card screens (memoryCardTaskInit): checking, formatting, loading and saving, with their
- * messages. */
+ * messages. The file is C++, as g++ built it: locals of sibling blocks share a stack slot (MessageWindow_draw),
+ * locals with destructors run them at the end of their block (ResetLock, TextPrinter), and the task's
+ * constructor and destructor store its virtual table and call the base's in g++'s order. */
 
 #include "common.h"
 #include "kernel.h"
+/* kernel.h names its file delete erase with a macro, which would rename C++'s delete */
+#undef delete
 #include "psyq.h"
 #include "libmcrd.h"
 #include "memory.h"
 #include "strings.h"
 #include "engine/gfx/box.h"
+#include "engine/debug/system_menu.h"
 #include "engine/game/game_state.h"
 #include "engine/game/sequencer.h"
 #include "engine/gfx/ordering_table.h"
@@ -19,152 +24,108 @@
 #include "engine/text/font.h"
 #include "engine/text/text_printer.h"
 #include "title/title_classes.h"
+#include "title/memory_card.h"
 
-/* A message window (MessageWindow_init, MESSAGE_WINDOW_VTABLE): a rectangle that grows open and shrinks
- * closed (MessageWindow_tick) with lines of text centred in it (MessageWindow_draw). The four values of the
- * constructor are the rectangle, as MessageWindow_draw copies them into the RECT it draws. */
-typedef struct MessageWindow {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 scale; /* how far open, 0 (closed) to 0x1000 */
-    /* 0x1C */ s32 open;  /* nonzero while opening or open, 0 while closing */
-    /* 0x20 */ u8 *text;  /* the lines it shows, NULL for none */
-    /* 0x24 */ s32 x;
-    /* 0x28 */ s32 y;
-    /* 0x2C */ s32 width;
-    /* 0x30 */ s32 height;
-} MessageWindow;
-
-/* The yes/no window (YesNoWindow_init, YES_NO_WINDOW_VTABLE): a message window with two choices under the
- * text, STR_YES and STR_NO, picked with up and down (YesNoWindow_tick). */
-typedef struct YesNoWindow {
-    /* 0x00 */ MessageWindow window;
-    /* 0x34 */ s32 choice;  /* 0 for yes (the first choice), 1 for no */
-    /* 0x38 */ s32 decided; /* set once the player confirmed a choice */
-} YesNoWindow;
-
-extern EntityVtable MESSAGE_WINDOW_VTABLE;
-extern EntityVtable YES_NO_WINDOW_VTABLE;
-
-/* The memory card task (memoryCardTaskInit, MEMORY_CARD_TASK_VTABLE). Its thread (MemoryCardTask_run) does
- * the work of the mode it was made with and shows what happens in its two windows; the card callback
- * memoryCardCallback hands it the results the thread waits for (MemoryCardTask_waitResult). */
-typedef struct MemoryCardTask {
-    /* 0x00 */ Task task;
-    /* 0x20 */ s32 mode;    /* the work the thread does (MemoryCardTask_run): MEMORY_CARD_* */
-    /* 0x24 */ Thread thread;
-    /* 0x30 */ s32 channel; /* what the card calls get */
-    /* 0x34 */ EntityGroup windows;
-    /* 0x44 */ s32 done;    /* set once the thread returned */
-    /* 0x48 */ MessageWindow *message;
-    /* 0x4C */ YesNoWindow *question;
-    /* Set by the memory card callback memoryCardCallback and polled by the thread, so volatile:
-     * MemoryCardTask_waitResult stores 0x50 and loads it right back, and memoryCardCallback's last store
-     * stays out of the delay slot of its `jr ra`. */
-    /* 0x50 */ volatile s32 cmds;   /* the command the callback reported (MemCB's cmds), 0 until it ran */
-    /* 0x54 */ volatile s32 result; /* its result (MemCB's rslt) */
-} MemoryCardTask;
-
-/* Keeps the reset buttons off while it lives: the card's format, read and write make one on their stack
- * over SYSTEM_CONTEXT.resetDisabled (D_8005FCB0), so the game is not reset in the middle of a card write. */
-typedef struct ResetLock {
-    /* 0x0 */ s32 *flag; /* set to 1 by ResetLock_init, back to 0 by ResetLock_destroy */
-} ResetLock;
-
+EXTERN_C_BEGIN
 /* in .rodata: the yes/no window's choices, messages and a file name pattern */
 extern u8 STR_YES[];
 extern u8 STR_NO[];
 extern u8 STR_LOAD_PROMPT[];
 extern u8 STR_CARD_REMOVED[];
-extern u8 STR_ANY_FILE[];
-extern TaskVtable MEMORY_CARD_TASK_VTABLE;
-/* the task memoryCardTaskInit builds, while it lives */
-extern MemoryCardTask *MEMORY_CARD_TASK;
+extern char STR_ANY_FILE[];
+extern u8 STR_CARD_FORMAT_PROMPT[];
+extern u8 STR_CARD_FORMATTING[];
+extern u8 STR_CARD_FORMAT_FAILED[];
+extern u8 STR_CARD_NOT_INSERTED_2[];
+extern u8 STR_CARD_NOT_FORMATTED[];
+extern u8 STR_CARD_ALREADY_FORMATTED[];
+extern u8 STR_CARD_FORMATTED[];
+extern u8 STR_LOADING[];
+extern u8 STR_LOAD_FAILED[];
+extern u8 STR_LOADED[];
+extern u8 STR_SAVE_DATA_CORRUPTED[];
+extern u8 STR_SAVING[];
+extern u8 STR_SAVE_FAILED[];
+extern u8 STR_SAVED[];
+/* in .data: the save file's name (STR_SAVE_FILE_NAME) and its title */
+extern char *SAVE_FILE_NAME;
+extern char *SAVE_FILE_TITLE;
+/* in .rodata: the save file's icon, three 16x16 frames */
+extern u32 SAVE_ICON_TIM[];
+EXTERN_C_END
+
+/* The save file, as buildSaveFile makes it: a 0x80-byte header, the icon's three 0x80-byte frames, then the
+ * save data; it fits in one card block. */
+#define SAVE_FILE_DATA_OFFSET 0x200
+#define SAVE_FILE_BLOCK_SIZE 0x2000
 
 /* The buttons that confirm a choice: start or the menus' confirm button. */
 #define MEMORY_CARD_CONFIRM (PADstart | PAD_CONFIRM)
 /* The buttons that go on past a message: start or any face button (the same in every version). */
 #define MEMORY_CARD_ANY_BUTTON (PADstart | PADRup | PADRright | PADRdown | PADRleft)
 
-/* A TextPrinter's setColor, inlined as the game has it (its virtual table read from the stack). */
-#define TEXT_SET_COLOR(printer, color) \
-    (printer).printer.vtable->setColor.func((u8 *)&(printer) + (printer).printer.vtable->setColor.delta, color)
-
-void MessageWindow_draw(MessageWindow *this, s32 arg);
-void memoryCardThreadEntry(s32 unused, void *object);
-void MemoryCardTask_run(MemoryCardTask *this);
-void MemoryCardTask_runOptionLoad(MemoryCardTask *this);
-void MemoryCardTask_runOptionSave(MemoryCardTask *this);
-void MemoryCardTask_runLoad(MemoryCardTask *this);
-void MemoryCardTask_runSave(MemoryCardTask *this);
-void MemoryCardTask_load(MemoryCardTask *this, s32 timed);
-void MemoryCardTask_save(MemoryCardTask *this);
-void memoryCardCallback(long cmds, long result);
-s32 MemoryCardTask_waitResult(MemoryCardTask *this);
-void MemoryCardTask_wait(MemoryCardTask *this, s32 frames, s32 skippable);
-s32 MemoryCardTask_ask(MemoryCardTask *this, s32 defaultYes);
-
 /* The card file's name ("BISLPS-03357" in Japan), its title and a yes/no pair that no code names. */
 INCLUDE_RODATA("title/nonmatchings/memory_card", STR_SAVE_FILE_NAME);
 
 /* Constructs a closed message window over the rectangle x, y, width, height. */
-MessageWindow *MessageWindow_init(MessageWindow *this, s32 x, s32 y, s32 width, s32 height) {
-    entityInit(&this->entity, 0);
-    this->x = x;
-    this->y = y;
-    this->width = width;
-    this->entity.vtable = &MESSAGE_WINDOW_VTABLE;
-    this->scale = 0;
-    this->open = 0;
-    this->text = NULL;
-    this->height = height;
-    return this;
+MessageWindow *MessageWindow_init(MessageWindow *window, s32 x, s32 y, s32 width, s32 height) {
+    entityInit(&window->entity, 0);
+    window->x = x;
+    window->y = y;
+    window->width = width;
+    window->entity.vtable = &MESSAGE_WINDOW_VTABLE;
+    window->scale = 0;
+    window->open = 0;
+    window->text = NULL;
+    window->height = height;
+    return window;
 }
 
 /* Prints one line of text centred in the window's width, offsetY below its top (8 pixels a character). */
-void MessageWindow_printLine(MessageWindow *this, Printer *printer, u8 *text, s32 offsetY) {
-    s32 length = strlen(text);
-    s32 left = (this->width - length * 8) / 2;
-    s32 top = this->y + offsetY; /* The match depends on top computed first and stored last. */
+void MessageWindow_printLine(MessageWindow *window, Printer *printer, u8 *text, s32 offsetY) {
+    s32 length = strlen((char *)text); /* the SDK's string functions take char */
+    s32 left = (window->width - length * 8) / 2;
+    s32 top = window->y + offsetY; /* The match depends on top computed first and stored last. */
 
-    printer->x = this->x + left;
+    printer->x = window->x + left;
     printer->y = top;
     printerPrint(printer, text);
 }
 
 /* Opens the window on text. */
-void MessageWindow_show(MessageWindow *this, u8 *text) {
-    this->open = 1;
-    this->text = text;
+void MessageWindow_show(MessageWindow *window, u8 *text) {
+    window->open = 1;
+    window->text = text;
 }
 
 /* Opens the window on the text it has. */
-void MessageWindow_open(MessageWindow *this) {
-    this->open = 1;
+void MessageWindow_open(MessageWindow *window) {
+    window->open = 1;
 }
 
 /* Closes the window. */
-void MessageWindow_close(MessageWindow *this) {
-    this->open = 0;
+void MessageWindow_close(MessageWindow *window) {
+    window->open = 0;
 }
 
 /* Whether the window is all the way open. */
-s32 MessageWindow_isOpen(MessageWindow *this) {
-    return this->scale == 0x1000;
+s32 MessageWindow_isOpen(MessageWindow *window) {
+    return window->scale == 0x1000;
 }
 
 /* Grows the window open, or shrinks it closed, by 0x111 a frame. */
-void MessageWindow_tick(MessageWindow *this) {
-    if (this->open) {
-        if (this->scale != 0x1000) {
-            this->scale += 0x111;
-            if (this->scale > 0x1000) {
-                this->scale = 0x1000;
+void MessageWindow_tick(MessageWindow *window) {
+    if (window->open) {
+        if (window->scale != 0x1000) {
+            window->scale += 0x111;
+            if (window->scale > 0x1000) {
+                window->scale = 0x1000;
             }
         }
     } else {
-        this->scale -= 0x111;
-        if (this->scale < 0) {
-            this->scale = 0;
+        window->scale -= 0x111;
+        if (window->scale < 0) {
+            window->scale = 0;
         }
     }
 }
@@ -214,56 +175,92 @@ u8 *copyLine(u8 *line, u8 *text) {
     return c != '\0' ? text : NULL;
 }
 
-INCLUDE_ASM("title/nonmatchings/memory_card", MessageWindow_draw);
+/* The message window's draw: once open, its lines centred one under the other (16 pixels apart), on the
+ * framed dark rectangle of the window scaled to how far open it is. */
+void MessageWindow_draw(MessageWindow *window, s32 arg) {
+    u_long *ot;
+
+    if (window->scale <= 0) {
+        return;
+    }
+    ot = FRAME_OT.lastDrawn - 1;
+    if (MessageWindow_isOpen(window) && window->text != NULL) {
+        TextPrinter printer(ot);
+        u8 line[40];
+        u8 *text;
+        s32 offsetY;
+
+        printer.setShadow(1);
+        TEXT_SET_COLOR(printer, 0x909080);
+        printer.setShadowColor(0x700000);
+        text = window->text;
+        offsetY = (window->height - countLines(text) * 16) / 2;
+        while (text != NULL) {
+            text = copyLine(line, text);
+            MessageWindow_printLine(window, &printer, line, offsetY);
+            offsetY += 16;
+        }
+    }
+    {
+        RECT rect;
+
+        rect.x = window->x;
+        rect.y = window->y;
+        rect.w = window->width;
+        rect.h = window->height;
+        scaleRect(&rect, window->scale);
+        drawFramedDarkRect(ot, &rect);
+    }
+}
 
 /* Opens the yes/no window on yes, or on no when defaultYes is 0. */
-void YesNoWindow_open(YesNoWindow *this, s32 defaultYes) {
-    MessageWindow_open(&this->window);
+void YesNoWindow_open(YesNoWindow *question, s32 defaultYes) {
+    MessageWindow_open(&question->window);
     if (defaultYes) {
-        this->choice = 0;
+        question->choice = 0;
     } else {
-        this->choice = 1;
+        question->choice = 1;
     }
-    this->decided = 0;
+    question->decided = 0;
 }
 
 /* Whether the player confirmed a choice. */
-s32 YesNoWindow_isDecided(YesNoWindow *this) {
-    return this->decided;
+s32 YesNoWindow_isDecided(YesNoWindow *question) {
+    return question->decided;
 }
 
 /* Whether the choice is yes (the first one). */
-s32 YesNoWindow_isYes(YesNoWindow *this) {
-    return this->choice == 0;
+s32 YesNoWindow_isYes(YesNoWindow *question) {
+    return question->choice == 0;
 }
 
 /* The yes/no window's update: once open, up and down move the choice and the confirm button closes it
  * on that choice. */
-void YesNoWindow_tick(YesNoWindow *this) {
+void YesNoWindow_tick(YesNoWindow *question) {
     u32 pressed;
 
-    MessageWindow_tick(&this->window);
-    if (!MessageWindow_isOpen(&this->window)) {
+    MessageWindow_tick(&question->window);
+    if (!MessageWindow_isOpen(&question->window)) {
         return;
     }
-    if (YesNoWindow_isDecided(this)) {
+    if (YesNoWindow_isDecided(question)) {
         return;
     }
     pressed = padManagerGetPressed(PAD_MANAGER_INSTANCE, -1);
     if (pressed & MEMORY_CARD_CONFIRM) {
         soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CONFIRM, 0);
-        this->decided = 1;
-        MessageWindow_close(&this->window);
+        question->decided = 1;
+        MessageWindow_close(&question->window);
         return;
     }
-    if (this->choice <= 0) {
+    if (question->choice <= 0) {
         if (pressed & PAD_DOWN) {
-            this->choice++;
+            question->choice++;
             soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CURSOR, 0);
         }
     } else {
         if (pressed & PAD_UP) {
-            this->choice--;
+            question->choice--;
             soundControlPlaySound(&SOUND_CONTROL, SOUND_MENU_CURSOR, 0);
         }
     }
@@ -273,54 +270,47 @@ INCLUDE_RODATA("title/nonmatchings/memory_card", STR_YES);
 INCLUDE_RODATA("title/nonmatchings/memory_card", STR_NO);
 
 /* The yes/no window's draw: once open, its two choices (the one picked bright) under the text. */
-void YesNoWindow_draw(YesNoWindow *this, s32 arg) {
-    TextPrinter printer;
+void YesNoWindow_draw(YesNoWindow *question, s32 arg) {
     u32 firstColor;
     u32 secondColor;
 
-    if (!MessageWindow_isOpen(&this->window)) {
+    if (!MessageWindow_isOpen(&question->window)) {
         return;
     }
     firstColor = 0x808080;
     secondColor = 0x404040;
-    if (this->choice != 0) {
+    if (question->choice != 0) {
         firstColor = 0x404040;
         secondColor = 0x808080;
     }
-    textPrinterInit(&printer, FRAME_OT.lastDrawn - 1);
-    textPrinterSetShadow(&printer, 1);
-    textPrinterSetShadowColor(&printer, 0x700000);
+    TextPrinter printer(FRAME_OT.lastDrawn - 1);
+
+    printer.setShadow(1);
+    printer.setShadowColor(0x700000);
     TEXT_SET_COLOR(printer, firstColor);
-    MessageWindow_printLine(&this->window, &printer.printer, STR_YES, 0);
+    MessageWindow_printLine(&question->window, &printer, STR_YES, 0);
     TEXT_SET_COLOR(printer, secondColor);
-    MessageWindow_printLine(&this->window, &printer.printer, STR_NO, 0x10);
-    MessageWindow_draw(&this->window, arg);
-    printerDestroy(&printer.printer, DESTROY_BASES);
+    MessageWindow_printLine(&question->window, &printer, STR_NO, 0x10);
+    MessageWindow_draw(&question->window, arg);
 }
 
-/* Turns the reset off: points this at flag and sets the flag to 1; returns this. */
-ResetLock *ResetLock_init(ResetLock *this, s32 *flag) {
+/* Turns the reset off: keeps flag and sets it to 1. */
+ResetLock::ResetLock(s32 *flag) {
     this->flag = flag;
     *flag = 1;
-    return this;
 }
 
-/* ResetLock's destructor: turns the reset back on (its flag back to 0). */
-void ResetLock_destroy(ResetLock *this, s32 flags) {
-    *this->flag = 0;
-    if (flags & DESTROY_FREE) {
-        operatorDelete(this);
-    }
+/* Turns the reset back on (the flag back to 0). */
+ResetLock::~ResetLock() {
+    *flag = 0;
 }
 
 /* Constructs the memory card task for mode: starts the card and installs its callback, checks the
  * ranking's records (the table's constructor resets broken ones), and makes its thread and two windows. */
-MemoryCardTask *memoryCardTaskInit(MemoryCardTask *this, s32 mode) {
+MemoryCardTask::MemoryCardTask(s32 mode) : Task(0, "no name") {
     RankingTable records;
     YesNoWindow *question;
 
-    taskInit(&this->task, 0, "no name");
-    this->task.vtable = &MEMORY_CARD_TASK_VTABLE;
     threadInit(&this->thread, memoryCardThreadEntry, 0x1000, this, 0);
     entityGroupInit(&this->windows);
     this->mode = mode;
@@ -328,9 +318,11 @@ MemoryCardTask *memoryCardTaskInit(MemoryCardTask *this, s32 mode) {
     MemCardCallback(memoryCardCallback);
     this->channel = 0;
     RankingTable_init(&records, (RankingRecord *)GAME_STATE.save.records, 8);
-    this->message = MessageWindow_init(entityOperatorNew(sizeof(MessageWindow)), 0x20, 0x30, 0x100, 0x50);
+    /* the windows are entities, made in entityOperatorNew's memory */
+    this->message = MessageWindow_init((MessageWindow *)entityOperatorNew(sizeof(MessageWindow)), 0x20, 0x30, 0x100,
+                                       0x50);
     /* the yes/no window: YesNoWindow_init, inlined */
-    question = entityOperatorNew(sizeof(YesNoWindow));
+    question = (YesNoWindow *)entityOperatorNew(sizeof(YesNoWindow));
     MessageWindow_init(&question->window, 0x78, 0x90, 0x50, 0x20);
     question->window.entity.vtable = &YES_NO_WINDOW_VTABLE;
     question->choice = 0;
@@ -340,44 +332,41 @@ MemoryCardTask *memoryCardTaskInit(MemoryCardTask *this, s32 mode) {
     MEMORY_CARD_TASK = this;
     this->done = 0;
     RankingTable_destroy(&records, DESTROY_BASES);
-    return this;
 }
 
 /* The memory card task's destructor: stops the card, then destroys the windows and the thread. */
-void MemoryCardTask_destroy(MemoryCardTask *this, s32 flags) {
-    this->task.vtable = &MEMORY_CARD_TASK_VTABLE;
+MemoryCardTask::~MemoryCardTask() {
     MemCardCallback(NULL);
     MemCardStop();
     MEMORY_CARD_TASK = NULL;
     entityGroupDestroy(&this->windows, DESTROY_BASES);
     threadDestroy(&this->thread, DESTROY_BASES);
-    taskDestroy(&this->task, flags);
 }
 
 /* Whether the task's work is done. */
-s32 MemoryCardTask_isDone(MemoryCardTask *this) {
+s32 MemoryCardTask::isDone() {
     return this->done;
 }
 
 /* The entry of the thread of memoryCardTaskInit's object. */
 void memoryCardThreadEntry(s32 unused, void *object) {
-    MemoryCardTask_run(object);
+    ((MemoryCardTask *)object)->run();
 }
 
 /* The task's thread: does the work of its mode, then hands back 1 every frame. */
-void MemoryCardTask_run(MemoryCardTask *this) {
+void MemoryCardTask::run() {
     switch (this->mode) {
     case MEMORY_CARD_OPTION_LOAD:
-        MemoryCardTask_runOptionLoad(this);
+        runOptionLoad();
         break;
     case MEMORY_CARD_OPTION_SAVE:
-        MemoryCardTask_runOptionSave(this);
+        runOptionSave();
         break;
     case MEMORY_CARD_LOAD:
-        MemoryCardTask_runLoad(this);
+        runLoad();
         break;
     case MEMORY_CARD_SAVE:
-        MemoryCardTask_runSave(this);
+        runSave();
         break;
     }
     for (;;) {
@@ -385,10 +374,53 @@ void MemoryCardTask_run(MemoryCardTask *this) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/memory_card", MemoryCardTask_formatCard);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_FORMAT_PROMPT);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_FORMATTING);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_FORMAT_FAILED);
+
+/* Formats the card, with the reset off: when askFirst, asks first (the cursor on no) and formats only a card
+ * that MemoryCardTask_acceptCard finds unformatted, showing how it went; otherwise only says the card is not
+ * formatted. Then waits for a button. Returns 0 once the card is formatted (or was already), else -1.
+ * The match depends on the nested card tests (a switch or `||` tests McErrCardNotExist and McErrCardInvalid as
+ * one range) and on each text set before the tests that keep it. */
+s32 MemoryCardTask::formatCard(s32 askFirst) {
+    ResetLock lock(&SYSTEM_CONTEXT.resetDisabled);
+    s32 result = -1;
+    u8 *text = STR_CARD_NOT_FORMATTED;
+    s32 card;
+
+    if (askFirst) {
+        showMessage(STR_CARD_FORMAT_PROMPT);
+        if (!ask(0)) {
+            return -1;
+        }
+        card = acceptCard();
+        text = STR_CARD_NOT_INSERTED_2;
+        if (card != McErrCardNotExist) {
+            if (card != McErrCardInvalid) {
+                text = STR_CARD_ALREADY_FORMATTED;
+                if (card != McErrNotFormat) {
+                    result = 0;
+                } else {
+                    showMessage(STR_CARD_FORMATTING);
+                    wait(4, 0);
+                    if (checkResult(MemCardFormat(this->channel), STR_CARD_FORMAT_FAILED) != 0) {
+                        goto waitButton;
+                    }
+                    result = 0;
+                    text = STR_CARD_FORMATTED;
+                }
+            }
+        }
+    }
+    showMessage(text);
+waitButton:
+    waitButton();
+    return result;
+}
 
 /* Opens the message window on text. */
-void MemoryCardTask_showMessage(MemoryCardTask *this, u8 *text) {
+void MemoryCardTask::showMessage(u8 *text) {
     MessageWindow_show(this->message, text);
 }
 
@@ -396,36 +428,36 @@ INCLUDE_RODATA("title/nonmatchings/memory_card", STR_LOAD_PROMPT);
 
 /* MEMORY_CARD_OPTION_LOAD: asks "Load data?" (the cursor on no) and on yes loads, waiting for a button at the end;
  * then closes the message window and waits 0x14 frames. */
-void MemoryCardTask_runOptionLoad(MemoryCardTask *this) {
-    MemoryCardTask_showMessage(this, STR_LOAD_PROMPT);
-    if (MemoryCardTask_ask(this, 0)) {
-        MemoryCardTask_load(this, 0);
+void MemoryCardTask::runOptionLoad() {
+    showMessage(STR_LOAD_PROMPT);
+    if (ask(0)) {
+        load(0);
     }
     MessageWindow_close(this->message);
-    MemoryCardTask_wait(this, 0x14, 0);
+    wait(0x14, 0);
 }
 
 /* MEMORY_CARD_OPTION_SAVE: saves (MemoryCardTask_save asks "Save data?" itself), then closes the message
  * window and waits 0x14 frames. */
-void MemoryCardTask_runOptionSave(MemoryCardTask *this) {
-    MemoryCardTask_save(this);
+void MemoryCardTask::runOptionSave() {
+    save();
     MessageWindow_close(this->message);
-    MemoryCardTask_wait(this, 0x14, 0);
+    wait(0x14, 0);
 }
 
 /* MEMORY_CARD_LOAD: loads without asking, closing "Loaded." after 0x2D frames (or a button); then closes the
  * message window and waits 0x14 frames. */
-void MemoryCardTask_runLoad(MemoryCardTask *this) {
-    MemoryCardTask_load(this, 1);
+void MemoryCardTask::runLoad() {
+    load(1);
     MessageWindow_close(this->message);
-    MemoryCardTask_wait(this, 0x14, 0);
+    wait(0x14, 0);
 }
 
 /* MEMORY_CARD_SAVE: the same as MemoryCardTask_runOptionSave (it asks "Save data?" too). */
-void MemoryCardTask_runSave(MemoryCardTask *this) {
-    MemoryCardTask_save(this);
+void MemoryCardTask::runSave() {
+    save();
     MessageWindow_close(this->message);
-    MemoryCardTask_wait(this, 0x14, 0);
+    wait(0x14, 0);
 }
 
 INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_CHECKING_DO_NOT_TOUCH);
@@ -435,27 +467,97 @@ INCLUDE_ASM("title/nonmatchings/memory_card", MemoryCardTask_load);
 
 INCLUDE_ASM("title/nonmatchings/memory_card", MemoryCardTask_save);
 
-INCLUDE_ASM("title/nonmatchings/memory_card", MemoryCardTask_readSave);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_LOADING);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_LOAD_FAILED);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_LOADED);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_SAVE_DATA_CORRUPTED);
 
-INCLUDE_ASM("title/nonmatchings/memory_card", MemoryCardTask_writeSave);
+/* Reads the save file (SAVE_FILE_NAME, its first block) and, when its save data is valid, copies it to
+ * GAME_STATE.save and applies its options; shows the result in the message window. Returns the card result
+ * (0) when it loaded, -1 when it did not. The match depends on the do/while (0) block its failures break out
+ * of: the game's code is laid out as a loop (the read at its end, its constant addresses loaded before it),
+ * which an if/else chain does not give. */
+s32 MemoryCardTask::readSave() {
+    ResetLock lock(&SYSTEM_CONTEXT.resetDisabled);
+    s32 result;
+    u8 *file;
+
+    showMessage(STR_LOADING);
+    file = new u8[SAVE_FILE_BLOCK_SIZE];
+    do {
+        threadSwitchBack(&this->thread, 0);
+        MemCardReadFile(this->channel, SAVE_FILE_NAME, (u_long *)file, 0, SAVE_FILE_BLOCK_SIZE);
+        result = waitResult();
+        if (checkResult(result, STR_LOAD_FAILED) != 0) {
+            result = -1;
+            break;
+        }
+        if (saveDataIsValid((SaveData *)(file + SAVE_FILE_DATA_OFFSET))) {
+            GAME_STATE.save = *(SaveData *)(file + SAVE_FILE_DATA_OFFSET);
+            saveDataApplyOptions(&GAME_STATE.save);
+            showMessage(STR_LOADED);
+        } else {
+            showMessage(STR_SAVE_DATA_CORRUPTED);
+            result = -1;
+        }
+    } while (0);
+    delete[] file;
+    return result;
+}
+
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_SAVING);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_SAVE_FAILED);
+INCLUDE_RODATA("title/nonmatchings/memory_card", STR_SAVED);
+
+/* Writes the save file: stores the MD5 of GAME_STATE.save, builds the file around it (buildSaveFile), opens
+ * or creates SAVE_FILE_NAME (one block, up to 10 tries each) and writes the file's whole blocks; shows the
+ * result in the message window. Returns 0 when it saved, -1 when it did not. The match depends on the
+ * do/while (0) block its failures break out of (as in MemoryCardTask_readSave) and on result and save being
+ * set before the lock is made (the game sets both before ResetLock_init). */
+s32 MemoryCardTask::writeSave() {
+    s32 result = 0;
+    SaveData *save = &GAME_STATE.save;
+    ResetLock lock(&SYSTEM_CONTEXT.resetDisabled);
+    u32 size;
+    u8 *file;
+
+    showMessage(STR_SAVING);
+    saveDataStoreMd5(save);
+    file = buildSaveFile(&size, SAVE_FILE_TITLE, SAVE_ICON_TIM, (u8 *)save, sizeof(SaveData));
+    do {
+        if (checkResult(openOrCreateFile(SAVE_FILE_NAME, 1, 10), STR_SAVE_FAILED) != 0) {
+            result = -1;
+            break;
+        }
+        MemCardWriteData((u_long *)file, 0, (size + SAVE_FILE_BLOCK_SIZE - 1) & ~(SAVE_FILE_BLOCK_SIZE - 1));
+        if (checkResult(waitResult(), STR_SAVE_FAILED) != 0) {
+            result = -1;
+            break;
+        }
+        showMessage(STR_SAVED);
+    } while (0);
+    MemCardClose();
+    delete[] file;
+    return result;
+}
 
 INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_REMOVED);
 
 /* Shows a card result (McErr*) in the message window: McErrNone shows nothing and returns 0; no card or a
  * new card shows STR_CARD_REMOVED (the card was pulled out), any other result shows text; returns -1 then. */
-s32 MemoryCardTask_checkResult(MemoryCardTask *this, s32 result, u8 *text) {
+s32 MemoryCardTask::checkResult(s32 result, u8 *text) {
     switch (result) {
     case McErrNone:
         return 0;
     case McErrCardNotExist:
     case McErrNewCard:
-        MemoryCardTask_showMessage(this, STR_CARD_REMOVED);
+        showMessage(STR_CARD_REMOVED);
         break;
     case McErrCardInvalid:
     case McErrNotFormat:
     case McErrFileNotExist:
     default:
-        MemoryCardTask_showMessage(this, text);
+        showMessage(text);
         break;
     }
     return -1;
@@ -469,7 +571,7 @@ void memoryCardCallback(long cmds, long result) {
 }
 
 /* The number of files on the card whose name matches name, -1 when the card can't say. */
-s32 MemoryCardTask_countFiles(MemoryCardTask *this, char *name) {
+s32 MemoryCardTask::countFiles(char *name) {
     struct DIRENTRY entry;
     long files;
 
@@ -482,7 +584,7 @@ s32 MemoryCardTask_countFiles(MemoryCardTask *this, char *name) {
 INCLUDE_RODATA("title/nonmatchings/memory_card", STR_ANY_FILE);
 
 /* The free blocks of the card (of its 15), -1 when the card can't say. */
-s32 MemoryCardTask_getFreeBlocks(MemoryCardTask *this) {
+s32 MemoryCardTask::getFreeBlocks() {
     struct DIRENTRY entries[15];
     long files;
     s32 freeBlocks = 15;
@@ -499,7 +601,7 @@ s32 MemoryCardTask_getFreeBlocks(MemoryCardTask *this) {
 
 /* Makes sure the file name exists: opens it, else creates it with blocks blocks and opens it again,
  * each step tried up to tries frames; returns the last card result (0 when it worked). */
-s32 MemoryCardTask_openOrCreateFile(MemoryCardTask *this, char *name, s32 blocks, s32 tries) {
+s32 MemoryCardTask::openOrCreateFile(char *name, s32 blocks, s32 tries) {
     s32 result = 0;
     s32 n;
 
@@ -544,7 +646,7 @@ s32 MemoryCardTask_openOrCreateFile(MemoryCardTask *this, char *name, s32 blocks
 
 /* Runs MemCardExist on the card (once it is free) and waits for its result, up to three times: 1 for a
  * card there (McErrNone or McErrNewCard), 0 when all three are others. */
-s32 MemoryCardTask_isCardPresent(MemoryCardTask *this) {
+s32 MemoryCardTask::isCardPresent() {
     s32 tries = 3;
     s32 result;
 
@@ -552,7 +654,7 @@ s32 MemoryCardTask_isCardPresent(MemoryCardTask *this) {
         while (!MemCardExist(this->channel)) {
             threadSwitchBack(&this->thread, 0);
         }
-        result = MemoryCardTask_waitResult(this);
+        result = waitResult();
         if (result == McErrNone || result == McErrNewCard) {
             return 1;
         }
@@ -562,7 +664,7 @@ s32 MemoryCardTask_isCardPresent(MemoryCardTask *this) {
 
 /* Runs MemCardAccept on the card (once it is free) and waits for its result, up to three times while the
  * result is neither McErrNone nor McErrNewCard; returns the last one. */
-s32 MemoryCardTask_acceptCard(MemoryCardTask *this) {
+s32 MemoryCardTask::acceptCard() {
     s32 tries = 3;
     s32 result;
 
@@ -570,7 +672,7 @@ s32 MemoryCardTask_acceptCard(MemoryCardTask *this) {
         while (!MemCardAccept(this->channel)) {
             threadSwitchBack(&this->thread, 0);
         }
-        result = MemoryCardTask_waitResult(this);
+        result = waitResult();
         if (result == McErrNone || result == McErrNewCard) {
             break;
         }
@@ -579,7 +681,7 @@ s32 MemoryCardTask_acceptCard(MemoryCardTask *this) {
 }
 
 /* Gives up the thread each frame until the card callback ran; returns what it got. */
-s32 MemoryCardTask_waitResult(MemoryCardTask *this) {
+s32 MemoryCardTask::waitResult() {
     this->cmds = 0;
     while (this->cmds == 0) {
         threadSwitchBack(&this->thread, 0);
@@ -588,7 +690,7 @@ s32 MemoryCardTask_waitResult(MemoryCardTask *this) {
 }
 
 /* Gives up the thread each frame until a button is pressed. */
-void MemoryCardTask_waitButton(MemoryCardTask *this) {
+void MemoryCardTask::waitButton() {
     PadManager *pad = PAD_MANAGER_INSTANCE;
 
     while (!(padManagerGetPressed(pad, -1) & MEMORY_CARD_ANY_BUTTON)) {
@@ -597,7 +699,7 @@ void MemoryCardTask_waitButton(MemoryCardTask *this) {
 }
 
 /* Gives up the thread for frames frames, or until a button is pressed when skippable. */
-void MemoryCardTask_wait(MemoryCardTask *this, s32 frames, s32 skippable) {
+void MemoryCardTask::wait(s32 frames, s32 skippable) {
     /* The match depends on the test against -1 (kept in a saved register) after the decrement. */
     while (--frames != -1) {
         if (skippable && (padManagerGetPressed(PAD_MANAGER_INSTANCE, -1) & MEMORY_CARD_ANY_BUTTON)) {
@@ -609,7 +711,7 @@ void MemoryCardTask_wait(MemoryCardTask *this, s32 frames, s32 skippable) {
 
 /* Asks the yes/no window's question (opened on yes unless defaultYes is 0) and gives up the thread each
  * frame until the player answers; returns whether the answer is yes. */
-s32 MemoryCardTask_ask(MemoryCardTask *this, s32 defaultYes) {
+s32 MemoryCardTask::ask(s32 defaultYes) {
     YesNoWindow *question = this->question;
 
     YesNoWindow_open(question, defaultYes);
@@ -621,12 +723,12 @@ s32 MemoryCardTask_ask(MemoryCardTask *this, s32 defaultYes) {
 
 /* The task's update: runs its thread for a frame and kills the task once the thread is done, then
  * updates the windows. */
-void MemoryCardTask_update(MemoryCardTask *this) {
+void MemoryCardTask::update(s32 arg) {
     s32 result = threadSwitchTo(&this->thread, 0);
 
     this->done = result > 0;
     if (this->done) {
-        taskKill(&this->task);
+        taskKill(this);
     }
     if (result >= 0) {
         entityGroupTick(&this->windows, (s32)this);
@@ -658,13 +760,13 @@ u8 *buildSaveFile(u32 *fileSize, char *title, u32 *icon, u8 *data, s32 size) {
     end = size + 0x80;
     total = iconSize + end;
     *fileSize = total;
-    file = operatorVecNew(((total + 3) >> 2) << 2);
+    file = new u8[((total + 3) >> 2) << 2];
     bzero(file, 0x80);
     file[0] = 'S';
     file[1] = 'C';
     file[3] = (*fileSize + 0x1FFF) >> 13;
     file[2] = frames + 0x10;
-    strncpy(file + 4, title, 0x40);
+    strncpy((char *)file + 4, title, 0x40);
     clut = tim.caddr;
     pixels = tim.paddr;
     memcpy(file + 0x60, clut, 0x20);
@@ -676,33 +778,33 @@ u8 *buildSaveFile(u32 *fileSize, char *title, u32 *icon, u8 *data, s32 size) {
 }
 
 /* The message window's destructor (MESSAGE_WINDOW_VTABLE, installed by MessageWindow_init). */
-void MessageWindow_destroy(Entity *this, s32 flags) {
-    entityDestroy(this, 0);
+void MessageWindow_destroy(Entity *window, s32 flags) {
+    entityDestroy(window, 0);
     if (flags & DESTROY_FREE) {
-        entityOperatorDelete(this);
+        entityOperatorDelete(window);
     }
 }
 
 /* The yes/no window's destructor (YES_NO_WINDOW_VTABLE, installed by YesNoWindow_init and its inlined copy in
  * memoryCardTaskInit). */
-void YesNoWindow_destroy(Entity *this, s32 flags) {
-    entityDestroy(this, 0);
+void YesNoWindow_destroy(Entity *window, s32 flags) {
+    entityDestroy(window, 0);
     if (flags & DESTROY_FREE) {
-        entityOperatorDelete(this);
+        entityOperatorDelete(window);
     }
 }
 
 /* Constructs a yes/no window on the first choice. */
-YesNoWindow *YesNoWindow_init(YesNoWindow *this, s32 x, s32 y, s32 width, s32 height) {
-    MessageWindow_init(&this->window, x, y, width, height);
-    this->window.entity.vtable = &YES_NO_WINDOW_VTABLE;
-    this->choice = 0;
-    return this;
+YesNoWindow *YesNoWindow_init(YesNoWindow *question, s32 x, s32 y, s32 width, s32 height) {
+    MessageWindow_init(&question->window, x, y, width, height);
+    question->window.entity.vtable = &YES_NO_WINDOW_VTABLE;
+    question->choice = 0;
+    return question;
 }
 
 INCLUDE_RODATA("title/nonmatchings/memory_card", YES_NO_WINDOW_VTABLE);
 INCLUDE_RODATA("title/nonmatchings/memory_card", MESSAGE_WINDOW_VTABLE);
-INCLUDE_RODATA("title/nonmatchings/memory_card", MEMORY_CARD_TASK_VTABLE);
+INCLUDE_RODATA("title/nonmatchings/memory_card", _vt.14MemoryCardTask);
 INCLUDE_RODATA("title/nonmatchings/memory_card", SAVE_ICON_TIM);
 INCLUDE_RODATA("title/nonmatchings/memory_card", STR_CARD_NOT_INSERTED_2);
 INCLUDE_RODATA("title/nonmatchings/memory_card", STR_SAVE_DATA_NOT_FOUND);

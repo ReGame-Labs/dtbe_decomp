@@ -137,7 +137,7 @@ PadManager *padManagerInit(PadManager *padManager);
 void padManagerDestroy(PadManager *padManager, s32 flags);
 void padManagerStart(PadManager *padManager);
 void padManagerSetRepeat(PadManager *padManager, s32 delay, s32 rate);
-void resetPads(void);
+void resetPads(PadManager *padManager);
 void padManagerUpdate(PadManager *padManager);
 u32 padManagerGetButtons(PadManager *padManager, s32 port, s32 offset);
 u32 padManagerGetHeld(PadManager *padManager, s32 port);

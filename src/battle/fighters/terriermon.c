@@ -4,6 +4,7 @@
 #include "common.h"
 #include <abs.h>
 #include "battle/game_classes.h"
+#include "engine/math/sin_cos.h"
 
 void Terriermon_spawnSpecial2Effect(Fighter *this);
 struct TerriermonSpecial2Hitbox *TerriermonSpecial2Hitbox_init(struct TerriermonSpecial2Hitbox *this,
@@ -25,12 +26,12 @@ void Terriermon_spawnSpecial1Effect(Fighter *this);
 /* offset's initializer in Terriermon_throw: GCC keeps it as an anonymous constant (.rodata stays in asm) */
 extern VECTOR D_8006C06C;
 
-/* Builds Terriermon: a Fighter with its own vtable and faces, 0x4A4 and 0x4A8 0. */
+/* Builds Terriermon: a Fighter with its own vtable and faces, no hit cooldown or count. */
 Terriermon *Terriermon_init(Terriermon *this) {
     Fighter_init(&this->base);
     this->base.entity.vtable = &TERRIERMON_VTABLE;
     Fighter_setFaceTable(&this->base, TERRIERMON_FACES);
-    this->unk4A4 = this->unk4A8 = 0;
+    this->hitCooldown = this->hitCount = 0;
     return this;
 }
 
@@ -205,10 +206,10 @@ void Terriermon_spawnSpecial1Effect(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-/* Special move 2: Fighter's; frame 0 the voice and sound 0xF8, 0x4A4 and 0x4A8 cleared; 0x4A4 counts down to 0; the
- * effect on odd frames before 16; on frames 4 to 29 while 0x4A4 is 0, a hitbox at point 5 (odd frames) or 12, its
- * damage 0xC7AC1000 instead of 0x7AC0800 once 0x4A8 reaches 2; before frame 31 an acceleration forward and an upward
- * velocity of frame * 256, else a stop; dust before frame 3. */
+/* Special move 2: Fighter's; frame 0 the voice and sound 0xF8, the hit cooldown and count cleared; the cooldown
+ * counts down to 0; the effect on odd frames before 16; on frames 4 to 29 while the cooldown is 0, a hitbox at point
+ * 5 (odd frames) or 12, its damage 0xC7AC1000 instead of 0x7AC0800 once the hit count reaches 2; before frame 31 an
+ * acceleration forward and an upward velocity of frame * 256, else a stop; dust before frame 3. */
 void Terriermon_special2(Terriermon *this, s32 frame) {
     Fight *fight;
     /* The match depends on pos declared before offset: their stack slots. */
@@ -222,22 +223,22 @@ void Terriermon_special2(Terriermon *this, s32 frame) {
     if (frame == 0) {
         Fighter_playVoice(&this->base, 0xFC);
         Fighter_playSound(&this->base, 0xF8);
-        this->unk4A4 = 0;
-        this->unk4A8 = 0;
+        this->hitCooldown = 0;
+        this->hitCount = 0;
     }
-    this->unk4A4--;
-    if (this->unk4A4 < 0) {
-        this->unk4A4 = 0;
+    this->hitCooldown--;
+    if (this->hitCooldown < 0) {
+        this->hitCooldown = 0;
     }
     odd = frame & 1;
     if (odd && frame < 16) {
         Terriermon_spawnSpecial2Effect(&this->base);
     }
-    if (frame < 30 && this->unk4A4 == 0 && frame >= 4) {
+    if (frame < 30 && this->hitCooldown == 0 && frame >= 4) {
         fight = Fighter_getScene(&this->base);
         memset(&offset, 0, sizeof(offset));
         damage = 0x7AC0800;
-        if (this->unk4A8 >= 2) {
+        if (this->hitCount >= 2) {
             damage = 0xC7AC1000;
         }
         /* The match depends on a child per branch: one shared variable takes $s0 before damage. */
@@ -286,22 +287,22 @@ void Terriermon_airSpecial2(Terriermon *this, s32 frame) {
     if (frame == 0) {
         Fighter_playVoice(&this->base, 0xFC);
         Fighter_playSound(&this->base, 0xF8);
-        this->unk4A4 = 0;
-        this->unk4A8 = 0;
+        this->hitCooldown = 0;
+        this->hitCount = 0;
     }
-    this->unk4A4--;
-    if (this->unk4A4 < 0) {
-        this->unk4A4 = 0;
+    this->hitCooldown--;
+    if (this->hitCooldown < 0) {
+        this->hitCooldown = 0;
     }
     odd = frame & 1;
     if (odd && frame < 16) {
         Terriermon_spawnSpecial2Effect(&this->base);
     }
-    if (frame < 30 && this->unk4A4 == 0) {
+    if (frame < 30 && this->hitCooldown == 0) {
         fight = Fighter_getScene(&this->base);
         memset(&offset, 0, sizeof(offset));
         damage = 0x7AC0800;
-        if (this->unk4A8 >= 2) {
+        if (this->hitCount >= 2) {
             damage = 0xC7AC1000;
         }
         /* The match depends on a child per branch: one shared variable takes $s0 before damage. */
@@ -419,7 +420,43 @@ void TerriermonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/terriermon", TerriermonSpecial2Hitbox_hit);
+/* The hit flash at the hitbox: a guard flash. */
+static inline Entity *TerriermonSpecial2Hitbox_newFlash(TerriermonSpecial2Hitbox *this) {
+    Entity *child = allocEntityMemory(0x58);
+
+    if (child != NULL) {
+        func_8006D4D4_initSized(entityOperatorNewAt(0x58, child), (VECTOR *)&this->position, 0x40, 0xA0A0A0);
+    }
+    return child;
+}
+
+/* The hit spark at the hitbox. */
+static inline Entity *TerriermonSpecial2Hitbox_newSpark(TerriermonSpecial2Hitbox *this) {
+    Entity *child = allocEntityMemory(0x48);
+
+    if (child != NULL) {
+        HitSpark_init(entityOperatorNewAt(0x48, child), &this->position, &ZERO_VECTOR, 0x80, 0x808080);
+    }
+    return child;
+}
+
+/* On a hit: Hit_apply, the owner's special 2 waits 6 frames before its next hitbox and counts the hit; a guard flash
+ * when it struck a guarding fighter, else a hit spark. */
+void TerriermonSpecial2Hitbox_hit(TerriermonSpecial2Hitbox *this, CollisionSphere *sum) {
+    Entity *target;
+
+    Hit_apply(&this->parts.base, sum);
+    target = sum->entity;
+    this->owner->hitCooldown = 6;
+    this->owner->hitCount++;
+    if (target != NULL && entityGetKind(target) == ENTITY_KIND_FIGHTER) {
+        entityAddSibling(&this->parts.entity, Fighter_isGuarding((Fighter *)target)
+                                                  ? TerriermonSpecial2Hitbox_newFlash(this)
+                                                  : TerriermonSpecial2Hitbox_newSpark(this));
+    } else {
+        entityAddSibling(&this->parts.entity, TerriermonSpecial2Hitbox_newSpark(this));
+    }
+}
 
 /* Deletes the hitbox at its first tick. */
 void TerriermonSpecial2Hitbox_tick(TerriermonSpecial2Hitbox *this, s32 arg) {
@@ -474,6 +511,23 @@ void TerriermonSpecial1Effect_tick(TerriermonSpecial1Effect *this, s32 arg) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/terriermon", TerriermonSpecial1Effect_draw);
 
+/* The special move 2's effect (TerriermonSpecial2Effect_init): a band of 8 quads between the newest and the oldest
+ * of four rings left by a growing, rising position, turned by angle. */
+typedef struct TerriermonSpecial2Effect {
+    /* 0x000 */ Entity entity;
+    /* 0x018 */ Fighter *fighter;
+    /* 0x01C */ SVECTOR band[8][2]; /* the newest ring's point and the oldest's, per step */
+    /* 0x09C */ Vec3 position;      /* vx is the ring's radius, vy its height */
+    /* 0x0A8 */ s32 unkA8;
+    /* 0x0AC */ VECTOR rings[4];    /* the last four positions, by frames & 3 */
+    /* 0x0EC */ MATRIX matrix;      /* the fighter's model matrix when made */
+    /* 0x10C */ s32 velocityY;      /* added to position.vy, falls by 4 a tick */
+    /* 0x110 */ s32 angle;          /* the band's turn (matrixRotateY) */
+    /* 0x114 */ s32 shade;
+    /* 0x118 */ s32 frames;         /* deleted at 16 */
+    /* 0x11C */ u16 vramY;
+} TerriermonSpecial2Effect;
+
 INCLUDE_ASM("game/nonmatchings/fighters/terriermon", TerriermonSpecial2Effect_init);
 
 /* The special move 2 effect's destructor. */
@@ -485,7 +539,55 @@ void TerriermonSpecial2Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/terriermon", TerriermonSpecial2Effect_tick);
+/* Sets one of the effect's rings (the match depends on the stores going through the ring's address). */
+static inline void setRing(VECTOR *ring, s32 x, s32 y, s32 z) {
+    ring->vx = x;
+    ring->vy = y;
+    ring->vz = z;
+}
+
+/* Sets a point of the band. The match depends on the s16 parameters: the narrowed products shift with srl. */
+static inline void setBandPoint(SVECTOR *point, s16 x, s16 y, s16 z) {
+    point->vx = x;
+    point->vy = y;
+    point->vz = z;
+}
+
+/* The special move 2 effect's tick: the ring grows by 0x20 and rises, the newest ring is stored and the band rebuilt
+ * between it and the ring of three ticks before, at 8 angles; turns and fades by 0x10, deleted at frame 16. The match
+ * depends on the parameter copied into this and on one index for the ring slot and the angle step. */
+void TerriermonSpecial2Effect_tick(Entity *entity) {
+    TerriermonSpecial2Effect *this = (TerriermonSpecial2Effect *)entity;
+    s32 oldest;
+    s32 i;
+    s32 newRadius, oldRadius;
+    s16 newY, oldY;
+    s32 sin;
+    s32 cos;
+
+    i = this->frames & 3;
+    oldest = (i - 3) & 3;
+    this->position.vx += 0x20;
+    this->position.vy += this->velocityY;
+    this->velocityY -= 4;
+    setRing(&this->rings[i], this->position.vx, this->position.vy, this->position.vz);
+    newRadius = this->rings[i].vx;
+    oldRadius = this->rings[oldest].vx;
+    newY = this->rings[i].vy;
+    oldY = this->rings[oldest].vy;
+    for (i = 0; i < 8; i++) {
+        sin = COS_SIN_TABLE[(i << 9) & 0xFFF].sin;
+        cos = COS_SIN_TABLE[(i << 9) & 0xFFF].cos;
+        setBandPoint(&this->band[i][0], (newRadius * sin) >> 12, newY, (newRadius * cos) >> 12);
+        setBandPoint(&this->band[i][1], (oldRadius * sin) >> 12, oldY, (oldRadius * cos) >> 12);
+    }
+    this->angle -= 0x10;
+    this->shade -= 0x10;
+    this->frames++;
+    if (this->frames >= 16) {
+        entityDelete(&this->entity);
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/terriermon", TerriermonSpecial2Effect_draw);
 

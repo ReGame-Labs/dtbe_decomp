@@ -54,3 +54,5 @@ func_800D5910 St07Board_init
 func_800D59B4 St07Board_destroy
 func_800D5A08 St07Board_tick
 func_800D5AFC St07Board_draw
+# r14 agent D
+func_800D3D58 st07_checkEnd

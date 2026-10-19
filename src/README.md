@@ -27,11 +27,11 @@ of `config/<version>/title.yaml` and `game.yaml`; each file's `.rodata` and
 | `boot_logo.c` | the boot logo |
 | `title_logo.c` | the title screen |
 | `main_menu.c` | the main menu |
-| `chara_select.c` | the character and stage selection |
-| `memory_card.c` | the memory card screens |
+| `chara_select.cpp` | the character and stage selection |
+| `memory_card.cpp` | the memory card screens |
 | `guide.c` | the guide: the minigames' explanations |
 | `ranking.c` | the ranking |
-| `name_entry.c` | the name entry, which the ranking and the options open |
+| `name_entry.cpp` | the name entry, which the ranking and the options open |
 | `credits.c` | the credits |
 | `title_chara.c` | the character model the character select and the guide show (boundary unproven) |
 | `option.cpp` | the options |

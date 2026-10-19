@@ -11,7 +11,8 @@ extern FaceEntry PATAMON_FACES[];
 extern EntityVtable D_8006A784;
 extern EntityVtable PATAMON_SPECIAL1_EFFECT_VTABLE;
 extern EntityVtable PATAMON_VTABLE;
-Entity *PatamonSpecial1Hitbox_init(Entity *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *unk228);
+struct PatamonSpecial1Hitbox *PatamonSpecial1Hitbox_init(struct PatamonSpecial1Hitbox *this, Fighter *fighter,
+                                                          Vec3 *position, VECTOR *velocity, Fight *fight);
 
 /* Builds Patamon: a Fighter with its own vtable and faces. */
 Patamon *Patamon_init(Patamon *this) {
@@ -158,7 +159,7 @@ void Patamon_spawnSpecial1Hitbox(Fighter *this) {
     s32 facing = Fighter_getFacing(this);
     Fight *unk228;
     Vec3 position;
-    Vec3 velocity;
+    VECTOR velocity;
     Entity *child;
 
     Fighter_getPosition(this, &position);
@@ -238,15 +239,74 @@ void func_800A1DFC(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/patamon", PatamonSpecial1Hitbox_init);
-
 /* The special move 1's hitbox (0xC8 bytes): while it lives its fighter's special1Active is set. */
 typedef struct PatamonSpecial1Hitbox {
     /* 0x00 */ UnkPartsEntity3C parts;
     /* 0x84 */ Patamon *fighter;
+    /* 0x88 */ VECTOR position;
+    /* 0x98 */ Vec3 velocity;
+    /* 0xA4 */ s32 velocityPad;
+    /* 0xA8 */ s32 ticks;
+    /* 0xAC */ s32 unkAC;  /* bit 0 once it stops hitting (tick 36, unkC2 -1 or a touch); bit 1 after a touch */
+    /* 0xB0 */ s32 unkB0; /* 0x100 at first */
+    /* 0xB4 */ s32 unkB4; /* 0xC0 at first */
+    /* 0xB8 */ s32 radius; /* the sphere's: grows by 0x33 to 0xC0 while it hits, then shrinks to its end */
+    /* 0xBC */ s32 unkBC;
+    /* 0xC0 */ s16 unkC0;
+    /* 0xC2 */ s16 unkC2;
+    /* 0xC4 */ u16 vramY; /* Fighter_getVramY of the fighter */
 } PatamonSpecial1Hitbox;
 
 extern EntityVtable PATAMON_SPECIAL1_HITBOX_VTABLE;
+
+/* Builds the special move 1 hitbox of fighter at position, moving by velocity: a sphere in its side's list of fight,
+ * hitting 0x7A81AA0 with a knockback of 64 times velocity's x and as much up; it sets the fighter's
+ * special1Active. */
+PatamonSpecial1Hitbox *PatamonSpecial1Hitbox_init(PatamonSpecial1Hitbox *this, Fighter *fighter, Vec3 *position,
+                                                  VECTOR *velocity, Fight *fight) {
+    VECTOR knockback;
+    s32 x, y, z;
+    s32 vx, vy, vz;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    this->parts.entity.vtable = &PATAMON_SPECIAL1_HITBOX_VTABLE;
+    TrackedHit_init(&this->parts.unk18, fighter, 0x7A81AA0, (Vec3 *)velocity, 0);
+    CollisionSphere_init(&this->parts.part, position, 0, &this->parts.unk18);
+    knockback = *velocity;
+    knockback.vx <<= 6;
+    knockback.vy = -abs(knockback.vx);
+    knockback.vz = 0;
+    Hit_setKnockback(&this->parts.unk18.base, &knockback);
+    this->parts.part.entity = &this->parts.entity;
+    this->fighter = (Patamon *)fighter;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    vx = velocity->vx;
+    vy = velocity->vy;
+    vz = velocity->vz;
+    this->ticks = 0;
+    this->unkAC = 0;
+    this->unkB0 = 0x100;
+    this->unkB4 = 0xC0;
+    this->radius = 0;
+    this->unkC0 = 0;
+    this->unkC2 = 0;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
+    this->vramY = Fighter_getVramY(fighter);
+    if (Fighter_getSide(&this->fighter->base) == 0) {
+        Fight_addSide0Shape(fight, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->parts.part.link);
+    }
+    this->fighter->special1Active = 1;
+    return this;
+}
 
 /* The special move 1 hitbox's destructor: clears the fighter's special1Active and calls its func_80079B0C(1). */
 void PatamonSpecial1Hitbox_destroy(PatamonSpecial1Hitbox *this, s32 flags) {
@@ -269,7 +329,67 @@ void PatamonSpecial1Hitbox_destroy(PatamonSpecial1Hitbox *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/patamon", PatamonSpecial1Hitbox_tick);
+struct PatamonSpecial1Effect *PatamonSpecial1Effect_init(struct PatamonSpecial1Effect *this, Vec3 *position);
+
+/* Moves by the velocity (braking x for its first 3 ticks). While it hits, its sphere follows it and grows; a touch, tick
+ * 36 or unkC2 -1 disables the sphere. Then it shrinks with an effect a tick and deletes itself once its radius is
+ * gone. */
+void PatamonSpecial1Hitbox_tick(PatamonSpecial1Hitbox *this) {
+    s32 x, y, z;
+    Entity *child;
+
+    /* The match depends on vecAddInPlace's shape: the position read whole, then added to, then stored. */
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    if (this->ticks < 3) {
+        this->velocity.vx -= this->velocity.vx >> 3;
+    }
+    if (this->ticks >= 36 || this->unkC2 == -1) {
+        this->unkAC |= 1;
+        this->parts.part.flags.bits.disabled = 1;
+    }
+    if (this->unkAC == 0) {
+        this->parts.part.radius = this->radius;
+        this->radius += 0x33;
+        /* The match depends on this copy reading its three words before any store, in its own scope. */
+        {
+            s32 px = this->position.vx;
+            s32 py = this->position.vy;
+            s32 pz = this->position.vz;
+
+            this->parts.part.position.vx = px;
+            this->parts.part.position.vy = py;
+            this->parts.part.position.vz = pz;
+        }
+        if (this->radius > 0xC0) {
+            this->radius = 0xC0;
+        }
+        if (this->parts.part.flags.bits.touched) {
+            this->parts.part.flags.bits.disabled = 1;
+            this->unkAC |= 3;
+        }
+    } else {
+        this->radius -= 0x33;
+        if (this->radius <= 0) {
+            entityDelete(&this->parts.entity);
+            return;
+        }
+        child = allocEntityMemory(0x4C);
+        if (child != NULL) {
+            PatamonSpecial1Effect_init(entityOperatorNewAt(0x4C, child), (Vec3 *)&this->position);
+        }
+        entityAddSibling(&this->parts.entity, child);
+    }
+    this->unkC0 = 1;
+    this->ticks++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/patamon", PatamonSpecial1Hitbox_draw);
 

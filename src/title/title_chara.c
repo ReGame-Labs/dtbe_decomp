@@ -8,6 +8,7 @@
 #include "engine/game/character.h"
 #include "engine/math/matrix.h"
 #include "engine/math/random.h"
+#include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
 #include "title/title_classes.h"
 
@@ -18,6 +19,8 @@ extern EntityVtable TITLE_CHARA_VTABLE;
 
 void TitleChara_startClip(TitleChara *this, s32 clip, s32 blendFrames, s32 plays);
 void TitleChara_setEyes(TitleChara *this, s32 index);
+void TitleChara_setMouth(TitleChara *this, s32 index);
+void TitleChara_tickBlink(TitleChara *this);
 
 /* The title character's constructor: loads character 0x18, makes its model in clip 0 and places it at
  * position, turned by rotation about x, y and z, to be drawn in camera. */
@@ -67,7 +70,52 @@ void TitleChara_destroy(TitleChara *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/title_chara", TitleChara_tick);
+/* The title character's tick: idle, starts the action asked for (its clip, eyes and mouth) and blinks;
+ * playing, a talk moves the mouth (a random picture every 4 frames) and blinks, and the action ends (back to
+ * idle) once its voice or, with none, its clip is done. */
+void TitleChara_tick(TitleChara *this) {
+    if (this->action == TITLE_CHARA_IDLE) {
+        if (this->nextAction == 9) {
+            TitleChara_startClip(this, 9, 20, 1);
+            this->action = 9;
+            TitleChara_setEyes(this, 3);
+        }
+        if (this->nextAction == 10) {
+            TitleChara_startClip(this, 10, 20, 1);
+            this->action = 10;
+            TitleChara_setEyes(this, 2);
+            TitleChara_setMouth(this, 5);
+        }
+        if (this->nextAction == 1) {
+            TitleChara_startClip(this, 1, 20, 0);
+            this->action = 1;
+            TitleChara_setEyes(this, 3);
+        }
+        if (this->nextAction == TITLE_CHARA_TALK) {
+            TitleChara_startClip(this, TITLE_CHARA_TALK, 20, 6);
+            this->action = TITLE_CHARA_TALK;
+            TitleChara_setEyes(this, 3);
+        }
+        TitleChara_tickBlink(this);
+    } else {
+        if (this->nextAction == TITLE_CHARA_TALK) {
+            if ((this->frame & 3) == 0) {
+                /* The match depends on the u16 cast (the game masks the picture with andi 0xFFFF). */
+                TitleChara_setMouth(this, (u16)abs((s32)mersenneTwisterGenerate(&RANDOM) % 5));
+            }
+            TitleChara_tickBlink(this);
+        }
+        if (this->voice != 0 ? !isSoundPlaying(this->voice) : modelIsStopped(this->model)) {
+            TitleChara_startClip(this, 0, 20, 0);
+            this->nextAction = TITLE_CHARA_IDLE;
+            this->action = TITLE_CHARA_IDLE;
+            TitleChara_setEyes(this, 0);
+            TitleChara_setMouth(this, 0);
+            this->voice = 0;
+        }
+    }
+    this->frame++;
+}
 
 /* Blinks: every second frame shows the next of the three eye pictures until three have shown, then waits 56 to
  * 176 frames (random, by 8) with the eyes open and starts over. */

@@ -67,6 +67,17 @@ typedef struct FighterParams {
 
 /* FighterParams.flags */
 #define FIGHTER_PARAM_EVOLVED 0x1 /* does not evolve: clear for exactly the ten characters that do */
+#define FIGHTER_PARAM_UNK1 0x2           /* sets Fighter.flags.unk1 (Fighter_setUp) */
+#define FIGHTER_PARAM_START_TURNED 0x4   /* starts at angle 0x800, half a turn (Fighter_setUp) */
+#define FIGHTER_PARAM_START_UNTURNED 0x8 /* starts at angle 0 (Fighter_setUp) */
+/* which way the pose of the round's end faces (Fighter_applyPose): its back or its front to the camera, else right
+ * or left */
+#define FIGHTER_PARAM_WIN_POSE_BACK 0x10
+#define FIGHTER_PARAM_WIN_POSE_FRONT 0x20
+#define FIGHTER_PARAM_END_POSE_BACK 0x40
+#define FIGHTER_PARAM_END_POSE_FRONT 0x80
+#define FIGHTER_PARAM_POSE_RIGHT 0x400
+#define FIGHTER_PARAM_POSE_LEFT 0x800
 
 /* the params of the characters, by CHARACTER_* */
 extern FighterParams FIGHTER_PARAMS[];
@@ -128,16 +139,24 @@ typedef struct TerrainProbe {
     /* 0x38 */ VECTOR localHit;   /* the crossing point */
     /* 0x48 */ VECTOR start;      /* the segment, in world space */
     /* 0x58 */ VECTOR end;
-    /* 0x68 */ VECTOR normal;     /* the hit line's, rotated by its link's matrix (func_80078254 dots it, vecDot12) */
+    /* 0x68 */ VECTOR normal;     /* the hit line's, rotated by its link's matrix (Fighter_landOnFloor dots it) */
     /* 0x78 */ MeshSceneLink *link; /* the link of COLLISION_LINKS hit last */
 } TerrainProbe;
 
 /* the list of the mesh scene links that have collision lines (COLLISION_LINKS) */
 ListNode *getCollisionLinks(void);
 
-/* CollisionShape's flags */
-#define COLLISION_SHAPE_DISABLED 0x1 /* collideShapes skips it; the debug draw tints it */
-#define COLLISION_SHAPE_TOUCHED 0x2  /* collideShapes ORs in whether it touched another */
+/* CollisionShape's flags: bit fields over one word (CollisionShape_setDisabled, collideShapes and the USA
+ * Fighter_updateModel store them the way only a bit field compiles) */
+typedef union CollisionShapeFlags {
+    u32 word; /* the constructors clear it */
+    struct {
+        u32 disabled : 1; /* collideShapes skips it; the debug draw tints it */
+        u32 touched : 1;  /* collideShapes ORs in whether it touched another */
+    } bits;
+} CollisionShapeFlags;
+
+#define COLLISION_SHAPE_TOUCHED 0x2 /* flags.bits.touched in flags.word */
 
 /* A collision sphere (virtual table COLLISION_SPHERE_VTABLE): its first 0x34 bytes are the CollisionShape it
  * derives from (the same fields), then a position and a radius; CollisionSphere_overlaps is its test. The hits
@@ -146,7 +165,7 @@ ListNode *getCollisionLinks(void);
 typedef struct CollisionSphere {
     /* 0x00 */ ListNode link;
     /* 0x08 */ void *owner;       /* its CollisionOwner: a Hit in game.bin, a StageHit in st00 */
-    /* 0x0C */ u32 flags;         /* COLLISION_SHAPE_* */
+    /* 0x0C */ CollisionShapeFlags flags;
     /* 0x10 */ s32 unk10;         /* the other's must be 0 for an overlap (a kind of shape?) */
     /* 0x14 */ Entity *entity;    /* the entity it belongs to (CollisionShape_setEntity) */
     /* 0x18 */ u32 hitDamage;     /* the damage of the hits added (HIT_DAMAGE_MASK, saturating) and their flags */
@@ -164,6 +183,27 @@ typedef struct MoveReward {
     /* 0x0 */ u16 score;
     /* 0x2 */ u16 gauge;
 } MoveReward;
+MoveReward *MoveReward_init(MoveReward *this);
+
+/* Fighter.flags: bit fields over one word (Fighter_updatePhysics stores them and reads dashing as only a bit field
+ * compiles: lbu for the top bit of the first byte). The USA release has one more bit (unk4) under frozen, so the
+ * bits from frozen on are one higher there. */
+typedef union FighterFlags {
+    u32 word;
+    struct {
+        u32 computer : 1;    /* GAME_STATE's side is the computer */
+        u32 unk1 : 1;        /* func_800777BC */
+        u32 onGround : 1;    /* Fighter_checkGround's result, each physics step */
+        u32 landed : 1;      /* Fighter_landOnFloor's result, each physics step (Fighter_isThrowable) */
+#if !VERSION_JP
+        u32 unk4 : 1;        /* runs the physics' floor steps off the ground too */
+#endif
+        u32 frozen : 1;      /* Fighter_freeze */
+        u32 unk80079AF8 : 1; /* func_80079AF8 sets it */
+        u32 unk80079AE4 : 1; /* func_80079AE4 sets it, func_8007782C takes it */
+        u32 dashing : 1;     /* set every frame of a dash; the physics step skips the friction and clears it */
+    } bits;
+} FighterFlags;
 
 /* The fighter of a side: the base class of the 24 fighters (virtual table FIGHTER_VTABLE, 0x4A4 bytes; the
  * fighters put their own fields from 0x4A4 on). createFighter builds one by CHARACTER_*; a side that can evolve
@@ -181,7 +221,7 @@ typedef struct Fighter {
     /* 0x230 */ FighterState *attackState;
     /* 0x234 */ struct InputHistory *input;
     /* 0x238 */ BattleSide *battleSide;      /* the side object, shared by both forms of the side */
-    /* 0x23C */ u8 unk23C[0x240 - 0x23C];
+    /* 0x23C */ s32 unk23C;
     /* 0x240 */ Entity *holder;               /* the entity of holderHandle (Fighter_attachToPart) */
     /* 0x244 */ u32 holderHandle;             /* the fighter the model is attached to (held), or 0 */
     /* 0x248 */ u32 unk248;                   /* the handle of the entity func_80079420 makes */
@@ -202,10 +242,10 @@ typedef struct Fighter {
     /* 0x340 */ s32 comboHits;
     /* 0x344 */ u8 unk344[0x348 - 0x344];
     /* 0x348 */ MoveReward rewards[13];       /* by MOVE_*, Fighter_setMoveReward */
-    /* 0x37C */ u32 flags;                    /* FIGHTER_FLAG_* */
+    /* 0x37C */ FighterFlags flags;
     /* 0x380 */ s32 airMovesUsed;             /* bits of the air moves made since the fighter left the ground */
     /* 0x384 */ Vec3 position;                /* in 1/256ths */
-    /* 0x390 */ u8 unk390[4];
+    /* 0x390 */ s32 positionPad;
     /* 0x394 */ Vec3 lastPosition;            /* before the last move (Fighter_move) */
     /* 0x3A0 */ u8 unk3A0[4];
     /* 0x3A4 */ Vec3 velocity;                /* added to the position every step */
@@ -215,9 +255,9 @@ typedef struct Fighter {
     /* 0x3C4 */ s32 mass;                     /* 16.16, the params' */
     /* 0x3C8 */ VECTOR unk3C8;                /* func_800A1160 interpolates it (Patamon) */
     /* 0x3D8 */ Vec3 rotation;                /* Fighter_updateRotation turns it toward targetRotation */
-    /* 0x3E4 */ u8 unk3E4[0x3E8 - 0x3E4];
+    /* 0x3E4 */ s32 rotationPad;
     /* 0x3E8 */ Vec3 targetRotation;          /* its vy is the facing: 0x401 right, -0x401 left */
-    /* 0x3F4 */ u8 unk3F4[0x3F8 - 0x3F4];
+    /* 0x3F4 */ s32 targetRotationPad;
     /* 0x3F8 */ Chara *chara;                 /* the model's files */
     /* 0x3FC */ Model *model;                 /* Fighter_setUp makes it with modelInit */
     /* 0x400 */ Lights lights;                /* the camera's (Fight_lightFighter) */
@@ -231,7 +271,7 @@ typedef struct Fighter {
     /* 0x464 */ TimedEffect itemEffect;       /* updateItemEffect runs it */
     /* 0x478 */ TimedEffect unk478;           /* func_800C99B0 runs it */
     /* 0x48C */ s32 unk48C;
-    /* 0x490 */ u8 unk490[0x494 - 0x490];
+    /* 0x490 */ s32 unk490;
     /* 0x494 */ s32 unk494;                   /* func_8007A12C sets it to 5 or clears it */
     /* 0x498 */ s32 invulnerableFrames;       /* after getting up or a respawn (Fighter_isInvulnerable) */
     /* 0x49C */ s32 unk49C;
@@ -240,10 +280,11 @@ typedef struct Fighter {
 
 /* the damage bits of a hit word; its flags are above them (bits 27 and 28: the guards that do not block it) */
 #define HIT_DAMAGE_MASK 0x3FFFF
+/* the flags of a hit word that FighterStateFlinch_init reads */
+#define HIT_FLAG_STUN 0x20000000       /* fills the side's stun count (func_8007F184) */
+#define HIT_FLAG_LAUNCH 0x40000000     /* flinches in the air (FighterStateAirFlinch_init) */
+#define HIT_FLAG_KNOCK_DOWN 0x80000000 /* knocks the fighter down (FighterStateDown_init) */
 
-/* Fighter.flags (the US build has one more bit above these two) */
-#define FIGHTER_FLAG_COMPUTER 0x1  /* GAME_STATE's side is the computer */
-#define FIGHTER_FLAG_ON_GROUND 0x4
 
 /* The states of a fighter: its body state and its attack state keep one each (Fighter_getBodyStateId,
  * Fighter_getAttackStateId); each sets it and calls its slot of FIGHTER_VTABLE every frame. */
@@ -302,6 +343,7 @@ enum FighterClip {
     FIGHTER_CLIP_GUARD = 0xC,
     FIGHTER_CLIP_FLINCH = 0xD,
     FIGHTER_CLIP_AIR_FLINCH = 0xE,
+    FIGHTER_CLIP_DIZZY = 0xF,
     FIGHTER_CLIP_KNOCKED_DOWN = 0x10,
     FIGHTER_CLIP_DOWN = 0x11,
     FIGHTER_CLIP_GET_UP = 0x12,
@@ -334,7 +376,8 @@ enum Move {
     MOVE_AIR_SIDE = 9,  /* (400) */
     MOVE_SPECIAL1 = 10, /* (100) */
     MOVE_SPECIAL2 = 11, /* (1000) */
-    MOVE_SPECIAL3 = 12  /* (3000) */
+    MOVE_SPECIAL3 = 12, /* (3000) */
+    MOVE_COUNT
 };
 
 /* adds amount to the side's 16.16 evolution gauge, kept between 0 and 1.0 */
@@ -347,6 +390,7 @@ void Fighter_setPosition(Fighter *fighter, Vec3 *position);
 Vec3 *Fighter_getPosition(Fighter *fighter, Vec3 *out);
 /* the fighter's params */
 FighterParams *Fighter_getParams(Fighter *this);
+s32 Fighter_getComboHits(Fighter *this);
 /* whether the fighter stands on the stage part that moves with matrix */
 s32 Fighter_isStandingOn(Fighter *fighter, MATRIX *matrix);
 void Fighter_requestEvolution(Fighter *this);
@@ -362,8 +406,8 @@ typedef struct Unk800AFD78 {
     /* 0x30 */ s32 unk30;
     /* 0x34 */ s32 unk34;
     /* 0x38 */ s32 unk38;
-    /* 0x3C */ s32 unk3C[8];
-    /* 0x5C */ s16 unk5C;
+    /* 0x3C */ s16 unk3C[8]; /* 0 to 2 at random every tick (func_800AFE3C) */
+    /* 0x4C */ s16 unk4C[9]; /* random offsets every tick, wider down the row (func_800AFE3C) */
     /* 0x5E */ s16 vramY; /* Fighter_getVramY of the character */
 } Unk800AFD78;
 
@@ -476,11 +520,21 @@ ParticleEmitter *func_800C6088(ParticleEmitter *this, s32 kind, Vec3 *pos, s32 s
 ParticleEmitter *ParticleBurst_init(ParticleEmitter *this, s32 kind, Vec3 *pos, s32 spread, s32 size, s32 count,
                                     s32 color);
 
+/* A row of a sprite animation table (PARTICLE_ANIMS, ITEM_PROJECTILE_PIECE_ANIMS): a strip of cells in VRAM. */
+typedef struct SpriteAnimRow {
+    /* 0x00 */ u16 x, y;                  /* the first cell */
+    /* 0x04 */ u16 cellWidth, cellHeight;
+    /* 0x08 */ u16 stripWidth;            /* past x + stripWidth the next cell is one row lower */
+    /* 0x0A */ s16 cellCount;             /* Particle_tick deletes the particle after this many cells */
+    /* 0x0C */ u32 stepMask;              /* Particle_tick steps a cell on the frames where age & stepMask is 0 */
+    /* 0x10 */ u16 clut, tpage;
+} SpriteAnimRow; /* size 0x14 */
+
 /* A particle's sprite animation (Particle 0x18): spriteAnimInit keeps its row of PARTICLE_ANIMS and the 0x100 bit
  * of the flags, spriteAnimRewind sets the first cell, spriteAnimStep the next one along the strip, and
  * spriteAnimFillShape makes a PolyFT4Shape of it. */
 typedef struct SpriteAnim {
-    /* 0x00 */ u16 *anim;  /* u16[10]: x, y, cell w, cell h, strip width, cell count, step mask, 0, clut, tpage */
+    /* 0x00 */ SpriteAnimRow *anim;
     /* 0x04 */ s16 flags;
     /* 0x06 */ s16 angle;
     /* 0x08 */ s32 size;   /* half the side of the square func_8009F120 draws */
@@ -500,6 +554,9 @@ typedef struct PolyFT4Shape {
     /* 0x20 */ u16 uv2, pad22;
     /* 0x24 */ u16 uv3, pad26;
 } PolyFT4Shape; /* size 0x28 */
+
+/* PolyFT4Shape's uv words as their u and v bytes: the type has them u16, and the game stores the bytes. */
+#define UV_BYTES(uv) ((u8 *)&(uv))
 
 /* A sprite particle (Particle_init, virtual table PARTICLE_VTABLE): steps its animation, drifts by its velocity
  * with 1/16 drag, and deletes itself after the animation's cells. */
@@ -522,7 +579,7 @@ typedef struct Unk8009F248 {
 /* the fighters with fields of their own past Fighter's (src/battle/fighters/) */
 typedef struct Gabumon {
     /* 0x000 */ Fighter base;
-    /* 0x4A4 */ s32 unk4A4;
+    /* 0x4A4 */ s32 special2Damage; /* the special move 2's next hit (Gabumon_special2) */
 } Gabumon;
 
 /* Patamon's class (CHARACTER_PATAMON). */
@@ -542,11 +599,11 @@ typedef struct Tailmon {
     /* 0x4A4 */ s16 unk4A4;
 } Tailmon;
 
-/* Terriermon's class (CHARACTER_TERRIERMON): special2 counts 0x4A4 down between its hitboxes. */
+/* Terriermon's class (CHARACTER_TERRIERMON). */
 typedef struct Terriermon {
     /* 0x000 */ Fighter base;
-    /* 0x4A4 */ s32 unk4A4;
-    /* 0x4A8 */ s32 unk4A8;
+    /* 0x4A4 */ s32 hitCooldown; /* frames before the special 2's next hitbox, 6 after a hit */
+    /* 0x4A8 */ s32 hitCount;    /* the special 2's hits; its damage grows from the second */
 } Terriermon;
 
 /* Wormmon's class (CHARACTER_WORMMON). */
@@ -588,7 +645,7 @@ typedef struct TrackedHit {
 typedef struct CollisionShape {
     /* 0x00 */ ListNode link;
     /* 0x08 */ void *owner;    /* its CollisionOwner: collideShapes calls its slot 0x08 with the other shape */
-    /* 0x0C */ u32 flags;      /* COLLISION_SHAPE_*: the constructors clear both */
+    /* 0x0C */ CollisionShapeFlags flags;
     /* 0x10 */ s32 unk10;
     /* 0x14 */ void *entity;   /* the entity it belongs to (CollisionShape_setEntity) */
     /* 0x18 */ u8 unk18[0x30 - 0x18]; /* CollisionSphere's hit fields */
@@ -599,6 +656,8 @@ typedef struct CollisionShape {
  * destructor install last; the one of Hit's base is COLLISION_OWNER_VTABLE
  * (battle/game.h) */
 extern VtableEntry COLLISION_SHAPE_VTABLE[];
+/* the virtual table of CollisionSphere (CollisionSphere_init, and Fighter_init's inlined constructor) */
+extern VtableEntry COLLISION_SPHERE_VTABLE[];
 
 /* Constructs a sphere of owner (a CollisionOwner) at position with radius. */
 CollisionSphere *CollisionSphere_init(CollisionSphere *this, Vec3 *position, s32 radius, void *owner);
@@ -644,13 +703,20 @@ typedef struct UnkPartsEntity3C {
     /* 0x3C */ CollisionSphere part;
 } UnkPartsEntity3C;
 
-/* The class that func_80097FA0 constructs (vtable D_80069A7C): an
- * UnkPartsEntity3C with a Fighter and a vector it hands to what it creates. */
+/* The class that func_80097FA0 constructs (vtable D_80069A7C, 0xB4 bytes): an UnkPartsEntity3C with a Fighter
+ * and a position it hands to what it creates. */
 typedef struct Unk80097FA0 {
     /* 0x00 */ UnkPartsEntity3C parts;
-    /* 0x84 */ Fighter *unk84;
-    /* 0x88 */ s32 unk88;
-    /* 0x8C */ Vec3 unk8C;
+    /* 0x84 */ Fighter *fighter;
+    /* 0x88 */ struct Fight *fight; /* the fighter's Fighter_getScene: its part goes into the side's list */
+    /* 0x8C */ Vec3 position;       /* 0x200 in front of the fighter and 0x140 up */
+    /* 0x98 */ s32 positionPad;
+    /* 0x9C */ s32 unk9C;           /* 0x133 at first */
+    /* 0xA0 */ s32 unkA0;
+    /* 0xA4 */ s32 unkA4;
+    /* 0xA8 */ s32 unkA8;           /* 1 at first */
+    /* 0xAC */ s32 unkAC;
+    /* 0xB0 */ s16 vramY;           /* Fighter_getVramY of the fighter */
 } Unk80097FA0;
 
 /* The classes func_800ACA60 and func_800AC470 construct (0xB0 bytes): parts that move from position by velocity
@@ -691,13 +757,13 @@ typedef struct Unk800AD050 {
 typedef struct GokumonSpecial1Hitbox {
     /* 0x00 */ UnkPartsEntity38 parts;
     /* 0x80 */ Fighter *owner;
-    /* 0x84 */ VECTOR unk84; /* Fighter_getNodePosition of the owner's point 5 */
-    /* 0x94 */ s32 unk94;
-    /* 0x98 */ s32 unk98;
-    /* 0x9C */ s32 unk9C;
-    /* 0xA0 */ s32 unkA0;
-    /* 0xA4 */ s32 unkA4;
-    /* 0xA8 */ s32 unkA8;
+    /* 0x84 */ VECTOR position; /* Fighter_getNodePosition of the owner's point 5 */
+    /* 0x94 */ s32 facing;      /* Fighter_getFacing of the owner */
+    /* 0x98 */ s32 size;        /* 0x40, eases toward 0x400 after 8 frames; half of it is the sphere's radius */
+    /* 0x9C */ s32 animFrame;   /* frames & 3 */
+    /* 0xA0 */ s32 brightness;  /* 0xFF, 12 less a frame from frame 31; the hitbox is deleted at 0 */
+    /* 0xA4 */ s32 frames;
+    /* 0xA8 */ s32 vramY;       /* Fighter_getVramY of the owner */
     /* 0xAC */ u32 soundHandle;
 } GokumonSpecial1Hitbox;
 
@@ -706,7 +772,10 @@ typedef struct GokumonSpecial3Hitbox {
     /* 0x000 */ UnkPartsEntity38 parts;
     /* 0x080 */ u8 unk80[0x280 - 0x80];
     /* 0x280 */ Fighter *owner;
-    /* 0x284 */ u8 unk284[0x2A8 - 0x284];
+    /* 0x284 */ Vec3 position; /* the owner's, while 0x29C is below 2 */
+    /* 0x290 */ u8 unk290[0x2A0 - 0x290];
+    /* 0x2A0 */ s32 pulses;    /* func_800C1180's so far: they cycle through D_8006CD70's three sizes */
+    /* 0x2A4 */ u8 unk2A4[0x2A8 - 0x2A4];
     /* 0x2A8 */ u32 soundHandle;
 } GokumonSpecial3Hitbox;
 
@@ -737,6 +806,7 @@ void Fighter_playActionClip(Fighter *this, s32 clip, s32 blendFrames, s32 frame,
  * blendFrames, and starts the clip only when Fighter_isActionClipDone allows it. */
 void Fighter_setClip(Fighter *this, s32 clip, s32 blendFrames, s32 frame);
 void func_80079AE4(Fighter *this);
+void func_80079AF8(Fighter *this);
 void Fighter_spawnDust(Fighter *this, s32 dir, s32 arg2, s32 count);
 void Fighter_dashLeft(Fighter *this, s32 frame);
 void Fighter_dashRight(Fighter *this, s32 frame);
@@ -767,7 +837,7 @@ s32 Fighter_playVoice(Fighter *this, s32 sound);
 s32 Fighter_playSound(Fighter *this, s32 sound);
 
 /* the constructor of a particle's sprite animation, and the setup of its motion */
-SpriteAnim *spriteAnimInit(SpriteAnim *this, u16 *anim, s32 flags);
+SpriteAnim *spriteAnimInit(SpriteAnim *this, SpriteAnimRow *anim, s32 flags);
 void Particle_setMotion(Particle *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color);
 void Particle_buildShape(Particle *this, PolyFT4Shape *shape, SVECTOR *corners);
 
@@ -782,23 +852,34 @@ void func_800A9998(Entity *this, s32 arg);
 /* the constructors the functions below call */
 Fighter *Fighter_init(Fighter *this);
 FighterState *FighterStateGround_init(FighterState *this, s32 arg);
-Entity *ThrowLaunch_init(Entity *this, Fighter *arg, Vec3 *vel, s32 arg3, s32 side);
+/* The entity class of ThrowLaunch_init (0x34 bytes, virtual table THROW_LAUNCH_VTABLE): it launches the thrower's
+ * opponent, and ThrowLaunch_tick hits it again with hit when it lands. */
+typedef struct ThrowLaunch {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ s32 targetHandle; /* entityGetHandle of the target */
+    /* 0x1C */ Fighter *target;  /* the thrower's opponent (Fighter_getOpponent) */
+    /* 0x20 */ Fighter *fighter; /* the thrower */
+    /* 0x24 */ s32 side;         /* over 0 the target faces left, else right */
+    /* 0x28 */ u32 hit;          /* the hit (Fighter_takeHit) when the target lands */
+    /* 0x2C */ s32 lastY;        /* the target's height */
+    /* 0x30 */ s32 delay;        /* ticks before ThrowLaunch_tick starts: 1 */
+} ThrowLaunch;
+ThrowLaunch *ThrowLaunch_init(ThrowLaunch *this, Fighter *fighter, Vec3 *vel, u32 hit, s32 side);
 void Projectile_hit(Projectile *this, CollisionSphere *sum);
 struct Imperialdramon *Imperialdramon_init(struct Imperialdramon *this);
 Entity *func_800BD490(Entity *this, Fighter *arg);
 struct Unk800BDA50 *func_800BDA50(struct Unk800BDA50 *this, Fighter *owner, Vec3 *pos, s32 arg3, s32 arg4);
 Particle *Particle_initById(Particle *this, s32 anim, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags);
-Entity *Sparkle_init(Entity *this, Vec3 *unk28, Vec3 *unk40, s32 unk20, u32 color, s32 unk18);
+Entity *Sparkle_init(Entity *entity, Vec3 *position, Vec3 *velocity, s32 size, u32 color, s32 anim);
 /* A point of the model a trail follows (Trail_init's table; Trail_setPoints copies up to 4, all but the pad): a
  * model node and an offset from it (Fighter_getNodePosition), and its color. */
 typedef struct TrailPoint {
     /* 0x00 */ s32 node;
-    /* 0x04 */ Vec3 offset;
-    /* 0x10 */ s32 offsetPad;
+    /* 0x04 */ VECTOR offset; /* copied whole by Trail_record; Trail_setPoints leaves its pad */
     /* 0x14 */ CVECTOR color;
 } TrailPoint;
 
-Entity *Trail_init(Entity *this, Fighter *arg, TrailPoint *entries, s32 count, s32 arg4, s32 arg5);
+Entity *Trail_init(Entity *entity, Fighter *fighter, TrailPoint *entries, s32 count, s32 length, s32 recordFrames);
 extern VtableEntry D_8006C9DC[];
 extern EntityVtable D_8006C9FC;
 extern EntityVtable HIT_SPARK_VTABLE;
@@ -870,6 +951,15 @@ typedef struct WarGreymon {
 
 WarGreymon *WarGreymon_init(WarGreymon *this);
 
+/* WarGreymon's virtual table: the fighter's and two slots of its own, which BlackWarGreymon's overrides. */
+typedef struct WarGreymonVtable {
+    /* 0x000 */ FighterVtable base;
+    /* 0x120 */ VtableEntry unk120; /* spawns an effect (func_800BC3C8) */
+    /* 0x128 */ VtableEntry unk128; /* (Vec3 *offset, s32 arg): spawns a hitbox (func_800BC7CC) */
+} WarGreymonVtable;
+
+#define GET_WARGREYMON_VTABLE(object) ((WarGreymonVtable *)(object)->base.entity.vtable)
+
 /* The flash of an evolution (TransformFlash_init, virtual table TRANSFORM_FLASH_VTABLE), for a side
  * (func_8007F7A0) at its fighter's position: in three phases its height eases from the fighter's to its other
  * form's (CHARA_OTHER_FORM), a burst follows, then it widens and fades. */
@@ -897,21 +987,35 @@ typedef struct Unk800AD5BC {
     /* 0x44 */ u32 unk44;
 } Unk800AD5BC;
 
+/* The class func_800A926C constructs (virtual table D_8006AEAC, D_8006AE8C for its Hit at 0x18) for a fighter at a
+ * position; func_800BE39C's derives from it. */
 typedef struct Unk800A9944 {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Hit unk18;
     /* 0x34 */ u8 unk34[0x38 - 0x34];
     /* 0x38 */ CollisionSphere unk38;
-    /* 0x80 */ u8 unk80[0xB4 - 0x80];
+    /* 0x80 */ struct Fighter *fighter;
+    /* 0x84 */ Vec3 position;
+    /* 0x90 */ u8 unk90[0x94 - 0x90];
+    /* 0x94 */ CVECTOR color;
+    /* 0x98 */ s16 unk98;
+    /* 0x9A */ s16 unk9A;
+    /* 0x9C */ s16 unk9C;
+    /* 0x9E */ s16 unk9E;
+    /* 0xA0 */ u16 clut;   /* in VRAM row vramY + 0xFD (0xFE in func_800BE39C's), x 0x1C0 */
+    /* 0xA2 */ s16 facing; /* Fighter_getFacing of the fighter */
+    /* 0xA4 */ u8 unkA4[0xB4 - 0xA4];
     /* 0xB4 */ s32 unkB4;
-    /* 0xB8 */ u8 unkB8[0xD4 - 0xB8];
-    /* 0xD4 */ u32 unkD4; /* a sound's handle (stopSound) */
+    /* 0xB8 */ u8 unkB8[0xD0 - 0xB8];
+    /* 0xD0 */ s32 vramY;  /* Fighter_getVramY of the fighter */
+    /* 0xD4 */ u32 unkD4;  /* a sound's handle (stopSound) */
 } Unk800A9944;
 
 /* Projectile_init constructs an entity for fighter at position, moving by
- * velocity; the other four arguments are set by the derived classes. */
-Projectile *Projectile_init(Projectile *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, s32 unkA8, u32 unk14,
-                            s32 unkB4, s32 unk1C);
+ * velocity: its hit deals damage of kind, its radius grows to maxRadius and it
+ * dies after travelling range. */
+Projectile *Projectile_init(Projectile *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, s32 maxRadius,
+                            u32 damage, s32 range, s32 kind);
 
 /* Returns the entity at 0x14 of arg when entityGetKind gives 0x10000 for it, else NULL. */
 Entity *getHitFighter(CollisionSphere *sum);
@@ -941,7 +1045,16 @@ typedef struct Unk800BDA50 {
     /* 0xCC */ s32 unkCC;
     /* 0xD0 */ s32 vramY; /* Fighter_getVramY of the character */
 } Unk800BDA50;
-Entity *func_800BE39C(Entity *this, s32 arg1, Vec3 *position, u32 arg3, s32 arg4, CVECTOR *arg5);
+
+/* The class func_800BE39C constructs (virtual table D_8006C9AC, and D_8006C98C for its base at 0x18),
+ * derived from func_800A926C's. */
+typedef struct Unk800BE39C {
+    /* 0x00 */ Unk800A9944 base;
+    /* 0xD8 */ s32 unkD8; /* func_800BE39C's fifth argument */
+    /* 0xDC */ s32 unkDC;
+} Unk800BE39C;
+
+Unk800BE39C *func_800BE39C(Unk800BE39C *this, s32 fighter, Vec3 *position, u32 damage, s32 arg4, CVECTOR *color);
 
 TerrainProbe *TerrainProbe_init(TerrainProbe *this);
 s32 TerrainProbe_cast(TerrainProbe *this, Vec3 *start, Vec3 *end);
@@ -975,8 +1088,13 @@ void Fighter_setFace(Fighter *this, s32 face);
 /* this->unk334 = arg */
 void func_80079B0C(Fighter *this, s32 arg);
 void Fighter_stopActionClip(Fighter *this);
+void Fighter_attachTo(Fighter *this, Fighter *holder, s32 index);
 void Fighter_detach(Fighter *this);
+void Fighter_spawnHitSpark(Fighter *this, s32 size);
 s32 BattleSide_canEvolve(BattleSide *this);
+void BattleSide_freeze(BattleSide *this);
+void BattleSide_takeDamage(BattleSide *this, s32 amount);
+void func_8007F730(BattleSide *this);
 BattleSide *func_8007758C(Fighter *this);
 void func_8007F1B8(BattleSide *this);
 FighterState *FighterAttackIdle_init(FighterState *this);
@@ -994,6 +1112,7 @@ void Fighter_guard(Fighter *this, s32 frame);
 void Fighter_crouchGuard(Fighter *this, s32 frame);
 void BattleSide_addLife(BattleSide *this, s32 amount);
 void BattleSide_addGauge(BattleSide *this, s32 amount);
+void BattleSide_unlinkCharacters(BattleSide *this);
 s32 FighterState_getClip(FighterState *this);
 void *FighterStateHeld_init(FighterState *this, s32 arg);
 ListNode *listAppend(ListNode *head, ListNode *node);
@@ -1004,6 +1123,10 @@ void BattleSide_tickGauges(BattleSide *this);
 void func_8007A158(Fighter *fighter, Fighter *other);
 
 void func_80079268(Fighter *fighter);
+void Fighter_requestWinPose(Fighter *this);
+void Fighter_addModelTo(Fighter *this, Group *group);
+void Fighter_removeModel(Fighter *this);
+void Fighter_freeze(Fighter *this);
 /* The battle's messages (BattleMessage_init's kind): each indexes BATTLE_MESSAGE_LAYOUTS, _TICKS and _DRAWS. */
 enum BattleMessageKind {
     BATTLE_MESSAGE_READY_FIGHT,    /* the round's call, READY? then FIGHT! */
@@ -1024,7 +1147,25 @@ enum BattleMessageKind {
 /* Constructs a battle message (a 0x59C-byte BattleMessage, hud.c) of a BATTLE_MESSAGE_* kind; character picks
  * the EVOLUTION message's palette. */
 Entity *BattleMessage_init(void *this, s32 kind, s32 character);
+/* The continue screen (ContinuePrompt_init, 0x2C bytes), which Fight_showContinue makes for the player's side:
+ * "CONTINUE?" and a countdown; START continues, at 0 it shows GAME OVER. */
+typedef struct ContinuePrompt {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ s32 side;           /* gameStateGetPlayerSide; also the pad port */
+    /* 0x1C */ s32 gameOverHandle; /* the GAME OVER message's handle, made when the countdown ends */
+    /* 0x20 */ s32 unk20;
+    /* 0x24 */ s32 framesLeft;     /* counts down a frame at a time; drawn in seconds (/ 30) */
+    /* 0x28 */ s32 unk28;
+} ContinuePrompt;
 
+/* Constructs the continue screen for side (hud.c). */
+ContinuePrompt *ContinuePrompt_init(ContinuePrompt *this, s32 side);
+
+/* Constructs the score tally (a 0x64-byte ScoreTally, hud.c) of side's won round. */
+struct ScoreTally;
+Entity *ScoreTally_init(struct ScoreTally *this, Fight *fight, s32 side);
+
+VECTOR *TerrainProbe_getNormal(TerrainProbe *this);
 Vec3 *TerrainProbe_getHitPoint(TerrainProbe *this, Vec3 *out);
 
 void Fight_freezeFighters(Fight *this);
@@ -1049,19 +1190,12 @@ s32 Fighter_isComputer(Fighter *this);
 
 s32 func_800777BC(Fighter *this);
 
-/* Bits of Fighter.flags, named after the functions that set them. The USA release has one more flag
- * below them, so each is one bit higher there. */
-#if VERSION_JP
-#define FIGHTER_FLAG_FROZEN_BIT 4
-#define FIGHTER_FLAG_80079AF8_BIT 5
-#define FIGHTER_FLAG_80079AE4_BIT 6
-#else
-#define FIGHTER_FLAG_FROZEN_BIT 5
-#define FIGHTER_FLAG_80079AF8_BIT 6
-#define FIGHTER_FLAG_80079AE4_BIT 7
-#endif
 
 s32 Fighter_isOnGround(Fighter *this);
+s32 Fighter_isModelStopped(Fighter *this);
+/* returns the flag bit func_80079AE4 sets, and clears it */
+s32 func_8007782C(Fighter *this);
+s32 Fighter_hasFloorAhead(Fighter *this, s32 distance);
 
 s32 Fighter_isAttackIdle(Fighter *this);
 
@@ -1115,6 +1249,7 @@ void Fighter_takeHit(Fighter *this, u32 unk, Vec3 *velocity, s32 unk3);
 void Hit_set(Hit *this, s32 damage, s32 kind);
 
 TrackedHit *TrackedHit_init(TrackedHit *this, Fighter *owner, s32 damage, Vec3 *knockback, s32 kind);
+s32 TrackedHit_hitFighter(TrackedHit *this);
 
 CollisionSphere *shapeListFindNearest(ListNode *list, Vec3 *point, Vec3 *nearest);
 
@@ -1124,9 +1259,18 @@ TransformFlash *TransformFlash_init(TransformFlash *this, BattleSide *owner);
  * makes one when an evolved form's gauge runs out). */
 typedef struct Unk800C4F74 {
     /* 0x000 */ Entity entity;
-    /* 0x018 */ u8 unk18[0x488 - 0x18];
+    /* 0x018 */ u8 unk18[0x1C - 0x18];
+    /* 0x01C */ BattleSide *owner;
+    /* 0x020 */ Vec3 position; /* the current fighter's point (func_8007A650) in func_800BA7AC */
+    /* 0x02C */ u8 unk2C[0x488 - 0x2C];
     /* 0x488 */ s32 unk488;
-    /* 0x48C */ u8 unk48C[0x4A8 - 0x48C];
+    /* 0x48C */ s32 unk48C;
+    /* 0x490 */ s32 unk490;
+    /* 0x494 */ s32 unk494;
+    /* 0x498 */ s32 unk498; /* a state in func_800BA7AC: 0, 1, 2 */
+    /* 0x49C */ s32 unk49C; /* + 1 a tick in func_800BA7AC */
+    /* 0x4A0 */ s32 unk4A0;
+    /* 0x4A4 */ u8 unk4A4[0x4A8 - 0x4A4];
 } Unk800C4F74;
 
 Unk800C4F74 *func_800C4F74(Unk800C4F74 *this, BattleSide *owner);
@@ -1139,10 +1283,22 @@ void InputHistory_startSearch(InputHistory *this, s32 frames);
 s32 InputHistory_findHeld(InputHistory *this, u32 buttons, s32 any);
 s32 InputHistory_findPresses(InputHistory *this, u32 buttons, s32 count, s32 any);
 void func_800797B8(Fighter *this, s32 clip);
+void func_8007F184(BattleSide *this);
 s32 func_8007F1C0(BattleSide *this);
 
 s32 Fighter_probeFloorBelow(Fighter *this);
 void func_8007A12C(Fighter *this, s32 arg);
+s32 func_8007AEA8(Fighter *this);
+void Fighter_updateBoxes(Fighter *this);
+void Fighter_updateFace(Fighter *this);
+void func_80077F80(Fighter *this);
+s32 Fighter_checkGround(Fighter *this);
+s32 Fighter_landOnFloor(Fighter *this);
+Vec3 *Fighter_getFriction(Fighter *this, Vec3 *out);
+FighterState *func_80080730(FighterState *this);
+void func_80078834(Fighter *this);
+void func_80078840(Fighter *this);
+FighterState *func_800807AC(FighterState *this);
 
 /* Creates an entity of ThrowLaunch_init's class (0x34 bytes) with g++'s new, and hands it to Fighter_addEntity: it
  * launches the Fighter of Fighter_getOpponent with vel. The match depends on this helper: its vel parameter keeps
@@ -1158,8 +1314,8 @@ static inline void newLaunch(Fighter *this, Vec3 *vel, s32 side) {
 
 void Projectile_tick(Projectile *this, s32 arg);
 
-Entity *createHitSpark(Entity *target, Vec3 *arg1, s32 arg2);
-void createItemSpawner(Fight *this, void *arg1, s32 arg2);
+Entity *createHitSpark(Entity *target, Vec3 *direction, s32 size);
+void createItemSpawner(Fight *this, void *spawnPoints, s32 maxItems);
 
 extern EntityVtable SPIN_PARTICLE_VTABLE;
 
@@ -1177,25 +1333,26 @@ static inline void func_8006D4D4_init(Entity *this, VECTOR *pos) {
     this->vtable = &D_8006D4D4;
 }
 
+/* The same with size and color (createParticle, createHitSpark). */
+static inline void func_8006D4D4_initSized(Entity *this, VECTOR *pos, s32 size, u32 color) {
+    Particle_initById((Particle *)this, 8, pos, &ZERO_VECTOR, size, color, 0);
+    this->vtable = &D_8006D4D4;
+}
+
 /* Imperialdramon's class (CHARACTER_IMPERIALDRAMON); ImperialdramonPaladinMode's is the same class with its own
  * vtable. The fields from 0x4A6 are the special move 3's hold (Imperialdramon_special3Hold). */
 typedef struct Imperialdramon {
     /* 0x000 */ Fighter base;
     /* 0x4A4 */ u16 unk4A4;          /* frame 0 of the hold clears it; while set the hold does not carry; set when a
-                                     * special 3 hitbox hits an unguarded fighter (ImperialdramonSpecial3Hitbox_hit) */
+                                     * special 3 hitbox hits an unguarded fighter (ImperialdramonSpecial3Hitbox_hit,
+                                     * ImperialdramonPaladinModeSpecial3Hitbox_hit, which then pushes only once) */
     /* 0x4A6 */ u16 special3Parts;   /* the attack parts of the hold's current hit (Fighter_setAttackParts) */
     /* 0x4A8 */ u16 holding;         /* set when the hold grabs the opponent (Fighter_hold) */
     /* 0x4AA */ u16 hitPending;      /* set by the hold's hits, cleared once their sparks are spawned */
     /* 0x4AC */ u16 special3Active;  /* set every frame of the hold; endMove lets the opponent go while it is set */
     /* 0x4AE */ s16 unk4AE;
-    /* 0x4B0 */ s32 unk4B0;
-    /* 0x4B4 */ s32 unk4B4;
-    /* 0x4B8 */ s32 unk4B8;
-    /* 0x4BC */ s32 unk4BC;
-    /* 0x4C0 */ s32 unk4C0;
-    /* 0x4C4 */ s32 unk4C4;
-    /* 0x4C8 */ s32 unk4C8;
-    /* 0x4CC */ s32 unk4CC;
+    /* 0x4B0 */ VECTOR carryPosition;     /* where the hold carries the opponent (func_8008DD50 returns it) */
+    /* 0x4C0 */ VECTOR carryLastPosition; /* carryPosition of the frame before */
     /* 0x4D0 */ Vec3 carryForce;     /* func_8008DD50 hands it to func_80079C1C as the force */
     /* 0x4DC */ s32 unk4DC;
     /* 0x4E0 */ Vec3 carryVelocity;  /* and this as the velocity */
@@ -1204,7 +1361,7 @@ typedef struct Imperialdramon {
 } Imperialdramon;
 
 void Imperialdramon_destroy(Entity *this, s32 flags);
-Particle *Particle_init(Particle *this, u16 *anim, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags);
+Particle *Particle_init(Particle *this, SpriteAnimRow *anim, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags);
 
 void Particle_tick(Particle *this, s32 arg);
 

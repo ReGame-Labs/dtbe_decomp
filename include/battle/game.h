@@ -6,10 +6,13 @@
 #include "common.h"
 #include "vtable.h"
 #include "engine/game/character.h"
+#include "engine/game/game_state.h"
 #include "engine/gfx/camera.h"
 #include "engine/gfx/look_at.h"
 #include "engine/gfx/mesh_scene.h"
+#include "engine/gfx/sprite.h"
 #include "engine/lib/list.h"
+#include "engine/math/lerp.h"
 #include "engine/math/random.h"
 #include "engine/system/thread.h"
 #include "engine/task/entity.h"
@@ -40,7 +43,9 @@ typedef struct Fight {
     /* 0x228 */ ListNode side1Shapes; /* the collision shapes of side 1's fighter */
     /* 0x230 */ ListNode side0Shapes;
     /* 0x238 */ ListNode stageShapes; /* the stage's and the items' */
-    /* 0x240 */ s32 wins[4]; /* the rounds won, by side; the constructor clears the four */
+    /* 0x240 */ s32 wins[2]; /* the rounds won, by side */
+    /* 0x248 */ s32 gauges[2]; /* the sides' evolution gauges between rounds (Fight_destroySides keeps them,
+                               * Fight_createSides gives them back) */
     /* 0x250 */ s32 winsNeeded;
     /* 0x254 */ s32 roundsLeft;
     /* 0x258 */ s32 unk258; /* Fight_setUpAngle's argument */
@@ -48,17 +53,28 @@ typedef struct Fight {
     /* 0x2A4 */ VECTOR unk2A4; /* (0, -0x1000, 0) through setTerrainUp (func_8006F1C4) */
     /* 0x2B4 */ u8 unk2B4[0x2B8 - 0x2B4];
     /* 0x2B8 */ s32 wipe; /* the screen wipe: from 0x20 down to -6 (Fight_wipeIn), from 0 up to 0x26 (Fight_wipeOut) */
+#if VERSION_JP
     /* 0x2BC */ s32 pauseCursor; /* 0 continue, 1 quit */
+#else
+    /* 0x2BC */ s16 pauseCursor; /* 0 continue, 1 quit; on pausePage 1, 0 no, 1 yes */
+    /* 0x2BE */ s16 pausePage;   /* 1 while the menu asks again before quitting */
+#endif
     /* 0x2C0 */ s32 pauseSide; /* the side that paused */
     /* 0x2C4 */ s32 pauseButtons; /* its pressed buttons */
     /* 0x2C8 */ u32 flags; /* FIGHT_FLAG_* */
-    /* 0x2CC */ u8 unk2CC[0x314 - 0x2CC];
+    /* 0x2CC */ s32 continueFrames;   /* the continue screen's frames: its eye turns 24 a frame (Fight_updateCamera) */
+    /* 0x2D0 */ Lerp continueDistance; /* the continue screen's eye distance from the fighter (Fight_showContinue) */
+    /* 0x2E4 */ Lerp continueTilt;     /* the continue screen's eye tilt (its x rotation) */
+    /* 0x2F8 */ s32 hasBackground; /* Fight_load sets it with the background; the bonus games and st01 clear it */
+    /* 0x2FC */ Sprite background; /* drawn behind the world (Fight_drawWorld) */
     /* 0x314 */ s32 arena; /* GAME_STATE.arena */
-    /* 0x318 */ u8 unk318[0x31C - 0x318];
+    /* 0x318 */ u32 unk318; /* bit 0: until the round is over, the fighters and the entities draw in camera with the
+                            * world, not in camera2 over it (st01 sets it, Fight_startRound clears it) */
     /* 0x31C */ Vec3 eye; /* Fight_updateCamera copies it into lookAt.eye */
     /* 0x328 */ u8 unk328[0x32C - 0x328];
-    /* 0x32C */ s32 unk32C; /* st01 sways it (st01_tickFallEvent) */
-    /* 0x330 */ u8 unk330[0x33C - 0x330];
+    /* 0x32C */ Vec3 target; /* Fight_updateCamera eases it between the fighters and copies it into lookAt.target;
+                              * st01 sways its x (st01_tickFallEvent) */
+    /* 0x338 */ u8 unk338[0x33C - 0x338];
     /* 0x33C */ s32 boundLeft; /* the arena's bounds (Fight_setBounds), the stages' constants */
     /* 0x340 */ s32 boundTop;
     /* 0x344 */ u8 unk344[0x34C - 0x344];
@@ -100,6 +116,9 @@ typedef struct Fight {
 
 /* the fight Fight_init constructed last */
 extern Fight *CURRENT_FIGHT;
+
+/* the join state of the pause (game_main's): Start on a side pauses, and the pause's side leaves it */
+extern JoinState PAUSE_JOIN;
 
 /* where each side's fighter stands, by arena and side: at the start of a round (Fight_startRound) and when it is
  * put back (Fight_respawnFighter) */
@@ -186,6 +205,14 @@ EntityGroup *func_8006F0E4(Fight *this, Entity *entity);
 s32 func_8006F104(Fight *this);
 s32 func_8006F144(Fight *this);
 s32 Fight_isRoundOver(Fight *this);
+void Fight_respawnFighter(Fight *this, s32 side);
+s32 Fight_getScore(Fight *this, s32 side);
+s32 Fight_getBonus(Fight *this, s32 side, s32 kind);
+void unlockBonusGame(s16 arena);
+s32 Fight_computeBonus(Fight *this, s32 side);
+s32 Fight_getWins(Fight *this, s32 side);
+void Fight_updatePauseMenu(Fight *this);
+void Fight_draw(Fight *this);
 s32 Fight_isContinueShown(Fight *this);
 MeshScene *Fight_getMeshScene(Fight *this);
 
@@ -195,13 +222,16 @@ void Fight_setBounds(Fight *this, s32 left, s32 right, s32 top, s32 bottom, s32 
 
 /* the virtual methods the stages override and call from theirs */
 void Fight_startRound(Fight *this);
+void Fight_createNodeEntities(Fight *this);
 void Fight_tick(Fight *this);
-void Fight_tickScenery(void);
+void Fight_tickScenery(Fight *this);
+void Fight_stopRound(Fight *this);
 void Fight_updateCamera(Fight *this);
 void Fight_drawWorld(void *this);
 
 /* whether the segment from from to to hits the map, moving to to the hit */
 s32 castMapRay(Vec3 *to, Vec3 *from);
+s32 func_80072FE0(Vec3 *start, Vec3 *end);
 
 /* integrates velocity by force over mass (divide16), setting move to the mean of the old and new velocity */
 void func_80079C1C(Vec3 *move, Vec3 *velocity, Vec3 *force, s32 mass);

@@ -29,6 +29,36 @@ typedef struct FontCache {
     /* 0x18 */ Font *font;
 } FontCache;
 
+EXTERN_C_END
+
+#ifdef __cplusplus
+
+/*
+ * Prints into an ordering table: the two-byte characters in the glyphs of
+ * the FontCache, the others in the 8 by 16 font in VRAM. The C files see it
+ * as the struct in the #else part.
+ */
+class TextPrinter : public Printer {
+public:
+    /* 0x0C */ u_long *ot; /* where the characters go */
+    /* 0x10 */ FontCache *cache;
+    /* 0x14 */ u32 color;       /* 0xBBGGRR */
+    /* 0x18 */ u32 shadowColor; /* 0xBBGGRR */
+    /* 0x1C */ s32 left; /* where a new line starts */
+    /* 0x20 */ s32 top;
+    /* 0x24 */ u32 shadow : 1; /* draw a shadow one pixel down and right */
+
+    TextPrinter(u_long *ot) __asm__("textPrinterInit");
+    void setShadow(s32 shadow) __asm__("textPrinterSetShadow");
+    void setShadowColor(u32 color) __asm__("textPrinterSetShadowColor");
+};
+
+/* A TextPrinter's setColor, inlined as the game has it (its virtual table read from the printer). */
+#define TEXT_SET_COLOR(printer, color) \
+    (printer).vtable->setColor.func((u8 *)&(printer) + (printer).vtable->setColor.delta, color)
+
+#else
+
 /* Prints into an ordering table: the two-byte characters in the glyphs of
  * the FontCache, the others in the 8 by 16 font in VRAM. */
 typedef struct TextPrinter {
@@ -41,6 +71,14 @@ typedef struct TextPrinter {
     /* 0x20 */ s32 top;
     /* 0x24 */ u32 shadow : 1; /* draw a shadow one pixel down and right */
 } TextPrinter;
+
+/* A TextPrinter's setColor, inlined as the game has it (its virtual table read from the printer). */
+#define TEXT_SET_COLOR(printer, color) \
+    (printer).printer.vtable->setColor.func((u8 *)&(printer) + (printer).printer.vtable->setColor.delta, color)
+
+#endif /* __cplusplus */
+
+EXTERN_C_BEGIN
 
 /* A SPRT_16 as words, to set it a word at a time. */
 typedef struct Sprt16Words {
@@ -103,10 +141,14 @@ void fontCacheLoadGlyph(FontCache *fontCache, s16 x, s16 y, u32 code);
 Font *fontInit(Font *font, u16 *data);
 void fontDestroy(Font *font, s32 flags);
 u8 *fontFindGlyph(Font *font, u16 code);
+#ifndef __cplusplus
 TextPrinter *textPrinterInit(TextPrinter *textPrinter, u_long *ot);
+#endif
 void textPrinterSetColor(TextPrinter *textPrinter, u32 color);
+#ifndef __cplusplus
 void textPrinterSetShadow(TextPrinter *textPrinter, s32 shadow);
 void textPrinterSetShadowColor(TextPrinter *textPrinter, u32 color);
+#endif
 void textPrinterPutChar(TextPrinter *textPrinter, s32 x, s32 y, u32 code);
 void textPrinterDrawKanji(TextPrinter *textPrinter, s32 x, s32 y, u32 code);
 void textPrinterDrawAscii(TextPrinter *textPrinter, s32 x, s32 y, u32 code);
@@ -115,7 +157,10 @@ void fontCacheDestroy(FontCache *fontCache, s32 flags);
 void textPrinterDestroy(TextPrinter *textPrinter, s32 flags);
 u_long *addNestedOt(u_long *ot, void *prim);
 s32 findCodeIndex(u16 *codes, s32 count, u16 code);
-void printerDestroy(Printer *printer, s32 flags);
+#ifndef __cplusplus
+/* Printer's destructor, by g++'s name for it */
+void printerDestroy(Printer *printer, s32 flags) __asm__("_._7Printer");
+#endif
 
 EXTERN_C_END
 

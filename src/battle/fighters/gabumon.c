@@ -40,7 +40,7 @@ Gabumon *Gabumon_init(Gabumon *this) {
     Fighter_init(&this->base);
     this->base.entity.vtable = &GABUMON_VTABLE;
     Fighter_setFaceTable(&this->base, GABUMON_FACES);
-    this->unk4A4 = 0;
+    this->special2Damage = 0;
     return this;
 }
 
@@ -149,7 +149,47 @@ void Gabumon_spawnSpecial1Projectile(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gabumon", Gabumon_special2);
+void Gabumon_spawnSpecial2Effect(Fighter *this);
+
+/* Special move 2, a rising attack: voice 0x86 at frame 0; at frame 6 a push forward and up, hits of kind 3 from damage
+ * 0x1D00 and its effect. From frame 6 a rise brakes along x; until frame 17, every 4 frames, part 0x80 hits with the
+ * force as knockback, its damage a quarter less when the last hit has no damage left. */
+void Gabumon_special2(Gabumon *this, s32 frame) {
+    s32 push;
+
+    Fighter_special2(&this->base, frame);
+    switch (frame) {
+    case 0:
+        Fighter_playVoice(&this->base, 0x86);
+        this->special2Damage = 0;
+        break;
+    case 6:
+        push = ((s64)this->base.mass * 0x238C) >> 16;
+        this->base.force.vx += push * Fighter_getFacing(&this->base);
+        this->special2Damage = 0x1D00;
+        this->base.hitKind = 3;
+        this->base.force.vy -= ((s64)this->base.mass * 0x7FF8) >> 16;
+        Gabumon_spawnSpecial2Effect(&this->base);
+        break;
+    }
+    if (frame >= 6) {
+        if (this->base.velocity.vy > 0) {
+            this->base.force.vx -= this->base.velocity.vx >> 3;
+        }
+        if (frame < 18) {
+            if (((frame - 6) & 3) == 0) {
+                if ((this->base.hitDamage & HIT_DAMAGE_MASK) == 0) {
+                    this->special2Damage -= this->special2Damage >> 2;
+                }
+                this->base.attackParts = 0x80;
+                this->base.hitDamage = this->special2Damage | 0x46AC0000;
+                this->base.hitKnockback = this->base.force;
+            }
+        } else {
+            this->base.attackParts = 0;
+        }
+    }
+}
 
 /* Spawns the special move 2's effect. */
 void Gabumon_spawnSpecial2Effect(Fighter *this) {

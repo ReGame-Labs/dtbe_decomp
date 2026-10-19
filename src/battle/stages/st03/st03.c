@@ -6,6 +6,8 @@
 #include "engine/gfx/lights.h"
 #include "engine/gfx/mesh_scene.h"
 #include "engine/gfx/prim/alloc_dr_load.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
 #include "engine/gfx/scene_graph.h"
 #include "engine/gfx/sprite.h"
 #include "engine/math/matrix.h"
@@ -22,8 +24,9 @@ typedef struct StageShrine {
     /* 0xD38 */ MeshSceneLink collisionLink; /* lines of the arena itself, in COLLISION_LINKS (StageShrine_init) */
     /* 0xD50 */ s32 liftRaised; /* while set, the lifts move out (St03Lift_moveOffset); func_800D878C reads it */
     /* 0xD54 */ u8 unkD54[0xD58 - 0xD54];
-    /* 0xD58 */ u8 unkD58; /* func_800D6A38 copies it */
-    /* 0xD59 */ u8 unkD59[0xD60 - 0xD59];
+    /* 0xD58 */ s32 brightness; /* 0x80, stepped down by 4 to 0x20 and back (StageShrine_tickScenery); the scenery
+                                 * entities shade by it */
+    /* 0xD5C */ u8 unkD5C[0xD60 - 0xD5C];
     /* 0xD60 */ Sprite sprite; /* the 0xA0 by 0xAE TIM image at (0x240, 0) of VRAM, dithered */
     /* 0xD78 */ Group group; /* drawn by St03GroupDrawer (st03_drawGroup) */
 } StageShrine;
@@ -342,7 +345,40 @@ void St03Lift_moveOffset(St03Lift *this, StageShrine *stage) {
     }
 }
 
-INCLUDE_ASM("st03/nonmatchings/st03", St03LiftPart_init);
+/* Constructs an St03LiftPart: an St03Lift whose St03Hit (damage 0x80004000, kind 10, knockback 0x38E0 up) is the
+ * owner of a sphere 0x62 under the lift's position. The match depends on the knockback and the centre being local
+ * Vec3s copied by struct assignment (the game stores them on the stack too). */
+St03LiftPart *St03LiftPart_init(St03LiftPart *this, MeshScene *meshScene, s32 node, Vec3 *pos) {
+    s32 x, y, z;
+    Vec3 knockback;
+    Vec3 center;
+
+    St03Lift_init(&this->base, meshScene, node, pos);
+    /* St03Hit_init(&this->unk40, 0x80004000, &ZERO_VECTOR, 10, 0), inline (the vector read before any store) */
+    this->unk40.base.vtable = ST03_HIT_VTABLE;
+    this->unk40.damage = 0x80004000;
+    this->unk40.kind = 10;
+    this->unk40.withEffect = 0;
+    x = ZERO_VECTOR.vx;
+    y = ZERO_VECTOR.vy;
+    z = ZERO_VECTOR.vz;
+    this->unk40.knockback.vx = x;
+    this->unk40.knockback.vy = y;
+    this->unk40.knockback.vz = z;
+    this->unk40.base.vtable = D_800D3C74;
+    this->base.entity.vtable = &ST03_LIFT_PART_VTABLE.entity;
+    CollisionSphere_init(&this->part, pos, 0, &this->unk40);
+    knockback.vx = 0;
+    knockback.vy = -0x38E0;
+    knockback.vz = 0;
+    this->unk40.knockback = knockback;
+    this->part.entity = &this->base.entity;
+    center.vx = this->base.position.vx;
+    center.vy = this->base.position.vy - 0x62;
+    center.vz = this->base.position.vz;
+    this->part.position = center;
+    return this;
+}
 
 void St03LiftPart_relink(St03LiftPart *this, StageShrine *stage);
 
@@ -506,11 +542,16 @@ void func_800D54F0(Unk800D5464 *this) {
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D5594);
 
-/* The entity func_800D5804 makes for a mesh of the stage (StageShrine_createNodeEntity), at position: StageMeshMover's
- * fields, and 0x10 at 0x34. */
+/* The entity func_800D5804 makes for a mesh of the stage (StageShrine_createNodeEntity), at position (StageMeshMover's
+ * layout): the mesh turned about x and spun about y, scaled up while the stage's liftRaised is 2 and down at 4
+ * (func_800D5880). */
 typedef struct Unk800D5804 {
-    /* 0x00 */ StageMeshMover base;
-    /* 0x34 */ s32 unk34;
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Mesh *mesh;
+    /* 0x1C */ VECTOR position;
+    /* 0x2C */ s32 scale; /* of the mesh: eases to 0x1000 at liftRaised 2, to 0 at 4 */
+    /* 0x30 */ s32 angle; /* about y */
+    /* 0x34 */ s32 spin;  /* angle's step: 0x10, up to 0x60 once scale passes 0xC00, down to 0 at liftRaised 4 */
 } Unk800D5804; /* size 0x38 */
 
 extern EntityVtable D_800D3BFC;
@@ -519,23 +560,56 @@ extern EntityVtable D_800D3BFC;
 Unk800D5804 *func_800D5804(Unk800D5804 *this, Mesh *mesh, Vec3 *pos) {
     s32 x, y, z;
 
-    entityInit(&this->base.entity, 0);
-    this->base.entity.vtable = &D_800D3BFC;
-    this->base.mesh = mesh;
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3BFC;
+    this->mesh = mesh;
     /* The match depends on reading the whole position before writing it (as vecCopy). */
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->base.position.vx = x;
-    this->base.position.vy = y;
-    this->base.position.vz = z;
-    this->base.motion = 0;
-    this->base.frame = 0;
-    this->unk34 = 0x10;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->scale = 0;
+    this->angle = 0;
+    this->spin = 0x10;
     return this;
 }
 
-INCLUDE_ASM("st03/nonmatchings/st03", func_800D5880);
+/* func_800D5804's tick: the mesh at position, scaled by scale, turned 0x40 about x and angle about y; angle steps by
+ * spin. At the stage's liftRaised 2 the scale eases an eighth of the way to 0x1000 and, past 0xC00, spin grows by 4 up
+ * to 0x60; at 4 spin falls by 2 down to 0 and the scale shrinks by a sixteenth. */
+void func_800D5880(Unk800D5804 *this, StageShrine *stage) {
+    Mesh *mesh = this->mesh;
+    MATRIX *matrix;
+    VECTOR scale;
+
+    /* The match depends on the scale going through a VECTOR: the game stores it on the stack and reads it back. */
+    scale.vx = this->scale;
+    scale.vy = this->scale;
+    scale.vz = this->scale;
+    meshSetPosition(mesh, &this->position);
+    matrix = &mesh->object.transform.local.m;
+    matrixScale(matrix, scale.vx, scale.vy, scale.vz);
+    matrixRotateX(matrix, 0x40);
+    matrixRotateY(matrix, this->angle);
+    this->angle += this->spin;
+    if (stage->liftRaised == 2) {
+        this->scale += (ONE - this->scale) >> 3;
+        if (this->scale > 0xC00) {
+            this->spin += 4;
+            if (this->spin >= 0x60) {
+                this->spin = 0x60;
+            }
+        }
+    } else if (stage->liftRaised == 4) {
+        this->spin -= 2;
+        this->scale += -this->scale >> 4;
+        if (this->spin <= 0) {
+            this->spin = 0;
+        }
+    }
+}
 
 extern EntityVtable D_800D3BD4;
 
@@ -940,7 +1014,7 @@ typedef struct Unk800D69C4 {
     /* 0x18 */ Vec3 position;
     /* 0x24 */ u8 unk24[0x2C - 0x24];
     /* 0x2C */ s32 unk2C;     /* how far it moves left each tick */
-    /* 0x30 */ u8 unk30;      /* the stage's 0xD58 */
+    /* 0x30 */ u8 brightness; /* the stage's, each tick: the quad's grey */
 } Unk800D69C4;
 
 extern EntityVtable D_800D3B84;
@@ -968,7 +1042,7 @@ Unk800D69C4 *func_800D69C4(Unk800D69C4 *this, Vec3 *pos) {
 void func_800D6A38(Unk800D69C4 *this, StageShrine *stage) {
     s32 x = this->position.vx - this->unk2C;
 
-    this->unk30 = stage->unkD58;
+    this->brightness = stage->brightness;
     this->position.vx = x;
     if (x <= -0x300) {
         this->position.vx = x + 0x600;
@@ -984,7 +1058,7 @@ void func_800D6C94(Unk800D69C4 *this, StageShrine *stage) {
     /* The match depends on the generator's address taken here, before the test. */
     MersenneTwister *random = &RANDOM;
 
-    this->unk30 = stage->unkD58;
+    this->brightness = stage->brightness;
     this->position.vx = x;
     if (x <= -0x1800) {
         s32 z;
@@ -1141,7 +1215,68 @@ INCLUDE_ASM("st03/nonmatchings/st03", func_800D7AC4);
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D7B58);
 
-INCLUDE_ASM("st03/nonmatchings/st03", func_800D7D88);
+/* The entity class func_800D7B58 constructs (virtual table D_800D3B0C): an St03Hit base at 0x18 and a sphere at
+ * 0x38 (CollisionSphere_init's class) that follows a point drifting toward its target, as high above it as height and
+ * as wide as life. */
+typedef struct Unk800D7B58 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ St03Hit unk18;
+    /* 0x34 */ u8 unk34[0x38 - 0x34];
+    /* 0x38 */ CollisionSphere unk38;
+    /* 0x80 */ s32 ticks;
+    /* 0x84 */ VECTOR position;
+    /* 0x94 */ VECTOR target;
+    /* 0xA4 */ s32 unkA4; /* 0..3 at random each tick */
+    /* 0xA8 */ s32 life;  /* the sphere's radius, 2 less per tick */
+    /* 0xAC */ s32 height; /* closes on 0x300 by a 16th per tick; above 0x400 the sphere is left out */
+    /* 0xB0 */ s32 timer;
+} Unk800D7B58;
+
+/* listRemove(&this->unk38.link), in the access order the game's compiler used (the match depends on it) */
+static inline void unk800D7B58SphereRemove(Unk800D7B58 *this) {
+    ListNode *link = &this->unk38.link;
+
+    this->unk38.link.next->prev = this->unk38.link.prev;
+    link->prev->next = this->unk38.link.next;
+    this->unk38.link.next = link;
+    this->unk38.link.prev = link;
+}
+
+/* Unk800D7B58's tick: the point drifts a 16th of the way to its target in x and z and height a 16th of the way to
+ * 0x300; while height is above 0x400 the sphere is out of the lists, else it moves height above the point with radius
+ * life and every eighth tick joins the stage's shapes (out of the lists the other ticks). The entity deletes itself
+ * when its life or its timer runs out. */
+void func_800D7D88(Unk800D7B58 *this, StageShrine *stage) {
+    VECTOR center;
+    ListNode *link;
+
+    this->position.vx += (this->target.vx - this->position.vx) >> 4;
+    this->position.vz += (this->target.vz - this->position.vz) >> 4;
+    this->height += (0x300 - this->height) >> 4;
+    this->unkA4 = mersenneTwisterGenerate(&RANDOM) & 3;
+    if (this->height > 0x400) {
+        unk800D7B58SphereRemove(this);
+    } else {
+        center = this->position;
+        center.vy -= this->height;
+        this->unk38.position.vx = center.vx;
+        this->unk38.position.vy = center.vy;
+        this->unk38.position.vz = center.vz;
+        this->unk38.radius = this->life;
+        /* The match depends on link taken here: the second remove shares it and is not merged with the first. */
+        link = &this->unk38.link;
+        this->ticks++;
+        if ((this->ticks & 7) == 0) {
+            Fight_addStageShape(&stage->base, link);
+        } else {
+            unk800D7B58SphereRemove(this);
+        }
+    }
+    this->life -= 2;
+    if (this->life <= 0 || --this->timer <= 0) {
+        entityDelete(&this->entity);
+    }
+}
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D7F20);
 
@@ -1153,10 +1288,10 @@ typedef struct Unk800D80DC {
     /* 0x18 */ u32 fighterHandle; /* the fighter's (entityGetHandle) */
     /* 0x1C */ Vec3 position; /* the character's, at construction */
     /* 0x28 */ u8 unk28[0x2C - 0x28];
-    /* 0x2C */ s32 unk2C;     /* Fighter_getParams's unk2 */
-    /* 0x30 */ s32 unk30;
-    /* 0x34 */ s32 unk34;
-    /* 0x38 */ s32 unk38; /* 0xFF at construction */
+    /* 0x2C */ s32 scale;      /* the character's height (Fighter_getParams), the square's scale */
+    /* 0x30 */ s32 frame;      /* 0, 1, 2: the picture's row */
+    /* 0x34 */ s32 angle;      /* random each tick, the square's turn about z */
+    /* 0x38 */ s32 brightness; /* 0xFF at construction, fades by 4 a tick */
 } Unk800D80DC;
 
 /* Constructs the stage's entity for a character: its handle, its position and a value of its record. */
@@ -1165,15 +1300,15 @@ Unk800D80DC *func_800D80DC(Unk800D80DC *this, Fighter *fighter) {
     this->entity.vtable = &D_800D3AE4;
     this->fighterHandle = entityGetHandle(&fighter->entity);
     func_8007A650(fighter, &this->position);
-    this->unk2C = Fighter_getParams(fighter)->height;
-    this->unk30 = 0;
-    this->unk34 = 0;
-    this->unk38 = 0xFF;
+    this->scale = Fighter_getParams(fighter)->height;
+    this->frame = 0;
+    this->angle = 0;
+    this->brightness = 0xFF;
     return this;
 }
 
-/* Follows the character: deletes itself once the character is gone or unk38 has faded out (4 a frame);
- * meanwhile takes the character's position, a new random unk34 and steps unk30 through 0, 1, 2. */
+/* Follows the character: deletes itself once the character is gone or brightness has faded out (4 a frame);
+ * meanwhile takes the character's position, a new random angle and steps frame through 0, 1, 2. */
 void func_800D8158(Unk800D80DC *this) {
     Fighter *fighter = (Fighter *)getEntityByHandle(this->fighterHandle);
 
@@ -1182,23 +1317,72 @@ void func_800D8158(Unk800D80DC *this) {
         return;
     }
     func_8007A650(fighter, &this->position);
-    this->unk34 = mersenneTwisterGenerate(&RANDOM);
-    this->unk30++;
-    if (this->unk30 >= 3) {
-        this->unk30 = 0;
+    this->angle = mersenneTwisterGenerate(&RANDOM);
+    this->frame++;
+    if (this->frame >= 3) {
+        this->frame = 0;
     }
-    this->unk38 -= 4;
-    if (this->unk38 <= 0) {
+    this->brightness -= 4;
+    if (this->brightness <= 0) {
         entityDelete(&this->entity);
     }
 }
 
-INCLUDE_ASM("st03/nonmatchings/st03", func_800D8224);
+extern SVECTOR D_800D3A88[4];
+
+/* Unk800D80DC's draw: the square of D_800D3A88 turned about z by angle and scaled by scale at the character's
+ * position, with frame's 32-pixel row of the 32 by 32 picture at (0xA0, 0) of the texture page at (512, 256) and
+ * the CLUT at (528, 504), semi-transparent in brightness grey. The match depends on the depth read first and the
+ * ordering table after the matrix's translation, on the matrix passed through one pointer, and on the shape's fields
+ * in this order with the uv bytes stored as chains. */
+void func_800D8224(Unk800D80DC *this, s32 arg) {
+    Camera *camera = (Camera *)arg;
+    s32 depth = camera->zShift + 1;
+    u_long *ot;
+    MatrixWords m;
+    MATRIX *matrix;
+    PolyFT4Shape shape;
+    Vec3 *position;
+    s32 x, y, z;
+    u8 v;
+
+    matrix = &m.m;
+    m.words[0] = ONE;
+    m.words[1] = 0;
+    m.words[2] = ONE;
+    m.words[3] = 0;
+    m.words[4] = ONE;
+    position = &this->position;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    ot = camera->ot.slots;
+    matrixSetRotationZ(matrix, this->angle);
+    matrixScale(matrix, this->scale, this->scale, this->scale);
+    setModelMatrix(matrix);
+    shape.corners[0] = &D_800D3A88[0];
+    shape.corners[1] = &D_800D3A88[1];
+    shape.corners[2] = &D_800D3A88[2];
+    shape.corners[3] = &D_800D3A88[3];
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0xA0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xBF;
+    shape.clut = getClut(528, 504);
+    shape.tpage = getTPage(0, 1, 512, 256);
+    shape.flags = SPRITE_SEMI_TRANS | 1;
+    shape.color = this->brightness | (this->brightness << 8) | (this->brightness << 16);
+    v = this->frame << 5;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = v;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = v + 0x1F;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, depth);
+}
 
 /* The entity class func_800D8374 constructs (virtual table D_800D3ABC). */
 typedef struct Unk800D8374 {
     /* 0x000 */ Entity entity;
-    /* 0x018 */ u8 unk18[0x114 - 0x18];
+    /* 0x018 */ u32 colors[9][7]; /* greys, by row and column: 0x80 at column 0 down to the stage's brightness */
     /* 0x114 */ s32 unk114;
     /* 0x118 */ Vec3 unk118;
 } Unk800D8374;
@@ -1216,7 +1400,25 @@ Unk800D8374 *func_800D8374(Unk800D8374 *this) {
     return this;
 }
 
-INCLUDE_ASM("st03/nonmatchings/st03", func_800D83C0);
+/* Unk800D8374's tick: each row of colors fades from grey 0x80 to the stage's brightness across its columns; unk114
+ * steps and unk118 adds its sine and cosine to vx and vy, and 1 to vz. */
+void func_800D83C0(Unk800D8374 *this, StageShrine *stage) {
+    s32 row;
+    s32 column;
+    s32 level;
+    s32 fade = 0x80 - stage->brightness;
+
+    for (row = 0; row < 9; row++) {
+        for (column = 0; column < 7; column++) {
+            level = 0x80 - column * fade / 6;
+            this->colors[row][column] = level | (level << 8) | (level << 16);
+        }
+    }
+    this->unk114++;
+    this->unk118.vx += COS_SIN_TABLE[this->unk114 & 0xFFF].sin;
+    this->unk118.vy += COS_SIN_TABLE[this->unk114 & 0xFFF].cos;
+    this->unk118.vz++;
+}
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D849C);
 
@@ -1448,27 +1650,10 @@ void func_800D8C74(Unk800D7534 *this, s32 flags) {
     }
 }
 
-/* The entity class func_800D7B58 constructs (virtual table D_800D3B0C): an
- * St03Hit base at 0x18 and a member of CollisionSphere_init's class at 0x38. */
-typedef struct Unk800D7B58 {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ St03Hit unk18;
-    /* 0x34 */ u8 unk34[0x38 - 0x34];
-    /* 0x38 */ CollisionShape unk38;
-} Unk800D7B58;
-
 /* Unk800D7B58's destructor: its member's and its base's inlined, then entityDestroy. */
 void func_800D8D24(Unk800D7B58 *this, s32 flags) {
-    ListNode *link;
-
     this->unk38.vtable = COLLISION_SHAPE_VTABLE;
-    /* listRemove(&this->unk38.link) written out: the match depends on this
-     * access order (soundControlDestroy's), as in st04's func_800D8618 */
-    link = &this->unk38.link;
-    this->unk38.link.next->prev = this->unk38.link.prev;
-    link->prev->next = this->unk38.link.next;
-    this->unk38.link.next = link;
-    this->unk38.link.prev = link;
+    unk800D7B58SphereRemove(this);
     this->unk18.base.vtable = COLLISION_OWNER_VTABLE;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {

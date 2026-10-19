@@ -184,6 +184,13 @@ D_80068E6C HOLYDRAMON_SPECIAL1_EFFECT_VTABLE
 func_8008B1F8 HolydramonSpecial1Effect_tick
 func_8008B25C HolydramonSpecial1Effect_draw
 func_8008B1A4 HolydramonSpecial1Effect_destroy
+func_8008A91C Holydramon_spawnSpecial3Effect
+func_8008B62C HolydramonSpecial3Effect_init
+Unk8008B62C HolydramonSpecial3Effect
+D_80068DAC HOLYDRAMON_SPECIAL3_EFFECT_VTABLE
+func_8008B6FC HolydramonSpecial3Effect_tick
+func_8008B860 HolydramonSpecial3Effect_draw
+func_8008B6A8 HolydramonSpecial3Effect_destroy
 func_8008C20C HolydramonSpecial2Hitbox_init
 Unk8008C20C HolydramonSpecial2Hitbox
 D_80068E44 HOLYDRAMON_SPECIAL2_HITBOX_VTABLE
@@ -859,6 +866,7 @@ func_800BCFBC WarGreymonSpecial1Effect_tick
 func_800BD07C WarGreymonSpecial1Effect_draw
 func_800BEE94 WarGreymonSpecial1Effect_destroy
 func_800BB2B8 WarGreymon_spawnAttackTrails
+func_800BC444 WarGreymon_readAimAngle
 
 # blackwargreymon.c (CHARACTER_BLACKWARGREYMON, createFighter case 23; its class derives from WarGreymon's: vtable
 # D_8006D044 keeps eleven of WarGreymon's methods, which keep WarGreymon's names; only its own five are named here)
@@ -915,3 +923,6 @@ func_800BF3B8 Gokumon_getAttackTrailColor
 func_800BF3F0 Gokumon_getSpecialTrailColor
 D_8006CF74 GOKUMON_ATTACK_TRAIL_COLORS
 D_8006CF7C GOKUMON_SPECIAL_TRAIL_COLORS
+func_800BB5F8 WarGreymon_holdOpponent
+D_8006C8A4 WARGREYMON_THROW_GRIP_OFFSET
+func_800A3C98 Renamon_swapWithOpponent

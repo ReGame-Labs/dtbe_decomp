@@ -8,16 +8,21 @@
 #include "engine/gfx/prim_buffer.h"
 #include "engine/gfx/camera.h"
 #include "engine/math/matrix.h"
+#include "engine/math/random.h"
+#include "engine/math/sin_cos.h"
 #include "gte.h"
 
 struct Unk800971E0 *func_800971E0(struct Unk800971E0 *this, Fighter *fighter, s32 arg2, Fight *fight);
-Entity *BeelzebumonSpecial2Hitbox_init(Entity *this, Fighter *fighter, Fight *fight, s32 side);
+struct BeelzebumonSpecial2Hitbox *BeelzebumonSpecial2Hitbox_init(struct BeelzebumonSpecial2Hitbox *this,
+                                                                 Fighter *fighter, Fight *fight, s32 facing);
 struct BeelzebumonSpecial1Projectile *BeelzebumonSpecial1Projectile_init(struct BeelzebumonSpecial1Projectile *this,
                                                                          Fighter *owner, Fight *fight, VECTOR *pos,
                                                                          VECTOR *vel);
 struct Unk80096F6C *func_80096F6C(struct Unk80096F6C *this, Fighter *fighter);
-Entity *func_80097FA0(Entity *this, Fighter *arg, Fight *arg2);
+Unk80097FA0 *func_80097FA0(Unk80097FA0 *this, Fighter *fighter, Fight *fight);
 struct Unk80098720 *func_80098720(struct Unk80098720 *this, Fighter *fighter, Vec3 *position);
+struct Unk80098A78 *func_80098A78(struct Unk80098A78 *this, Fighter *fighter, Fight *fight, Vec3 *position,
+                                 VECTOR *velocity);
 extern VECTOR D_80069964;
 extern EntityVtable BEELZEBUMON_SPECIAL3_EFFECT_VTABLE;
 extern EntityVtable D_80069A04;
@@ -37,7 +42,6 @@ typedef struct Beelzebumon {
     /* 0x4A8 */ s32 unk4A8;
     /* 0x4AC */ s32 unk4AC; /* Beelzebumon_endMove sets it */
 } Beelzebumon;
-Entity *func_80098A78(Entity *this, Fighter *fighter, Fight *unk228, Vec3 *position, Vec3 *velocity);
 
 /* Builds Beelzebumon: a Fighter with its own vtable. */
 Beelzebumon *Beelzebumon_init(Beelzebumon *this) {
@@ -109,9 +113,75 @@ void Beelzebumon_spawnThrowEffect(Fighter *this, s32 arg) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", Beelzebumon_special1);
+void func_800955D4(Fighter *this, s32 arg);
+void Beelzebumon_spawnSpecial1Projectile(Fighter *this);
+void func_80095714(Fighter *this);
+void func_800957C0(Fighter *this);
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", Beelzebumon_airSpecial1);
+/* Special move 1: Fighter's; the voice at frame 0, func_800955D4(16) at frame 4, func_80095714 at frame 7, the
+ * projectile and func_800957C0 at frame 12, a recoil back at frame 13 when there is floor behind; from frame 14 the
+ * horizontal velocity is braked by a quarter, with dust until frame 16. */
+void Beelzebumon_special1(Fighter *this, s32 frame) {
+    Fighter_special1(this, frame);
+    if (frame == 0) {
+        Fighter_playVoice(this, 0xB3);
+    }
+    if (frame == 4) {
+        func_800955D4(this, 16);
+    }
+    if (frame == 7) {
+        func_80095714(this);
+    }
+    if (frame == 12) {
+        Beelzebumon_spawnSpecial1Projectile(this);
+        func_800957C0(this);
+    }
+    if (frame == 13 && Fighter_hasFloorAhead(this, -0x100) == 1) {
+        s32 push = ((s64)this->mass * 0x238C) >> 16;
+
+        this->force.vx -= push * Fighter_getFacing(this);
+    }
+    if (frame >= 14) {
+        this->force.vx = ((s64)this->velocity.vx * -0x400) >> 12;
+        if (frame < 17) {
+            Fighter_spawnDust(this, 1, 0x60, 2);
+        }
+    }
+}
+
+/* Special move 1 in the air: Fighter's; the voice at frame 0, func_800955D4(16) at frame 5, func_80095714 at frame 9,
+ * the projectile and func_800957C0 at frame 14; until then the horizontal velocity loses a sixteenth a frame and a
+ * fall is braked; a recoil back at frame 15, then the horizontal velocity is braked by a fifth. */
+void Beelzebumon_airSpecial1(Fighter *this, s32 frame) {
+    Fighter_airSpecial1(this, frame);
+    if (frame == 0) {
+        Fighter_playVoice(this, 0xB3);
+    }
+    if (frame == 5) {
+        func_800955D4(this, 16);
+    }
+    if (frame == 9) {
+        func_80095714(this);
+    }
+    if (frame == 14) {
+        Beelzebumon_spawnSpecial1Projectile(this);
+        func_800957C0(this);
+    }
+    if (frame < 15) {
+        this->force.vx -= this->velocity.vx >> 4;
+        if (this->velocity.vy > 0) {
+            this->force.vy -= this->velocity.vy;
+        }
+    }
+    if (frame == 15) {
+        s32 push = ((s64)this->mass * 0x38E0) >> 16;
+
+        this->force.vx -= push * Fighter_getFacing(this);
+    }
+    if (frame >= 16) {
+        this->force.vx = ((s64)this->velocity.vx * -0x333) >> 12;
+    }
+}
 
 /* Creates func_800971E0's entity (0x30 bytes) for the character with arg, and hands it to
  * Fighter_addEntity. */
@@ -185,6 +255,9 @@ void func_800957C0(Fighter *this) {
 
 void Beelzebumon_spawnSpecial2Hitbox(Fighter *this);
 void Beelzebumon_spawnSpecial2Particle(Fighter *this);
+struct BeelzebumonSpecial2Particle *BeelzebumonSpecial2Particle_init(struct BeelzebumonSpecial2Particle *this,
+                                                                     Fighter *fighter, VECTOR *pos, VECTOR *vel,
+                                                                     s32 angle);
 
 /* Special move 2: Fighter's, with the voice at frame 0, the hitbox at frame 7 and 20 particles at frame 14. */
 void Beelzebumon_special2(Fighter *this, s32 frame) {
@@ -216,7 +289,42 @@ void Beelzebumon_spawnSpecial2Hitbox(Fighter *this) {
     Fighter_playSound(this, 0xAF);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", Beelzebumon_spawnSpecial2Particle);
+/* Spawns one of the special move 2's particles 0x180 to 0x27F from the fighter (0x140 lower, at z 0), at a random
+ * angle within a quarter turn from 0x380 (from 0x880 when it faces left), moving outward at 1/256 of the unit. */
+void Beelzebumon_spawnSpecial2Particle(Fighter *this) {
+    VECTOR position;
+    VECTOR velocity;
+    Fight *fight;
+    Entity *child;
+    u32 spread;
+    s32 angle;
+    s32 distance;
+    s16 sin;
+    s16 cos;
+
+    fight = Fighter_getScene(this);
+    spread = mersenneTwisterGenerate(&fight->random);
+    if (Fighter_getFacing(this) > 0) {
+        angle = (spread & 0x3FF) + 0x380;
+    } else {
+        angle = ((spread & 0x3FF) + 0x880) & 0xFFF;
+    }
+    distance = (mersenneTwisterGenerate(&fight->random) & 0xFF) + 0x180;
+    sin = COS_SIN_TABLE[angle].sin;
+    cos = COS_SIN_TABLE[angle].cos;
+    Fighter_getPosition(this, (Vec3 *)&position);
+    position.vx += (distance * sin) >> 12;
+    position.vy += ((distance * cos) >> 12) - 0x140;
+    position.vz = 0;
+    velocity.vx = sin >> 8;
+    velocity.vy = cos >> 8;
+    velocity.vz = 0;
+    child = allocEntityMemory(0x5C);
+    if (child != NULL) {
+        BeelzebumonSpecial2Particle_init(entityOperatorNewAt(0x5C, child), this, &position, &velocity, angle);
+    }
+    Fighter_addEntity(this, child);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", Beelzebumon_special3);
 
@@ -238,7 +346,7 @@ void func_80095CB4(Fighter *this) {
     s32 facing = Fighter_getFacing(this);
     Fight *unk228;
     Vec3 position;
-    Vec3 velocity;
+    VECTOR velocity;
     Entity *child;
 
     Fighter_getPosition(this, &position);
@@ -569,7 +677,7 @@ typedef struct Unk80096F6C {
     /* 0x58 */ s32 facing; /* Fighter_getFacing of the character */
 } Unk80096F6C;
 
-extern u16 D_80069984[];
+extern SpriteAnimRow D_80069984;
 extern EntityVtable D_80069B1C;
 extern VECTOR D_80069998;
 
@@ -579,7 +687,7 @@ INCLUDE_RODATA("game/nonmatchings/fighters/beelzebumon", D_80069998);
 /* Constructs the sprite of D_80069B1C for a character: Particle_init with frame D_80069984, no motion, size
  * 0x33, color 0x646464 and the character's 0x440 (Fighter_getVramY) as flags. */
 Unk80096F6C *func_80096F6C(Unk80096F6C *this, Fighter *fighter) {
-    Particle_init(&this->base, D_80069984, &ZERO_VECTOR, &ZERO_VECTOR, 0x33, 0x646464,
+    Particle_init(&this->base, &D_80069984, &ZERO_VECTOR, &ZERO_VECTOR, 0x33, 0x646464,
                   Fighter_getVramY(fighter));
     this->base.entity.vtable = &D_80069B1C;
     Fighter_getNodePosition(fighter, &this->base.sprite.position, 6, &D_80069998);
@@ -694,7 +802,51 @@ void func_800975D0(Unk800971E0 *this, SVECTOR *out, VECTOR *from, VECTOR *to, s3
     out->vz = from->vz + (((to->vz - from->vz) * t) >> 12);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", BeelzebumonSpecial2Hitbox_init);
+/* The special move 2's hitbox (Beelzebumon_spawnSpecial2Hitbox). */
+typedef struct BeelzebumonSpecial2Hitbox {
+    /* 0x00 */ UnkPartsEntity3C parts;
+    /* 0x84 */ Fighter *fighter;
+    /* 0x88 */ Fight *fight;
+    /* 0x8C */ s32 facing; /* Fighter_getFacing of the fighter when spawned */
+    /* 0x90 */ s32 unk90;
+    /* 0x94 */ s32 unk94;
+    /* 0x98 */ s32 unk98;
+    /* 0x9C */ s32 unk9C;
+    /* 0xA0 */ s16 vramY;  /* Fighter_getVramY of the fighter */
+} BeelzebumonSpecial2Hitbox; /* size 0xA4 */
+
+/* Builds the special move 2's hitbox for fighter: a disabled 0x140 sphere (damage 0x44AC2800, knockback facing * 2
+ * and up by 1) on fighter's side of fight. */
+BeelzebumonSpecial2Hitbox *BeelzebumonSpecial2Hitbox_init(BeelzebumonSpecial2Hitbox *this, Fighter *fighter,
+                                                          Fight *fight, s32 facing) {
+    VECTOR knockback;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    this->parts.entity.vtable = &BEELZEBUMON_SPECIAL2_HITBOX_VTABLE;
+    /* ZERO_VECTOR is a VECTOR; only its first three words are read here */
+    TrackedHit_init(&this->parts.unk18, fighter, 0x44AC2800, (Vec3 *)&ZERO_VECTOR, 2);
+    CollisionSphere_init(&this->parts.part, (Vec3 *)&ZERO_VECTOR, 0x140, &this->parts.unk18);
+    knockback.vx = facing * 2;
+    knockback.vy = -1;
+    knockback.vz = 0;
+    Hit_setKnockback(&this->parts.unk18.base, &knockback);
+    this->parts.part.flags.bits.disabled = 1;
+    this->parts.part.entity = &this->parts.entity;
+    this->fighter = fighter;
+    this->fight = fight;
+    this->facing = facing;
+    this->unk90 = 0xFA;
+    this->unk94 = 0x533;
+    this->unk98 = 0x100;
+    this->unk9C = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    if (Fighter_getSide(this->fighter) == 0) {
+        Fight_addSide0Shape(fight, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->parts.part.link);
+    }
+    return this;
+}
 
 /* The special move 2 hitbox's destructor. */
 void BeelzebumonSpecial2Hitbox_destroy(UnkPartsEntity3C *this, s32 flags) {
@@ -727,9 +879,9 @@ typedef struct BeelzebumonSpecial2Particle {
 
 extern EntityVtable BEELZEBUMON_SPECIAL2_PARTICLE_VTABLE;
 
-/* Builds a special move 2 particle: Particle_initById with cell 9 at pos moving by vel, size 2, then the angle (arg1 is
- * not read). */
-BeelzebumonSpecial2Particle *BeelzebumonSpecial2Particle_init(BeelzebumonSpecial2Particle *this, s32 arg1,
+/* Builds a special move 2 particle: Particle_initById with cell 9 at pos moving by vel, size 2, then the angle (the
+ * fighter is not read). */
+BeelzebumonSpecial2Particle *BeelzebumonSpecial2Particle_init(BeelzebumonSpecial2Particle *this, Fighter *fighter,
                                                               VECTOR *pos, VECTOR *vel, s32 angle) {
     Particle_initById(&this->base, 9, pos, vel, 2, 0, 0);
     this->base.entity.vtable = &BEELZEBUMON_SPECIAL2_PARTICLE_VTABLE;
@@ -793,7 +945,40 @@ void BeelzebumonSpecial2Particle_draw(BeelzebumonSpecial2Particle *this, Camera 
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80097FA0);
+/* Constructs func_80097FA0's class for fighter: a 0x180 sphere (0x8008A0, knocking back 0x1000 the fighter's way,
+ * starting disabled) in its side's list of fight, at 0x200 in front of the fighter and 0x140 up. The match depends
+ * on the knockback as an initialized local in its own block: gcc fills a zeroed temporary and copies it whole. */
+Unk80097FA0 *func_80097FA0(Unk80097FA0 *this, Fighter *fighter, Fight *fight) {
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    this->parts.entity.vtable = &D_80069A7C;
+    /* ZERO_VECTOR is a VECTOR; only its first three words are read here */
+    TrackedHit_init(&this->parts.unk18, fighter, 0x8008A0, (Vec3 *)&ZERO_VECTOR, 0);
+    CollisionSphere_init(&this->parts.part, (Vec3 *)&ZERO_VECTOR, 0x180, &this->parts.unk18);
+    {
+        VECTOR knockback = {Fighter_getFacing(fighter) << 12};
+
+        Hit_setKnockback(&this->parts.unk18.base, &knockback);
+    }
+    this->parts.part.entity = &this->parts.entity;
+    this->parts.part.flags.bits.disabled = 1;
+    Fighter_getPosition(fighter, &this->position);
+    this->position.vx += Fighter_getFacing(fighter) << 9;
+    this->position.vy -= 0x140;
+    this->fighter = fighter;
+    this->fight = fight;
+    this->unk9C = 0x133;
+    this->unkA0 = 0;
+    this->unkA4 = 0;
+    this->unkA8 = 1;
+    this->unkAC = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(fight, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->parts.part.link);
+    }
+    return this;
+}
 
 /* The destructor of the UnkPartsEntity3C class of vtable D_80069A7C, which func_80097FA0 installs. */
 void func_80098128(UnkPartsEntity3C *this, s32 flags) {
@@ -823,7 +1008,7 @@ void func_800986C0(Unk80097FA0 *this) {
     Entity *child = allocEntityMemory(0x44);
 
     if (child != NULL) {
-        func_80098720(entityOperatorNewAt(0x44, child), this->unk84, &this->unk8C);
+        func_80098720(entityOperatorNewAt(0x44, child), this->fighter, &this->position);
     }
     entityAddSibling(&this->parts.entity, child);
 }
@@ -890,7 +1075,78 @@ void func_8009880C(Unk80098720 *this) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_800988A4);
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80098A78);
+/* The UnkPartsEntity3C class func_80098A78 constructs (0xC8 bytes, virtual table D_80069A2C). */
+typedef struct Unk80098A78 {
+    /* 0x00 */ UnkPartsEntity3C parts;
+    /* 0x84 */ Fighter *fighter;
+    /* 0x88 */ Fight *fight;
+    /* 0x8C */ Vec3 position;
+    /* 0x98 */ s32 unk98;
+    /* 0x9C */ Vec3 velocity;
+    /* 0xA8 */ s32 unkA8;
+    /* 0xAC */ s32 unkAC;
+    /* 0xB0 */ s32 direction; /* 1, or -1 when velocity.vx is negative */
+    /* 0xB4 */ s16 vramY;     /* Fighter_getVramY of the character */
+    /* 0xB6 */ s16 unkB6;
+    /* 0xB8 */ s32 unkB8;
+    /* 0xBC */ s32 unkBC;
+    /* 0xC0 */ s32 unkC0;
+    /* 0xC4 */ s32 unkC4;
+} Unk80098A78;
+
+/* Builds func_80095CB4's entity for fighter at position, moving by velocity: a 0x180 sphere in its side's list of
+ * fight, hitting 0x84B09C00 with a knockback of 32 times velocity's x and as much up; direction is velocity's
+ * side. The match depends on direction set to 1 and flipped by an if with no else: CSE then carries &parts.part
+ * across the calls in a saved register, as the game does (a ternary breaks the block). */
+Unk80098A78 *func_80098A78(Unk80098A78 *this, Fighter *fighter, Fight *fight, Vec3 *position, VECTOR *velocity) {
+    VECTOR knockback;
+    s32 x, y, z;
+    s32 vx, vy, vz;
+    s32 direction;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    this->parts.entity.vtable = &D_80069A2C;
+    TrackedHit_init(&this->parts.unk18, fighter, 0x84B09C00, (Vec3 *)velocity, 3);
+    CollisionSphere_init(&this->parts.part, position, 0x180, &this->parts.unk18);
+    knockback = *velocity;
+    knockback.vx <<= 5;
+    knockback.vy = -abs(knockback.vx);
+    knockback.vz = 0;
+    Hit_setKnockback(&this->parts.unk18.base, &knockback);
+    this->parts.part.entity = &this->parts.entity;
+    this->fighter = fighter;
+    this->fight = fight;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    vx = velocity->vx;
+    vy = velocity->vy;
+    vz = velocity->vz;
+    this->unkAC = 0;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
+    direction = 1;
+    if (vx < 0) {
+        direction = -1;
+    }
+    this->direction = direction;
+    this->vramY = Fighter_getVramY(fighter);
+    this->unkB6 = 0;
+    this->unkB8 = 0;
+    this->unkBC = 0x40;
+    this->unkC0 = 0x20;
+    this->unkC4 = 0;
+    if (Fighter_getSide(this->fighter) == 0) {
+        Fight_addSide0Shape(fight, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->parts.part.link);
+    }
+    return this;
+}
 
 /* The destructor of the UnkPartsEntity3C class of vtable D_80069A2C, which func_80098A78 installs. */
 void func_80098C04(UnkPartsEntity3C *this, s32 flags) {
@@ -914,25 +1170,6 @@ void func_80098C04(UnkPartsEntity3C *this, s32 flags) {
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80098C98);
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80098ECC);
-
-/* The UnkPartsEntity3C class func_80098A78 constructs (0xC8 bytes, virtual table D_80069A2C). */
-typedef struct Unk80098A78 {
-    /* 0x00 */ UnkPartsEntity3C parts;
-    /* 0x84 */ Fighter *fighter;
-    /* 0x88 */ Fight *unk228;
-    /* 0x8C */ Vec3 position;
-    /* 0x98 */ s32 unk98;
-    /* 0x9C */ Vec3 velocity;
-    /* 0xA8 */ s32 unkA8;
-    /* 0xAC */ s32 unkAC;
-    /* 0xB0 */ s32 direction; /* 1, or -1 when velocity.vx is negative */
-    /* 0xB4 */ s16 vramY;     /* Fighter_getVramY of the character */
-    /* 0xB6 */ s16 unkB6;
-    /* 0xB8 */ s32 unkB8;
-    /* 0xBC */ s32 unkBC;
-    /* 0xC0 */ s32 unkC0;
-    /* 0xC4 */ s32 unkC4;
-} Unk80098A78;
 
 /* The entity class of vtable D_80069A04 (0x54 bytes, func_8009918C spawns it, constructor func_8009921C). */
 typedef struct Unk8009921C {
@@ -965,7 +1202,7 @@ void func_8009918C(Unk80098A78 *this) {
     }
     child = allocEntityMemory(0x54);
     if (child != NULL) {
-        func_8009921C(entityOperatorNewAt(0x54, child), this->fighter, this->unk228, &this->position, this->direction,
+        func_8009921C(entityOperatorNewAt(0x54, child), this->fighter, this->fight, &this->position, this->direction,
                       unk48);
     }
     entityAddSibling(&this->parts.entity, child);

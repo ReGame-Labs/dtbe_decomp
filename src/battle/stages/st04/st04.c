@@ -1,9 +1,14 @@
 #include "common.h"
+#include <abs.h>
 #include "battle/game.h"
 #include "battle/game_classes.h"
 #include "battle/stage_objects.h"
 #include "psyq.h"
+#include "gte.h"
 #include "engine/gfx/lights.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/gfx/sprite.h"
 #include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 #include "engine/task/entity.h"
@@ -45,20 +50,21 @@ typedef struct StageIceberg {
     /* 0x1E3C */ s32 unk1E3C[6];
     /* 0x1E54 */ s16 unk1E54[6];
     /* 0x1E60 */ u16 unk1E60[6]; /* a random scale, 0 to 0xFFF (Fight_random) */
-    /* 0x1E6C */ VECTOR unk1E6C[6]; /* the part's position; starts at the next one */
+    /* 0x1E6C */ VECTOR partPositions[6]; /* starts at the next one; st04_stepPart makes it fall */
     /* 0x1ECC */ VECTOR unk1ECC[6]; /* D_800D3824's row at set-up */
-    /* 0x1F2C */ VECTOR unk1F2C[6];
-    /* 0x1F8C */ VECTOR unk1F8C[6];
-    /* 0x1FEC */ u8 unk1FEC[0x1FF4 - 0x1FEC];
+    /* 0x1F2C */ VECTOR partForces[6]; /* gravity 0x71C a step (st04_stepPart) */
+    /* 0x1F8C */ VECTOR partVelocities[6]; /* y cleared when the part lands */
+    /* 0x1FEC */ s32 fallStates[2]; /* by side: the state func_800D58C0 switches on (0 to 4); 0 at round start */
     /* the per-side state func_800D56E4 resets */
     /* 0x1FF4 */ s32 unk1FF4[2];
-    /* 0x1FFC */ s16 unk1FFC[2];
+    /* 0x1FFC */ s16 unk1FFC[2]; /* 0x1000 at reset, less mass >> 13 of each fighter in its area (func_800D5770) */
     /* 0x2000 */ s16 unk2000[2];
     /* 0x2004 */ s16 unk2004[2];
-    /* 0x2008 */ VECTOR unk2008[2]; /* reset to the next one */
-    /* 0x2028 */ VECTOR unk2028[2];
-    /* 0x2048 */ VECTOR unk2048[2];
-    /* 0x2068 */ VECTOR unk2068[2];
+    /* by side, what func_800D58C0 drops (st04_stepFall steps it, func_800D56E4 resets it): */
+    /* 0x2008 */ VECTOR fallPosition[2]; /* reset to fallHome */
+    /* 0x2028 */ VECTOR fallHome[2];
+    /* 0x2048 */ VECTOR fallForce[2];    /* gravity 0x71C a step */
+    /* 0x2068 */ VECTOR fallVelocity[2]; /* y cleared below the floor */
     /* 0x2088 */ u16 continueShown; /* Fight_isContinueShown, each frame (StageIceberg_tickScenery) */
 } StageIceberg;
 
@@ -67,9 +73,10 @@ typedef struct St04SideSquare {
     /* 0x00 */ Entity entity;
     /* 0x18 */ StageIceberg *stage;
     /* 0x1C */ u16 side;
-    /* 0x20 */ u32 unk20; /* 0xF08080 at construction */
-    /* 0x24 */ u8 unk24[0x34 - 0x24];
-    /* 0x34 */ SVECTOR unk34[4]; /* the square's corners, in the z = 0 plane */
+    /* 0x20 */ u32 color; /* of the drawn square: 0xF08080 at construction */
+    /* 0x24 */ Vec3 position; /* the fighter's (func_8007A650), each tick */
+    /* 0x30 */ u8 unk30[0x34 - 0x30];
+    /* 0x34 */ SVECTOR corners[4]; /* in the z = 0 plane */
 } St04SideSquare;
 
 /* The class of vtable D_800D39D4 (func_800D6A9C), made by func_800D4FE0: a quad standing at a position, whose top
@@ -180,7 +187,7 @@ void func_800D58C0(StageIceberg *this);
  * continue prompt is shown or func_8006F144 holds before the round is over, its nine steps, counted in frames
  * (st00's StageMachine_tickScenery). */
 void StageIceberg_tickScenery(StageIceberg *this) {
-    Fight_tickScenery();
+    Fight_tickScenery(&this->base);
     Fighter_getPosition(Fight_getFighter(&this->base, 0), (Vec3 *)&this->fighterPositions[0]);
     Fighter_getPosition(Fight_getFighter(&this->base, 1), (Vec3 *)&this->fighterPositions[1]);
     if (Fight_isContinueShown(&this->base)) {
@@ -297,7 +304,23 @@ void st04_clearPlunged(StageIceberg *this) {
     this->plunged[0] = 0;
 }
 
-Entity *St04Plunge_init(Entity *this, StageIceberg *stage, u16 side);
+/* The splash of a fighter who goes below the water: four quads 0x200 wide around random points near where he went
+ * in. */
+typedef struct St04Plunge {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ StageIceberg *stage;
+    /* 0x1C */ SVECTOR origin; /* the fighter's x and z when he went in, y 0 */
+    /* 0x24 */ u16 side;
+    /* 0x26 */ u16 frames;
+    /* 0x28 */ s16 unk28[4];
+    /* 0x30 */ u8 shades[4]; /* the draw's color, 0x80 at first */
+    /* 0x34 */ s16 unk34[4]; /* random, 0x1F to 0x22 */
+    /* 0x3C */ s16 unk3C[4];
+    /* 0x44 */ GridVertex centers[4]; /* within 0x80 of the origin in x and z; word-aligned like the grids' */
+    /* 0x64 */ GridVertex corners[4][4];
+} St04Plunge; /* size 0xE4 */
+
+St04Plunge *St04Plunge_init(St04Plunge *this, StageIceberg *stage, u16 side);
 
 /* The sound of a fighter who goes below the water. */
 #define ST04_SOUND_PLUNGE 0x64
@@ -425,45 +448,163 @@ static inline void clearVector(VECTOR *v) {
     v->pad = 0;
 }
 
-/* Resets one part's state: two vectors and three counters cleared, 0x1E6C set back to 0x1ECC. */
+/* Resets one part's state: its force, velocity and three counters cleared, its position set back to 0x1ECC. */
 void func_800D4DEC(StageIceberg *this, s32 part) {
-    clearVector(&this->unk1F2C[part]);
-    clearVector(&this->unk1F8C[part]);
+    clearVector(&this->partForces[part]);
+    clearVector(&this->partVelocities[part]);
     this->unk1E60[part] = 0;
     this->unk1E54[part] = 0;
     this->unk1E3C[part] = 0;
-    this->unk1E6C[part].vx = this->unk1ECC[part].vx;
-    this->unk1E6C[part].vy = this->unk1ECC[part].vy;
-    this->unk1E6C[part].vz = this->unk1ECC[part].vz;
+    this->partPositions[part].vx = this->unk1ECC[part].vx;
+    this->partPositions[part].vy = this->unk1ECC[part].vy;
+    this->partPositions[part].vz = this->unk1ECC[part].vz;
 }
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D4E6C);
+/* Whether a fighter is under a part: within 0x100 of it in x and between its y and 0x200 below. Part 5 rides on
+ * side 1's fall (its position is offset by that fallPosition) and counts only while that fall's state is below 4. */
+s32 st04_isFighterUnderPart(StageIceberg *this, s32 part) {
+    s32 i;
+
+    if (part != 5) {
+        for (i = 0; i < 2; i++) {
+            if (ABS(this->fighterPositions[i].vx - this->partPositions[part].vx) < 0x100
+                && ABS(this->fighterPositions[i].vy - (this->partPositions[part].vy + 0x100)) < 0x100) {
+                return 1;
+            }
+        }
+    } else {
+        if (this->fallStates[1] >= 4) {
+            return 0;
+        }
+        for (i = 0; i < 2; i++) {
+            if (ABS(this->fighterPositions[i].vx - (this->partPositions[part].vx + this->fallPosition[1].vx)) < 0x100
+                && ABS(this->fighterPositions[i].vy - (this->partPositions[part].vy + 0x100 + this->fallPosition[1].vy))
+                       < 0x100) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D4FE0);
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D5430);
+/* One fall step of a part (st04_stepFall's twin, with a mass of 2): gravity into its force, the force into the
+ * velocity and the step (in 256ths) into the position. Then the segment from the old position to 0x100 below the new
+ * one (for part 5, from its position plus side 1's fallPosition down 0x100) is cast at the map (func_80072FE0); on a
+ * hit the part goes back to the segment's start and its fall stops. Returns whether it hit. */
+s32 st04_stepPart(StageIceberg *this, s32 part) {
+    Vec3 start;
+    Vec3 end;
+    Vec3 step;
+
+    start.vx = this->partPositions[part].vx;
+    start.vy = this->partPositions[part].vy;
+    start.vz = 0;
+    this->partForces[part].vy += 0x71C;
+    func_80079C1C(&step, (Vec3 *)&this->partVelocities[part], (Vec3 *)&this->partForces[part], 0x20000);
+    clearVector(&this->partForces[part]);
+    this->partPositions[part].vx += step.vx >> 8;
+    this->partPositions[part].vy += step.vy >> 8;
+    if (part != 5) {
+        end.vx = this->partPositions[part].vx;
+        end.vy = this->partPositions[part].vy + 0x100;
+    } else {
+        start.vx = this->partPositions[5].vx + this->fallPosition[1].vx;
+        start.vy = this->partPositions[5].vy + this->fallPosition[1].vy;
+        end.vx = this->partPositions[5].vx + this->fallPosition[1].vx;
+        /* The match depends on this order of the sum (fold turns it into pos + (fall + 0x100)). */
+        end.vy = this->partPositions[5].vy + 0x100 + this->fallPosition[1].vy;
+    }
+    end.vz = 0;
+    if (func_80072FE0(&start, &end)) {
+        this->partPositions[part].vx = start.vx;
+        this->partPositions[part].vy = start.vy;
+        this->partVelocities[part].vy = 0;
+        return 1;
+    }
+    return 0;
+}
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D5598);
 
-/* Resets one side's other state: two vectors and 0x1FF4 cleared, 0x2004 and 0x1FFC set to 0x1000, 0x2008 set back
- * to 0x2028. */
+/* Resets one side's other state: the fall's force and velocity and 0x1FF4 cleared, 0x2004 and 0x1FFC set to
+ * 0x1000, the fall's position set back to its home. */
 void func_800D56E4(StageIceberg *this, s32 side) {
-    clearVector(&this->unk2048[side]);
-    clearVector(&this->unk2068[side]);
+    clearVector(&this->fallForce[side]);
+    clearVector(&this->fallVelocity[side]);
     this->unk2004[side] = 0x1000;
     this->unk2000[side] = 0;
     this->unk1FF4[side] = 0;
     this->unk1FFC[side] = 0x1000;
-    this->unk2008[side].vx = this->unk2028[side].vx;
-    this->unk2008[side].vy = this->unk2028[side].vy;
-    this->unk2008[side].vz = this->unk2028[side].vz;
+    this->fallPosition[side].vx = this->fallHome[side].vx;
+    this->fallPosition[side].vy = this->fallHome[side].vy;
+    this->fallPosition[side].vz = this->fallHome[side].vz;
 }
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D5770);
+extern VECTOR D_800D89E4[2][2];
+
+/* Lowers side's 0x1FFC by mass >> 13 of each fighter on the ground in the side's area of D_800D89E4 (in x past
+ * [side][0] toward the side, in y between [side][1] and [side][0]) and returns it. */
+s32 func_800D5770(StageIceberg *this, s32 side) {
+    s32 level = this->unk1FFC[side];
+    s32 i;
+
+    for (i = 0; i < 2; i++) {
+        if (side == 0) {
+            if (this->fighterPositions[i].vx > D_800D89E4[side][0].vx) {
+                continue;
+            }
+        } else if (this->fighterPositions[i].vx < D_800D89E4[side][0].vx) {
+            continue;
+        }
+        if (this->fighterPositions[i].vy > D_800D89E4[side][0].vy
+            || this->fighterPositions[i].vy < D_800D89E4[side][1].vy) {
+            continue;
+        }
+        if (Fighter_isOnGround(Fight_getFighter(&this->base, i))) {
+            level -= Fight_getFighter(&this->base, i)->mass >> 13;
+        }
+    }
+    this->unk1FFC[side] = level;
+    return level;
+}
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D58C0);
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D5EA4);
+/* One fall step of a side's fallPosition: gravity into the force, the force over a mass of 3 into the velocity and
+ * the step (in 256ths) into the position. Returns whether it is below the floor (y > 0), stopping its fall there. */
+s32 st04_stepFall(StageIceberg *this, s32 side) {
+    /* The match depends on landed's initialisation here (the game keeps it in a saved register across the call). */
+    Vec3 step;
+    s32 landed = 0;
+
+    this->fallForce[side].vy += 0x71C;
+    func_80079C1C(&step, (Vec3 *)&this->fallVelocity[side], (Vec3 *)&this->fallForce[side], 0x30000);
+    clearVector(&this->fallForce[side]);
+    this->fallPosition[side].vx += step.vx >> 8;
+    this->fallPosition[side].vy += step.vy >> 8;
+    this->fallPosition[side].vz += step.vz >> 8;
+    if (this->fallPosition[side].vy > 0) {
+        this->fallVelocity[side].vy = 0;
+        landed = 1;
+    }
+    return landed;
+}
+
+/* The entity class of virtual table D_800D3A24 (func_800D5F94, 0xE4 bytes): four 0x80-wide quads around a position,
+ * each at a random x within 0x40 of it. */
+typedef struct Unk800D5F94 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ VECTOR position; /* cut to 16 bits at construction */
+    /* 0x28 */ u16 states[4];   /* by quad: drawn while below 2 */
+    /* 0x30 */ s16 greys[4];    /* by quad: its color's grey (the low byte) */
+    /* 0x38 */ s16 unk38;
+    /* 0x3A */ s16 unk3A[4];    /* by quad: 3 to 10 at random */
+    /* 0x42 */ s16 unk42;
+    /* 0x44 */ SVECTOR centers[4];
+    /* 0x64 */ SVECTOR corners[4][4];
+} Unk800D5F94; /* size 0xE4 */
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D5F94);
 
@@ -478,7 +619,57 @@ void func_800D60E8(Entity *this, s32 flags) {
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D613C);
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D6384);
+/* Unk800D5F94's draw, when a sphere of radius 0x5A at its position is in view: each quad whose state is below 2,
+ * in its grey, with the 32 by 32 picture at (0, 0x20) of the texture page at x 0x200 and the CLUT at (0x230, 0xF6),
+ * semi-transparent (abr 3: a quarter of it added). */
+void func_800D6384(Unk800D5F94 *this, Camera *camera) {
+    PolyFT4Shape shape;
+    u8 grey;
+    s32 i;
+
+    shape.flags = 0;
+    if (cameraIsSphereVisible(camera, &this->position, 0x5A)) {
+        gte_loadRotTrans(SCRATCH_VIEW_MATRIX);
+        UV_BYTES(shape.uv0)[0] = 0;
+        UV_BYTES(shape.uv0)[1] = 0x20;
+        UV_BYTES(shape.uv1)[0] = 0x1F;
+        UV_BYTES(shape.uv1)[1] = 0x20;
+        UV_BYTES(shape.uv2)[0] = 0;
+        UV_BYTES(shape.uv2)[1] = 0x3F;
+        UV_BYTES(shape.uv3)[0] = 0x1F;
+        UV_BYTES(shape.uv3)[1] = 0x3F;
+        shape.tpage = getTPage(0, 3, 0x200, 0);
+        shape.clut = getClut(0x230, 0xF6);
+        shape.flags |= SPRITE_SEMI_TRANS | 3;
+        for (i = 0; i < 4; i++) {
+            if (this->states[i] < 2) {
+                shape.corners[0] = &this->corners[i][0];
+                shape.corners[1] = &this->corners[i][1];
+                shape.corners[2] = &this->corners[i][2];
+                shape.corners[3] = &this->corners[i][3];
+                grey = this->greys[i];
+                shape.color = grey | grey << 8 | grey << 16;
+                PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+            }
+        }
+    }
+}
+
+/* The entity class func_800D6520 constructs (virtual table D_800D39FC), one per side (StageIceberg_init): 32 points
+ * with their own phases, and a state its tick (func_800D66D0) steps. */
+typedef struct Unk800D6520 {
+    /* 0x000 */ Entity entity;
+    /* 0x018 */ StageIceberg *stage;
+    /* 0x01C */ u16 timer; /* the state's frames (0x200 in state 0, 0x400 in state 2) */
+    /* 0x01E */ u16 state; /* 0 to 3 (func_800D66D0) */
+    /* 0x020 */ VECTOR unk20; /* random x and y in state 1, which unk30 eases toward */
+    /* 0x030 */ VECTOR unk30;
+    /* 0x040 */ u16 phases[32];
+    /* 0x080 */ u8 greys[32]; /* each point's grey (func_800D6938) */
+    /* 0x0A0 */ s16 unkA0[32]; /* 8 to 39 at random */
+    /* 0x0E0 */ s16 unkE0[32]; /* each point's start x */
+    /* 0x120 */ VECTOR points[32];
+} Unk800D6520; /* size 0x320 */
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D6520);
 
@@ -493,7 +684,59 @@ void func_800D667C(Entity *this, s32 flags) {
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D66D0);
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D6938);
+extern SVECTOR D_800D38B0[4];
+
+/* func_800D6520's draw: unless the continue prompt is shown, each of the 32 points as a square with the 32 by 32
+ * picture at (0, 0) of the texture page at x 0x200 and the CLUT at (0x230, 0xFF), added in the point's grey.
+ * The match depends on the camera parameter typed Camera * and on matrix taken inside the loop (loop hoists it into
+ * a saved register after i's start; the translation is stored straight into m). */
+void func_800D6938(Unk800D6520 *this, Camera *camera) {
+    MatrixWords m;
+    MATRIX *matrix;
+    PolyFT4Shape shape;
+    VECTOR *point;
+    s32 x, y, z;
+    s32 i;
+
+    if (this->stage->continueShown == 0) {
+        shape.corners[0] = &D_800D38B0[0];
+        shape.corners[1] = &D_800D38B0[1];
+        shape.corners[2] = &D_800D38B0[2];
+        shape.corners[3] = &D_800D38B0[3];
+        UV_BYTES(shape.uv0)[0] = 0;
+        UV_BYTES(shape.uv0)[1] = 0;
+        UV_BYTES(shape.uv1)[0] = 0x1F;
+        UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[0] = 0;
+        UV_BYTES(shape.uv2)[1] = 0x1F;
+        UV_BYTES(shape.uv3)[0] = 0x1F;
+        UV_BYTES(shape.uv3)[1] = 0x1F;
+        shape.tpage = getTPage(0, 1, 0x200, 0);
+        shape.clut = getClut(0x230, 0xFF);
+        shape.flags = SPRITE_SEMI_TRANS | 1;
+        for (i = 0; i < 32; i++) {
+            u8 grey;
+
+            matrix = &m.m;
+            point = &this->points[i];
+            x = point->vx;
+            y = point->vy;
+            z = point->vz;
+            m.words[0] = ONE;
+            m.words[1] = 0;
+            m.words[2] = ONE;
+            m.words[3] = 0;
+            m.words[4] = ONE;
+            m.m.t[0] = x;
+            m.m.t[1] = y;
+            m.m.t[2] = z;
+            setModelMatrix(matrix);
+            grey = this->greys[i];
+            shape.color = grey | grey << 8 | grey << 16;
+            PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+        }
+    }
+}
 
 /* Constructs an Unk800D6A9C at a part's position (the stage is not kept): a 0x200 by 0x200 quad whose bottom edge
  * is 0x180 below the position. The position is cut to 16 bits, as the quad's SVECTORs hold it. */
@@ -542,14 +785,14 @@ St04SideSquare *St04SideSquare_init(St04SideSquare *this, StageIceberg *stage, u
     this->entity.vtable = &ST04_SIDE_SQUARE_VTABLE;
     this->stage = stage;
     this->side = side;
-    this->unk20 = 0xF08080;
+    this->color = 0xF08080;
     func_8007A650(Fight_getFighter(&stage->base, side), &position);
     size = (FIGHTER_PARAMS + Fighter_getCharacter(Fight_getFighter(&this->stage->base, this->side)))->height * 2;
-    this->unk34[0].vz = this->unk34[1].vz = this->unk34[2].vz = this->unk34[3].vz = 0;
-    this->unk34[0].vx = this->unk34[2].vx = -size;
-    this->unk34[1].vx = this->unk34[3].vx = size;
-    this->unk34[0].vy = this->unk34[1].vy = -size;
-    this->unk34[2].vy = this->unk34[3].vy = size;
+    this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = 0;
+    this->corners[0].vx = this->corners[2].vx = -size;
+    this->corners[1].vx = this->corners[3].vx = size;
+    this->corners[0].vy = this->corners[1].vy = -size;
+    this->corners[2].vy = this->corners[3].vy = size;
     return this;
 }
 
@@ -564,9 +807,80 @@ void St04SideSquare_destroy(Entity *this, s32 flags) {
 
 INCLUDE_ASM("st04/nonmatchings/st04", St04SideSquare_tick);
 
-INCLUDE_ASM("st04/nonmatchings/st04", St04SideSquare_draw);
+/* St04SideSquare's draw: unless the continue prompt is shown, the square at the fighter's position, with the 64 by
+ * 64 picture at (0x20, 0) of the texture page at x 0x200 and the CLUT at (0x230, 0xFC), semi-transparent. */
+void St04SideSquare_draw(St04SideSquare *this, s32 arg) {
+    Camera *camera = (Camera *)arg;
+    MatrixWords m;
+    PolyFT4Shape shape;
+    Vec3 *position;
+    s32 x, y, z;
 
-INCLUDE_ASM("st04/nonmatchings/st04", St04Plunge_init);
+    if (this->stage->continueShown == 0) {
+        position = &this->position;
+        x = position->vx;
+        y = position->vy;
+        z = position->vz;
+        m.words[0] = ONE;
+        m.words[1] = 0;
+        m.words[2] = ONE;
+        m.words[3] = 0;
+        m.words[4] = ONE;
+        m.m.t[0] = x;
+        m.m.t[1] = y;
+        m.m.t[2] = z;
+        setModelMatrix(&m.m);
+        shape.corners[0] = &this->corners[0];
+        shape.corners[1] = &this->corners[1];
+        shape.corners[2] = &this->corners[2];
+        shape.corners[3] = &this->corners[3];
+        UV_BYTES(shape.uv0)[0] = 0x20;
+        UV_BYTES(shape.uv0)[1] = 0;
+        UV_BYTES(shape.uv1)[0] = 0x5F;
+        UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[0] = 0x20;
+        UV_BYTES(shape.uv2)[1] = 0x3F;
+        UV_BYTES(shape.uv3)[0] = 0x5F;
+        UV_BYTES(shape.uv3)[1] = 0x3F;
+        shape.tpage = getTPage(0, 0, 0x200, 0);
+        shape.clut = getClut(0x230, 0xFC);
+        shape.flags = SPRITE_SEMI_TRANS;
+        shape.color = this->color;
+        PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
+    }
+}
+
+/* Constructs the splash for the side's fighter at his x and z, with its quads at random points around them. */
+St04Plunge *St04Plunge_init(St04Plunge *this, StageIceberg *stage, u16 side) {
+    s32 i;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &ST04_PLUNGE_VTABLE;
+    this->side = side;
+    this->stage = stage;
+    this->origin.vx = stage->fighterPositions[this->side].vx;
+    this->origin.vz = stage->fighterPositions[this->side].vz;
+    this->origin.vy = 0;
+    this->frames = 0;
+    for (i = 0; i < 4; i++) {
+        this->unk28[i] = 0;
+        this->unk34[i] = (Fight_random(&stage->base) & 3) + 0x1F;
+        this->shades[i] = 0x80;
+        this->unk3C[i] = 0;
+        /* The match depends on a signed random byte (with a u32 one, the sum narrowed to a halfword loads 0xFF80 into a register) and on
+         * this order of the sum (fold turns it into random + (origin - 0x80)). */
+        this->centers[i].vx = ((s32)Fight_random(&stage->base) & 0xFF) - 0x80 + this->origin.vx;
+        this->centers[i].vy = 0;
+        this->centers[i].vz = ((s32)Fight_random(&stage->base) & 0xFF) - 0x80 + this->origin.vz;
+        this->corners[i][0].vx = this->corners[i][2].vx = this->centers[i].vx - 0x100;
+        this->corners[i][1].vx = this->corners[i][3].vx = this->centers[i].vx + 0x100;
+        this->corners[i][0].vy = this->corners[i][1].vy = this->corners[i][2].vy = this->corners[i][3].vy =
+            this->centers[i].vy;
+        this->corners[i][0].vz = this->corners[i][1].vz = this->corners[i][2].vz = this->corners[i][3].vz =
+            this->centers[i].vz;
+    }
+    return this;
+}
 
 /* St04Plunge's destructor. */
 void St04Plunge_destroy(Entity *this, s32 flags) {
@@ -596,6 +910,17 @@ INCLUDE_ASM("st04/nonmatchings/st04", func_800D7AB8);
 
 INCLUDE_ASM("st04/nonmatchings/st04", func_800D7CE4);
 
+/* Semi-transparent Gouraud quads with a pulsing level (St04Glow_init, virtual table ST04_GLOW_VTABLE). */
+typedef struct St04Glow {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ u16 phase;
+    /* 0x1A */ u8 level;
+    /* 0x1B */ u8 unk1B;
+    /* 0x1C */ s16 unk1C;
+    /* 0x1E */ u8 unk1E[0x20 - 0x1E];
+    /* 0x20 */ SVECTOR vertices[3][3][13]; /* three grids of 3 rows of 13 points (St04Glow_init) */
+} St04Glow; /* size 0x3C8 */
+
 INCLUDE_ASM("st04/nonmatchings/st04", St04Glow_init);
 
 /* St04Glow's destructor. */
@@ -606,13 +931,6 @@ void St04Glow_destroy(Entity *this, s32 flags) {
         entityOperatorDelete(this);
     }
 }
-
-/* Semi-transparent Gouraud quads with a pulsing level (St04Glow_init, virtual table ST04_GLOW_VTABLE). */
-typedef struct St04Glow {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ u16 phase;
-    /* 0x1A */ u8 level;
-} St04Glow;
 
 /* St04Glow's tick: the level follows a sine of the phase (0x6F +- 16), and the phase steps. */
 void St04Glow_tick(St04Glow *this) {
@@ -654,23 +972,28 @@ void StageHit_apply(StageHit *this, CollisionSphere *part) {
     part->hitKnockback.vz = z;
 }
 
-INCLUDE_ASM("st04/nonmatchings/st04", func_800D850C);
-
-/* The entity class func_800D850C constructs (virtual table D_800D38EC) for one of the stage's six parts: an
- * CollisionOwner base at 0x18 and CollisionSphere_init's object at 0x30. */
+/* The entity class func_800D850C constructs (virtual table D_800D38EC) for one of the stage's six parts: a
+ * StageHit at 0x18 and CollisionSphere_init's object at 0x30. */
 typedef struct Unk800D850C {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ CollisionOwner unk18;
-    /* 0x1C */ u8 unk1C[0x30 - 0x1C];
+    /* 0x18 */ StageHit hit;
+    /* 0x2C */ u8 unk2C[0x30 - 0x2C];
     /* 0x30 */ CollisionSphere unk30;
     /* 0x78 */ StageIceberg *stage;
     /* 0x7C */ u16 index; /* the part, 0 to 5 */
     /* 0x7E */ s16 unk7E; /* set while unk30 is out of the stage's list (func_800D86AC) */
     /* 0x80 */ Vec3 unk80; /* the part's position (0x1E6C), 0x100 lower */
-    /* 0x8C */ u8 unk8C[0xA0 - 0x8C];
+    /* 0x8C */ u8 unk8C[0x90 - 0x8C];
+    /* 0x90 */ Vec3 unk90; /* (0x60, 0, 0) at construction: StageHit_init's knockback */
+    /* 0x9C */ u8 unk9C[0xA0 - 0x9C];
 } Unk800D850C;
 
 extern EntityVtable D_800D38EC;
+
+/* Constructs part index of the stage at position: a StageHit of damage 0x2D8 (and flag 0x2000000) whose knockback is
+ * cleared and kept apart in unk90, the sphere of radius 0x80 owned by it, added to the stage's shapes disabled. It
+ * also writes a zero VECTOR on the stack that nothing reads, which no clean C form has given yet. */
+INCLUDE_ASM("st04/nonmatchings/st04", func_800D850C);
 
 /* Unk800D850C's destructor: its member's and its base's inlined, then entityDestroy. */
 void func_800D8618(Unk800D850C *this, s32 flags) {
@@ -685,7 +1008,7 @@ void func_800D8618(Unk800D850C *this, s32 flags) {
     link->prev->next = this->unk30.link.next;
     this->unk30.link.next = link;
     this->unk30.link.prev = link;
-    this->unk18.vtable = COLLISION_OWNER_VTABLE;
+    this->hit.vtable = COLLISION_OWNER_VTABLE;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);

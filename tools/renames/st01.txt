@@ -59,3 +59,15 @@ func_800D745C St01HoverQuad_tick
 func_800D74AC St01HoverQuad_draw
 D_800D3C84 ST01_HOVER_QUAD_VTABLE
 func_800D4DEC st01_cycleClut
+
+# fam12 agent D
+func_800D63F8 St01FallingObject_getFloorY
+D_800DA014 ST01_FLOOR_PROFILE
+D_800DA034 ST01_FLOOR_OFFSETS
+Unk800D7670 St01RisingQuads
+D_800D3C5C ST01_RISING_QUADS_VTABLE
+func_800D7670 St01RisingQuads_init
+func_800D7750 St01RisingQuads_destroy
+func_800D77A4 St01RisingQuads_tick
+func_800D7880 St01RisingQuads_draw
+func_800D47B0 st01_keepFightersInside

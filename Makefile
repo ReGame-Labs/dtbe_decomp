@@ -221,13 +221,14 @@ G0_OBJ := $(G0_UNITS:%=$(BUILDDIR)/%.o) $(foreach b,$(OVERLAYS),$(filter-out %.s
 $(G0_OBJ): CC1FLAGS := $(subst -G8,-G0,$(CC1FLAGS))
 $(G0_OBJ): MASPSXFLAGS := $(subst -G8,-G0,$(MASPSXFLAGS))
 
-# seven fighters of the battle overlay (factory ids 4, 7, 8, 10, 11, 14 and 19) were
-# built without CSE following jumps: their entity updates reload a count in the
-# else block after `if (count > N) delete;`, which -O2 gives only with
+# ten fighters of the battle overlay (factory ids 4, 6, 7, 8, 10, 11, 14, 16, 17 and 19)
+# were built without CSE following jumps: their entity updates reload a count in
+# the else block after `if (count > N) delete;` (id 6: the intro effect's frame
+# count after `if (frames >= 88)`; id 16: the special 3 effect's owner after
+# `if (!owner->inSpecial3) delete;`), which -O2 gives only with
 # -fno-cse-follow-jumps; every other function of these units matches either way
-# (ids 5 and 6, imperialdramon.c and imperialdramon_paladin_mode.c, match either
-# way too and have nothing that tells)
-NOFOLLOW_FIGHTERS := holydramon impmon beelzebumon omegamon patamon saintgargomon v_mon
+# (id 5, imperialdramon.c, matches either way too and has nothing that tells)
+NOFOLLOW_FIGHTERS := holydramon imperialdramon_paladin_mode impmon beelzebumon omegamon patamon saintgargomon stingmon tailmon v_mon
 NOFOLLOW_OBJ := $(foreach f,$(NOFOLLOW_FIGHTERS),$(BUILDDIR)/src/battle/fighters/$(f).c.o)
 $(NOFOLLOW_OBJ): CC1FLAGS += -fno-cse-follow-jumps
 

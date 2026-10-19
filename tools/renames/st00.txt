@@ -66,3 +66,18 @@ func_800D8228 St00GlowQuad_destroy
 func_800D7064 st00_resetFallingObject
 D_800D3838 ST00_TERRAIN_LINE_ENDS
 D_800DA2BC ST00_TERRAIN_LINES
+
+# fam12 agent D
+func_800D40C0 st00_loadPulsingClut
+func_800D9128 St00CrossingSprites_placeSprite
+func_800D9234 St00CrossingSprites_moveSprite
+D_800DA1A4 ST00_ITEM_SPAWN_POINTS
+func_800D3E80 st00_loadCluts
+func_800D3D94 st00_readCluts
+
+# r13 agent D
+D_800D3A3C ST00_BACKDROP_GRID_VTABLE
+func_800D7A70 St00BackdropGrid_init
+func_800D7BCC St00BackdropGrid_tick
+func_800D7BD4 St00BackdropGrid_draw
+func_800D7B78 St00BackdropGrid_destroy

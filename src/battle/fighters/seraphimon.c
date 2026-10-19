@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/math/sin_cos.h"
 
 SeraphimonSpecial2Effect *SeraphimonSpecial2Effect_init(SeraphimonSpecial2Effect *this, Fighter *fighter);
 Unk800AFD78 *func_800AFD78(Unk800AFD78 *this, Fighter *fighter, Fight *fight);
@@ -52,7 +53,7 @@ void Seraphimon_endMove(Fighter *this) {
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", Seraphimon_throw);
 
 void Seraphimon_spawnSpecial2Effect(Fighter *this);
-void Seraphimon_spawnSpecial2Hitbox(Fighter *this, s32 arg, s32 index);
+void Seraphimon_spawnSpecial2Hitbox(Fighter *this, s32 angle, s32 index);
 
 /* Special move 2: as in the air, but the hitboxes get -0x200, with no push back, and until frame 11 the force brakes
  * only a sixteenth of the horizontal velocity. */
@@ -104,7 +105,42 @@ void Seraphimon_airSpecial2(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", Seraphimon_spawnSpecial2Hitbox);
+struct SeraphimonSpecial2Hitbox *SeraphimonSpecial2Hitbox_init(struct SeraphimonSpecial2Hitbox *this, Fighter *fighter,
+                                                               Vec3 *position, VECTOR *velocity, Fight *list, s32 arg5);
+
+/* Spawns one of the special move 2's hitboxes at the fighter's node 18, moving at angle (mirrored when the fighter
+ * faces left) at 1/32 of the unit. */
+void Seraphimon_spawnSpecial2Hitbox(Fighter *this, s32 angle, s32 index) {
+    VECTOR position;
+    VECTOR velocity;
+    VECTOR offset;
+    Fight *fight;
+    Entity *child;
+
+    memset(&offset, 0, sizeof(offset));
+    Fighter_getNodePosition(this, &position, 18, &offset);
+    if (Fighter_getFacing(this) > 0) {
+        velocity.vx = COS_SIN_TABLE[angle & 0xFFF].cos >> 5;
+        velocity.vy = COS_SIN_TABLE[angle & 0xFFF].sin >> 5;
+        velocity.vz = 0;
+    } else {
+        /* The match depends on this local: written in the index, the subtraction is scheduled after the table's
+         * address. */
+        s32 mirrored = 0x800 - angle;
+
+        velocity.vx = COS_SIN_TABLE[mirrored & 0xFFF].cos >> 5;
+        velocity.vy = COS_SIN_TABLE[mirrored & 0xFFF].sin >> 5;
+        velocity.vz = 0;
+    }
+    fight = Fighter_getScene(this);
+    child = allocEntityMemory(0xD0);
+    if (child != NULL) {
+        /* the hitbox reads only the position's first three words */
+        SeraphimonSpecial2Hitbox_init(entityOperatorNewAt(0xD0, child), this, (Vec3 *)&position, &velocity, fight,
+                                      index);
+    }
+    Fighter_addEntity(this, child);
+}
 
 /* Spawns the special move 2's effect for this fighter. */
 void Seraphimon_spawnSpecial2Effect(Fighter *this) {
@@ -497,7 +533,7 @@ SeraphimonSpecial1Hitbox *SeraphimonSpecial1Hitbox_init(SeraphimonSpecial1Hitbox
     } else {
         Fight_addSide1Shape(list, &this->unk38.link);
     }
-    this->unk38.flags |= COLLISION_SHAPE_DISABLED;
+    this->unk38.flags.bits.disabled = 1;
     return this;
 }
 
@@ -550,7 +586,7 @@ void SeraphimonSpecial1Hitbox_hit(SeraphimonSpecial1Hitbox *this, CollisionSpher
     Hit_apply(&this->unk18, sum);
     if (sum->entity != NULL && entityGetKind(sum->entity) == ENTITY_KIND_FIGHTER) {
         this->unk154 = 1;
-        this->unk38.flags |= COLLISION_SHAPE_DISABLED;
+        this->unk38.flags.bits.disabled = 1;
         /* The match depends on the two news as inlines taking the owner (a ternary of their results). */
         entityAddSibling(&this->entity, Fighter_isGuarding(Fighter_getOpponent(this->fighter))
                                             ? func_800AF5A4_newFlash(this)
@@ -584,7 +620,29 @@ void func_800AFDE8(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", func_800AFE3C);
+/* The tick of func_800AFD78's effect: for 24 ticks it rerolls its nine offsets (-0x400..0x3FF, times 1 to 9, an
+ * eighth of it) and its eight values (0, 1 or 2, a 3 counting as 2) from the fight's random numbers, then deletes
+ * itself. */
+void func_800AFE3C(Unk800AFD78 *this) {
+    s32 i;
+    s32 value;
+
+    if (this->unk34 < 24) {
+        for (i = 0; i < 9; i++) {
+            this->unk4C[i] = ((s32)((mersenneTwisterGenerate(&this->unk1C->random) & 0x7FF) - 0x400) * (i + 1)) >> 3;
+        }
+        for (i = 0; i < 8; i++) {
+            value = mersenneTwisterGenerate(&this->unk1C->random) & 3;
+            if (value == 3) {
+                value = 2;
+            }
+            this->unk3C[i] = value;
+        }
+        this->unk34++;
+    } else {
+        entityDelete(&this->entity);
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", func_800AFF40);
 

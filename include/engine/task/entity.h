@@ -95,7 +95,7 @@ static inline void entityDelete(Entity *entity) {
  * ifs on memory, jump threading or cse drop that second test). */
 #define NEW_ENTITY(size, ctor, ...) ({ \
     Entity *newMemory = allocEntityMemory(size); \
-    newMemory != NULL ? (ctor(entityOperatorNewAt(size, newMemory), __VA_ARGS__), newMemory) : newMemory; \
+    newMemory != NULL ? (ctor(entityOperatorNewAt(size, newMemory), ##__VA_ARGS__), newMemory) : newMemory; \
 })
 
 EXTERN_C_END

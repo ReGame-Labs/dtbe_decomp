@@ -27,15 +27,17 @@ s32 playSoundEffect(u16 effect) {
 }
 
 /* A node for a new sound effect: a free one, or else the playing effect of
- * the lowest priority when that is not above its own. NULL when there is
- * none or its VAB is not open. */
-#if VERSION_JP
+ * the lowest priority when that is not above its own (the US build stops that
+ * effect and takes the node it frees). NULL when there is none or its VAB is
+ * not open. */
 SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volumeLeft, u8 volumeRight) {
     SndEffect *def = &SOUND_SYSTEM.effects[effect];
     s16 vabId = SOUND_SYSTEM.vabs[def->vab].id;
     SndPlayingEffect *node;
     u8 priority;
+#if VERSION_JP
     LinkList *used;
+#endif
 
     if (vabId < 0) {
         return NULL;
@@ -44,6 +46,7 @@ SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volumeLeft, u8 volumeRight) 
     if (def->flags & SND_EFFECT_LOOP) {
         priority |= SND_PRIORITY_LOOP;
     }
+#if VERSION_JP
     used = &SOUND_SYSTEM.effectPool.used;
     if (SOUND_SYSTEM.effectPool.used.count == SOUND_SYSTEM.voiceCount) {
         node = (SndPlayingEffect *)SOUND_SYSTEM.effectPool.used.tail;
@@ -55,6 +58,15 @@ SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volumeLeft, u8 volumeRight) 
     } else {
         node = (SndPlayingEffect *)nodePoolAllocInline(&SOUND_SYSTEM.effectPool);
     }
+#else
+    if (SOUND_SYSTEM.effectPool.used.count == SOUND_SYSTEM.voiceCount) {
+        if (priority < ((SndPlayingEffect *)SOUND_SYSTEM.effectPool.used.tail)->priority) {
+            return NULL;
+        }
+        sndPlayingEffectStop((SndPlayingEffect *)SOUND_SYSTEM.effectPool.used.tail);
+    }
+    node = (SndPlayingEffect *)nodePoolAllocInline(&SOUND_SYSTEM.effectPool);
+#endif
     node->handle = allocSoundEffectHandle(node);
     node->timer = -1;
     node->effect = effect;
@@ -75,9 +87,6 @@ SndPlayingEffect *allocPlayingEffect(s32 effect, u8 volumeLeft, u8 volumeRight) 
     }
     return node;
 }
-#else
-INCLUDE_ASM("main/nonmatchings/sound/sound_effect", allocPlayingEffect);
-#endif
 
 /* Plays a sound effect at the volume given: its handle, or 0 when it does
  * not play. The playing effects are kept from the highest priority down. */

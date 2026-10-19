@@ -18,6 +18,7 @@ StageBallShoot_createController = 0x800D3C08; // type:func
 st07_clearState = 0x800D3C3C; // type:func
 StageBallShoot_tick = 0x800D3C58; // type:func
 StageBallShoot_tickScenery = 0x800D3D10; // type:func
+st07_checkEnd = 0x800D3D58; // type:func
 st07_resetCharge = 0x800D3E94; // type:func
 st07_createThrowers = 0x800D3EB0; // type:func
 st07_createBoard = 0x800D3F30; // type:func

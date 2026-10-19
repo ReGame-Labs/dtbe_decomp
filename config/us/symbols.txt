@@ -1077,7 +1077,8 @@ fontCacheDestroy = 0x80032600; // type:func
 textPrinterDestroy = 0x80032620; // type:func
 addNestedOt = 0x80032640; // type:func
 findCodeIndex = 0x800326E8; // type:func
-printerDestroy = 0x8003277C; // type:func
+// Printer's destructor, by g++'s name (text/font.c defines it, the C++ files call it)
+_._7Printer = 0x8003277C; // type:func
 printerPrint = 0x800327B0; // type:func
 printerIgnoreColor = 0x80032870; // type:func
 printerSetCursor = 0x80032880; // type:func

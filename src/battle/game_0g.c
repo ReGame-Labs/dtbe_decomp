@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/prim/build_line_f3.h"
 #include "engine/gfx/prim/build_line_g2.h"
 #include "engine/gfx/prim_buffer.h"
 #include "engine/game/character.h"
@@ -40,7 +41,7 @@ Entity *func_800C38D8(Entity *this, Vec3 *arg1, Vec3 *arg2, s32 arg3, s32 arg4);
 
 /* The constructors of the particle classes of vtables D_8006D54C, D_8006D524 and D_8006D4D4, which
  * createParticle gets inlined like func_8006D574_init (out-of-line copies: func_800C69C4, func_800C6A74; the
- * D_8006D4D4 one with size and color, unlike func_8006D4D4_init). */
+ * D_8006D4D4 one is func_8006D4D4_initSized, game_classes.h). */
 static inline void func_8006D54C_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
     Particle_initById((Particle *)this, frame + 3, pos, vel, size, 0x808080, 0);
     this->vtable = &D_8006D54C;
@@ -49,11 +50,6 @@ static inline void func_8006D54C_init(Entity *this, VECTOR *pos, VECTOR *vel, s3
 static inline void func_8006D524_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
     Particle_initById((Particle *)this, 6, pos, vel, size, color, 0);
     this->vtable = &D_8006D524;
-}
-
-static inline void func_8006D4D4_initSized(Entity *this, VECTOR *pos, s32 size, u32 color) {
-    Particle_initById((Particle *)this, 8, pos, &ZERO_VECTOR, size, color, 0);
-    this->vtable = &D_8006D4D4;
 }
 
 /* Creates a particle entity of a kind (0 to 11) at pos moving by vel, with size and color: 0 to 6 and 8 are
@@ -168,7 +164,7 @@ void spriteAnimRewind(SpriteAnim *this);
 
 /* Constructs a sprite animation on its row of PARTICLE_ANIMS: keeps the 0x100 bit of flags as 0x10, then starts
  * at the first cell (spriteAnimRewind). */
-SpriteAnim *spriteAnimInit(SpriteAnim *this, u16 *anim, s32 flags) {
+SpriteAnim *spriteAnimInit(SpriteAnim *this, SpriteAnimRow *anim, s32 flags) {
     this->anim = anim;
     this->flags = (flags & 0x100) >> 4;
     spriteAnimRewind(this);
@@ -177,12 +173,12 @@ SpriteAnim *spriteAnimInit(SpriteAnim *this, u16 *anim, s32 flags) {
 
 /* Goes back to the first cell: the anim's x and y, one cell wide and high. */
 void spriteAnimRewind(SpriteAnim *this) {
-    u16 *anim = this->anim;
+    SpriteAnimRow *anim = this->anim;
 
-    this->left = anim[0];
-    this->top = anim[1];
-    this->right = anim[0] + anim[2] - 1;
-    this->bottom = anim[1] + anim[3] - 1;
+    this->left = anim->x;
+    this->top = anim->y;
+    this->right = anim->x + anim->cellWidth - 1;
+    this->bottom = anim->y + anim->cellHeight - 1;
 }
 
 /* Moves to the next cell: one cell right along the strip, or back to the strip's x one cell lower at its end. The
@@ -190,15 +186,15 @@ void spriteAnimRewind(SpriteAnim *this) {
 void spriteAnimStep(SpriteAnim *this) {
     s16 left = this->left;
     s16 right = this->right;
-    u16 *anim = this->anim;
+    SpriteAnimRow *anim = this->anim;
     s16 top = this->top;
     s16 bottom = this->bottom;
-    s16 width = anim[2];
-    s16 height = anim[3];
+    s16 width = anim->cellWidth;
+    s16 height = anim->cellHeight;
 
     right += width;
-    if (right >= (s16)(anim[0] + anim[4])) {
-        left = anim[0];
+    if (right >= (s16)(anim->x + anim->stripWidth)) {
+        left = anim->x;
         right = left + width - 1;
         top += height;
         bottom = top + height - 1;
@@ -234,7 +230,7 @@ void spriteAnimBuildShape(SpriteAnim *this, PolyFT4Shape *shape) {
  * top, left, right, bottom first. */
 void spriteAnimFillShape(SpriteAnim *this, PolyFT4Shape *shape, SVECTOR *corners) {
     s32 top, left, right, bottom;
-    u16 *anim;
+    SpriteAnimRow *anim;
 
     shape->corners[0] = &corners[0];
     shape->corners[1] = &corners[1];
@@ -250,12 +246,12 @@ void spriteAnimFillShape(SpriteAnim *this, PolyFT4Shape *shape, SVECTOR *corners
     shape->uv2 = right | (top << 8);
     shape->uv3 = right | (bottom << 8);
     anim = this->anim;
-    shape->clut = anim[8] + (this->flags << 10);
-    shape->tpage = anim[9] | this->flags;
+    shape->clut = anim->clut + (this->flags << 10);
+    shape->tpage = anim->tpage | this->flags;
 }
 
 /* Constructs a particle on an anim row, at pos moving by vel (Particle_setMotion), with size and color. */
-Particle *Particle_init(Particle *this, u16 *anim, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags) {
+Particle *Particle_init(Particle *this, SpriteAnimRow *anim, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags) {
     entityInit(&this->entity, 0);
     spriteAnimInit(&this->sprite, anim, flags);
     this->entity.vtable = &PARTICLE_VTABLE;
@@ -263,17 +259,17 @@ Particle *Particle_init(Particle *this, u16 *anim, VECTOR *pos, VECTOR *vel, s32
     return this;
 }
 
-/* the particles' anims: x, y, cell width, cell height, strip width, cell count, step mask, 0, clut, tpage */
-extern u16 PARTICLE_ANIMS[][10];
+/* the particles' anims */
+extern SpriteAnimRow PARTICLE_ANIMS[];
 
 /* Constructs a particle like Particle_init, on row anim of PARTICLE_ANIMS. The match depends on the table taken
  * into a local first (its address is loaded before the index is scaled). */
 Particle *Particle_initById(Particle *this, s32 anim, VECTOR *pos, VECTOR *vel, s32 size, u32 color, s32 flags) {
-    u16 (*anims)[10];
+    SpriteAnimRow *anims;
 
     entityInit(&this->entity, 0);
     anims = PARTICLE_ANIMS;
-    spriteAnimInit(&this->sprite, anims[anim], flags);
+    spriteAnimInit(&this->sprite, &anims[anim], flags);
     this->entity.vtable = &PARTICLE_VTABLE;
     Particle_setMotion(this, pos, vel, size, color);
     return this;
@@ -317,7 +313,36 @@ void Particle_buildShape(Particle *this, PolyFT4Shape *shape, SVECTOR *corners) 
     shape->flags |= 8;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", Particle_tick);
+/* The particle's frame: moves by its velocity, loses a sixteenth of it to drag, and after the first frame steps
+ * its cell when age & stepMask is 0, deleting itself once it has stepped all the cells. The match depends on the
+ * position sum reading everything before writing (as vecAddInPlace) and the velocity's added field by field. */
+void Particle_tick(Particle *this, s32 arg) {
+    Vec3 drag;
+    s32 x, y, z;
+    SpriteAnimRow *anim;
+
+    x = this->sprite.position.vx;
+    y = this->sprite.position.vy;
+    z = this->sprite.position.vz;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->sprite.position.vx = x;
+    this->sprite.position.vy = y;
+    this->sprite.position.vz = z;
+    drag.vx = -this->velocity.vx >> 4;
+    drag.vy = -this->velocity.vy >> 4;
+    drag.vz = -this->velocity.vz >> 4;
+    this->velocity.vx += drag.vx;
+    this->velocity.vy += drag.vy;
+    this->velocity.vz += drag.vz;
+    if (++this->age != 1) {
+        anim = this->sprite.anim;
+        if (!(this->age & anim->stepMask) && Particle_stepAnim(this) >= anim->cellCount) {
+            entityDelete(&this->entity);
+        }
+    }
+}
 
 void spriteAnimBuildShape(SpriteAnim *sprite, PolyFT4Shape *shape);
 
@@ -345,12 +370,12 @@ void SpinParticle_tick(Particle *this, s32 arg) {
 /* Constructs an HitSpark at position, turned the way of dir (its y and x, ratan2), with color. The match depends
  * on the frame table taken into a local first, as in Particle_initById. */
 HitSpark *HitSpark_init(HitSpark *this, Vec3 *position, VECTOR *dir, s32 unk3, u32 color) {
-    u16 (*frames)[10];
+    SpriteAnimRow *frames;
     s32 x, y, z;
 
     entityInit(&this->entity, 0);
     frames = PARTICLE_ANIMS;
-    spriteAnimInit(&this->sprite, frames[7], 0);
+    spriteAnimInit(&this->sprite, &frames[7], 0);
     this->entity.vtable = &HIT_SPARK_VTABLE;
     x = position->vx;
     y = position->vy;
@@ -388,7 +413,50 @@ void HitSpark_tick(HitSpark *this) {
 
 INCLUDE_RODATA("game/nonmatchings/game_0g", HIT_SPARK_CORNERS);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", HitSpark_draw);
+/* The spark's corners: x from -0x800 to 0x1000, y from -0x1000 to 0x1000 (HitSpark_draw). */
+extern SVECTOR HIT_SPARK_CORNERS[4];
+
+/* The draw method of HitSpark: a model matrix at the spark's position, turned by its angle and scaled by its size,
+ * then the spark's quad twice: in its color (flags 9, one OT slot further while func_8006F104 of CURRENT_FIGHT
+ * gives 0), and again with clut 0x7F20 and tpage 0x58 (flags 0xA). */
+void HitSpark_draw(HitSpark *this, Camera *camera) {
+    u_long *ot = camera->ot.slots;
+    s32 shift = camera->zShift;
+    u8 *prim = PRIM_BUFFER_FREE;
+    /* The match depends on further being declared before sprite (their saved registers). */
+    s32 further = func_8006F104(CURRENT_FIGHT) == 0;
+    SpriteAnim *sprite = &this->sprite;
+    MatrixWords m;
+    PolyFT4Shape shape;
+    MATRIX *matrix;
+    VECTOR *pos;
+    s32 x, y, z;
+
+    pos = &this->sprite.position;
+    x = pos->vx;
+    y = pos->vy;
+    z = pos->vz;
+    m.words[0] = ONE;
+    m.words[1] = 0;
+    m.words[2] = ONE;
+    m.words[3] = 0;
+    m.words[4] = ONE;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    matrix = &m.m;
+    matrixSetRotationZ(matrix, this->sprite.angle);
+    matrixScale(matrix, this->sprite.size, this->sprite.size, this->sprite.size);
+    setModelMatrix(matrix);
+    shape.flags = 0;
+    spriteAnimFillShape(sprite, &shape, HIT_SPARK_CORNERS);
+    shape.flags = (shape.flags & ~3) | 9;
+    prim = buildPolyFT4(&shape, prim, ot, shift + further);
+    shape.clut = 0x7F20;
+    shape.tpage = 0x58;
+    shape.flags = (shape.flags & ~3) | 0xA;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, prim, ot, shift);
+}
 
 /* The draw method of D_8006D4D4: like Particle_draw, without bit 3, one OT slot further while func_8006F104 of
  * CURRENT_FIGHT gives 0. */
@@ -403,10 +471,6 @@ void func_800C35D4(Particle *this, Camera *camera) {
     PRIM_BUFFER_FREE = buildPolyFT4(shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + further);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", Sparkle_init);
-
-INCLUDE_ASM("game/nonmatchings/game_0g", Sparkle_tick);
-
 /* A sparkle (Sparkle_init, virtual tables D_8006D45C, D_8006D484, SPARKLE_VTABLE): a 16-pixel glint that floats
  * up and grows, its color kept as hue, saturation and value, the value fading over its life of 16 frames. */
 typedef struct Sparkle {
@@ -418,6 +482,40 @@ typedef struct Sparkle {
     /* 0x54 */ s32 startValue; /* the value is startValue * life >> 4 */
     /* 0x58 */ s32 life;       /* 16 frames, counted down */
 } Sparkle; /* size 0x5C */
+
+INCLUDE_ASM("game/nonmatchings/game_0g", Sparkle_init);
+
+/* The tick of Sparkle_init's classes: the sprite grows, drifts by its velocity, slows down by 1/8 each frame and
+ * rises at random, its brightness fades with its life and it is deleted when the 16 frames are over.
+ * The match depends on the position sum read whole (as in vecAddInPlace) and the drag added field by field, the
+ * same mixed shape as Particle_tick. */
+void Sparkle_tick(Sparkle *this) {
+    Vec3 drag;
+    s32 x, y, z;
+
+    this->sprite.size += 2;
+    x = this->sprite.position.vx;
+    y = this->sprite.position.vy;
+    z = this->sprite.position.vz;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->sprite.position.vx = x;
+    this->sprite.position.vy = y;
+    this->sprite.position.vz = z;
+    drag.vx = -this->velocity.vx >> 3;
+    drag.vy = -this->velocity.vy >> 3;
+    drag.vz = -this->velocity.vz >> 3;
+    this->velocity.vx += drag.vx;
+    this->velocity.vy += drag.vy;
+    this->velocity.vz += drag.vz;
+    this->velocity.vy -= mersenneTwisterGenerate(&RANDOM) & 1;
+    this->hsv.value = this->startValue * this->life >> 4;
+    this->life--;
+    if (this->life <= 0) {
+        entityDelete(&this->entity);
+    }
+}
 
 /* The draw method of Sparkle_init's classes: the sprite's color from its hsv, then like Particle_draw with bits 0
  * and 3 set and bit 1 cleared. */
@@ -448,13 +546,14 @@ Entity *func_800C391C(Entity *this, Vec3 *arg1, Vec3 *arg2, s32 arg3, s32 arg4) 
 
 extern EntityVtable D_8006D434;
 
-/* The entity of func_800C3960 (vtable D_8006D434, 0xE4 bytes) for a fighter, by its handle. */
+/* The entity of func_800C3960 (vtable D_8006D434, 0xE4 bytes) for a fighter, by its handle: a ring of 12 points
+ * turning above its head while it is dizzy (func_800C39C8). */
 typedef struct Unk800C3960 {
     /* 0x00 */ Entity entity;
     /* 0x18 */ u32 fighterHandle; /* the fighter's (entityGetHandle) */
-    /* 0x1C */ u8 unk1C[0xDC - 0x1C];
+    /* 0x1C */ VECTOR points[12]; /* the ring's, in world space */
     /* 0xDC */ s32 unkDC; /* whether the character's func_80079E2C is 15 */
-    /* 0xE0 */ s32 unkE0;
+    /* 0xE0 */ s32 angle; /* the ring's turn: the fighter's facing * 0x40 a tick */
 } Unk800C3960; /* size 0xE4 */
 
 /* Constructs the character's entity of vtable D_8006D434. */
@@ -462,7 +561,7 @@ Unk800C3960 *func_800C3960(Unk800C3960 *this, Fighter *fighter) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006D434;
     this->fighterHandle = entityGetHandle(&fighter->entity);
-    this->unkE0 = 0;
+    this->angle = 0;
     this->unkDC = func_80079E2C(fighter) == 15;
     return this;
 }
@@ -590,7 +689,36 @@ void SpeedLine_draw(SpeedLine *this, Camera *camera) {
     AddPrim(ot, tpage);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", TransformFlash_init);
+extern EntityVtable TRANSFORM_FLASH_VTABLE;
+/* each character's other form (its evolution, or the form it evolved from), by CHARACTER_* */
+extern s32 CHARA_OTHER_FORM[];
+
+/* Sets *target to the height of fighter's other form, or to *ownHeight when func_800777BC holds.
+ * The match depends on the store through target: its address is taken before the call and kept in a register. */
+static inline void TransformFlash_setFormHeight(s32 *target, Fighter *fighter, s32 *ownHeight) {
+    *target = func_800777BC(fighter) ? *ownHeight
+                                     : FIGHTER_PARAMS[CHARA_OTHER_FORM[Fighter_getCharacter(fighter)]].height;
+}
+
+/* Constructs the flash of owner's evolution at its fighter's position: from the fighter's height to the other
+ * form's (unless func_800777BC holds: then the fighter's own), radius 0 out to twice that height, opaque. */
+TransformFlash *TransformFlash_init(TransformFlash *this, BattleSide *owner) {
+    Fighter *fighter;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &TRANSFORM_FLASH_VTABLE;
+    fighter = owner->current;
+    this->side = owner;
+    Fighter_getPosition(fighter, &this->position);
+    this->height = Fighter_getParams(fighter)->height;
+    TransformFlash_setFormHeight(&this->targetHeight, fighter, &this->height);
+    this->radius = 0;
+    this->maxRadius = this->targetHeight * 2;
+    this->alpha = 0xFF;
+    this->phase = 0;
+    this->frame = 0;
+    return this;
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0g", TransformFlash_tick);
 
@@ -614,9 +742,63 @@ void TransformFlash_spawnBurst(TransformFlash *this, s32 arg1, s32 count) {
     entityAddSibling(&this->entity, child);
 }
 
-INCLUDE_RODATA("game/nonmatchings/game_0g", D_8006D214);
+INCLUDE_RODATA("game/nonmatchings/game_0g", TRANSFORM_FLASH_DISC);
 
-INCLUDE_ASM("game/nonmatchings/game_0g", TransformFlash_draw);
+/* the flash's disc: its center, then 17 points round a circle of radius 0x1000 in x and y (the last is the first) */
+extern SVECTOR TRANSFORM_FLASH_DISC[18];
+
+/* Sets a matrix's translation t to v. */
+static inline void setTranslation(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Scales m (matrixScale) and makes it the GTE's model matrix (setModelMatrix). */
+static inline void setScaledModelMatrix(MATRIX *m, s32 x, s32 y, s32 z) {
+    matrixScale(m, x, y, z);
+    setModelMatrix(m);
+}
+
+/* The flash's draw: a disc facing the camera at the position, radius wide and an eighth more high, as 8 POLY_G4
+ * of two rim segments each, its center colored by alpha (red alpha / 2, green 3/4 alpha, blue alpha) and its rim
+ * black. The match depends on the translation set by an inline taking m.t (the position read through its pointer
+ * parameter, the stores sp-relative) and on the two matrix calls made by the setScaledModelMatrix inline (&m
+ * kept in a saved register). */
+void TransformFlash_draw(TransformFlash *this, Camera *camera) {
+    MATRIX m;
+    PolyG4Shape shape;
+    u8 *packet = PRIM_BUFFER_FREE;
+    u_long *ot;
+    s32 zShift;
+    u32 alpha;
+    s32 i;
+
+    m = camera->view->rotation;
+    zShift = camera->zShift + 1;
+    setTranslation(m.t, &this->position);
+    ot = camera->ot.slots;
+    setScaledModelMatrix(&m, this->radius, this->radius + (this->radius >> 3), this->radius);
+    shape.corners[0] = &TRANSFORM_FLASH_DISC[1];
+    shape.corners[1] = &TRANSFORM_FLASH_DISC[2];
+    shape.corners[2] = &TRANSFORM_FLASH_DISC[0];
+    shape.corners[3] = &TRANSFORM_FLASH_DISC[3];
+    shape.colors[0] = shape.colors[1] = shape.colors[3] = 0;
+    alpha = this->alpha;
+    shape.flags = 9;
+    shape.colors[2] = (alpha >> 1) | ((alpha - (alpha >> 2)) << 8) | (alpha << 16);
+    for (i = 0; i < 8; i++) {
+        packet = buildPolyG4(&shape, packet, ot, zShift);
+        shape.corners[0] += 2;
+        shape.corners[1] += 2;
+        shape.corners[3] += 2;
+    }
+    PRIM_BUFFER_FREE = packet;
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0g", func_800C4F74);
 
@@ -643,7 +825,55 @@ void Trail_tick(Trail *this, CollisionSphere *sum) {
     Trail_fadeColors(this);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", Trail_record);
+/* Records the trail's points: moves head on in the ring, samples every point's model position (its node and
+ * offset, Fighter_getNodePosition) and color into it, then counts the sample in validCount, which starts again
+ * when the first point jumped more than 0x300 from the last sample. The match depends on the position narrowed
+ * through s16 locals (lh loads), the point count read into a local, and the last sample's address taken before the
+ * head's. */
+void Trail_record(Trail *this) {
+    s32 previous = this->head;
+    Fighter *fighter = this->fighter;
+    TrailPoint *point;
+    TrailSample *sample;
+    TrailSample *last;
+    VECTOR position;
+    s32 count;
+    s32 head;
+    s32 i;
+
+    if (previous < 0) {
+        previous = 0;
+    }
+    point = this->points;
+    head = (this->head + 1) & 0x1F;
+    count = this->pointCount;
+    this->head = head;
+    for (i = 0; i < count; i++) {
+        VECTOR offset = point->offset;
+        s16 x, y, z;
+
+        Fighter_getNodePosition(fighter, &position, point->node, &offset);
+        sample = &this->samples[i][head];
+        x = position.vx;
+        y = position.vy;
+        z = position.vz;
+        sample->x = x;
+        sample->y = y;
+        sample->z = z;
+        /* one word: a CVECTOR assignment copies with lwl/lwr, the game with lw/sw */
+        *(u32 *)&sample->color = *(u32 *)&point->color;
+        point++;
+    }
+    last = &this->samples[0][previous];
+    sample = &this->samples[0][head];
+    position.vx = sample->x - last->x;
+    position.vy = sample->y - last->y;
+    position.vz = sample->z - last->z;
+    if ((u32)(position.vx * position.vx + position.vy * position.vy + position.vz * position.vz) > 0x90000) {
+        this->validCount = 0;
+    }
+    this->validCount++;
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0g", Trail_fadeColors);
 
@@ -697,7 +927,58 @@ void Trail_draw(Trail *this, Camera *camera) {
     vtable->drawStrips.func((u8 *)this + vtable->drawStrips.delta, camera);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0g", Trail_drawStrips);
+/* Draws the trail (TrailVtable.drawStrips): a POLY_G4 between each two neighbouring points for each two samples in
+ * a row, from the newest back over length - 1 samples (at most the valid ones), gouraud between the samples' colors;
+ * the newest end of the first strip is black when there are two strips or more. A sample starts with an SVECTOR's
+ * layout, so the corners point at the samples; the colors are copied as words (CVECTOR to the shape's u32). The
+ * match depends on the four samples taken by pointer (the game reads the colors through the corners' registers). */
+void Trail_drawStrips(Trail *this, Camera *camera) {
+    PolyG4Shape shape;
+    u8 *packet = PRIM_BUFFER_FREE;
+    u_long *ot;
+    s32 zShift;
+    s32 strips;
+    s32 edges;
+    s32 cur;
+    s32 prev;
+    s32 i;
+    s32 j;
+
+    strips = this->length - 1;
+    shape.flags = 9;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    if (this->validCount - 1 < strips) {
+        strips = this->validCount - 1;
+    }
+    cur = this->head;
+    edges = this->pointCount - 1;
+    for (i = 0; i < strips; i++) {
+        prev = (cur - 1) & 0x1F;
+        for (j = 0; j < edges; j++) {
+            TrailSample *newer = &this->samples[j][cur];
+            TrailSample *older = &this->samples[j][prev];
+            TrailSample *nextNewer = &this->samples[j + 1][cur];
+            TrailSample *nextOlder = &this->samples[j + 1][prev];
+
+            shape.corners[0] = (SVECTOR *)newer;
+            shape.corners[1] = (SVECTOR *)older;
+            shape.corners[2] = (SVECTOR *)nextNewer;
+            shape.corners[3] = (SVECTOR *)nextOlder;
+            if (i == 0 && strips >= 2) {
+                shape.colors[0] = shape.colors[2] = 0;
+            } else {
+                shape.colors[0] = *(u32 *)&newer->color;
+                shape.colors[2] = *(u32 *)&nextNewer->color;
+            }
+            shape.colors[1] = *(u32 *)&older->color;
+            shape.colors[3] = *(u32 *)&nextOlder->color;
+            packet = buildPolyG4(&shape, packet, ot, zShift);
+        }
+        cur = prev;
+    }
+    PRIM_BUFFER_FREE = packet;
+}
 
 /* A particle spray (ParticleSpray_init, virtual table PARTICLE_SPRAY_VTABLE): emits particles of createParticle's
  * kind at pos with vel, both jittered by half of vel's length (count > 0: one a frame; < 0: all at once). */
@@ -832,7 +1113,7 @@ void Particle_destroy(Entity *this, s32 flags) {
 }
 
 /* Constructs a sprite entity of PARTICLE_VTABLE on frame with flags, without the motion of Particle_setMotion. */
-Particle *Particle_initStill(Particle *this, u16 *frame, s32 flags) {
+Particle *Particle_initStill(Particle *this, SpriteAnimRow *frame, s32 flags) {
     entityInit(&this->entity, 0);
     spriteAnimInit(&this->sprite, frame, flags);
     this->entity.vtable = &PARTICLE_VTABLE;

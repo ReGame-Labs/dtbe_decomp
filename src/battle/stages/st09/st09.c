@@ -5,6 +5,8 @@
 #include "battle/game_classes.h"
 #include "battle/stage_objects.h"
 #include "engine/gfx/camera.h"
+#include "engine/gfx/look_at.h"
+#include "engine/gfx/ordering_table.h"
 #include "engine/gfx/scene_graph.h"
 #include "engine/lib/list.h"
 #include "engine/system/memory.h"
@@ -56,9 +58,9 @@ typedef struct StageJewelHunt {
     /* 0x103C */ s16 frames; /* the scenery's frames (StageJewelHunt_tickScenery adds 1) */
     /* 0x103E */ u8 unk103E[0x1040 - 0x103E];
     /* 0x1040 */ MeshScene *scene; /* Fight_getMeshScene's (StageJewelHunt_startRound) */
-    /* 0x1044 */ u8 unk1044[0x1404 - 0x1044];
+    /* 0x1044 */ VECTOR throwPositions[2][30]; /* by side and slot: its St09Throw's position (St09Throw_init) */
     /* 0x1404 */ u16 nextThrowSlot[2]; /* by side: the next of 30 slots BonusThrower_throw gives an St09Throw */
-    /* 0x1408 */ u8 unk1408[0x1480 - 0x1408];
+    /* 0x1408 */ u16 unk1408[2][30]; /* by side and slot: set to 1 by func_800D6110 */
     /* 0x1480 */ Group groups[3]; /* each drawn in the view of its own camera (StageJewelHunt_drawWorld) */
     /* 0x15A0 */ s16 unk15A0; /* the func_800D5BA0 entities func_800D49A0 has made, up to 16 */
     /* 0x15A2 */ u16 holdFrames[2]; /* by side: frames button 0x80 has been held, up to BONUS_CHARGE_FRAMES */
@@ -74,10 +76,10 @@ void st09_clearFrames(StageJewelHunt *this);
 void st09_resetCharge(StageJewelHunt *this);
 void st09_createThrowers(Fight *this);
 void func_800D476C(StageJewelHunt *this);
-void func_800D42EC(StageJewelHunt *this);
+void st09_keepFightersInside(StageJewelHunt *this);
 void st09_updateCharge(StageJewelHunt *this);
 void func_800D49A0(StageJewelHunt *this);
-void func_800D45F8(StageJewelHunt *this);
+void st09_endOnTimeUp(StageJewelHunt *this);
 
 INCLUDE_ASM("st09/nonmatchings/st09", JewelHuntController_getButtons);
 
@@ -237,14 +239,32 @@ void StageJewelHunt_tickScenery(StageJewelHunt *this) {
     Fight_getFighter(&this->base.base, 0)->invulnerableFrames = 10;
     Fight_getFighter(&this->base.base, 1)->invulnerableFrames = 10;
     BonusFight_tickScenery(&this->base);
-    func_800D42EC(this);
+    st09_keepFightersInside(this);
     st09_updateCharge(this);
     func_800D49A0(this);
-    func_800D45F8(this);
+    st09_endOnTimeUp(this);
     this->frames++;
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D42EC);
+/* Keeps both fighters inside the arena: x within 0x500 less the character's height on either side. */
+void st09_keepFightersInside(StageJewelHunt *this) {
+    s32 side;
+
+    for (side = 0; side < 2; side++) {
+        s32 height = FIGHTER_PARAMS[Fighter_getCharacter(Fight_getFighter(&this->base.base, side))].height;
+        Vec3 position;
+
+        Fighter_getPosition(Fight_getFighter(&this->base.base, side), &position);
+        if (abs(position.vx) >= 0x500 - height) {
+            if (position.vx > 0) {
+                position.vx = 0x500 - height;
+            } else {
+                position.vx = height - 0x500;
+            }
+        }
+        Fighter_setPosition(Fight_getFighter(&this->base.base, side), &position);
+    }
+}
 
 /* where the stage's view looks at, and from */
 extern Vec3 ST09_VIEW_TARGET;
@@ -290,9 +310,54 @@ void StageJewelHunt_tick(StageJewelHunt *this) {
     }
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", StageJewelHunt_drawWorld);
+/* Draws group i in the battle's view through camera i, its world then invalidated, and links that camera's table after
+ * the main camera's last-drawn slot. */
+static inline void st09_drawGroup(StageJewelHunt *this, s32 i, LookAt *lookAt, Camera *mainCamera) {
+    MATRIX view;
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D45F8);
+    lookAtGetView(lookAt, &view);
+    cameraSetView(&this->cameras[i], &view);
+    cameraApplyLights(&this->cameras[i]);
+    sceneObjectDrawInView(&this->groups[i].object, &this->cameras[i]);
+    this->groups[i].object.vtable->invalidate.func((u8 *)&this->groups[i]
+                                                   + this->groups[i].object.vtable->invalidate.delta);
+    orderingTableLinkAfter(&this->cameras[i].ot, mainCamera->ot.lastDrawn);
+}
+
+/* The stage's override of Fight_drawWorld: its three cameras' tables cleared, the base's draw with the main camera's
+ * lights, then each group through its own camera. */
+void StageJewelHunt_drawWorld(StageJewelHunt *this) {
+    Camera *camera;
+    LookAt *lookAt;
+
+    camera = Fight_getCamera(&this->base.base);
+    cameraClearOt(&this->cameras[0]);
+    cameraClearOt(&this->cameras[1]);
+    cameraClearOt(&this->cameras[2]);
+    cameraApplyLights(camera);
+    Fight_drawWorld(this);
+    lookAt = Fight_getLookAt(&this->base.base);
+    st09_drawGroup(this, 0, lookAt, camera);
+    st09_drawGroup(this, 1, lookAt, camera);
+    st09_drawGroup(this, 2, lookAt, camera);
+}
+
+/* At the end of the time (timeLeft below 2), once: the higher score wins, equal scores end in a draw; then the
+ * bonus HUD is hidden. */
+void st09_endOnTimeUp(StageJewelHunt *this) {
+    if (this->base.base.timeLeft < 2 && this->base.hudHidden == 0) {
+        if (this->base.scores[0] == this->base.scores[1]) {
+            BonusFight_endInDraw(&this->base);
+        } else if (this->base.scores[0] > this->base.scores[1]) {
+            BonusFight_endWithWinner(&this->base, Fight_getFighter(&this->base.base, 0),
+                                     Fight_getFighter(&this->base.base, 1));
+        } else {
+            BonusFight_endWithWinner(&this->base, Fight_getFighter(&this->base.base, 1),
+                                     Fight_getFighter(&this->base.base, 0));
+        }
+        this->base.hudHidden = 1;
+    }
+}
 
 /* Clears the hold counts and sets the gauge's maximum to BONUS_CHARGE_FRAMES (as st07_resetCharge). */
 void st09_resetCharge(StageJewelHunt *this) {
@@ -395,7 +460,83 @@ void func_800D49A0(StageJewelHunt *this) {
     }
 }
 
-INCLUDE_ASM("st09/nonmatchings/st09", St09Throw_init);
+/* The object a BonusThrower throws (St09Throw_init, virtual table ST09_THROW_VTABLE, 0x78 bytes). */
+typedef struct St09Throw {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ StageJewelHunt *stage;
+    /* 0x1C */ u16 side; /* indexes the stage's throwPositions by side (lhu) */
+    /* 0x1E */ u16 slot; /* and by slot (BonusThrower_throw's nextThrowSlot) */
+    /* 0x20 */ s16 direction; /* -1 for a throw toward +x, else 1 */
+    /* 0x22 */ u16 ticks;     /* counted up by St09Throw_tick */
+    /* 0x24 */ SVECTOR corners[4]; /* a 128 by 128 square */
+    /* 0x44 */ Vec3 force;
+    /* 0x50 */ s32 unk50;
+    /* 0x54 */ Vec3 velocity;
+    /* 0x60 */ s32 unk60;
+    /* 0x64 */ Vec3 position;
+    /* 0x70 */ u8 unk70[0x74 - 0x70];
+    /* 0x74 */ s32 scale; /* the thrower's charge times 0xCC, the draw's scale */
+} St09Throw;
+
+/* Copies a position into one of the stage's throwPositions. */
+static inline void copyThrowPosition(VECTOR *dst, Vec3 *position) {
+    s32 x = position->vx;
+    s32 y = position->vy;
+    s32 z = position->vz;
+
+    dst->vx = x;
+    dst->vy = y;
+    dst->vz = z;
+}
+
+/* Constructs a thrown object of the stage at position: launch's vx and vy are its force, vz its scale, pad its side;
+ * records the position in the stage's throwPositions[side][slot], makes a 128 by 128 square and loads sound 0x800A.
+ * The match depends on each copy reading its words into its own block's locals first, and on the if/else for
+ * direction (as in St07Ball_init). */
+St09Throw *St09Throw_init(St09Throw *this, StageJewelHunt *stage, Vec3 *position, VECTOR *launch, s32 slot) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &ST09_THROW_VTABLE;
+    this->stage = stage;
+    this->scale = launch->vz;
+    {
+        s32 x = position->vx;
+        s32 y = position->vy;
+        s32 z = position->vz;
+
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+    }
+    {
+        s32 x = launch->vx;
+        s32 y = launch->vy;
+
+        this->force.vx = x;
+        this->force.vy = y;
+    }
+    this->force.vz = 0;
+    this->unk50 = 0;
+    this->velocity.vx = 0;
+    this->velocity.vy = 0;
+    this->velocity.vz = 0;
+    this->unk60 = 0;
+    if (this->force.vx > 0) {
+        this->direction = -1;
+    } else {
+        this->direction = 1;
+    }
+    this->side = launch->pad;
+    this->slot = slot;
+    copyThrowPosition(&this->stage->throwPositions[this->side][slot], position);
+    this->corners[0].vx = this->corners[2].vx = -0x40;
+    this->corners[1].vx = this->corners[3].vx = 0x40;
+    this->corners[0].vy = this->corners[1].vy = -0x40;
+    this->corners[2].vy = this->corners[3].vy = 0x40;
+    this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = 0;
+    this->ticks = 0;
+    soundControlLoadSound(&SOUND_CONTROL, 0x800A, 1);
+    return this;
+}
 
 /* St09Throw's destructor. */
 void St09Throw_destroy(Entity *this, s32 flags) {
@@ -441,9 +582,6 @@ static inline StageJewelHunt *throwerStage(BonusThrower *thrower) {
     return (StageJewelHunt *)thrower->owner;
 }
 
-struct St09Throw *St09Throw_init(struct St09Throw *this, Fight *stage, Vec3 *position, VECTOR *vec,
-                                  u16 slot);
-
 /* BonusThrower's tick: BonusThrower_place, BonusThrower_throw, then counts its frames. */
 void BonusThrower_tick(BonusThrower *this, s32 arg) {
     BonusThrower_place(this);
@@ -480,7 +618,7 @@ void BonusThrower_throw(BonusThrower *this) {
         vec.vz = throwerStage(this)->heldCharge[this->side] * 0xCC;
         vec.pad = this->side;
         this->position.vz = 0;
-        entity = NEW_ENTITY(0x78, St09Throw_init, this->owner, &this->position, launch,
+        entity = NEW_ENTITY(0x78, St09Throw_init, throwerStage(this), &this->position, launch,
                             throwerStage(this)->nextThrowSlot[this->side]);
         if (entity != NULL) {
             entityAddSibling(&this->entity, entity);
@@ -597,22 +735,58 @@ INCLUDE_ASM("st09/nonmatchings/st09", func_800D5998);
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D5BA0);
 
-INCLUDE_ASM("st09/nonmatchings/st09", func_800D5DDC);
+/* The entity func_800D49A0 adds every 16 frames (func_800D5BA0, virtual table D_800D399C): a mesh of the scene, of a
+ * kind 0 to 2; kinds other than 1 count in the stage's jewelCounts cell under them. */
+typedef struct Unk800D5BA0 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ MeshScene *scene;
+    /* 0x1C */ StageJewelHunt *stage;
+    /* 0x20 */ Mesh *mesh; /* of the kind's node of the scene (D_800D3824), in the stage's group of the kind */
+    /* 0x24 */ Vec3 position;
+    /* 0x30 */ u8 unk30[0x34 - 0x30];
+    /* 0x34 */ u16 column; /* its jewelCounts cell: (x + 0x480) >> 8 */
+    /* 0x36 */ u16 row;    /* and (y + 0x480) >> 8 */
+    /* 0x38 */ u16 kind;
+    /* 0x3A */ s16 unk3A;
+    /* 0x3C */ s16 unk3C;
+    /* 0x3E */ u8 unk3E[0x40 - 0x3E];
+    /* 0x40 */ s32 unk40;
+    /* 0x44 */ s16 unk44;
+    /* 0x46 */ s16 unk46;
+    /* 0x48 */ u8 unk48[0x4C - 0x48];
+} Unk800D5BA0;
+
+extern EntityVtable D_800D399C;
+
+/* Deletes a scene object through its virtual destructor (engine scene_graph.c's inline). */
+static inline void sceneObjectDelete(SceneObject *object) {
+    if (object != NULL) {
+        object->vtable->destroy.func((u8 *)object + object->vtable->destroy.delta, DESTROY_DELETE);
+    }
+}
+
+/* Unk800D5BA0's destructor: its cell of jewelCounts emptied (kinds other than 1), the mesh out of the scene and
+ * deleted, then entityDestroy. */
+void func_800D5DDC(Unk800D5BA0 *this, s32 flags) {
+    this->entity.vtable = &D_800D399C;
+    if (this->kind != 1) {
+        this->stage->jewelCounts[this->column][this->row] = 0;
+    }
+    listRemove(&this->mesh->object.link);
+    sceneObjectDelete(&this->mesh->object);
+    entityDestroy(&this->entity, 0);
+    if (flags & DESTROY_FREE) {
+        entityOperatorDelete(this);
+    }
+}
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D5EB8);
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D6110);
 
-/* An object of st09 whose 0x20 is a scene object (Unk800D6360_getLocalMatrix, func_800D636C); its class is not
- * known yet. */
-typedef struct Unk800D6360 {
-    /* 0x00 */ u8 unk0[0x20];
-    /* 0x20 */ SceneObject *unk20;
-} Unk800D6360;
-
 /* Returns the local matrix of the scene object at 0x20. */
-MATRIX *Unk800D6360_getLocalMatrix(Unk800D6360 *this) {
-    return &this->unk20->transform.local.m;
+MATRIX *Unk800D5BA0_getLocalMatrix(Unk800D5BA0 *this) {
+    return &this->mesh->object.transform.local.m;
 }
 
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D636C);
