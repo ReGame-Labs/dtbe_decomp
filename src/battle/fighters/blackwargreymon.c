@@ -16,6 +16,7 @@ typedef struct BlackWarGreymon {
 
 Unk800BDA50 *func_800C2264(Unk800BDA50 *this, Fighter *owner, Vec3 *pos, s32 arg3, s32 arg4);
 extern CVECTOR D_8006CFA8;
+extern CVECTOR D_8006CF84; /* the intro hitbox's colour */
 extern VECTOR D_8006CF98;
 void func_800C1CE0(BlackWarGreymon *this);
 
@@ -35,7 +36,31 @@ void BlackWarGreymon_handleInput(void *this, void *arg) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/blackwargreymon", D_8006CF84);
 
-INCLUDE_ASM("game/nonmatchings/fighters/blackwargreymon", BlackWarGreymon_intro);
+/* Intro: at frame 24 the intro's hitbox (func_800BE39C) at the fighter's point (func_8007A650) and sound 0x11C; at
+ * frame 80 it faces the opponent's half (right on side 0). */
+void BlackWarGreymon_intro(BlackWarGreymon *this, s32 frame) {
+    if (frame == 24) {
+        CVECTOR color = D_8006CF84;
+        Vec3 position;
+        Entity *child;
+
+        func_8007A650(&this->base.base, &position);
+        child = allocEntityMemory(0xE0);
+        if (child != NULL) {
+            /* arg1 is the fighter here; the hitbox methods that also spawn one pass their s32 arg */
+            func_800BE39C(entityOperatorNewAt(0xE0, child), (s32)this, &position, 0, 0x300, &color);
+        }
+        Fighter_addEntity(&this->base.base, child);
+        Fighter_playSound(&this->base.base, 0x11C);
+    }
+    if (frame == 80) {
+        if (Fighter_getSide(&this->base.base) == 0) {
+            Fighter_faceRight(&this->base.base, 0);
+        } else {
+            Fighter_faceLeft(&this->base.base, 0);
+        }
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/blackwargreymon", BlackWarGreymon_throw);
 
@@ -109,7 +134,39 @@ void func_800C1E64(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/blackwargreymon", BlackWarGreymon_special3);
+/* Special move 3: frame 0 the voice, action clip 0x1A and the slot 0x128 hitbox at (144 forward, 48) (arg 0x31);
+ * forward pushes at frames 45 and 64, the velocity stopped at frame 50. */
+void BlackWarGreymon_special3(BlackWarGreymon *this, s32 frame) {
+    Vec3 offset;
+    WarGreymonVtable *vtable;
+
+    switch (frame) {
+    case 0:
+        Fighter_playVoice(&this->base.base, 0x121);
+        Fighter_playActionClip(&this->base.base, FIGHTER_CLIP_SPECIAL3, 4, 0, -1);
+        offset.vx = Fighter_getFacing(&this->base.base) * 144;
+        offset.vy = 48;
+        offset.vz = 0;
+        vtable = GET_WARGREYMON_VTABLE(&this->base);
+        vtable->unk128.func((u8 *)this + vtable->unk128.delta, &offset, 0x31);
+        break;
+    case 45: {
+        s64 push = ((s64)this->base.base.mass * 0x3FFC) >> 16;
+
+        this->base.base.force.vx = (s32)push * Fighter_getFacing(&this->base.base);
+        break;
+    }
+    case 50:
+        this->base.base.velocity.vx = 0;
+        break;
+    case 64: {
+        s64 push = ((s64)this->base.base.mass * 0xE38) >> 16;
+
+        this->base.base.force.vx = (s32)push * Fighter_getFacing(&this->base.base);
+        break;
+    }
+    }
+}
 
 /* Creates an entity of func_800C2264's class (0xD4 bytes) at pos with g++'s new and hands it to Fighter_addEntity, then
  * plays sound 0x11B, sets unk498 to 10 and takes the level of the object at 0x238 down to 0. */

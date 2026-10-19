@@ -87,15 +87,15 @@ void meshSceneSetParent(MeshScene *meshScene, Transform *parent) {
  * meshSceneInitNodes does. */
 INCLUDE_ASM("main/nonmatchings/gfx/mesh_scene", meshSceneSetLocalMatrix);
 
-/* Prepares the TMD of a node again (tmdHeaderRelocate), and its first
+/* Prepares the TMD of a node again (tmdHeaderRelocate) and returns its first
  * object. */
-void meshSceneRelocateNodeTmd(MeshScene *meshScene, s32 node) {
+TmdObject *meshSceneRelocateNodeTmd(MeshScene *meshScene, s32 node) {
     MeshSceneFile *file = meshScene->file;
     s16 *tmdIndex = file->nodes + 1;
     TmdHeader *tmd = file->tmds[tmdIndex[node]];
 
     tmdHeaderRelocate(tmd);
-    tmdHeaderGetObject(tmd, 0);
+    return tmdHeaderGetObject(tmd, 0);
 }
 
 /* The number of nodes. */

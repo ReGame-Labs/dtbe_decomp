@@ -11,7 +11,8 @@ extern EntityVtable WORMMON_SPECIAL1_HITBOX_VTABLE;
 extern EntityVtable WORMMON_VTABLE;
 struct WormmonSpecial1Hitbox *WormmonSpecial1Hitbox_init(struct WormmonSpecial1Hitbox *this, Fighter *fighter,
                                                          Vec3 *position, Vec3 *velocity, Fight *fight);
-Entity *WormmonGuardEffect_init(void *this, Fighter *fighter, s32 arg);
+struct WormmonGuardEffect *WormmonGuardEffect_init(struct WormmonGuardEffect *this, Fighter *fighter,
+                                                   s32 crouching);
 
 /* Builds Wormmon: a Fighter with its own vtable and faces, no guard effect out. */
 Wormmon *Wormmon_init(Wormmon *this) {
@@ -59,7 +60,53 @@ void Wormmon_crouchGuard(Wormmon *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", Wormmon_throw);
+/* Throw: Fighter's; at frame 0 the opponent is held (8) flinching and both fighters stop; at frame 8, on the ground,
+ * hits the opponent forward and up with a spark at its position + (0, -0x100, -0x100), else lets go
+ * (Fighter_stopActionClip). */
+void Wormmon_throw(Fighter *this, s32 frame) {
+    Fighter *opponent;
+    Vec3 velocity;
+    Vec3 position;
+    VECTOR direction;
+    Entity *child;
+
+    Fighter_throw(this, frame);
+    opponent = Fighter_getOpponent(this);
+    if (frame == 0) {
+        Fighter_hold(opponent, 8);
+        Fighter_setClip(opponent, FIGHTER_CLIP_FLINCH, 0, 0);
+        opponent->velocity.vx = 0;
+        opponent->velocity.vy = 0;
+        opponent->velocity.vz = 0;
+        opponent->velocityPad = 0;
+        this->velocity.vx = 0;
+        this->velocity.vy = 0;
+        this->velocity.vz = 0;
+        this->velocityPad = 0;
+    }
+    if (frame == 8) {
+        if (Fighter_isOnGround(this)) {
+            velocity.vx = (s16)Fighter_getFacing(this) * 9100;
+            velocity.vy = -0x38E0;
+            velocity.vz = 0;
+            Fighter_takeHit(opponent, 0x5B8C1A00, &velocity, 2);
+            direction.vx = 0;
+            direction.vy = 0;
+            direction.vz = 0;
+            direction.pad = 0;
+            Fighter_getPosition(opponent, &position);
+            position.vy -= 0x100;
+            position.vz -= 0x100;
+            child = allocEntityMemory(0x48);
+            if (child != NULL) {
+                HitSpark_init(entityOperatorNewAt(0x48, child), &position, &direction, 0x60, 0x808080);
+            }
+            Fighter_addEntity(this, child);
+        } else {
+            Fighter_stopActionClip(this);
+        }
+    }
+}
 
 /* Special move 1: its clip and the voice at frame 0, the hitbox (spawnSpecial1Hitbox(0)) at frame 13. */
 void Wormmon_special1(Fighter *this, s32 frame) {
@@ -175,7 +222,34 @@ void Wormmon_upAttack(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", Wormmon_airSpecial1);
+/* Special move 1 in the air: at frame 0 its clip, a stop and the voice; at frame 5 a push back; the hitbox at frame
+ * 11; from frame 6 a rise is braked and the horizontal velocity loses 1/128 a frame. */
+void Wormmon_airSpecial1(Fighter *this, s32 frame) {
+    func_80079AE4(this);
+    switch (frame) {
+    case 0:
+        Fighter_playActionClip(this, FIGHTER_CLIP_AIR_SPECIAL1, 0, 0, -1);
+        this->velocity.vx = 0;
+        this->velocity.vy = 0;
+        Fighter_playVoice(this, 0x105);
+        break;
+    case 5: {
+        s32 push = ((s64)this->mass * 0x1C70) >> 16;
+
+        this->force.vx += push * -Fighter_getFacing(this);
+        break;
+    }
+    case 11:
+        Wormmon_spawnSpecial1Hitbox(this, 1);
+        break;
+    }
+    if (frame >= 6) {
+        if (this->velocity.vy > 0) {
+            this->force.vy -= this->velocity.vy;
+        }
+        this->force.vx -= this->velocity.vx >> 7;
+    }
+}
 
 /* Special move 2 in the air: as Wormmon_special2, with its own clip (the vertical velocity stopped first) and
  * 0x47AC1400 at frame 10. The match depends on the same block-scoped speeds. */
@@ -358,7 +432,33 @@ Unk800BA734 *func_800BA734(Unk800BA734 *this, Fighter *fighter, BattleSide *owne
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", func_800BA7AC);
+/* The tick of func_800BA734's entity: follows the side's current fighter (func_8007A650); in state 0 0x488 grows by
+ * 8 until tick 5, state 1 waits until tick 9, state 2 takes 8 off 0x494 a tick and deletes the entity at 0. */
+void func_800BA7AC(Unk800BA734 *this) {
+    func_8007A650(this->base.owner->current, &this->base.position);
+    switch (this->base.unk498) {
+    case 0:
+        this->base.unk488 += 8;
+        if (this->base.unk49C >= 5) {
+            this->base.unk498 = 1;
+        }
+        break;
+    case 1:
+        if (this->base.unk49C >= 9) {
+            this->base.unk498 = 2;
+        }
+        break;
+    case 2:
+        this->base.unk494 -= 8;
+        if (this->base.unk494 <= 0) {
+            entityDelete(&this->base.entity);
+            return;
+        }
+        break;
+    }
+    this->base.unk4A0 += 10;
+    this->base.unk49C++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/wormmon", func_800BA8AC);
 
@@ -371,14 +471,36 @@ typedef struct WormmonGuardEffect {
     /* 0x22 */ s16 facing; /* Fighter_getFacing */
     /* 0x24 */ s16 vramY;  /* Fighter_getVramY */
     /* 0x26 */ s16 unk26;
-    /* 0x28 */ VECTOR unk28;
+    /* 0x28 */ VECTOR fighterPosition; /* the fighter's when made (Fighter_getPosition) */
     /* 0x38 */ VECTOR position; /* where the draw puts the rectangle */
     /* 0x48 */ s32 scale;       /* of the rectangle, in 4096ths; 0 draws nothing */
 } WormmonGuardEffect;
 
 extern EntityVtable WORMMON_GUARD_EFFECT_VTABLE;
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonGuardEffect_init);
+/* Builds the guard effect for fighter: it keeps its handle and facing, and sits 200 in front of it and 0x84 up when
+ * standing (crouching 0), 0xE8 in front and 0x60 up when crouching (1), 0x80 toward the camera. */
+WormmonGuardEffect *WormmonGuardEffect_init(WormmonGuardEffect *this, Fighter *fighter, s32 crouching) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &WORMMON_GUARD_EFFECT_VTABLE;
+    this->handle = entityGetHandle(&fighter->entity);
+    this->facing = Fighter_getFacing(fighter);
+    {
+        VECTOR offsets[2] = { { this->facing * 200, -0x84 }, { this->facing * 0xE8, -0x60 } };
+
+        Fighter_getPosition(fighter, (Vec3 *)&this->fighterPosition);
+        this->position.vz = -0x80;
+        /* The match depends on the offset being the first operand */
+        this->position.vx = offsets[crouching].vx + this->fighterPosition.vx;
+        this->position.vy = offsets[crouching].vy + this->fighterPosition.vy;
+    }
+    this->vramY = Fighter_getVramY(fighter);
+    this->fighter = (Wormmon *)fighter;
+    this->unk26 = 0;
+    this->scale = 0;
+    this->unk20 = 0;
+    return this;
+}
 
 /* The guard effect's destructor: clears the character's guardEffectActive, so that it can make another. */
 void WormmonGuardEffect_destroy(WormmonGuardEffect *this, s32 flags) {

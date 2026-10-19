@@ -19,7 +19,10 @@ func_800D4814 StageVolcano_lightFighter
 func_800D47E8 StageVolcano_drawWorld
 func_800D47D4 StageVolcano_isFallen
 func_800D4A10 StageVolcano_updateCamera
+func_800D4BB4 st05_drawScenery
+D_800D3A74 ST05_SCENERY_POINT
 func_800D4570 st05_clampFighterX
+func_800D45E0 st05_burnFighter
 func_800D5364 st05_startSound
 func_800D53A8 st05_stopSound
 func_800D6A08 st05_getRiseBoost
@@ -44,3 +47,15 @@ func_800D64FC St05Shard_init
 func_800D6584 St05Shard_tick
 func_800D65F8 St05Shard_draw
 func_800D6B94 St05Shard_destroy
+
+# r13 agent D
+func_800D5144 st05_drawBackdropSprites
+func_800D5254 st05_drawRedGlow
+func_800D5004 st05_loadPulsingCluts
+D_800D3A9C ST05_PULSING_CLUT_RECTS
+# r14 agent D
+D_800D3984 ST05_BACKGROUND_CLUT_RECT
+D_800D398C ST05_BACKGROUND_IMAGE_RECT
+D_800D3994 ST05_LIGHT_DIRECTION
+D_800D39A4 ST05_LIGHT_COLOR
+D_800D3CA4 ST05_ITEM_SPAWN_POINTS

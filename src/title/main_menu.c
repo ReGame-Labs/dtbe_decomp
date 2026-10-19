@@ -2,10 +2,14 @@
 
 #include "common.h"
 #include "engine/game/game_state.h"
+#include "engine/debug/system_menu.h"
+#include "engine/cd/file_load.h"
+#include "engine/gfx/display.h"
 #include "engine/gfx/fade.h"
 #include "engine/gfx/ordering_table.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/gfx/prim/alloc_poly_ft4.h"
+#include "engine/gfx/prim_buffer.h"
 #include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
@@ -15,13 +19,20 @@
 #include "engine/gfx/sprite.h"
 #include "title/title_classes.h"
 
+/* The StepperGroup (engine/menu/stepper.h) of the main menu's items, as C sees it. */
+typedef struct MainMenuGroup {
+    /* 0x00 */ u8 unk0[0x10];
+    /* 0x10 */ u32 wraps : 1; /* moving past the last item goes to the first */
+    /* 0x14 */ u8 unk14[0x44 - 0x14];
+} MainMenuGroup;
+
 /* The main menu's task (mainMenuTaskInit, virtual table MAIN_MENU_TASK_VTABLE): its thread runs the
  * StepperGroup of the items until one closes it; the update draws the background, the items, the arrows,
  * the rails and the banners. */
 typedef struct MainMenuTask {
     /* 0x00 */ Task task;
     /* 0x20 */ Thread thread;
-    /* 0x2C */ u8 items[0x44]; /* a StepperGroup */
+    /* 0x2C */ MainMenuGroup items;
     /* 0x70 */ Sprite background;
     /* 0x88 */ s32 frame;
     /* 0x8C */ s16 leftX;  /* of the left arrow and rail, in 1/16 pixels: slides in after 0x10 frames */
@@ -48,6 +59,21 @@ typedef struct MainMenuItem {
     /* 0x2C */ s32 frame;      /* the items start to move one after the other */
     /* 0x30 */ s32 locked;     /* a "???" item, which refuses the confirm */
 } MainMenuItem;
+
+/* The pictures of /title/mainmenu.tim the main menu draws, in MAIN_MENU_IMAGES. */
+enum MainMenuImage {
+    MAIN_MENU_IMAGE_BACKGROUND = 0, /* 512x480; the background is drawn from MAIN_MENU_BACKGROUND_TIM instead */
+    MAIN_MENU_IMAGE_RAIL = 1,       /* 32x256, drawn 312 high (mainMenuDrawRail) */
+    MAIN_MENU_IMAGE_ARROW = 2,      /* at the cursor's item, beside each rail */
+    MAIN_MENU_IMAGE_UNK3 = 3,       /* 32x256 as the rail; nothing draws it */
+    MAIN_MENU_IMAGE_LABELS = 4,     /* the items' labels, 7 (MAIN_MENU_LABELS) */
+    MAIN_MENU_IMAGE_LABEL_BAR = 11, /* drawn semi-transparent and dark behind every label */
+    MAIN_MENU_IMAGE_HEADER = 12,    /* at the top of the screen */
+    MAIN_MENU_IMAGE_FOOTER = 13,    /* at the bottom */
+    MAIN_MENU_IMAGE_COUNT = 14
+};
+
+extern TitleImage MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_COUNT];
 
 /* Stepper's constructor, as C sees it */
 void *stepperInit(void *this, s32 value);
@@ -83,7 +109,11 @@ SprtColorWords *mainMenuDrawImage(u_long *ot, s32 x, s32 y, TitleImage *image, s
     return sprt;
 }
 
-INCLUDE_ASM("title/nonmatchings/main_menu", func_80069A58);
+/* Draws a rail at (x, y), or its shadow (shadow set: half bright, subtractive, the CLUT 0x40 further), mirrored
+ * unless notMirrored: the image's 256 rows as two quads, 0x9C rows over 0x9C pixels, then the other 0x64 over
+ * another 0x9C. */
+INCLUDE_ASM("title/nonmatchings/main_menu", mainMenuDrawRail);
+void mainMenuDrawRail(u_long *ot, s32 x, s32 y, TitleImage *image, s32 notMirrored, s32 shadow);
 
 /* Draws the image at (x, y) as a POLY_FT4, mirrored left to right when notMirrored is 0. */
 void mainMenuDrawImageQuad(u_long *ot, s32 x, s32 y, TitleImage *image, s32 notMirrored) {
@@ -248,8 +278,6 @@ s32 MainMenuItem_input(MainMenuItem *this) {
 /* the item the main menu's cursor is on, set by the current item's draw (MainMenuTask_update reads it) */
 extern s32 MAIN_MENU_CURSOR;
 
-/* the bar drawn semi-transparent and dark behind every label */
-extern TitleImage MAIN_MENU_DECOR_IMAGES[];
 
 /* The cosine of angle (0x1000 a turn), 4.12. The match depends on this s16 inline, as in option.cpp: a table read
  * in the expression is narrowed to lhu + sll + sra. */
@@ -280,7 +308,7 @@ void MainMenuItem_draw(MainMenuItem *this, s32 ot, s32 isCurrent, s32 active) {
     if (isCurrent) {
         MAIN_MENU_CURSOR = index;
     }
-    sprt = (SPRT *)mainMenuDrawImage(front, 0x82, (this->y >> 4) + 4, MAIN_MENU_DECOR_IMAGES, 1);
+    sprt = (SPRT *)mainMenuDrawImage(front, 0x82, (this->y >> 4) + 4, &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_LABEL_BAR], 1);
     setRGB0(sprt, 0x40, 0x40, 0x40);
     this->frame++;
 }
@@ -291,7 +319,71 @@ s32 hasBonusGame(void) {
     return (GAME_STATE.save.bonusGamesUnlocked & BONUS_GAME_ARENA_BITS) != 0;
 }
 
-INCLUDE_ASM("title/nonmatchings/main_menu", mainMenuTaskInit);
+/* StepperGroup::stepperGroupAddChild, as C sees it */
+void *stepperGroupAddChild(void *this, void *child);
+
+/* StepperGroup::stepperGroupCountChildren, as C sees it */
+s32 stepperGroupCountChildren(void *this);
+
+void mainMenuThreadEntry(s32 unused, void *object);
+
+/* the buttons of the main menu's StepperGroup */
+extern u8 MAIN_MENU_BUTTONS[];
+
+/* the labels of the items; the two mini game items show the locked "???" (6) until a bonus game is unlocked */
+#define MAIN_MENU_LABELS (&MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_LABELS])
+
+/* the background picture */
+extern TIM_IMAGE MAIN_MENU_BACKGROUND_TIM;
+
+/* Constructs the main menu's task with the cursor on cursor: its thread, the items (the two mini games locked
+ * while no bonus game is unlocked), the background, and the arrows and rails off the screen. */
+MainMenuTask *mainMenuTaskInit(MainMenuTask *this, s32 cursor) {
+    Display *display;
+    u32 *file;
+
+    taskInit(&this->task, 0x2000, "MainMenu");
+    this->task.vtable = &MAIN_MENU_TASK_VTABLE;
+    threadInit(&this->thread, mainMenuThreadEntry, 0x1000, this, 0);
+    stepperGroupInit(&this->items, 1, MAIN_MENU_BUTTONS);
+    spriteInit(&this->background);
+    fadeControlFadeOut(&FADE_CONTROL, 0);
+    display = CURRENT_DISPLAY;
+    displaySetSize(display, 512, 480);
+    displayClear(display);
+    displaySetVsyncMode(display, 0);
+    displayDisable(display, 0);
+    displayWaitFrame(display);
+    soundControlLoadSound(&SOUND_CONTROL, 0x8001, 1);
+    file = loadFile("/title/mainmenu.tim");
+    uploadTims(file);
+    mainHeapFree(file);
+    /* The match depends on writing every new item out: an inline helper for them moves the label loads. */
+    stepperGroupAddChild(&this->items, MainMenuItem_init(operatorNew(sizeof(MainMenuItem)), &MAIN_MENU_LABELS[0], 0));
+    stepperGroupAddChild(&this->items, MainMenuItem_init(operatorNew(sizeof(MainMenuItem)), &MAIN_MENU_LABELS[1], 0));
+    stepperGroupAddChild(&this->items, MainMenuItem_init(operatorNew(sizeof(MainMenuItem)), &MAIN_MENU_LABELS[2], 0));
+    if (hasBonusGame()) {
+        stepperGroupAddChild(&this->items,
+                             MainMenuItem_init(operatorNew(sizeof(MainMenuItem)), &MAIN_MENU_LABELS[3], 0));
+        stepperGroupAddChild(&this->items,
+                             MainMenuItem_init(operatorNew(sizeof(MainMenuItem)), &MAIN_MENU_LABELS[4], 0));
+    } else {
+        stepperGroupAddChild(&this->items,
+                             MainMenuItem_init(operatorNew(sizeof(MainMenuItem)), &MAIN_MENU_LABELS[6], 1));
+        stepperGroupAddChild(&this->items,
+                             MainMenuItem_init(operatorNew(sizeof(MainMenuItem)), &MAIN_MENU_LABELS[6], 1));
+    }
+    stepperGroupAddChild(&this->items, MainMenuItem_init(operatorNew(sizeof(MainMenuItem)), &MAIN_MENU_LABELS[5], 0));
+    this->items.wraps = 1;
+    spriteSetTim(&this->background, &MAIN_MENU_BACKGROUND_TIM, 0);
+    this->frame = 0;
+    this->leftX = -0x400;
+    this->rightX = 0x2400;
+    MAIN_MENU_ITEM_COUNT = stepperGroupCountChildren(&this->items);
+    MAIN_MENU_CURSOR = cursor;
+    soundControlPlaySound(&SOUND_CONTROL, 0x8001, 0);
+    return this;
+}
 
 /* The destructor of MainMenuTask (task vtable MAIN_MENU_TASK_VTABLE): fades the screen in, then destroys the
  * background, the items, the thread and the task. */
@@ -299,14 +391,100 @@ void MainMenuTask_destroy(MainMenuTask *this, s32 flags) {
     this->task.vtable = &MAIN_MENU_TASK_VTABLE;
     fadeControlFadeIn(&FADE_CONTROL, 0);
     spriteDestroy(&this->background, DESTROY_BASES);
-    stepperGroupDestroy(this->items, DESTROY_BASES);
+    stepperGroupDestroy(&this->items, DESTROY_BASES);
     threadDestroy(&this->thread, DESTROY_BASES);
     taskDestroy(&this->task, flags);
 }
 
-INCLUDE_ASM("title/nonmatchings/main_menu", MainMenuTask_run);
+/* StepperGroup::stepperGroupInputIfOpen, as C sees it */
+s32 stepperGroupInputIfOpen(void *this, s32 arg, s32 held, u32 buttons);
 
-INCLUDE_ASM("title/nonmatchings/main_menu", MainMenuTask_update);
+/* StepperGroup::stepperGroupGetCloseValue, as C sees it */
+s32 stepperGroupGetCloseValue(void *this);
+
+/* The task's thread: waits 4 frames, fades the screen in (10 frames), runs the items until one closes the menu
+ * (input from both pads), leaves the choice in SYSTEM_CONTEXT.sceneResult, fades out (30 frames), kills the task
+ * and stops the songs, then hands back -1 every frame. */
+void MainMenuTask_run(MainMenuTask *this) {
+    s32 i;
+    s32 closed;
+
+    for (i = 4; i != 0; i--) {
+        threadSwitchBack(&this->thread, -1);
+    }
+    fadeControlFadeIn(&FADE_CONTROL, 10);
+    while (!fadeControlIsDone(&FADE_CONTROL)) {
+        threadSwitchBack(&this->thread, 0);
+    }
+    do {
+        PadManager *pads = PAD_MANAGER_INSTANCE;
+        u32 held = padManagerGetHeld(pads, -1);
+        u32 repeated = padManagerGetRepeated(pads, -1);
+
+        closed = stepperGroupInputIfOpen(&this->items, 0, held, repeated) == 0;
+        threadSwitchBack(&this->thread, 0);
+    } while (!closed);
+    SYSTEM_CONTEXT.sceneResult = stepperGroupGetCloseValue(&this->items);
+    fadeControlFadeOut(&FADE_CONTROL, 30);
+    while (!fadeControlIsDone(&FADE_CONTROL)) {
+        threadSwitchBack(&this->thread, 0);
+    }
+    taskKill(&this->task);
+    stopSongs();
+    for (;;) {
+        threadSwitchBack(&this->thread, -1);
+    }
+}
+
+/* The entry of the thread of mainMenuTaskInit's task. */
+void mainMenuThreadEntry(s32 unused, void *object) {
+    MainMenuTask_run(object);
+}
+
+/* StepperGroup::stepperGroupDrawIfOpen, as C sees it */
+void stepperGroupDrawIfOpen(void *this, s32 arg);
+
+/* The update of MainMenuTask: runs the thread, then draws the background; once the fade is done, the items,
+ * the arrows at the cursor's item and the rails (sliding in after 0x10 frames, an eighth of the way a frame),
+ * their shadows, the banners, the header and the footer; counts the frame. */
+void MainMenuTask_update(MainMenuTask *this, s32 arg) {
+    u_long *ot;
+    SPRT *sprt;
+
+    if (threadSwitchTo(&this->thread, 0) < 0) {
+        return;
+    }
+    /* The match depends on ot holding the background's slot first: it reads FRAME_OT before PRIM_BUFFER_FREE. */
+    ot = FRAME_OT.firstDrawn + 1;
+    PRIM_BUFFER_FREE = spriteDraw(&this->background, PRIM_BUFFER_FREE, ot);
+    if (!fadeControlIsDone(&FADE_CONTROL)) {
+        return;
+    }
+    stepperGroupDrawIfOpen(&this->items, 0);
+    ot = FRAME_OT.firstDrawn + 5;
+    if (this->frame >= 0x10) {
+        this->leftX += (0x4C0 - this->leftX) >> 3;
+        this->rightX += (0x1960 - this->rightX) >> 3;
+    }
+    mainMenuDrawImageQuad(ot, (this->leftX >> 4) - 13, getMainMenuItemY(MAIN_MENU_CURSOR) - 10,
+                          &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_ARROW], 0);
+    mainMenuDrawImageQuad(ot, (this->rightX >> 4) - 8, getMainMenuItemY(MAIN_MENU_CURSOR) - 10,
+                          &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_ARROW], 1);
+    mainMenuDrawRail(ot, this->leftX >> 4, 0x5C, &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_RAIL], 0, 0);
+    mainMenuDrawRail(ot, this->rightX >> 4, 0x5C, &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_RAIL], 1, 0);
+    mainMenuDrawImageShadow(ot, (this->leftX >> 4) - 11, getMainMenuItemY(MAIN_MENU_CURSOR) - 6,
+                            &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_ARROW], 0);
+    mainMenuDrawImageShadow(ot, (this->rightX >> 4) - 7, getMainMenuItemY(MAIN_MENU_CURSOR) - 6,
+                            &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_ARROW], 1);
+    mainMenuDrawRail(ot, (this->leftX >> 4) + 2, 0x60, &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_RAIL], 0, 1);
+    mainMenuDrawRail(ot, (this->rightX >> 4) + 2, 0x60, &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_RAIL], 1, 1);
+    mainMenuDrawBanners(ot, this->frame);
+    sprt = (SPRT *)mainMenuDrawImage(ot, 0xA4, 0x21, &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_HEADER], 1);
+    setRGB0(sprt, 0x80, 0x80, 0x80);
+    sprt = (SPRT *)mainMenuDrawImage(ot, 0xB9, 0x1AE, &MAIN_MENU_IMAGES[MAIN_MENU_IMAGE_FOOTER], 1);
+    setRGB0(sprt, 0x80, 0x80, 0x80);
+    this->frame++;
+}
 
 /* MainMenuItem's destructor: Stepper's, inlined (it takes the stepper out of its group's list). */
 void MainMenuItem_destroy(MainMenuItem *this, s32 flags) {
@@ -323,7 +501,4 @@ INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_BACKGROUND_TIM);
 INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_ITEM_VTABLE);
 INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_TASK_VTABLE);
 INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_BUTTONS);
-INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_SIDE_IMAGES);
-INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_LABELS);
-INCLUDE_RODATA("title/nonmatchings/main_menu", D_800647BC);
-INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_DECOR_IMAGES);
+INCLUDE_RODATA("title/nonmatchings/main_menu", MAIN_MENU_IMAGES);

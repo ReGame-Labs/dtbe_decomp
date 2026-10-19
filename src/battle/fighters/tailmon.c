@@ -294,12 +294,12 @@ INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Effect_draw);
 /* The special move 2's effect, made for a character at a position. */
 typedef struct TailmonSpecial2Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ s16 unk18;
+    /* 0x18 */ u16 age;    /* + 2 a frame; the tick deletes the effect past 0x20 */
     /* 0x1A */ s16 vramY;  /* the character's 0x440 (Fighter_getVramY) */
     /* 0x1C */ s16 facing; /* Fighter_getFacing of the character: 1 or -1 */
-    /* 0x1E */ u8 unk1E;   /* 0x1E-0x20: 0x80 each, maybe a color */
-    /* 0x1F */ u8 unk1F;
-    /* 0x20 */ u8 unk20;
+    /* 0x1E */ u8 r;       /* the draw's color, 0x80 each at first */
+    /* 0x1F */ u8 g;
+    /* 0x20 */ u8 b;
     /* 0x21 */ u8 unk21[3];
     /* 0x24 */ Vec3 position;
     /* 0x30 */ s32 unk30;
@@ -316,9 +316,9 @@ TailmonSpecial2Effect *TailmonSpecial2Effect_init(TailmonSpecial2Effect *this, F
     x = position->vx;
     y = position->vy;
     z = position->vz;
-    this->unk18 = 0;
+    this->age = 0;
     /* The match depends on this chain: it stores from right to left */
-    this->unk1E = this->unk1F = this->unk20 = 0x80;
+    this->r = this->g = this->b = 0x80;
     this->position.vx = x;
     this->position.vy = y;
     this->position.vz = z;
@@ -334,7 +334,51 @@ void TailmonSpecial2Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial2Effect_tick);
+/* Darkens the effect's color as it ages by 2 a frame, then deletes it once its age passes 0x20. */
+void TailmonSpecial2Effect_tick(TailmonSpecial2Effect *this) {
+    s32 level;
+    s32 fade;
+    s32 r, g, b;
+
+    level = this->age + 8;
+    this->r = 0x80 - level * 2;
+    this->g = 0x80 - level * 4;
+    this->b = 0x80 - level * 8;
+    fade = 0x80 - this->age * 4;
+    r = (this->r * fade) >> 7;
+    g = (this->g * fade) >> 7;
+    b = (this->b * fade) >> 7;
+    /* The match depends on the clamps testing >= 0 first (the game branches to the 0 arm placed last) */
+    if (r >= 0) {
+        if (r > 0xFF) {
+            r = 0xFF;
+        }
+    } else {
+        r = 0;
+    }
+    if (g >= 0) {
+        if (g > 0xFF) {
+            g = 0xFF;
+        }
+    } else {
+        g = 0;
+    }
+    if (b >= 0) {
+        if (b > 0xFF) {
+            b = 0xFF;
+        }
+    } else {
+        b = 0;
+    }
+    this->r = r;
+    this->g = g;
+    this->b = b;
+    if (this->age > 0x20) {
+        entityDelete(&this->entity);
+        return;
+    }
+    this->age += 2;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial2Effect_draw);
 

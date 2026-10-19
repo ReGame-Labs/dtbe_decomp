@@ -145,8 +145,10 @@ s32 setSndDef(SndDef *def) {
 
 /* Frees the sound effects that ended: a looping one when its timer runs out
  * or its voice went quiet, any other once its voice is keyed off. Then keys
- * on the new ones, and frees those that got no voice and do not loop. */
-#if VERSION_JP
+ * on the new ones, and frees those that got no voice and do not loop. The US
+ * version keys on only the one-shot effects with no group while the sound is
+ * paused, and frees every such one once keyed on (it tests the voice before
+ * the key on, while it is still 0). */
 void updateSoundEffects(void) {
     u8 keys[SND_VOICE_MAX];
     /* libspu takes it as a short, but compares it unsigned */
@@ -155,6 +157,9 @@ void updateSoundEffects(void) {
     SndPlayingEffect *next;
     s32 voice;
     LinkList *used;
+#if VERSION_US
+    s32 drop;
+#endif
 
     SpuGetAllKeysStatus(keys);
     used = &SOUND_SYSTEM.effectPool.used;
@@ -176,6 +181,7 @@ void updateSoundEffects(void) {
     }
     used = &SOUND_SYSTEM.effectPool.used;
     for (effect = (SndPlayingEffect *)used->head; effect != NULL; effect = next) {
+#if VERSION_JP
         next = (SndPlayingEffect *)effect->link.next;
         if (effect->voice == 0) {
             sndPlayingEffectKeyOn(effect);
@@ -183,11 +189,18 @@ void updateSoundEffects(void) {
                 sndPlayingEffectFree(effect);
             }
         }
+#else
+        drop = !(effect->priority & SND_PRIORITY_LOOP) && ((effect->voice & SND_VOICE_NONE) || effect->group == 0);
+        next = (SndPlayingEffect *)effect->link.next;
+        if (effect->voice == 0 && (SOUND_SYSTEM.paused != 1 || drop)) {
+            sndPlayingEffectKeyOn(effect);
+            if (drop) {
+                sndPlayingEffectFree(effect);
+            }
+        }
+#endif
     }
 }
-#else
-INCLUDE_ASM("main/nonmatchings/sound/sound", updateSoundEffects);
-#endif
 
 /* Moves the fading songs a frame on; a song that fades out stops. */
 void updateSongFades(void) {

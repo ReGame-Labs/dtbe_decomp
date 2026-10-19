@@ -162,25 +162,29 @@ typedef s32 (*SortCompare)(SortNode *a, SortNode *b);
 /* the opponents of a run picked at random; a fixed one follows them */
 #define RUN_RANDOM_OPPONENTS 7
 
-#ifdef __cplusplus
 /*
- * JoinState and its functions are C++ only, as only game_state.cpp uses them:
- * its flags are bool bit fields, which g++ tests one at a time as the game
- * does (joinStateUpdate's `joined0 || joined1`), where the tests of u32 bit
- * fields merge into one mask test.
+ * JoinState's flags are bool bit fields in C++ (game_state.cpp), which g++
+ * tests one at a time as the game does (joinStateUpdate's `joined0 || joined1`),
+ * where the tests of u32 bit fields merge into one mask test. The C files
+ * (battle_scene.c: the pause) only read its side and pass it on, and see the
+ * same bits as u32 bit fields.
  */
+#ifdef __cplusplus
+typedef bool JoinFlag;
+#else
+typedef u32 JoinFlag;
+#endif
 
 /* Whether players joined by pressing Start, as joinStateUpdate updates it. */
 typedef struct JoinState {
-    /* 0x0 */ bool joined0 : 1;   /* player 1 is in */
-    /* 0x0 */ bool joined1 : 1;   /* player 2 is in */
-    /* 0x0 */ bool wasJoined : 1; /* joined, in the last update */
-    /* 0x0 */ bool joined : 1;    /* either player is in */
-    /* 0x0 */ bool entered : 1;   /* joined in this update */
-    /* 0x0 */ bool left : 1;      /* left in this update */
-    /* 0x4 */ s32 side;           /* of the player who joined, player 1's if both did, or -1 */
+    /* 0x0 */ JoinFlag joined0 : 1;   /* player 1 is in */
+    /* 0x0 */ JoinFlag joined1 : 1;   /* player 2 is in */
+    /* 0x0 */ JoinFlag wasJoined : 1; /* joined, in the last update */
+    /* 0x0 */ JoinFlag joined : 1;    /* either player is in */
+    /* 0x0 */ JoinFlag entered : 1;   /* joined in this update */
+    /* 0x0 */ JoinFlag left : 1;      /* left in this update */
+    /* 0x4 */ s32 side;               /* of the player who joined, player 1's if both did, or -1 */
 } JoinState;
-#endif
 
 /* the codes gameStateUnlockByCode knows */
 #define CODE_COUNT 7
@@ -278,11 +282,9 @@ void gameStateSetUpDemo(GameState *gameState);
 s32 gameStateGetPlayerSide(GameState *gameState);
 s32 gameStateHasPlayerWon(GameState *gameState);
 s32 gameStateGetPlayerScore(GameState *gameState);
-#ifdef __cplusplus
 void joinStateReset(JoinState *joinState);
 void joinStateSetLeft(JoinState *joinState);
 void joinStateUpdate(JoinState *joinState);
-#endif
 
 EXTERN_C_END
 

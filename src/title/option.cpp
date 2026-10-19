@@ -6,6 +6,8 @@
 #include "engine/gfx/prim/alloc_sprt_16.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/gfx/prim/alloc_line_f2.h"
+#include "engine/gfx/prim/alloc_dr_mode.h"
+#include "engine/gfx/prim_buffer.h"
 #include "engine/gfx/ordering_table.h"
 #include "engine/sound/sound_control.h"
 #include "engine/game/game_state.h"
@@ -15,21 +17,45 @@
 #include "engine/pad/pad.h"
 #include "engine/system/handle_table.h"
 #include "engine/system/memory.h"
+#include "engine/cd/file_load.h"
 #include "overlay.h"
 #include "title/option.h"
 
 EXTERN_C_BEGIN
-/* name_entry.c's (ranking.c declares them too) */
+/* name_entry.cpp's (ranking.c declares them too) */
 void NameEntry_open(NameEntry *entry);
 void NameEntry_update(NameEntry *entry);
 void NameEntry_draw(NameEntry *entry);
 NameEntry *NameEntry_init(NameEntry *entry, s32 mode, s32 maxLength);
-/* name_entry.c defines these two without a parameter, but the options pass them the entry */
+/* name_entry.cpp defines these two without a parameter, but the options pass them the entry */
 void loadZasciiTim(NameEntry *entry);
 void loadInputTim(NameEntry *entry);
 
+void optionThreadEntry(s32 unused, void *object);
+
 /* the image OptionButtonMenu's draw puts right of the menu's title row */
 extern TitleImage OPTION_BUTTON_MENU_TITLE;
+/* the two images of the options' screen's header */
+extern TitleImage OPTION_HEADER_IMAGES[2];
+/* the texture windows of the background strips (the whole page) and of the header images */
+extern RECT OPTION_STRIP_WINDOW;
+extern RECT OPTION_HEADER_WINDOW;
+/* the buttons that step through the options' menus' rows */
+extern StepperButtons OPTION_MENU_BUTTONS;
+/* the button menu's images: the labels of its rows ([0], [7], [8], [9], [4], [5] the six button rows, [10] the
+ * vibration, [6] the reset), and what OptionButtonItem's draw shows ([1], and [2], the icons, by cell) */
+extern TitleImage OPTION_BUTTON_MENU_IMAGES[11];
+/* the vibration row's two values */
+extern TitleImage *OPTION_VIBRATION_IMAGES[2];
+/* the labels of the options' menu's rows */
+extern TitleImage OPTION_ROW_IMAGES[9];
+/* the values of the options' menu's first four rows: the level (three), the sound, row 2's and the auto save */
+extern TitleImage *OPTION_LEVEL_IMAGES[3];
+extern TitleImage *OPTION_SOUND_IMAGES[2];
+extern TitleImage *D_80066B48[2];
+extern TitleImage *OPTION_ON_OFF_IMAGES[2];
+/* the background picture */
+extern TIM_IMAGE OPTION_BACKGROUND_TIM;
 
 /* a line from (x0, y0) to (x1, y1) */
 typedef struct ScreenPoint {
@@ -535,7 +561,20 @@ s32 OptionButtonItem::input(s32 arg, s32 held, u32 buttons) {
 
 INCLUDE_ASM("title/nonmatchings/option", OptionButtonItem_draw);
 
-INCLUDE_ASM("title/nonmatchings/option", OptionButtonMenu_init);
+/* The button settings submenu: a group stepped by OPTION_MENU_BUTTONS, wrapping, open, of the six button rows, the
+ * vibration (two values) and the reset. */
+OptionButtonMenu::OptionButtonMenu(TitleImage *image) : StepperGroup(&OPTION_MENU_BUTTONS), OptionItem(image) {
+    stepperGroupAddChild(new OptionButtonItem(&OPTION_BUTTON_MENU_IMAGES[0]));
+    stepperGroupAddChild(new OptionButtonItem(&OPTION_BUTTON_MENU_IMAGES[7]));
+    stepperGroupAddChild(new OptionButtonItem(&OPTION_BUTTON_MENU_IMAGES[8]));
+    stepperGroupAddChild(new OptionButtonItem(&OPTION_BUTTON_MENU_IMAGES[9]));
+    stepperGroupAddChild(new OptionButtonItem(&OPTION_BUTTON_MENU_IMAGES[4]));
+    stepperGroupAddChild(new OptionButtonItem(&OPTION_BUTTON_MENU_IMAGES[5]));
+    stepperGroupAddChild(new OptionChoiceItem(&OPTION_BUTTON_MENU_IMAGES[10], OPTION_VIBRATION_IMAGES, 2));
+    stepperGroupAddChild(new OptionResetButtonsItem(&OPTION_BUTTON_MENU_IMAGES[6]));
+    stepperGroupOpen(0);
+    wraps = 1;
+}
 
 OptionButtonMenu::~OptionButtonMenu() {
 }
@@ -572,7 +611,41 @@ void OptionButtonMenu::draw(s32 ot, s32 isCurrent, s32 active) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/option", optionTaskInit);
+/* Constructs the options' task "Option": its thread, the options' menu (the level, the sound, row 2, the auto save,
+ * the memory card's two rows, the button menu, the screen position and the code), wrapping and open, and the
+ * background; loads the options' pictures and sound 0x8003 and plays it. The match depends on reaching the menu
+ * through this->menu each time (with a local pointer the wraps store goes through it, not this). */
+OptionTask::OptionTask() : Task(0x2000, "Option") {
+    u32 *file;
+
+    threadInit(&this->thread, optionThreadEntry, 0x1000, this, 0);
+    stepperGroupInit(this->menu, 1, &OPTION_MENU_BUTTONS);
+    spriteInit(&this->background);
+    file = (u32 *)loadFile("/title/option.tim");
+    uploadTims(file);
+    mainHeapFree(file);
+    cacheReset(&getFontCache()->cache);
+    soundControlLoadSound(&SOUND_CONTROL, 0x8003, 1);
+    soundControlPlaySound(&SOUND_CONTROL, 0x8003, 0);
+    ((StepperGroup *)this->menu)->stepperGroupAddChild(
+        new OptionChoiceItem(&OPTION_ROW_IMAGES[0], OPTION_LEVEL_IMAGES, 3));
+    ((StepperGroup *)this->menu)->stepperGroupAddChild(
+        new OptionChoiceItem(&OPTION_ROW_IMAGES[1], OPTION_SOUND_IMAGES, 2));
+    ((StepperGroup *)this->menu)->stepperGroupAddChild(new OptionChoiceItem(&OPTION_ROW_IMAGES[2], D_80066B48, 2));
+    ((StepperGroup *)this->menu)->stepperGroupAddChild(
+        new OptionChoiceItem(&OPTION_ROW_IMAGES[3], OPTION_ON_OFF_IMAGES, 2));
+    ((StepperGroup *)this->menu)->stepperGroupAddChild(
+        new OptionMemoryCardItem(&OPTION_ROW_IMAGES[4], MEMORY_CARD_OPTION_SAVE));
+    ((StepperGroup *)this->menu)->stepperGroupAddChild(
+        new OptionMemoryCardItem(&OPTION_ROW_IMAGES[5], MEMORY_CARD_OPTION_LOAD));
+    ((StepperGroup *)this->menu)->stepperGroupAddChild(new OptionButtonMenu(&OPTION_ROW_IMAGES[6]));
+    ((StepperGroup *)this->menu)->stepperGroupAddChild(new OptionScreenItem(&OPTION_ROW_IMAGES[7]));
+    ((StepperGroup *)this->menu)->stepperGroupAddChild(new OptionCodeItem(&OPTION_ROW_IMAGES[8]));
+    ((StepperGroup *)this->menu)->stepperGroupOpen(0);
+    ((StepperGroup *)this->menu)->wraps = 1;
+    spriteSetTim(&this->background, &OPTION_BACKGROUND_TIM, 0);
+    this->frame = 0;
+}
 
 /* Fades the screen in and destroys the members; the thread, the menu's StepperGroup and the sprite are C
  * structs here, so their destructors are called by hand. */
@@ -617,11 +690,42 @@ void OptionTask::run() {
 }
 
 /* The entry of the thread of optionTaskInit's task. */
-extern "C" void optionThreadEntry(s32 unused, void *object) {
+void optionThreadEntry(s32 unused, void *object) {
     ((OptionTask *)object)->run();
 }
 
-INCLUDE_ASM("title/nonmatchings/option", OptionTask_update);
+/* The task's update: runs its thread for a frame, then draws the scrolling background strips at the screen's
+ * sides, the two header images, the background sprite and the menu. */
+void OptionTask::update(s32 arg) {
+    u_long *ot;
+    SprtColorWords *sprt;
+
+    if (threadSwitchTo(&this->thread, 0) < 0) {
+        return;
+    }
+    ot = FRAME_OT.firstDrawn + 5;
+    AddPrim(ot, allocDrMode(0, &OPTION_STRIP_WINDOW));
+    sprt = (SprtColorWords *)allocSprt();
+    sprt->xy = 2;
+    sprt->rgbCode = (((SPRT *)sprt)->code << 24) | (PRIM_SEMI_TRANS << 24) | 0x808080;
+    sprt->uvClut = (GetClut(320, 64) << 16) | ((u8)this->frame << 8);
+    sprt->wh = (240 << 16) | 16;
+    AddPrim(ot, sprt);
+    sprt = (SprtColorWords *)allocSprt();
+    sprt->xy = 302;
+    sprt->rgbCode = (((SPRT *)sprt)->code << 24) | (PRIM_SEMI_TRANS << 24) | 0x808080;
+    sprt->uvClut = (GetClut(320, 64) << 16) | ((u8)-this->frame << 8);
+    sprt->wh = (240 << 16) | 16;
+    AddPrim(ot, sprt);
+    this->frame++;
+    AddPrim(ot, allocDrMode(5, &OPTION_HEADER_WINDOW));
+    sprt = optionDrawImage(ot, 47, 13, &OPTION_HEADER_IMAGES[0]);
+    setRGB0((SPRT *)sprt, 0x80, 0x80, 0x80);
+    sprt = optionDrawImage(ot, 94, 208, &OPTION_HEADER_IMAGES[1]);
+    setRGB0((SPRT *)sprt, 0x80, 0x80, 0x80);
+    PRIM_BUFFER_FREE = (u8 *)spriteDraw(&this->background, PRIM_BUFFER_FREE, FRAME_OT.firstDrawn + 1);
+    ((StepperGroup *)this->menu)->stepperGroupDrawIfOpen((s32)(FRAME_OT.firstDrawn + 4));
+}
 
 OptionChoiceItem::~OptionChoiceItem() {
 }
@@ -629,8 +733,8 @@ OptionChoiceItem::~OptionChoiceItem() {
 OptionScreenItem::~OptionScreenItem() {
 }
 
-/* The name entry is a C struct here (name_entry.c is C), so its destructor is called by hand, where g++
- * calls a member's. */
+/* The name entry is a C struct (name_entry.cpp keeps it one, with C names), so its destructor is called
+ * by hand, where g++ calls a member's. */
 OptionCodeItem::~OptionCodeItem() {
     NameEntry_destroy(&this->entry, DESTROY_BASES);
 }
@@ -680,8 +784,8 @@ void OptionButtonMenu::refresh(s32 arg) {
 INCLUDE_RODATA("title/nonmatchings/option", OPTION_BACKGROUND_CLUT_RECT);
 INCLUDE_RODATA("title/nonmatchings/option", OPTION_BACKGROUND_PIXEL_RECT);
 INCLUDE_RODATA("title/nonmatchings/option", OPTION_BACKGROUND_TIM);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066660);
-INCLUDE_RODATA("title/nonmatchings/option", D_80066668);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_STRIP_WINDOW);
+INCLUDE_RODATA("title/nonmatchings/option", OPTION_HEADER_WINDOW);
 INCLUDE_RODATA("title/nonmatchings/option", _vt.16OptionButtonMenu.7Stepper);
 INCLUDE_RODATA("title/nonmatchings/option", _vt.16OptionButtonItem.7Stepper);
 INCLUDE_RODATA("title/nonmatchings/option", _vt.22OptionResetButtonsItem.7Stepper);
@@ -705,7 +809,6 @@ INCLUDE_RODATA("title/nonmatchings/option", OPTION_IMAGE_ON);
 INCLUDE_RODATA("title/nonmatchings/option", OPTION_IMAGE_OFF);
 INCLUDE_RODATA("title/nonmatchings/option", OPTION_BUTTON_MENU_TITLE);
 INCLUDE_RODATA("title/nonmatchings/option", OPTION_BUTTON_MENU_IMAGES);
-INCLUDE_RODATA("title/nonmatchings/option", OPTION_BUTTON_ICONS);
 INCLUDE_RODATA("title/nonmatchings/option", OPTION_LEVEL_IMAGES);
 INCLUDE_RODATA("title/nonmatchings/option", OPTION_SOUND_IMAGES);
 INCLUDE_RODATA("title/nonmatchings/option", D_80066B48);

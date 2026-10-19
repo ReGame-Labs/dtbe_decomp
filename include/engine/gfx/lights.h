@@ -30,6 +30,9 @@ extern VECTOR LIGHTS_DEFAULT_BACK_COLOR;
  * (Particle_initById, Fighter_getNodePosition), and the calls that take a
  * Vec3 read its first three words through a cast */
 extern VECTOR ZERO_VECTOR;
+/* the next zero vector in the same block: an origin (Fight_showContinue's fighter position, a node offset of
+ * Holydramon) */
+extern VECTOR D_80010824;
 /* the unit y and z axes, in 4.12 fixed point */
 extern VECTOR AXIS_Y; /* the y axis */
 extern VECTOR AXIS_Z; /* the z axis */

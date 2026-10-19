@@ -1,5 +1,4 @@
 #include "common.h"
-#include <abs.h>
 #include "battle/game.h"
 #include "battle/game_classes.h"
 #include "battle/stage_objects.h"
@@ -15,22 +14,41 @@
  * whose scenery animates the map's nodes, its CLUTs and its textures (StageMachine_tickScenery). */
 typedef struct StageMachine {
     /* 0x000 */ Fight base;
-    /* 0xD38 */ u8 unkD38[0xD3C - 0xD38];
+    /* 0xD38 */ s32 unkD38;
     /* 0xD3C */ s32 frames; /* the scenery's frames (StageMachine_tickScenery) */
-    /* 0xD40 */ u8 unkD40[0xD4C - 0xD40];
+    /* 0xD40 */ s32 unkD40;
+    /* 0xD44 */ s32 unkD44;
+    /* 0xD48 */ u8 unkD48[0xD4C - 0xD48];
     /* 0xD4C */ u32 sound; /* a sound's handle, stopped before the next round */
     /* 0xD50 */ MeshSceneLink collisionLink; /* lines of the arena itself, in COLLISION_LINKS (StageMachine_init) */
-    /* 0xD68 */ u8 unkD68[0xDA8 - 0xD68];
+    /* 0xD68 */ s32 unkD68;
+    /* 0xD6C */ s32 unkD6C;
+    /* 0xD70 */ s32 unkD70;
+    /* 0xD74 */ s32 unkD74;
+    /* 0xD78 */ u8 unkD78[0xD90 - 0xD78];
+    /* 0xD90 */ RECT clutRects[3]; /* CLUTs at (0xF0, 0x1E0), (0x300, 0xF6) (2 rows) and (0x300, 0xEA) */
     /* 0xDA8 */ RECT clutRect; /* 16 by 1 pixels at (0x300, 0xFE): a CLUT */
-    /* 0xDB0 */ u8 unkDB0[0xE90 - 0xDB0];
+    /* The CLUTs of clutRects, read back from VRAM by st00_readCluts and loaded each frame by st00_loadCluts: */
+    /* 0xDB0 */ u16 clut0[16];           /* clut0Source turned by the frames */
+    /* 0xDD0 */ u16 clut0Source[16];
+    /* 0xDF0 */ u16 clut2[16];           /* clut2Source, partly turned, or clut2Alternate */
+    /* 0xE10 */ u16 clut2Source[16];
+    /* 0xE30 */ u16 clut2Alternate[16];  /* the CLUT at (0x370, 0xFF) */
+    /* 0xE50 */ u16 clut1[2][16];        /* entry 3 of each row pulses */
     /* 0xE90 */ u16 clut[16]; /* that CLUT, read back from VRAM by st00_readClut */
     /* 0xEB0 */ u8 unkEB0[0xEC4 - 0xEB0];
     /* 0xEC4 */ MeshScene *meshScene; /* the stage's meshes */
     /* 0xEC8 */ u32 angle; /* 0..0xFFF, stepped by st00_turnAngle */
     /* 0xECC */ s32 turnFrames; /* the frames st00_turnAngle has run since func_800D5A68 cleared it */
-    /* 0xED0 */ u8 unkED0[0xEF4 - 0xED0];
-    /* 0xEF4 */ s16 unkEF4;
-    /* 0xEF6 */ u8 unkEF6[0xF08 - 0xEF6];
+    /* 0xED0 */ s32 unkED0;
+    /* 0xED4 */ u8 unkED4[0xEF4 - 0xED4];
+    /* 0xEF4 */ s16 unkEF4; /* which of CLUT entries 8 and 9 glow (st00_loadPulsingClut) */
+    /* 0xEF6 */ u8 unkEF6[0xEF8 - 0xEF6];
+    /* 0xEF8 */ s32 unkEF8;
+    /* 0xEFC */ s32 unkEFC;
+    /* 0xF00 */ s32 unkF00;
+    /* 0xF04 */ s16 unkF04;
+    /* 0xF06 */ u8 unkF06[0xF08 - 0xF06];
     /* The four falling objects (st00_resetFallingObject resets one, func_800D70E4 drops it): */
     /* 0xF08 */ s32 unkF08[4];
     /* 0xF18 */ s32 unkF18[4];
@@ -46,9 +64,12 @@ typedef struct StageMachine {
     /* 0x1034 */ s32 unk1034[4]; /* func_800D59CC fills them with (r + i) & 3 */
     /* 0x1044 */ s32 unk1044;
     /* 0x1048 */ s16 unk1048;
-    /* 0x104A */ u8 unk104A[0x1050 - 0x104A];
+    /* 0x104A */ u8 unk104A[0x104C - 0x104A];
+    /* 0x104C */ s32 unk104C;
     /* 0x1050 */ s32 unk1050; /* while set, St00SignalQuads turn red */
-    /* 0x1054 */ u8 unk1054[0x1060 - 0x1054];
+    /* 0x1054 */ s32 unk1054;
+    /* 0x1058 */ s32 unk1058;
+    /* 0x105C */ s32 unk105C; /* 0xFF: st00_loadCluts loads clut2Alternate */
     /* 0x1060 */ Group group;      /* node 28's mesh, drawn by St00GroupDrawer */
     /* 0x10C0 */ s32 continueShown; /* Fight_isContinueShown: the group is not drawn, the scenery stops */
 } StageMachine;
@@ -65,7 +86,7 @@ extern EntityVtable ST00_SIGNAL_QUADS_VTABLE;
 extern EntityVtable D_800D39C4;
 extern EntityVtable ST00_GLOW_QUAD_VTABLE;
 extern EntityVtable D_800D3A14;
-extern EntityVtable D_800D3A3C;
+extern EntityVtable ST00_BACKDROP_GRID_VTABLE;
 extern EntityVtable ST00_GROUP_DRAWER_VTABLE;
 extern VtableEntry STAGE_HIT_VTABLE[];
 extern VtableEntry STAGE_MACHINE_VTABLE[];
@@ -113,11 +134,93 @@ void StageMachine_destroy(StageMachine *this, s32 flags) {
     Fight_destroy(&this->base, flags);
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", st00_resetRound);
+/* the spawn points of the stage's item spawner (createItemSpawner), in its .data */
+extern u8 ST00_ITEM_SPAWN_POINTS[];
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D3D94);
+/* Clears the stage's state for a new round (the turn, the four falling objects back at (-0xC80, -0xA40, 0)) and
+ * creates its item spawner. */
+void st00_resetRound(StageMachine *this) {
+    s32 i;
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D3E80);
+    this->unkD38 = 0;
+    this->frames = 0;
+    this->unkD40 = 0;
+    this->unkD44 = 0;
+    this->unk104C = 0;
+    this->unkEF8 = 0;
+    this->unk1050 = 0;
+    this->unkD68 = 0;
+    this->unkEFC = 0;
+    this->unkF00 = 0;
+    this->unkED0 = 0;
+    this->unkD70 = 0;
+    this->turnFrames = 0;
+    this->unkD6C = 0;
+    this->unk1058 = 0;
+    this->unk1054 = 0;
+    this->angle = 0;
+    this->unkF04 = 0;
+    for (i = 0; i < 4; i++) {
+        this->unk1020[i] = 0;
+        this->unkF18[i] = 0;
+        this->position[i].vx = -0xC80;
+        this->position[i].vy = -0xA40;
+        this->position[i].vz = 0;
+        this->position[i].pad = 0;
+        this->unkF28[i] = 0;
+        this->groundFrames[i] = 0;
+        this->inAir[i] = 0;
+        this->unkFF0[i] = 0;
+    }
+    this->unkD74 = 0;
+    createItemSpawner(&this->base, ST00_ITEM_SPAWN_POINTS, 3);
+    this->sound = 0;
+}
+
+INCLUDE_ASM("st00/nonmatchings/st00", st00_readCluts);
+
+/* Whether bit `bit` of a value is clear. The match depends on the shift-and-mask form on an unsigned value returned
+ * from an inline: the game tests it as `srl; xori 1; andi 1` rather than an andi with the mask. */
+static inline s32 isBitClear(u32 value, s32 bit) {
+    return !((value >> bit) & 1);
+}
+
+/* Loads the stage's animated CLUTs: clut0 turns clut0Source by the frames (except in some frames), clut2's entries 5
+ * to 7 cycle (or the whole of clut2 is set from clut2Alternate when unk105C is 0xFF, from clut2Source when 1), and
+ * entry 3 of both clut1 rows pulses with the frames' sine. */
+void st00_loadCluts(StageMachine *this) {
+    s32 i;
+    u8 level;
+
+    if (isBitClear(this->frames, 7) && isBitClear(this->frames, 5)) {
+        for (i = 0; i < 16; i++) {
+            this->clut0[i] = this->clut0Source[(i + (this->frames >> 1)) & 0xF];
+        }
+    }
+    if (this->unk105C == 0) {
+        for (i = 0; i < 3; i++) {
+            s32 step = this->frames >> 2;
+
+            this->clut2[5 + i] = this->clut2Source[(step - i >= 0 ? step - i : i - step) & 0xF];
+        }
+    } else {
+        if (this->unk105C == 0xFF) {
+            for (i = 0; i < 16; i++) {
+                this->clut2[i] = this->clut2Alternate[i];
+            }
+        }
+        if (this->unk105C == 1) {
+            for (i = 0; i < 16; i++) {
+                this->clut2[i] = this->clut2Source[i];
+            }
+        }
+    }
+    level = (COS_SIN_TABLE[(this->frames << 6) & 0xFFF].sin >> 9) + 0x10;
+    this->clut1[0][3] = this->clut1[1][3] = (level >> 2) | (level << 5) | ((level >> 1) << 10);
+    LoadImage(&this->clutRects[0], (u_long *)this->clut0);
+    LoadImage(&this->clutRects[1], (u_long *)this->clut1);
+    LoadImage(&this->clutRects[2], (u_long *)this->clut2);
+}
 
 /* Reads the 16-colour CLUT at (0x300, 0xFE) back from VRAM into clut. */
 void st00_readClut(StageMachine *this) {
@@ -129,7 +232,33 @@ void st00_readClut(StageMachine *this) {
     StoreImage(&this->clutRect, (u_long *)this->clut);
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D40C0);
+/* The glow level of the pulsing CLUT entries: 0x17 plus the sine of the scenery's frames, over 512. */
+static inline u8 getGlowLevel(StageMachine *this) {
+    return (COS_SIN_TABLE[(this->frames << 6) & 0xFFF].sin >> 9) + 0x17;
+}
+
+/* Loads the CLUT with its pulsing entries: entry 0 glows blue and entries 8/9 red; unkEF4 picks which of 8 and 9
+ * glow (0 both, 1 entry 8, else entry 9). The game reads the sine again for the second colour. */
+void st00_loadPulsingClut(StageMachine *this) {
+    u8 level;
+    u16 color;
+
+    level = getGlowLevel(this);
+    this->clut[0] = (level >> 2) | ((level >> 1) << 5) | (level << 10);
+    level = getGlowLevel(this);
+    color = level | ((level >> 1) << 5) | ((level >> 2) << 10);
+    if (this->unkEF4 == 0) {
+        this->clut[9] = color;
+        this->clut[8] = color;
+    } else if (this->unkEF4 == 1) {
+        this->clut[9] = 0;
+        this->clut[8] = color;
+    } else {
+        this->clut[9] = color;
+        this->clut[8] = 0;
+    }
+    LoadImage(&this->clutRect, (u_long *)this->clut);
+}
 
 INCLUDE_ASM("st00/nonmatchings/st00", StageMachine_startRound);
 
@@ -140,7 +269,7 @@ INCLUDE_ASM("st00/nonmatchings/st00", func_800D47C8);
 /* One frame of the scenery: Fight_tickScenery; while the continue prompt is not shown and (func_8006F144 is false
  * or the round is over), runs the animations (func_800D4BB0) and counts the frame. */
 void StageMachine_tickScenery(StageMachine *this) {
-    Fight_tickScenery();
+    Fight_tickScenery(&this->base);
     if (Fight_isContinueShown(&this->base)) {
         this->continueShown = 1;
         return;
@@ -277,21 +406,54 @@ void St00GroupDrawer_draw(St00GroupDrawer *this, Camera *camera) {
     }
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D7A70);
+/* A static backdrop of grey textured quads: an 8 by 6 grid of vertices at depth 0x64D behind the arena and a 5 by
+ * 3 one at depth 0xA00 (St00BackdropGrid_draw builds them with buildPolyFT4). */
+typedef struct St00BackdropGrid {
+    /* 0x000 */ Entity entity;
+    /* 0x018 */ u32 color;
+    /* 0x01C */ GridVertex back[8][6];
+    /* 0x19C */ GridVertex front[5][3];
+} St00BackdropGrid; /* size 0x214 */
 
-/* The destructor of the entity class of vtable D_800D3A3C, which func_800D7A70 installs. */
-void func_800D7B78(Entity *this, s32 flags) {
-    this->vtable = &D_800D3A3C;
+/* Constructs the backdrop: back vertex (row, column) at (column * 0x466 - 0xB00, row * 0x230 - 0xC80, 0x64D), front
+ * vertex (row, column) at (column * 0x708 - 0x708, row * 0x384 - 0xC00, 0xA00), all grey. */
+St00BackdropGrid *St00BackdropGrid_init(St00BackdropGrid *this) {
+    s32 row;
+    s32 column;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &ST00_BACKDROP_GRID_VTABLE;
+    for (row = 0; row < 8; row++) {
+        for (column = 0; column < 6; column++) {
+            this->back[row][column].vx = column * 0x466 - 0xB00;
+            this->back[row][column].vy = row * 0x230 - 0xC80;
+            this->back[row][column].vz = 0x64D;
+        }
+    }
+    for (row = 0; row < 5; row++) {
+        for (column = 0; column < 3; column++) {
+            this->front[row][column].vx = column * 0x708 - 0x708;
+            this->front[row][column].vy = row * 0x384 - 0xC00;
+            this->front[row][column].vz = 0xA00;
+        }
+    }
+    this->color = 0x808080;
+    return this;
+}
+
+/* The destructor of the entity class of vtable ST00_BACKDROP_GRID_VTABLE, which St00BackdropGrid_init installs. */
+void St00BackdropGrid_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST00_BACKDROP_GRID_VTABLE;
     entityDestroy(this, 0);
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
 }
 
-void func_800D7BCC(void) {
+void St00BackdropGrid_tick(void) {
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D7BD4);
+INCLUDE_ASM("st00/nonmatchings/st00", St00BackdropGrid_draw);
 
 /* A row of four textured quads (5 by 2 vertices, 0x600 to each side at depth -0x300) whose colour pulses red with
  * the sine of phase (func_800D7F88). */
@@ -407,7 +569,7 @@ typedef struct St00SignalQuads {
     /* 0x18 */ StageMachine *stage;
     /* 0x1C */ s32 red; /* the color below is the red one */
     /* 0x20 */ u32 color;
-    /* 0x24 */ SVECTOR corners[8]; /* two quads of four */
+    /* 0x24 */ SVECTOR corners[2][4]; /* two quads */
 } St00SignalQuads;
 
 /* Constructs the St00SignalQuads: x from -0x540 to -0x240 and from 0x240 to 0x540, y from 0x60 to
@@ -417,16 +579,16 @@ St00SignalQuads *St00SignalQuads_init(St00SignalQuads *this, StageMachine *stage
     this->entity.vtable = &ST00_SIGNAL_QUADS_VTABLE;
     this->stage = stage;
     this->red = 0;
-    this->corners[0].vx = this->corners[2].vx = -0x540;
-    this->corners[1].vx = this->corners[3].vx = -0x240;
-    this->corners[0].vy = this->corners[1].vy = 0x60;
-    this->corners[2].vy = this->corners[3].vy = 0x360;
-    this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = -0x400;
-    this->corners[4].vx = this->corners[6].vx = 0x240;
-    this->corners[5].vx = this->corners[7].vx = 0x540;
-    this->corners[4].vy = this->corners[5].vy = 0x60;
-    this->corners[6].vy = this->corners[7].vy = 0x360;
-    this->corners[4].vz = this->corners[5].vz = this->corners[6].vz = this->corners[7].vz = -0x400;
+    this->corners[0][0].vx = this->corners[0][2].vx = -0x540;
+    this->corners[0][1].vx = this->corners[0][3].vx = -0x240;
+    this->corners[0][0].vy = this->corners[0][1].vy = 0x60;
+    this->corners[0][2].vy = this->corners[0][3].vy = 0x360;
+    this->corners[0][0].vz = this->corners[0][1].vz = this->corners[0][2].vz = this->corners[0][3].vz = -0x400;
+    this->corners[1][0].vx = this->corners[1][2].vx = 0x240;
+    this->corners[1][1].vx = this->corners[1][3].vx = 0x540;
+    this->corners[1][0].vy = this->corners[1][1].vy = 0x60;
+    this->corners[1][2].vy = this->corners[1][3].vy = 0x360;
+    this->corners[1][0].vz = this->corners[1][1].vz = this->corners[1][2].vz = this->corners[1][3].vz = -0x400;
     this->color = 0x808010;
     return this;
 }
@@ -494,7 +656,43 @@ INCLUDE_ASM("st00/nonmatchings/st00", St00ColorQuad_tick);
 
 INCLUDE_ASM("st00/nonmatchings/st00", St00ColorQuad_draw);
 
-INCLUDE_ASM("st00/nonmatchings/st00", St00CrossingSprites_init);
+/* Up to 16 sprites, each crossing the arena's square from a random side (St00CrossingSprites_placeSprite picks its
+ * start, St00CrossingSprites_moveSprite moves it); one more starts every 8 frames. */
+typedef struct St00CrossingSprites {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Fight *owner;
+    /* 0x1C */ u16 frames;
+    /* 0x1E */ u8 pad1E[2];
+    /* 0x20 */ SVECTOR corners[4]; /* a flat 512 by 512 square */
+    /* 0x40 */ u16 count;          /* the sprites under way */
+    /* 0x42 */ u16 states[16];     /* by sprite: 0 to start, 1 crossing, 2 done (back to 0) */
+    /* 0x62 */ u16 sides[16];      /* by sprite: the side it starts from, 0 to 3 */
+    /* 0x82 */ u8 pad82[2];
+    /* 0x84 */ VECTOR positions[16];
+} St00CrossingSprites; /* size 0x184 */
+
+/* St00CrossingSprites's constructor: the square, and each sprite waiting to start from a random side at height
+ * 0x400. */
+St00CrossingSprites *St00CrossingSprites_init(St00CrossingSprites *this, Fight *owner) {
+    s32 i;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &ST00_CROSSING_SPRITES_VTABLE;
+    this->owner = owner;
+    this->frames = 0;
+    this->count = 0;
+    this->corners[0].vx = this->corners[2].vx = -0x100;
+    this->corners[1].vx = this->corners[3].vx = 0x100;
+    this->corners[0].vy = this->corners[1].vy = this->corners[2].vy = this->corners[3].vy = 0;
+    this->corners[0].vz = this->corners[1].vz = 0x100;
+    this->corners[2].vz = this->corners[3].vz = -0x100;
+    for (i = 0; i < 16; i++) {
+        this->sides[i] = Fight_random(this->owner) & 3;
+        this->positions[i].vy = 0x400;
+        this->states[i] = 0;
+    }
+    return this;
+}
 
 /* St00CrossingSprites's destructor. */
 void St00CrossingSprites_destroy(Entity *this, s32 flags) {
@@ -505,11 +703,88 @@ void St00CrossingSprites_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", St00CrossingSprites_tick);
+void St00CrossingSprites_placeSprite(St00CrossingSprites *this, s32 index);
+void St00CrossingSprites_moveSprite(St00CrossingSprites *this, s32 index);
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D9128);
+/* St00CrossingSprites's tick: every 8 frames one more sprite (up to 16); each one under way starts
+ * (St00CrossingSprites_placeSprite), crosses (St00CrossingSprites_moveSprite), or, once done, waits to start again. */
+void St00CrossingSprites_tick(St00CrossingSprites *this) {
+    s32 i;
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D9234);
+    if ((this->frames & 7) == 0) {
+        if (++this->count > 16) {
+            this->count = 16;
+        }
+    }
+    for (i = 0; i < this->count; i++) {
+        switch (this->states[i]) {
+            case 0:
+                St00CrossingSprites_placeSprite(this, i);
+                this->states[i]++;
+                /* fall through: a sprite moves on its first frame too */
+            case 1:
+                St00CrossingSprites_moveSprite(this, i);
+                break;
+            case 2:
+                this->states[i] = 0;
+                break;
+        }
+    }
+    this->frames++;
+}
+
+/* Puts a sprite at the start of its crossing: on its side's edge (0 at z 0xB54, 1 at z -0xB54, 2 at x 0xB54, 3 at x
+ * -0xB54), at a random place along it. */
+void St00CrossingSprites_placeSprite(St00CrossingSprites *this, s32 index) {
+    switch (this->sides[index]) {
+        case 0:
+            this->positions[index].vx = (Fight_random(this->owner) & 0xFFF) - 0x800;
+            this->positions[index].vz = 0xB54;
+            break;
+        case 1:
+            this->positions[index].vx = (Fight_random(this->owner) & 0xFFF) - 0x800;
+            this->positions[index].vz = -0xB54;
+            break;
+        case 2:
+            this->positions[index].vx = 0xB54;
+            this->positions[index].vz = (Fight_random(this->owner) & 0xFFF) - 0x800;
+            break;
+        case 3:
+            this->positions[index].vx = -0xB54;
+            this->positions[index].vz = (Fight_random(this->owner) & 0xFFF) - 0x800;
+            break;
+    }
+}
+
+/* Moves a sprite 0x80 towards the opposite edge; past it, the sprite is done. */
+void St00CrossingSprites_moveSprite(St00CrossingSprites *this, s32 index) {
+    switch (this->sides[index]) {
+        case 0:
+            this->positions[index].vz -= 0x80;
+            if (this->positions[index].vz < -0xB54) {
+                this->states[index]++;
+            }
+            break;
+        case 1:
+            this->positions[index].vz += 0x80;
+            if (this->positions[index].vz > 0xB54) {
+                this->states[index]++;
+            }
+            break;
+        case 2:
+            this->positions[index].vx -= 0x80;
+            if (this->positions[index].vx < -0xB54) {
+                this->states[index]++;
+            }
+            break;
+        case 3:
+            this->positions[index].vx += 0x80;
+            if (this->positions[index].vx > 0xB54) {
+                this->states[index]++;
+            }
+            break;
+    }
+}
 
 INCLUDE_ASM("st00/nonmatchings/st00", St00CrossingSprites_draw);
 
@@ -677,7 +952,7 @@ Unk800D99F0 *func_800D99F0(Unk800D99F0 *this, Fight *list, Vec3 *position, u16 a
     this->unk1C = arg;
     Fight_addStageShape(list, &this->unk5C.link);
     this->unk40 = 0;
-    this->unk5C.flags |= 1;
+    this->unk5C.flags.bits.disabled = 1;
     /* The match depends on velocity and v being whole VECTORs on the stack (v = velocity copies its pad
      * word) and on copying the position before the velocity */
     velocity.vx = 0x20;
@@ -758,7 +1033,7 @@ Unk800D9DDC *func_800D9DDC(Unk800D9DDC *this, Fight *list, Vec3 *position) {
     CollisionSphere_init(&this->unk54, position, 0x80, &this->unk3C);
     this->list = list;
     Fight_addStageShape(list, &this->unk54.link);
-    this->unk54.flags |= 1;
+    this->unk54.flags.bits.disabled = 1;
     /* The match depends on the same velocity, v copy and order as in func_800D99F0 */
     velocity.vx = 0x20;
     velocity.vy = 0;

@@ -187,7 +187,30 @@ Fight *GameMainTask_startFight(GameMainTask *this) {
     return stage;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_main", GameMainTask_pickSounds);
+/* the sound of each arena and of each character, by GAME_STATE's arena and character */
+extern s16 ARENA_SOUND_IDS[];
+extern s16 CHARACTER_SOUND_IDS[];
+
+/* Picks the fight's sounds: the arena's, two for each of the four characters that can show up (the two fighters
+ * and their evolutions: CHARACTER_SOUND_IDS and gameStateGetSound) and one for each side's fighter. The match
+ * depends on &GAME_STATE kept in a local (one saved register for all its uses). */
+void GameMainTask_pickSounds(GameMainTask *this) {
+    GameState *state = &GAME_STATE;
+    s32 characters[4];
+    s32 i;
+
+    this->stageSound = ARENA_SOUND_IDS[state->arena];
+    characters[0] = state->fighters[0].character;
+    characters[1] = state->fighters[1].character;
+    characters[2] = CHARACTER_EVOLUTIONS[characters[0]];
+    characters[3] = CHARACTER_EVOLUTIONS[characters[1]];
+    for (i = 0; i < 4; i++) {
+        this->characterSounds[i].unk0 = CHARACTER_SOUND_IDS[characters[i]];
+        this->characterSounds[i].unk4 = gameStateGetSound(state, characters[i]);
+    }
+    this->fighterSounds[0] = gameStateGetFighterSound(state, 0);
+    this->fighterSounds[1] = gameStateGetFighterSound(state, 1);
+}
 
 INCLUDE_ASM("game/nonmatchings/game_main", GameMainTask_stepFight);
 

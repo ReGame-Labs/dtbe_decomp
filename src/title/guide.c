@@ -2,7 +2,10 @@
 
 #include "common.h"
 #include <libetc.h>
+#include "engine/cd/file_load.h"
+#include "engine/debug/system_menu.h"
 #include "engine/gfx/camera.h"
+#include "engine/gfx/display.h"
 #include "engine/gfx/fade.h"
 #include "engine/gfx/prim/alloc_poly_ft4.h"
 #include "engine/gfx/prim/alloc_sprt.h"
@@ -11,6 +14,8 @@
 #include "engine/math/random.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
+#include "engine/system/main.h"
+#include "engine/system/memory.h"
 #include "engine/task/entity.h"
 #include "engine/text/font.h"
 #include "title/title_classes.h"
@@ -48,12 +53,16 @@ typedef struct GuideLogoTask {
 extern TickTaskVtable GUIDE_LOGO_TASK_VTABLE;
 extern u8 *GUIDE_TEXTS[]; /* the guides' texts, by bonus game */
 
+void GuideLogoTask_createModel(GuideLogoTask *this);
+void GuideLogoTask_startText(void *this);
+void func_80072560(GuideLogoTask *this);
 void GuideLogoTask_resetText(GuideLogoTask *this);
 void func_80073208(void);
 void GuideLogoTask_drawBonusGamePicture(GuideLogoTask *this);
 void GuideLogoTask_drawTextWindow(GuideLogoTask *this);
 void GuideLogoTask_typeText(GuideLogoTask *this);
 void GuideLogoTask_drawPageMark(GuideLogoTask *this);
+void GuideLogoTask_clearLeaving(GuideLogoTask *this);
 
 /* The minigames' explanations, which GUIDE_TEXTS points into. */
 INCLUDE_RODATA("title/nonmatchings/guide", STR_GUIDE_TEXTS);
@@ -115,7 +124,50 @@ void guideDrawSideStrips(u_long *ot, s32 frame) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/guide", guideLogoTaskInit);
+/* The guide logo task for bonusGame: its entities, a camera of 12 slots and the random generator, a 320 by 240
+ * black screen, both pads reset (repeat after 16 frames, every 8), /title/guide.tim in VRAM, the host and the
+ * text; then a fade in over 20 frames, the guide's voices loaded and sound 0x8006 played. */
+GuideLogoTask *guideLogoTaskInit(GuideLogoTask *this, SystemContext *context, u16 bonusGame) {
+    Display *display;
+    PadManager *pads;
+    u32 *tims;
+
+    taskInit(&this->task, 0x2000, "Guide Logo");
+    this->task.vtable = &GUIDE_LOGO_TASK_VTABLE.task;
+    entityGroupInit(&this->entities);
+    cameraInit(&this->camera, 12);
+    mersenneTwisterInit(&this->random);
+    this->bonusGame = bonusGame;
+    this->frame = 0;
+    this->playedVoices = 0;
+    cameraReset(&this->camera);
+    display = CURRENT_DISPLAY;
+    displaySetSize(display, 320, 240);
+    displaySetVsyncMode(display, 0);
+    displaySetClearColor(display, 0, 0, 0);
+    resetPads(context->pads);
+    pads = PAD_MANAGER_INSTANCE;
+    resetPads(pads);
+    padManagerSetRepeat(pads, 16, 8);
+    seedRandom(&this->random);
+    tims = loadFile("title/guide.tim");
+    uploadTims(tims);
+    mainHeapFree(tims);
+    GuideLogoTask_clearLeaving(this);
+    GuideLogoTask_createModel(this);
+    GuideLogoTask_startText(this);
+    func_80072560(this);
+    fadeControlFadeOut(&FADE_CONTROL, 0);
+    fadeControlFadeIn(&FADE_CONTROL, 20);
+    soundControlLoadSound(&SOUND_CONTROL, 0x2F, 1);
+    soundControlLoadSound(&SOUND_CONTROL, 0x32, 1);
+    soundControlLoadSound(&SOUND_CONTROL, 0x36, 1);
+    soundControlLoadSound(&SOUND_CONTROL, 0x3A, 1);
+    soundControlLoadSound(&SOUND_CONTROL, 0x8006, 1);
+    soundControlPlaySound(&SOUND_CONTROL, 0x8006, 0);
+    this->sound = 0;
+    return this;
+}
 
 /* The destructor of the guide logo task: stops its sound, unloads the sounds, deletes the host, fades the
  * screen in, then destroys the camera, the entities and the task. */
@@ -226,7 +278,8 @@ void GuideLogoTask_drawExplanation(GuideLogoTask *this) {
     GuideLogoTask_drawTextWindow(this);
 }
 
-/* An empty function that guideLogoTaskInit calls. */void func_80072560(void) {
+/* An empty function that guideLogoTaskInit calls with the task. */
+void func_80072560(GuideLogoTask *this) {
 }
 
 extern TitleImage GUIDE_IMAGES[];
@@ -267,15 +320,43 @@ void GuideLogoTask_drawScreen(GuideLogoTask *this) {
     AddPrim(ot, tpage);
 }
 
-/* An empty function that nothing calls. */void func_800726E4(void) {
+/* An empty function that nothing calls. */
+void func_800726E4(void) {
 }
 
-INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_PICTURE_UVS);
-INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_PICTURE_CLUTS);
+/* Draws the bonus game's picture in its frame: the 0x6C by 0x4F frame at (0x9E, 0x30) of texture page 0x18 (clut
+ * at (0x200, 0x1FF)), then the 0x50 by 0x40 picture of bonusGame at (0xAA, 0x36) of page 0x16, from its texel
+ * column (u 0, 0x50 or 0xA0) and with its clut. */
+void GuideLogoTask_drawBonusGamePicture(GuideLogoTask *this) {
+    DVECTOR uvs[3] = { { 0, 0 }, { 0x50, 0 }, { 0xA0, 0 } }; /* each picture's (u, v) */
+    DVECTOR cluts[3] = { { 0x180, 0x1FF }, { 0x180, 0x1FE }, { 0x180, 0x1FD } }; /* its clut's (x, y) */
+    u_long *ot = this->camera.ot.slots;
+    DR_TPAGE *tpage;
+    SPRT *sprt;
 
-INCLUDE_ASM("title/nonmatchings/guide", GuideLogoTask_drawBonusGamePicture);
+    tpage = allocDrTpage(0x18);
+    sprt = allocSprt();
+    setRGB0(sprt, 0x80, 0x80, 0x80);
+    setUV0(sprt, 0, 0);
+    setXY0(sprt, 0x9E, 0x30);
+    setWH(sprt, 0x6C, 0x4F);
+    sprt->clut = getClut(0x200, 0x1FF);
+    AddPrim(ot, sprt);
+    AddPrim(ot, tpage);
+    tpage = allocDrTpage(0x16);
+    sprt = allocSprt();
+    setRGB0(sprt, 0x80, 0x80, 0x80);
+    sprt->u0 = uvs[this->bonusGame].vx;
+    sprt->v0 = uvs[this->bonusGame].vy;
+    setXY0(sprt, 0xAA, 0x36);
+    setWH(sprt, 0x50, 0x40);
+    sprt->clut = getClut(cluts[this->bonusGame].vx, cluts[this->bonusGame].vy);
+    AddPrim(ot, sprt);
+    AddPrim(ot, tpage);
+}
 
-/* An empty function that nothing calls. */void func_800728D0(void) {
+/* An empty function that nothing calls. */
+void func_800728D0(void) {
 }
 
 INCLUDE_RODATA("title/nonmatchings/guide", GUIDE_WINDOW_CORNERS);
@@ -297,10 +378,7 @@ void GuideLogoTask_resetText(GuideLogoTask *this) {
     this->pageText = value;
 }
 
-/* A TextPrinter's virtual setColor and putChar, inlined as the game has them (the virtual table read from the
- * stack). */
-#define TEXT_SET_COLOR(printer, color) \
-    (printer).printer.vtable->setColor.func((u8 *)&(printer) + (printer).printer.vtable->setColor.delta, color)
+/* A TextPrinter's virtual putChar, inlined as the game has it (the virtual table read from the stack). */
 #define TEXT_PUT_CHAR(printer, x, y, code) \
     (printer).printer.vtable->putChar.func((u8 *)&(printer) + (printer).printer.vtable->putChar.delta, x, y, code)
 
@@ -514,10 +592,12 @@ void GuideLogoTask_typeText(GuideLogoTask *this) {
     printerDestroy(base, DESTROY_BASES);
 }
 
-/* An empty function that nothing calls. */void func_80073200(void) {
+/* An empty function that nothing calls. */
+void func_80073200(void) {
 }
 
-/* An empty function that GuideLogoTask_startText calls. */void func_80073208(void) {
+/* An empty function that GuideLogoTask_startText calls. */
+void func_80073208(void) {
 }
 
 /* While pageFull is set, draws a 16 by 16 mark at (0x110, 0xB4) of texture page 0x17 that blinks every 8 frames

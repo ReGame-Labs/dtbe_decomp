@@ -10,8 +10,6 @@
 
 s32 isInTerrainLineSpanXY(TerrainLine *line, s32 x, s32 y);
 
-extern VtableEntry COLLISION_SPHERE_VTABLE[];
-
 /* Constructs a sphere of owner at position with radius: CollisionShape_init's fields, inlined, with unk10 = 0,
  * then its own virtual table (as CollisionSphere_initDisabled).
  * The match depends on the virtual table stored after the base fields (vtable first gives other registers to
@@ -32,8 +30,8 @@ CollisionSphere *CollisionSphere_init(CollisionSphere *this, Vec3 *position, s32
     this->hitKnockback.vy = 0;
     this->hitKnockback.vz = 0;
     this->hitKnockbackPad = 0;
-    this->flags &= ~1;
-    this->flags &= ~2;
+    this->flags.bits.disabled = 0;
+    this->flags.bits.touched = 0;
     this->vtable = COLLISION_SPHERE_VTABLE;
     x = position->vx;
     y = position->vy;
@@ -90,8 +88,8 @@ CollisionSphere *CollisionShape_init(CollisionSphere *this, s32 unk10, void *own
     this->hitKnockback.vy = 0;
     this->hitKnockback.vz = 0;
     this->hitKnockbackPad = 0;
-    this->flags &= ~1;
-    this->flags &= ~2;
+    this->flags.bits.disabled = 0;
+    this->flags.bits.touched = 0;
     return this;
 }
 
@@ -126,22 +124,22 @@ void CollisionShape_setEntity(CollisionShape *this, void *entity) {
 
 /* Disables the shape (collideShapes skips it) or enables it again; no caller found. */
 void CollisionShape_setDisabled(CollisionShape *this, s32 disabled) {
-    this->flags = (this->flags & ~COLLISION_SHAPE_DISABLED) | (disabled & COLLISION_SHAPE_DISABLED);
+    this->flags.bits.disabled = disabled;
 }
 
 /* Whether the shape is disabled. */
 s32 CollisionShape_isDisabled(CollisionShape *this) {
-    return this->flags & COLLISION_SHAPE_DISABLED;
+    return this->flags.bits.disabled;
 }
 
 /* Whether the shape touched another; no caller found. */
 s32 CollisionShape_isTouched(CollisionShape *this) {
-    return (this->flags >> 1) & 1;
+    return this->flags.bits.touched;
 }
 
 /* Forgets that the shape touched another. */
 void CollisionShape_clearTouched(CollisionShape *this) {
-    this->flags &= ~COLLISION_SHAPE_TOUCHED;
+    this->flags.bits.touched = 0;
 }
 
 /* Adds node at the end of the list head (listAppend); no caller found. */
@@ -173,7 +171,7 @@ void CollisionSphere_destroy(CollisionShape *this, s32 flags) {
 }
 
 /* Constructs a disabled sphere of owner: CollisionShape_init's fields, inlined, with unk10 = 0, then
- * COLLISION_SHAPE_DISABLED set. */
+ * flags.bits.disabled set. */
 CollisionSphere *CollisionSphere_initDisabled(CollisionSphere *this, void *owner) {
     this->link.next = &this->link;
     this->link.prev = &this->link;
@@ -186,11 +184,11 @@ CollisionSphere *CollisionSphere_initDisabled(CollisionSphere *this, void *owner
     this->hitKnockback.vy = 0;
     this->hitKnockback.vz = 0;
     this->hitKnockbackPad = 0;
-    this->flags &= ~1;
-    this->flags &= ~2;
+    this->flags.bits.disabled = 0;
+    this->flags.bits.touched = 0;
     this->vtable = COLLISION_SPHERE_VTABLE;
-    this->flags &= ~1;
-    this->flags |= 1;
+    this->flags.bits.disabled = 0;
+    this->flags.bits.disabled = 1;
     return this;
 }
 
@@ -235,7 +233,60 @@ TerrainProbe *TerrainProbe_init(TerrainProbe *this) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0c", TerrainProbe_cast);
+s32 castTerrainLink(MeshSceneLink *link, TerrainProbe *probe, Vec3 *start, Vec3 *end);
+void moveCollisionLinkToFront(MeshSceneLink *link);
+
+/* Whether the node of the link is hidden: mesh_scene.h's C++ inline meshSceneLinkIsHidden, for this C file. */
+static inline s32 linkIsHidden(MeshSceneLink *link) {
+    return link->shown ^ 1;
+}
+
+/* Sets the probe's normal to its line's, rotated by world. */
+static inline void setWorldNormal(TerrainProbe *probe, MATRIX *world) {
+    probe->normal.vx = probe->line.normalX;
+    probe->normal.vy = probe->line.normalY;
+    probe->normal.vz = 0;
+    matrixRotateVec(world, &probe->normal, &probe->normal);
+}
+
+/* Casts the segment from start to end at the collision lines of the shown links of COLLISION_LINKS, in order: at
+ * the first link hit (castTerrainLink), moves it to the front of the list, keeps it, rotates the hit line's normal
+ * by its matrix and returns 1; returns 0 when none is hit. The match depends on each end copied in its own block
+ * (its own registers), reading the three words before storing any as vecCopy does, and on the normal set in
+ * setWorldNormal (the link's matrix is read before the stores). */
+s32 TerrainProbe_cast(TerrainProbe *this, Vec3 *start, Vec3 *end) {
+    ListNode *links;
+    MeshSceneLink *link;
+
+    {
+        s32 x = start->vx;
+        s32 y = start->vy;
+        s32 z = start->vz;
+
+        this->start.vx = x;
+        this->start.vy = y;
+        this->start.vz = z;
+    }
+    {
+        s32 x = end->vx;
+        s32 y = end->vy;
+        s32 z = end->vz;
+
+        this->end.vx = x;
+        this->end.vy = y;
+        this->end.vz = z;
+    }
+    links = getCollisionLinks();
+    for (link = (MeshSceneLink *)links->next; &link->link != links; link = (MeshSceneLink *)link->link.next) {
+        if (!linkIsHidden(link) && castTerrainLink(link, this, start, end)) {
+            moveCollisionLinkToFront(link);
+            this->link = link;
+            setWorldNormal(this, link->world);
+            return 1;
+        }
+    }
+    return 0;
+}
 
 /* The link of COLLISION_LINKS hit last. */
 MeshSceneLink *TerrainProbe_getLink(TerrainProbe *this) {

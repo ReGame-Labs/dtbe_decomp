@@ -3,6 +3,13 @@
 #include "battle/game.h"
 #include "battle/game_classes.h"
 #include "battle/stage_objects.h"
+#include "engine/game/game_state.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/gfx/sprite.h"
+#include "engine/math/matrix.h"
+#include "engine/math/random.h"
 #include "engine/math/vector.h"
 #include "engine/system/memory.h"
 #include "engine/sound/sound_control.h"
@@ -11,6 +18,7 @@
 BonusThrower *BonusThrower_init(BonusThrower *this, Fight *owner, s32 side);
 BonusLandingMark *BonusLandingMark_init(BonusLandingMark *this, Fight *owner, Vec3 *pos);
 void BonusThrower_place(BonusThrower *this);
+void BonusThrower_throw(BonusThrower *this);
 
 /* the virtual tables the functions below install, and the data they read */
 extern EntityVtable ST07_BOARD_VTABLE;
@@ -23,11 +31,14 @@ extern EntityVtable D_800D3914;
  * lets it go, for random lengths. */
 typedef struct BallShootController {
     /* 0x00 */ Controller base;
-    /* 0x08 */ s32 unk8;
-    /* 0x0C */ s32 unkC;
-    /* 0x10 */ s32 unk10;
-    /* 0x14 */ s32 unk14;
+    /* 0x08 */ s32 unk8;     /* 0 when a new spell starts; one more at its start (BallShootController_getButtons) */
+    /* 0x0C */ s32 frames;   /* of the spell */
+    /* 0x10 */ s32 period;   /* the spell's length */
+    /* 0x14 */ s32 released; /* the spell lets the button go (else it holds button 0x80) */
 } BallShootController;
+
+/* The goals that win the bonus game (st07_checkEnd); St07Ball_testGoal stops counting there. */
+#define ST07_WINNING_HITS 10
 
 /* Bonus game 0's stage (StageBallShoot_init, virtual table STAGE_BALL_SHOOT_VTABLE), derived from BonusFight: each
  * side holds its button to charge a throw at the goal; a hit counts, up to 10. */
@@ -36,11 +47,11 @@ typedef struct StageBallShoot {
     /* 0xF70 */ s16 frames; /* the scenery's frames (StageBallShoot_tickScenery) */
     /* 0xF72 */ u8 unkF72[0xF78 - 0xF72];
     /* 0xF78 */ MeshScene *meshScene; /* Fight_getMeshScene's, at the round's start */
-    /* 0xF7C */ s16 hits[2]; /* by side: the goals St07Ball_testGoal counts, up to 10 */
+    /* 0xF7C */ s16 hits[2]; /* by side: the goals St07Ball_testGoal counts, up to ST07_WINNING_HITS */
     /* 0xF80 */ s16 unkF80;
     /* 0xF82 */ s16 unkF82;
     /* 0xF84 */ u16 holdFrames[2]; /* by side: frames button 0x80 has been held, up to BONUS_CHARGE_FRAMES */
-    /* 0xF88 */ s16 heldCharge[2]; /* by side: how long it was held, when let go (st07_updateCharge) */
+    /* 0xF88 */ u16 heldCharge[2]; /* by side: how long it was held, when let go (st07_updateCharge) */
     /* 0xF8C */ s16 unkF8C;    /* set to 1 by St07Ball_testGoal */
     /* 0xF8E */ u8 unkF8E[0xF94 - 0xF8E];
     /* 0xF94 */ VECTOR goalPoints[3]; /* St07Ball_testGoal tests against [1] */
@@ -56,13 +67,54 @@ BallShootController *BallShootController_init(BallShootController *this, BattleS
     Controller_init(&this->base, side);
     this->base.vtable = BALL_SHOOT_CONTROLLER_VTABLE;
     this->unk8 = 0;
-    this->unkC = 0;
-    this->unk10 = 0;
-    this->unk14 = 0;
+    this->frames = 0;
+    this->period = 0;
+    this->released = 0;
     return this;
 }
 
-INCLUDE_ASM("st07/nonmatchings/st07", BallShootController_getButtons);
+/* BallShootController's getButtons: in spells of random length, holds button 0x80 (15 to 30 frames) or lets it go
+ * (15 to 46 frames on easy, 15 to 22 on normal; never on hard), each picked at random at the spell's start; the
+ * spell's last frame returns 0. */
+s32 BallShootController_getButtons(BallShootController *this) {
+    s32 level = GAME_STATE.level;
+    s32 buttons = 0;
+    s32 frames;
+
+    if (this->unk8 == 0) {
+        if (level != LEVEL_HARD) {
+            this->released = mersenneTwisterGenerate(&RANDOM) & 1;
+        } else {
+            this->released = 0;
+        }
+        switch (this->released) {
+        case 0:
+            this->period = (mersenneTwisterGenerate(&RANDOM) & 0xF) + 0xF;
+            break;
+        case 1:
+            switch (level) {
+            case LEVEL_EASY:
+                this->period = (mersenneTwisterGenerate(&RANDOM) & 0x1F) + 0xF;
+                break;
+            case LEVEL_NORMAL:
+                this->period = (mersenneTwisterGenerate(&RANDOM) & 7) + 0xF;
+                break;
+            }
+            break;
+        }
+        this->frames = 0;
+        this->unk8++;
+    }
+    frames = ++this->frames;
+    if (this->released == 0) {
+        buttons = 0x80;
+    }
+    if (frames >= this->period) {
+        this->unk8 = 0;
+        return 0;
+    }
+    return buttons;
+}
 
 /* Constructs the stage: BonusFight's, with virtual table STAGE_BALL_SHOOT_VTABLE and its eight mesh nodes. */
 StageBallShoot *StageBallShoot_init(StageBallShoot *this) {
@@ -90,7 +142,7 @@ void st07_clearState(StageBallShoot *this);
 void st07_resetCharge(StageBallShoot *this);
 void st07_createThrowers(Fight *this);
 void st07_createBoard(StageBallShoot *this);
-void func_800D3D58(StageBallShoot *this);
+void st07_checkEnd(StageBallShoot *this);
 void st07_updateCharge(StageBallShoot *this);
 void func_800D4140(StageBallShoot *this);
 
@@ -173,11 +225,41 @@ void StageBallShoot_tickScenery(StageBallShoot *this) {
     BonusFight_tickScenery(&this->base);
     st07_updateCharge(this);
     func_800D4140(this);
-    func_800D3D58(this);
+    st07_checkEnd(this);
     this->frames++;
 }
 
-INCLUDE_ASM("st07/nonmatchings/st07", func_800D3D58);
+/* Once per fight: a side with ST07_WINNING_HITS goals wins; at the end of the time (timeLeft 1) the side with more
+ * goals wins, equal goals end in a draw. Then the bonus HUD is hidden. */
+void st07_checkEnd(StageBallShoot *this) {
+    if (this->base.hudHidden == 0) {
+        if (this->hits[0] == ST07_WINNING_HITS) {
+            BonusFight_endWithWinner(&this->base, Fight_getFighter(&this->base.base, 0),
+                                     Fight_getFighter(&this->base.base, 1));
+            this->base.hudHidden = 1;
+        }
+        if (this->hits[1] == ST07_WINNING_HITS) {
+            BonusFight_endWithWinner(&this->base, Fight_getFighter(&this->base.base, 1),
+                                     Fight_getFighter(&this->base.base, 0));
+            this->base.hudHidden = 1;
+        }
+        if (this->base.base.timeLeft == 1) {
+            /* The match depends on the store in each arm: there cse stores timeLeft's register, known to be 1. */
+            if (this->hits[0] == this->hits[1]) {
+                BonusFight_endInDraw(&this->base);
+                this->base.hudHidden = 1;
+            } else if (this->hits[0] > this->hits[1]) {
+                BonusFight_endWithWinner(&this->base, Fight_getFighter(&this->base.base, 0),
+                                         Fight_getFighter(&this->base.base, 1));
+                this->base.hudHidden = 1;
+            } else {
+                BonusFight_endWithWinner(&this->base, Fight_getFighter(&this->base.base, 1),
+                                         Fight_getFighter(&this->base.base, 0));
+                this->base.hudHidden = 1;
+            }
+        }
+    }
+}
 
 /* Clears the hold counts and sets the gauge's maximum to BONUS_CHARGE_FRAMES; called by StageBallShoot_startRound. */
 void st07_resetCharge(StageBallShoot *this) {
@@ -246,7 +328,62 @@ void st07_updateCharge(StageBallShoot *this) {
 
 INCLUDE_ASM("st07/nonmatchings/st07", func_800D4140);
 
-INCLUDE_ASM("st07/nonmatchings/st07", func_800D449C);
+/* Unk800D449C's states (func_800D45E0). */
+enum {
+    GOAL_MARK_FLYING, /* to the target */
+    GOAL_MARK_GROWING, /* at the target, after its mark is added */
+    GOAL_MARK_DONE
+};
+
+/* The class func_800D449C constructs (virtual table D_800D3914, 0x58 bytes; st07_spawnGoalEffect makes one at a
+ * goal): a sprite that flies on the screen from the goal to the side's hit counter, which then gets a mark. */
+typedef struct Unk800D449C {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ StageBallShoot *stage;
+    /* 0x1C */ s16 side;
+    /* 0x1E */ u16 frames;
+    /* 0x20 */ u16 stateFrames;
+    /* 0x22 */ u8 unk22[0x24 - 0x22];
+    /* 0x24 */ VECTOR position; /* on the screen, in 16ths */
+    /* 0x34 */ VECTOR step;     /* a sixteenth of the way to the target (x and y) */
+    /* 0x44 */ VECTOR target;   /* in 16ths */
+    /* 0x54 */ u16 state;       /* GOAL_MARK_FLYING, _GROWING, then _DONE */
+    /* 0x56 */ s16 size;
+} Unk800D449C;
+
+/* Unk800D449C's constructor: from a screen point to another (x, y and z of each, in pixels) for a side. */
+Unk800D449C *func_800D449C(Unk800D449C *this, StageBallShoot *stage, SVECTOR *from, SVECTOR *to, s16 side) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_800D3914;
+    this->stage = stage;
+    /* The match depends on reading each point's three halves before storing any, each copy in its own block. */
+    {
+        s32 x = from->vx;
+        s32 y = from->vy;
+        s32 z = from->vz;
+
+        this->position.vx = x << 4;
+        this->position.vy = y << 4;
+        this->position.vz = z << 4;
+    }
+    {
+        s32 x = to->vx;
+        s32 y = to->vy;
+        s32 z = to->vz;
+
+        this->target.vx = x << 4;
+        this->target.vy = y << 4;
+        this->target.vz = z << 4;
+    }
+    this->size = 0;
+    this->step.vx = (this->target.vx - this->position.vx) / 16;
+    this->step.vy = (this->target.vy - this->position.vy) / 16;
+    this->side = side;
+    this->frames = 0;
+    this->state = 0;
+    this->stateFrames = 0;
+    return this;
+}
 
 /* The destructor of the entity class of vtable D_800D3914, which func_800D449C installs. */
 void func_800D458C(Entity *this, s32 flags) {
@@ -257,20 +394,45 @@ void func_800D458C(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st07/nonmatchings/st07", func_800D45E0);
+/* Unk800D449C's tick: flies a sixteenth of the way a frame, growing up to size 8; within 3 pixels of the target
+ * it gives its side a mark and grows faster for 10 frames, then plays sound 0x6E and is done. */
+void func_800D45E0(Unk800D449C *this) {
+    VECTOR offset;
+    s32 x, y;
+
+    switch (this->state) {
+    case GOAL_MARK_FLYING:
+        this->position.vx += this->step.vx;
+        this->position.vy += this->step.vy;
+        if (++this->size > 8) {
+            this->size = 8;
+        }
+        x = this->position.vx;
+        y = this->position.vy;
+        offset.vx = x - this->target.vx;
+        offset.vy = y - this->target.vy;
+        offset.vz = 0;
+        if ((vecGetLength(&offset) >> 4) >= 3) {
+            break;
+        }
+        BonusFight_addMark(&this->stage->base, this->side);
+        this->stateFrames = 0;
+        this->state++;
+        /* fall through */
+    case GOAL_MARK_GROWING:
+        this->size += this->stateFrames;
+        if (++this->stateFrames >= 10) {
+            soundControlPlaySound(&SOUND_CONTROL, 0x6E, 0);
+            this->state++;
+        }
+        break;
+    case GOAL_MARK_DONE: /* a case of its own in the game's switch (its compare tree tests above 1) */
+        break;
+    }
+    this->frames++;
+}
 
 INCLUDE_ASM("st07/nonmatchings/st07", func_800D4718);
-
-INCLUDE_ASM("st07/nonmatchings/st07", St07Ball_init);
-
-/* St07Ball's destructor. */
-void St07Ball_destroy(Entity *this, s32 flags) {
-    this->vtable = &ST07_BALL_VTABLE;
-    entityDestroy(this, 0);
-    if (flags & DESTROY_FREE) {
-        entityOperatorDelete(this);
-    }
-}
 
 /* The ball a BonusThrower throws (St07Ball_init, virtual table ST07_BALL_VTABLE, 0x80 bytes). */
 typedef struct St07Ball {
@@ -287,9 +449,65 @@ typedef struct St07Ball {
     /* 0x60 */ s32 unk60;
     /* 0x64 */ Vec3 position;
     /* 0x70 */ u8 unk70[0x78 - 0x70];
-    /* 0x78 */ s32 unk78;
-    /* 0x7C */ s32 unk7C; /* added to 0x78 each tick */
+    /* 0x78 */ s32 angle; /* the draw's rotation about z */
+    /* 0x7C */ s32 spin;  /* added to the angle each tick */
 } St07Ball;
+
+/* Constructs a ball of side thrown from position with force (its x and y; unk1E gets -1 for a throw toward +x, else
+ * 1), a 128 by 128 square spinning by force.vx / 32 a tick.
+ * The match depends on each copy reading its words into its own block's locals first, and on the if/else for unk1E
+ * (a ternary keeps force.vx in a register for the spin; the game reads it again). */
+St07Ball *St07Ball_init(St07Ball *this, StageBallShoot *stage, Vec3 *position, VECTOR *force, s32 side) {
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &ST07_BALL_VTABLE;
+    this->stage = stage;
+    {
+        s32 x = position->vx;
+        s32 y = position->vy;
+        s32 z = position->vz;
+
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+    }
+    {
+        s32 x = force->vx;
+        s32 y = force->vy;
+
+        this->force.vx = x;
+        this->force.vy = y;
+    }
+    this->force.vz = 0;
+    this->unk50 = 0x10000;
+    this->velocity.vx = 0;
+    this->velocity.vy = 0;
+    this->velocity.vz = 0;
+    this->unk60 = 0;
+    if (this->force.vx > 0) {
+        this->unk1E = -1;
+    } else {
+        this->unk1E = 1;
+    }
+    this->side = side;
+    this->corners[0].vx = this->corners[2].vx = -0x40;
+    this->corners[1].vx = this->corners[3].vx = 0x40;
+    this->corners[0].vy = this->corners[1].vy = -0x40;
+    this->corners[2].vy = this->corners[3].vy = 0x40;
+    this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = 0;
+    this->unk20 = 0;
+    this->angle = 0;
+    this->spin = this->force.vx >> 5;
+    return this;
+}
+
+/* St07Ball's destructor. */
+void St07Ball_destroy(Entity *this, s32 flags) {
+    this->vtable = &ST07_BALL_VTABLE;
+    entityDestroy(this, 0);
+    if (flags & DESTROY_FREE) {
+        entityOperatorDelete(this);
+    }
+}
 
 s32 St07Ball_testGoal(St07Ball *this, s32 arg);
 void st07_spawnGoalEffect(St07Ball *this, u16 index, s32 arg);
@@ -301,7 +519,7 @@ void St07Ball_tick(St07Ball *this, s32 arg) {
     Vec3 *pos;
     Vec3 move;
 
-    this->unk78 += this->unk7C;
+    this->angle += this->spin;
     this->force.vy += 0x71C;
     func_80079C1C(&move, &this->velocity, &this->force, 0x10000);
     /* The match depends on taking &this->position here, after the step: the game keeps it in a saved register from
@@ -347,7 +565,7 @@ enum {
 s32 St07Ball_testGoal(St07Ball *this, s32 arg) {
     s32 y;
 
-    if (this->stage->hits[this->side] >= 10) {
+    if (this->stage->hits[this->side] >= ST07_WINNING_HITS) {
         return BALL_GOAL_MISS;
     }
     if (this->velocity.vy < 0) {
@@ -379,7 +597,54 @@ s32 St07Ball_testGoal(St07Ball *this, s32 arg) {
 
 INCLUDE_ASM("st07/nonmatchings/st07", st07_spawnGoalEffect);
 
-INCLUDE_ASM("st07/nonmatchings/st07", St07Ball_draw);
+/* St07Ball's draw: the square turned about z by its angle at its position, with the 64 by 64 picture at
+ * (0x28, 0) of the 8-bit texture page at x 640 and the CLUT at (0, 480), opaque. The match depends on the matrix
+ * passed to both calls through one pointer (the game keeps it in a saved register) and on this order of the shape's
+ * fields. */
+void St07Ball_draw(St07Ball *this, s32 arg) {
+    Camera *camera = (Camera *)arg;
+    MatrixWords m;
+    MATRIX *matrix;
+    PolyFT4Shape shape;
+    Vec3 *position;
+    s32 x, y, z;
+
+    matrix = &m.m;
+    m.words[0] = ONE;
+    m.words[1] = 0;
+    m.words[2] = ONE;
+    m.words[3] = 0;
+    m.words[4] = ONE;
+    m.words[5] = 0;
+    m.words[6] = 0;
+    m.words[7] = 0;
+    matrixRotateZ(matrix, this->angle);
+    position = &this->position;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    setModelMatrix(matrix);
+    shape.flags = 0;
+    shape.color = 0x808080;
+    UV_BYTES(shape.uv0)[0] = 0x28;
+    UV_BYTES(shape.uv0)[1] = 0;
+    UV_BYTES(shape.uv1)[0] = 0x67;
+    UV_BYTES(shape.uv1)[1] = 0;
+    UV_BYTES(shape.uv2)[0] = 0x28;
+    UV_BYTES(shape.uv2)[1] = 0x3F;
+    UV_BYTES(shape.uv3)[0] = 0x67;
+    UV_BYTES(shape.uv3)[1] = 0x3F;
+    shape.tpage = getTPage(1, 0, 640, 0);
+    shape.clut = getClut(0, 480);
+    shape.corners[0] = &this->corners[0];
+    shape.corners[1] = &this->corners[1];
+    shape.corners[2] = &this->corners[2];
+    shape.corners[3] = &this->corners[3];
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
+}
 
 /* Constructs the BonusThrower of side for owner: the corners of a 128 by 128 square, then BonusThrower_place. */
 BonusThrower *BonusThrower_init(BonusThrower *this, Fight *owner, s32 side) {
@@ -408,9 +673,63 @@ void BonusThrower_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st07/nonmatchings/st07", BonusThrower_tick);
+/* The stage that owns a thrower. */
+static inline StageBallShoot *throwerStage(BonusThrower *thrower) {
+    return (StageBallShoot *)thrower->owner;
+}
 
-INCLUDE_ASM("st07/nonmatchings/st07", BonusThrower_throw);
+/* A side's hold count, as an s16. The match depends on the s16 result: BonusThrower_tick loads the u16 count with
+ * lh (as setGauge's s16 parameter does). */
+static inline s16 getHoldFrames(StageBallShoot *stage, s32 side) {
+    return stage->holdFrames[side];
+}
+
+/* BonusThrower's tick: while its side holds the button, the scale eases a quarter of the way to 0x1000 each frame
+ * (else it drops to 0); then BonusThrower_place, BonusThrower_throw, and counts its frames. */
+void BonusThrower_tick(BonusThrower *this, s32 arg) {
+    if (getHoldFrames(throwerStage(this), this->side) != 0) {
+        this->scale += (0x1000 - this->scale) >> 2;
+    } else {
+        this->scale = 0;
+    }
+    BonusThrower_place(this);
+    BonusThrower_throw(this);
+    this->frame++;
+}
+
+/* Each frame for its side: when the button is let go after a hold (heldCharge) and the stage allows it, throws an
+ * St07Ball from position, harder the longer the hold (the launch's pad gets the charge times 0xCC, which St07Ball_init
+ * does not read), and holds the side's fighter (BonusFight_holdFighter). As st09's, without its slots and sound. */
+void BonusThrower_throw(BonusThrower *this) {
+    VECTOR vec;
+    Entity *entity;
+    s32 power;
+    s32 x;
+    s32 y;
+
+    if (throwerStage(this)->base.holding[this->side] == 0 && throwerStage(this)->base.hudHidden == 0
+        && throwerStage(this)->heldCharge[this->side] != 0) {
+        /* The match depends on vec's address taken here: the game keeps it in a saved register from the start
+         * of the block. */
+        VECTOR *launch = &vec;
+
+        vec.vx = 0;
+        vec.vy = 0;
+        vec.vz = 0;
+        vec.pad = 0;
+        power = ((throwerStage(this)->heldCharge[this->side] + 8) >> 1) * 0x71C;
+        x = ((s64)power * 0x4000) >> 16;
+        vec.vx += x * Fighter_getFacing(Fight_getFighter(&throwerStage(this)->base.base, this->side));
+        y = ((s64)power * 0x10000) >> 16;
+        vec.vy -= y;
+        vec.pad = throwerStage(this)->heldCharge[this->side] * 0xCC;
+        /* The match depends on the owner cast here: throwerStage's inline result takes another register. */
+        entity = NEW_ENTITY(sizeof(St07Ball), St07Ball_init, (StageBallShoot *)this->owner, &this->position, launch,
+                            this->side);
+        entityAddSibling(&this->entity, entity);
+        BonusFight_holdFighter(&throwerStage(this)->base, this->side);
+    }
+}
 
 INCLUDE_ASM("st07/nonmatchings/st07", BonusThrower_place);
 

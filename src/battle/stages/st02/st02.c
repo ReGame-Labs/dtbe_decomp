@@ -3,6 +3,7 @@
 #include "battle/game.h"
 #include "battle/stage_objects.h"
 #include "engine/gfx/mesh_scene.h"
+#include "engine/math/random.h"
 #include "engine/math/vector.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
@@ -231,8 +232,7 @@ typedef struct Unk800D554C {
     /* 0x00 */ Entity entity;
     /* 0x18 */ St02Hit unk18;
     /* 0x30 */ u8 unk30[0x34 - 0x30];
-    /* 0x34 */ CollisionShape unk34;
-    /* 0x68 */ u8 unk68[0x7C - 0x68];
+    /* 0x34 */ CollisionSphere part; /* of radius 0x80 at the position, for unk18; disabled at construction */
     /* 0x7C */ MeshScene *scene; /* meshSceneRelocateNodeTmd, meshSceneGetMesh */
     /* 0x80 */ Mesh *mesh;
     /* 0x84 */ Vec3 unk84;  /* its y falls by func_800D5964's steps */
@@ -248,10 +248,62 @@ typedef struct Unk800D554C {
     /* 0xBC */ s32 unkBC;
 } Unk800D554C;
 
-INCLUDE_ASM("st02/nonmatchings/st02", func_800D554C);
-
 extern VtableEntry D_800D3F9C[];
 extern EntityVtable D_800D3FBC;
+
+void func_800D5B30(Unk800D554C *this);
+void func_800D5BC4(Unk800D554C *this);
+void func_800D5C24(Unk800D554C *this);
+
+/* Constructs an Unk800D554C at position for a mesh scene: its St02Hit (damage 0x40004000, kind 4, no knockback;
+ * the derived class's table D_800D3F9C), a disabled CollisionSphere for it, the mesh of node 2 added to the scene's
+ * group, a random unkB8, then func_800D5C24, func_800D5B30 and func_800D5BC4. */
+Unk800D554C *func_800D554C(Unk800D554C *this, MeshScene *scene, Vec3 *position) {
+    s32 x, y, z;
+
+    entityInit(&this->entity, 0x40000);
+    /* St02Hit_init(&this->unk18, 0x40004000, &ZERO_VECTOR, 4), inline (the vector read before any store). The match
+     * depends on its own vx, vy, vz in this block, apart from the position's x, y, z below. */
+    {
+        s32 vx, vy, vz;
+
+        this->unk18.base.vtable = ST02_HIT_VTABLE;
+        this->unk18.damage = 0x40004000;
+        this->unk18.kind = 4;
+        vx = ZERO_VECTOR.vx;
+        vy = ZERO_VECTOR.vy;
+        vz = ZERO_VECTOR.vz;
+        this->unk18.knockback.vx = vx;
+        this->unk18.knockback.vy = vy;
+        this->unk18.knockback.vz = vz;
+    }
+    this->unk18.base.vtable = D_800D3F9C;
+    this->entity.vtable = &D_800D3FBC;
+    CollisionSphere_init(&this->part, position, 0x80, &this->unk18);
+    this->part.flags.bits.disabled = 1;
+    this->part.entity = &this->entity;
+    this->scene = scene;
+    this->mesh = meshInit(operatorNew(sizeof(Mesh)), meshSceneRelocateNodeTmd(scene, 2), 0);
+    groupAddChild(&scene->group, &this->mesh->object);
+    this->unkB4 = 0;
+    this->unkB8 = mersenneTwisterGenerate(&RANDOM) & 0xFF;
+    this->unkBC = 0;
+    /* The match depends on the position read before the four zero stores. */
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->fallSpeed = 0;
+    this->unkA8 = 0;
+    this->unkAC = 0;
+    this->unkB0 = 0;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    func_800D5C24(this);
+    func_800D5B30(this);
+    func_800D5BC4(this);
+    return this;
+}
 
 /* Deletes a scene object through its virtual destructor (engine scene_graph.c's inline). */
 static inline void sceneObjectDelete(SceneObject *object) {
@@ -269,14 +321,14 @@ void func_800D56AC(Unk800D554C *this, s32 flags) {
     this->entity.vtable = &D_800D3FBC;
     listRemove(&this->mesh->object.link);
     sceneObjectDelete(&this->mesh->object);
-    this->unk34.vtable = COLLISION_SHAPE_VTABLE;
-    /* listRemove(&this->unk34.link) written out: the match depends on this access order, as in st04's
+    this->part.vtable = COLLISION_SHAPE_VTABLE;
+    /* listRemove(&this->part.link) written out: the match depends on this access order, as in st04's
      * func_800D8618 */
-    link = &this->unk34.link;
-    this->unk34.link.next->prev = this->unk34.link.prev;
-    link->prev->next = this->unk34.link.next;
-    this->unk34.link.next = link;
-    this->unk34.link.prev = link;
+    link = &this->part.link;
+    this->part.link.next->prev = this->part.link.prev;
+    link->prev->next = this->part.link.next;
+    this->part.link.next = link;
+    this->part.link.prev = link;
     this->unk18.base.vtable = COLLISION_OWNER_VTABLE;
     entityDestroy(&this->entity, 0);
     if (flags & DESTROY_FREE) {
@@ -586,7 +638,57 @@ void St02Terminal_tick(St02Terminal *this) {
     this->frames++;
 }
 
-INCLUDE_ASM("st02/nonmatchings/st02", St02Terminal_putNextChar);
+void St02Terminal_clearRow(St02Terminal *this, s32 row);
+
+/* Ends the cursor's line: a 0 at the cursor, then column 0 of the next row. */
+static inline void endLine(St02Terminal *this, s32 gridRow) {
+    this->grid[gridRow][this->column] = 0;
+    this->column = 0;
+    this->row++;
+}
+
+/* Moves the next character of the queue into the grid at the cursor: '\n' ends the line, as a 0 does after some
+ * text unless the terminal is closed; past column 15 the cursor wraps, and past row 11 the grid scrolls up a row
+ * (the top one cleared). The match depends on the switch with its default case first (the game lays the bodies out
+ * default, '\n', '\0', the two endLine copies cross-jumped into one tail). */
+void St02Terminal_putNextChar(St02Terminal *this) {
+    s32 gridRow;
+    u8 c;
+
+    if (this->readIndex == this->writeIndex) {
+        return;
+    }
+    c = this->queue[this->readIndex++];
+    gridRow = (this->topRow + this->row) % 12;
+    if (this->readIndex >= 0x100) {
+        this->readIndex = 0;
+    }
+    switch (c) {
+    default:
+        this->grid[gridRow][this->column++] = c;
+        if (this->column >= 16) {
+            this->column = 0;
+            this->row++;
+        }
+        break;
+    case '\n':
+        endLine(this, gridRow);
+        break;
+    case '\0':
+        if (this->column != 0 && !this->closed) {
+            endLine(this, gridRow);
+        }
+        break;
+    }
+    if (this->row >= 12) {
+        this->row = 11;
+        St02Terminal_clearRow(this, this->topRow);
+        this->topRow++;
+        if (this->topRow >= 12) {
+            this->topRow = 0;
+        }
+    }
+}
 
 /* Empties the queue. */
 void St02Terminal_clearQueue(St02Terminal *this) {

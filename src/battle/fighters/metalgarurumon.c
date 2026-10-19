@@ -3,7 +3,9 @@
  * move 2's projectile, and the special move 3's hitbox, projectiles and effects. */
 
 #include "common.h"
+#include <abs.h>
 #include "battle/game_classes.h"
+#include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 
 void MetalGarurumon_spawnAirAttackTrails(Fighter *this);
@@ -405,7 +407,8 @@ void MetalGarurumon_spawnSpecial2Projectile(Fighter *this) {
 }
 
 Unk8009D20C *func_8009D20C(Unk8009D20C *this, void *arg);
-Entity *func_8009D4EC(void *this, Fighter *fighter);
+struct Unk8009D4EC;
+Entity *func_8009D4EC(struct Unk8009D4EC *this, Fighter *fighter);
 void func_8009A920(Fighter *this);
 
 /* Special move 3: Fighter's; at frame 0 func_8009D20C's effect, 12 invulnerable frames and Fighter_addGauge(-0x8000);
@@ -547,13 +550,19 @@ typedef struct MetalGarurumonSpecial3HitboxTrail {
 /* The special move 3's hitbox, with a trail of its last 16 positions. */
 typedef struct MetalGarurumonSpecial3Hitbox {
     /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ u8 unk80[0x84 - 0x80];
+    /* 0x80 */ u32 targetHandle; /* the opponent's (entityGetHandle) */
     /* 0x84 */ Vec3 position;
-    /* 0x90 */ u8 unk90[0xB4 - 0x90];
-    /* 0xB4 */ s32 unkB4;
-    /* 0xB8 */ u8 unkB8[0xC0 - 0xB8];
+    /* 0x90 */ s32 positionPad;
+    /* 0x94 */ Vec3 velocity;
+    /* 0xA0 */ u8 unkA0[4];
+    /* 0xA4 */ Vec3 targetPoint; /* the opponent's point (func_8007A650) */
+    /* 0xB0 */ u8 unkB0[4];
+    /* 0xB4 */ s32 unkB4; /* set by the hit: from then on only the trail is drawn, and it fades */
+    /* 0xB8 */ s32 unkB8;
+    /* 0xBC */ s32 unkBC; /* the constructor's last argument */
     /* 0xC0 */ s32 ticks; /* ticks so far */
-    /* 0xC4 */ u8 unkC4[0xCC - 0xC4];
+    /* 0xC4 */ s32 unkC4;
+    /* 0xC8 */ s32 vramY; /* the fighter's (Fighter_getVramY) */
     /* 0xCC */ s32 trailIndex; /* the newest point of trail */
     /* 0xD0 */ s32 unkD0;
     /* 0xD4 */ MetalGarurumonSpecial3HitboxTrail trail[16];
@@ -562,7 +571,73 @@ typedef struct MetalGarurumonSpecial3Hitbox {
 void func_8009C914(MetalGarurumonSpecial3Hitbox *this);
 void func_8009CB58(MetalGarurumonSpecial3Hitbox *this, s32 arg);
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", MetalGarurumonSpecial3Hitbox_init);
+/* Copies src to dst as vecCopy does: the three words read before any is stored. */
+static inline void copyVec3(Vec3 *dst, Vec3 *src) {
+    s32 x = src->vx;
+    s32 y = src->vy;
+    s32 z = src->vz;
+
+    dst->vx = x;
+    dst->vy = y;
+    dst->vz = z;
+}
+
+/* Builds a special move 3 hitbox of fighter at position moving by velocity: a hit of 0x4B00C00, a sphere of 0x80, aimed
+ * at the opponent's point, its whole trail at position, then its sphere in the fighter's side's list. */
+MetalGarurumonSpecial3Hitbox *MetalGarurumonSpecial3Hitbox_init(MetalGarurumonSpecial3Hitbox *this, Fighter *fighter,
+                                                                Vec3 *position, Vec3 *velocity, s32 arg4) {
+    Fighter *opponent;
+    Fight *fight;
+    s32 i;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    Hit_init(&this->parts.base, fighter, 0x4B00C00, (Vec3 *)&ZERO_VECTOR, 1);
+    this->parts.base.vtable = METALGARURUMON_SPECIAL3_HITBOX_HIT_VTABLE;
+    this->parts.entity.vtable = &METALGARURUMON_SPECIAL3_HITBOX_VTABLE;
+    CollisionSphere_init(&this->parts.part, position, 0x80, &this->parts.base);
+    opponent = Fighter_getOpponent(fighter);
+    this->targetHandle = entityGetHandle(&opponent->entity);
+    /* The match depends on each copy reading its three words before any store (as vecCopy), in its own scope. */
+    {
+        s32 x = position->vx;
+        s32 y = position->vy;
+        s32 z = position->vz;
+
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+    }
+    {
+        s32 x = velocity->vx;
+        s32 y = velocity->vy;
+        s32 z = velocity->vz;
+
+        this->velocity.vx = x;
+        this->velocity.vy = y;
+        this->velocity.vz = z;
+    }
+    func_8007A650(opponent, &this->targetPoint);
+    this->unkB4 = 0;
+    this->unkB8 = 0;
+    this->unkBC = arg4;
+    this->ticks = 0;
+    this->unkC4 = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    this->trailIndex = -1;
+    this->unkD0 = 4;
+    for (i = 0; i < 16; i++) {
+        copyVec3(&this->trail[i].position, position);
+        this->trail[i].age = 16;
+    }
+    fight = Fighter_getScene(fighter);
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(fight, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->parts.part.link);
+    }
+    this->parts.part.entity = &this->parts.entity;
+    return this;
+}
 
 void func_8009C678(MetalGarurumonSpecial3Hitbox *this);
 void func_8009C898(MetalGarurumonSpecial3Hitbox *this);
@@ -585,7 +660,39 @@ void MetalGarurumonSpecial3Hitbox_tick(MetalGarurumonSpecial3Hitbox *this) {
     this->ticks++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", MetalGarurumonSpecial3Hitbox_hit);
+/* Sprays 6 gray particles from the position at velocity. The match depends on velocity being this inline's parameter:
+ * the game keeps the pointer in a saved register across allocEntityMemory. */
+static inline void MetalGarurumonSpecial3Hitbox_spray(MetalGarurumonSpecial3Hitbox *this, Vec3 *velocity) {
+    Entity *child = allocEntityMemory(0x48);
+
+    if (child != NULL) {
+        ParticleSpray_init(entityOperatorNewAt(0x48, child), 4, &this->position, velocity, 0x40, 6, 0x808080);
+    }
+    entityAddSibling(&this->parts.entity, child);
+}
+
+/* On a hit: Hit_apply, pushes the struck sum on by the velocity (x * 4, up by |y| * 16), sprays particles back at
+ * half the velocity, plays sound 0xB8, sets 0xB4 and leaves its side's list. */
+void MetalGarurumonSpecial3Hitbox_hit(MetalGarurumonSpecial3Hitbox *this, CollisionSphere *sum) {
+    Vec3 spray;
+    ListNode *node;
+
+    Hit_apply(&this->parts.base, sum);
+    sum->hitKnockback.vx += this->velocity.vx << 2;
+    sum->hitKnockback.vy -= ABS(this->velocity.vy) << 4;
+    spray.vx = -this->velocity.vx >> 1;
+    spray.vy = -this->velocity.vy >> 1;
+    spray.vz = -this->velocity.vz >> 1;
+    MetalGarurumonSpecial3Hitbox_spray(this, &spray);
+    soundControlPlaySound(&SOUND_CONTROL, 0xB8, 0);
+    this->unkB4 = 1;
+    /* listRemove(&this->parts.part.link), in the access order the game's compiler used */
+    node = &this->parts.part.link;
+    this->parts.part.link.next->prev = this->parts.part.link.prev;
+    node->prev->next = this->parts.part.link.next;
+    this->parts.part.link.next = node;
+    this->parts.part.link.prev = node;
+}
 
 /* Draws the hitbox (func_8009C914) until 0xB4 is set, then its trail (func_8009CB58). */
 void MetalGarurumonSpecial3Hitbox_draw(MetalGarurumonSpecial3Hitbox *this, s32 arg) {
@@ -682,13 +789,20 @@ INCLUDE_RODATA("game/nonmatchings/fighters/metalgarurumon", D_8006A0F0);
 
 INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009D308);
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009D4EC);
+extern EntityVtable D_8006A134;
+
+/* One of the 17 points of func_8009D4EC's ring: on a circle of 0x1000 at height 0, and 1.25 times as far out at
+ * height -0x400. */
+typedef struct Unk8009D4ECPoint {
+    /* 0x0 */ SVECTOR outer;
+    /* 0x8 */ SVECTOR inner;
+} Unk8009D4ECPoint;
 
 /* The entity class of virtual table D_8006A134 (constructor func_8009D4EC, size 0x14C). */
 typedef struct Unk8009D4EC {
     /* 0x000 */ Entity entity;
     /* 0x018 */ Fighter *fighter;
-    /* 0x01C */ u8 unk1C[0x12C - 0x1C]; /* 17 points of 0x10 bytes, from COS_SIN_TABLE */
+    /* 0x01C */ Unk8009D4ECPoint points[17]; /* a 16th of a turn apart, the last one again at angle 0 */
     /* 0x12C */ Vec3 position; /* the character's (Fighter_getPosition) */
     /* 0x138 */ u8 unk138[0x13C - 0x138];
     /* 0x13C */ s32 unk13C; /* 0x100 at construction */
@@ -696,6 +810,38 @@ typedef struct Unk8009D4EC {
     /* 0x144 */ s32 unk144;
     /* 0x148 */ s32 vramY;  /* Fighter_getVramY of the character */
 } Unk8009D4EC;
+
+/* Builds the entity at the fighter's position (Fighter_getPosition) with its ring of points. The match depends on a
+ * pointer to each point's outer and inner vector (the loop then walks the inner one's address). */
+Entity *func_8009D4EC(Unk8009D4EC *this, Fighter *fighter) {
+    s32 i;
+    SVECTOR *outer;
+    SVECTOR *inner;
+    s16 sin;
+    s16 cos;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_8006A134;
+    this->fighter = fighter;
+    Fighter_getPosition(fighter, &this->position);
+    this->unk13C = 0x100;
+    this->unk140 = 0;
+    this->unk144 = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    for (i = 0; i < 17; i++) {
+        sin = COS_SIN_TABLE[(i * 0x100) & 0xFFF].sin;
+        cos = COS_SIN_TABLE[(i * 0x100) & 0xFFF].cos;
+        outer = &this->points[i].outer;
+        inner = &this->points[i].inner;
+        outer->vx = sin + (sin >> 2);
+        outer->vy = -0x400;
+        outer->vz = cos + (cos >> 2);
+        inner->vx = sin;
+        inner->vy = 0;
+        inner->vz = cos;
+    }
+    return &this->entity;
+}
 
 /* The tick of func_8009D4EC's entity: follows the character's position until Fighter_isAttackIdle holds or bit 2
  * of its flags (Fighter_isOnGround) clears, and deletes itself once 0x13C, growing by 0x15, reaches 0x200. */

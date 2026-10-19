@@ -29,8 +29,8 @@ extern EntityVtable D_8006A504;
 extern EntityVtable D_8006A52C;
 extern EntityVtable D_8006A554;
 extern EntityVtable OMEGAMON_VTABLE;
-extern u16 D_8006A6EC[];
-extern u16 D_8006A700[];
+extern SpriteAnimRow D_8006A6EC;
+extern SpriteAnimRow D_8006A700;
 
 /* Omegamon's class (CHARACTER_OMEGAMON): func_8009E744 and func_8009E814 clear 0x4A8 and 0x4AC before they launch
  * the special move 3's hitboxes. */
@@ -68,7 +68,6 @@ INCLUDE_RODATA("game/nonmatchings/fighters/omegamon", D_8006A3D4);
 
 INCLUDE_ASM("game/nonmatchings/fighters/omegamon", Omegamon_attack3);
 
-void Fighter_attachTo(Fighter *this, Fighter *fighter, s32 index);
 
 /* Throw: Fighter's; at frame 0 the opponent is held (Fighter_hold(8)); at frame 7, unless no opponent is in reach (then
  * Fighter_stopActionClip), it is held (14), takes a clip by its character, is attached to node 13 and its model moved
@@ -224,7 +223,32 @@ void func_8009E480(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/omegamon", Omegamon_special2);
+void Omegamon_spawnSpecial2Hitbox(Fighter *this, s32 arg);
+
+/* Special move 2: Fighter's; frame 0 the voice and func_80079B14(0x2A), the hitboxes at frames 7 and 17, a push
+ * forward at frame 22, and from frame 23 a force of half the velocity against it. */
+void Omegamon_special2(Omegamon *this, s32 frame) {
+    s64 push;
+
+    Fighter_special2(&this->base, frame);
+    if (frame == 0) {
+        Fighter_playVoice(&this->base, 0xC4);
+        func_80079B14(&this->base, 0x2A);
+    }
+    if (frame == 7) {
+        Omegamon_spawnSpecial2Hitbox(&this->base, 0);
+    }
+    if (frame == 17) {
+        Omegamon_spawnSpecial2Hitbox(&this->base, 1);
+    }
+    if (frame == 22) {
+        push = ((s64)this->base.mass * 0x4718) >> 16;
+        this->base.force.vx += (s32)push * Fighter_getFacing(&this->base);
+    }
+    if (frame >= 23) {
+        this->base.force.vx = ((s64)this->base.velocity.vx * -0x800) >> 12;
+    }
+}
 
 /* Spawns the special move 2's hitbox 0x180 in front of the fighter and 0x133 up, toward its facing, with arg and its
  * sound. */
@@ -322,20 +346,21 @@ void func_8009E814(Omegamon *this) {
 extern EntityVtable OMEGAMON_SPECIAL1_PROJECTILE_VTABLE;
 extern VtableEntry OMEGAMON_SPECIAL1_PROJECTILE_HIT_VTABLE[];
 
-/* The special move 1's projectile (0xE4 bytes, a Projectile): it keeps its owner, the fight and where it started. */
+/* The special move 1's projectile (0xE4 bytes, a Projectile): it keeps its owner, the fight and a tail, drawn as a
+ * trail from the tail to its position. */
 typedef struct OmegamonSpecial1Projectile {
     /* 0x00 */ Projectile base;
     /* 0xC0 */ Fighter *owner;
     /* 0xC4 */ Fight *fight;
-    /* 0xC8 */ Vec3 start;
-    /* 0xD4 */ s32 unkD4;
-    /* 0xD8 */ s32 unkD8;
-    /* 0xDC */ s32 unkDC; /* set by OmegamonSpecial1Projectile_hit */
-    /* 0xE0 */ s32 unkE0;
+    /* 0xC8 */ Vec3 tail; /* where it started; its x follows at an eighth of the speed */
+    /* 0xD4 */ s32 tailPad;
+    /* 0xD8 */ s32 animFrame; /* 0, 1, 2 over and over (the draw's texture column) */
+    /* 0xDC */ s32 ending;    /* set by OmegamonSpecial1Projectile_hit or once past its range */
+    /* 0xE0 */ s32 life;      /* 0x80, 20 less a frame once ending; deleted at 0 */
 } OmegamonSpecial1Projectile;
 
 /* Builds the special move 1's projectile for owner at pos, moving by vel: Projectile_init (size 0x80, hit 0x6A82400,
- * 0x1000, 3), its vtables, the owner, the fight and where it started. */
+ * 0x1000, 3), its vtables, the owner, the fight and its tail where it starts. */
 OmegamonSpecial1Projectile *OmegamonSpecial1Projectile_init(OmegamonSpecial1Projectile *this, Fighter *owner,
                                                             Fight *fight, VECTOR *pos, VECTOR *vel) {
     s32 x, y, z;
@@ -348,22 +373,64 @@ OmegamonSpecial1Projectile *OmegamonSpecial1Projectile_init(OmegamonSpecial1Proj
     x = pos->vx;
     y = pos->vy;
     z = pos->vz;
-    this->unkE0 = 0x80;
-    this->unkD8 = 0;
-    this->unkDC = 0;
-    this->start.vx = x;
-    this->start.vy = y;
-    this->start.vz = z;
+    this->life = 0x80;
+    this->animFrame = 0;
+    this->ending = 0;
+    this->tail.vx = x;
+    this->tail.vy = y;
+    this->tail.vz = z;
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/omegamon", OmegamonSpecial1Projectile_tick);
+void func_8009EF64(OmegamonSpecial1Projectile *this);
 
-/* On a hit: Hit_apply, then sets 0xDC, disables its sphere and spawns its burst (4). */
+/* The special move 1 projectile's frame: puffs a trail particle, moves by its velocity (the tail's x an eighth as
+ * fast) and carries its hit part along, 0x80 wider than its radius; once it has gone its range or hit, it slows to
+ * half speed, shrinks by an eighth of maxRadius and fades by 20 a frame, and deletes itself when either is gone. */
+void OmegamonSpecial1Projectile_tick(OmegamonSpecial1Projectile *this) {
+    s32 x, y, z;
+
+    func_8009EF64(this);
+    if (++this->animFrame >= 3) {
+        this->animFrame = 0;
+    }
+    /* The match depends on the vector sum reading everything before writing (as vecAddInPlace). */
+    x = this->base.position.vx;
+    y = this->base.position.vy;
+    z = this->base.position.vz;
+    x += this->base.velocity.vx;
+    y += this->base.velocity.vy;
+    z += this->base.velocity.vz;
+    this->base.position.vx = x;
+    this->base.position.vy = y;
+    this->base.position.vz = z;
+    /* The match depends on the tail moving before the hit part takes the position */
+    this->tail.vx += this->base.velocity.vx >> 3;
+    this->base.parts.part.position = this->base.position;
+    this->base.parts.part.radius = this->base.radius + 0x80;
+    this->base.distance += this->base.speed;
+    if (this->base.distance > this->base.range) {
+        this->ending = 1;
+    }
+    if (this->ending == 0) {
+        this->base.radius += (this->base.maxRadius - this->base.radius) >> 2;
+    } else {
+        this->base.velocity.vx >>= 1;
+        this->base.radius -= this->base.maxRadius >> 3;
+        this->life -= 20;
+        if (this->base.radius <= 0 || this->life <= 0) {
+            entityDelete(&this->base.parts.entity);
+            return;
+        }
+    }
+    this->base.age++;
+}
+
+/* On a hit: Hit_apply, then starts ending, disables its sphere and spawns its burst (4). */
 void OmegamonSpecial1Projectile_hit(OmegamonSpecial1Projectile *this, CollisionSphere *sum) {
     Hit_apply(&this->base.parts.base, sum);
-    this->unkDC = 1;
-    this->base.parts.part.flags |= COLLISION_SHAPE_DISABLED;
+    this->ending = 1;
+    this->base.parts.part.flags.bits.disabled = 1;
     Projectile_spawnBurst(&this->base, 4);
 }
 
@@ -434,7 +501,7 @@ INCLUDE_RODATA("game/nonmatchings/fighters/omegamon", D_8006A44C);
 Unk8009F248 *func_8009F248(Unk8009F248 *this, Fighter *owner) {
     s32 flags = Fighter_getVramY(owner);
     /* The match depends on frame, read into a local before entityInit. */
-    u16 *frame = D_8006A6EC;
+    SpriteAnimRow *frame = &D_8006A6EC;
     VECTOR pos;
 
     entityInit(&this->base.entity, 0);
@@ -493,7 +560,7 @@ INCLUDE_RODATA("game/nonmatchings/fighters/omegamon", D_8006A46C);
 Unk8009F248 *func_8009F4D4(Unk8009F248 *this, Fighter *owner) {
     s32 flags = Fighter_getVramY(owner);
     /* The match depends on frame, read into a local before entityInit. */
-    u16 *frame = D_8006A700;
+    SpriteAnimRow *frame = &D_8006A700;
     VECTOR pos;
 
     entityInit(&this->base.entity, 0);
@@ -613,7 +680,7 @@ Unk800A0054 *func_800A0054(Unk800A0054 *this, Fighter *owner, Fight *fight, Vec3
     this->parts.part.entity = &this->parts.entity;
     this->owner = owner;
     this->fight = fight;
-    this->parts.part.flags |= COLLISION_SHAPE_DISABLED;
+    this->parts.part.flags.bits.disabled = 1;
     /* The match depends on reading each vector's three words before storing any, as vecCopy does, with
      * locals of its own for each copy */
     x = pos->vx;
@@ -762,7 +829,7 @@ Unk800A0830 *func_800A0830(Unk800A0830 *this, Fighter *owner, Fight *fight, Vec3
     Hit_setKnockback(&this->parts.unk18.base, &v);
     this->parts.part.entity = &this->parts.entity;
     if (index != 0) {
-        this->parts.part.flags |= COLLISION_SHAPE_DISABLED;
+        this->parts.part.flags.bits.disabled = 1;
     }
     this->owner = owner;
     this->fight = fight;
@@ -819,7 +886,43 @@ void func_800A09F0(UnkPartsEntity3C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A0A84);
+void func_800A0D94(Unk800A0830 *this);
+
+/* A chain link's tick: on frame 1 the links below 10 spawn the next one; links past 0 last 10 ticks, link 0 27 while
+ * its start (and part) moves a third of the velocity a tick. Once its part touched, it sets the owner's 0x4AC and
+ * disables the part when TrackedHit_hitFighter finds a fighter struck. */
+void func_800A0A84(Unk800A0830 *this) {
+    if (this->unkCC != 0) {
+        if (this->unkCC == 1 && this->index < 10) {
+            func_800A0D94(this);
+        }
+        this->unkC4++;
+        if (this->index != 0) {
+            if (this->unkC4 >= 10) {
+                entityDelete(&this->parts.entity);
+                return;
+            }
+        } else {
+            if (this->unkC4 >= 27) {
+                entityDelete(&this->parts.entity);
+                return;
+            }
+            this->start.vx += this->velocity.vx / 3;
+            this->parts.part.position.vx = this->start.vx;
+            this->parts.part.position.vy = this->start.vy;
+            this->parts.part.position.vz = this->start.vz;
+        }
+    }
+    /* CollisionShape_isTouched, inline */
+    if (this->parts.part.flags.bits.touched) {
+        this->parts.part.flags.bits.touched = 0;
+        if (TrackedHit_hitFighter(&this->parts.unk18)) {
+            this->parts.part.flags.bits.disabled = 1;
+            ((Omegamon *)this->owner)->unk4AC = 1;
+        }
+    }
+    this->unkCC++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A0BD0);
 

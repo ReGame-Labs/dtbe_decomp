@@ -76,6 +76,7 @@ func_80071EF8 Fight_resetRound
 func_80071F74 Fight_updatePauseMenu
 # drawing and the rest
 func_80072680 Fight_draw
+func_8007293C Fight_drawContinueFloor
 func_80072ADC drawDarkRect
 func_80072B74 drawRectFrame
 func_80072C6C printCentered
@@ -383,9 +384,9 @@ D_800D3790 ARENA_FRICTION
 D_800D3794 ARENA_GRIP
 # the fighter's flag bits named after the type's old name: Fighter_freeze sets the first; the other two keep
 # the address of the function that sets them
-UNK80076F34_FLAG_A78_BIT FIGHTER_FLAG_FROZEN_BIT
-UNK80076F34_FLAG_AF8_BIT FIGHTER_FLAG_80079AF8_BIT
-UNK80076F34_FLAG_AE4_BIT FIGHTER_FLAG_80079AE4_BIT
+# UNK80076F34_FLAG_A78_BIT FIGHTER_FLAG_FROZEN_BIT: now the bit field FighterFlags.bits.frozen
+# UNK80076F34_FLAG_AF8_BIT FIGHTER_FLAG_80079AF8_BIT: now a FighterFlags/CollisionShapeFlags bit field
+# UNK80076F34_FLAG_AE4_BIT FIGHTER_FLAG_80079AE4_BIT: now a FighterFlags/CollisionShapeFlags bit field
 
 # game_0c.c: the collision shapes the fight tests against each other (collideShapes calls slot 0x08 of each
 # pair, shapeListDraw slot 0x18), their one subclass, a sphere (position 0x34, radius 0x44: func_80075F58
@@ -906,3 +907,21 @@ D_80064E28 VIGNETTE_RING
 func_80071A8C Fight_playTimeUpWin
 # game_0b.c: InputHistory_findHeld for a run of at least n frames holding the buttons
 func_8007536C InputHistory_findHeldFor
+# game_0f.c: the attack chain's state (FighterStateChain, virtual tables D_80067D54 and D_80067D94): its constructor
+# and its tick (slot 1 of both tables)
+func_800823EC FighterStateChain_init
+func_800824B8 FighterStateChain_tick
+# fighter.c: puts the fighter on the floor its probe found and pushes it off it, unless it moves away from it
+# (Fighter_updatePhysics keeps the result as flag bit 3, beside FIGHTER_FLAG_ON_GROUND)
+func_80078254 Fighter_landOnFloor
+# PAUSE_JOIN (game_main's join state of the pause: JP D_80064150, US D_8006412C) is in config/<version>/symbols_game.txt
+# by hand: its splat label differs by version
+func_80075848 boxGetCorners
+func_80081200 FighterStateDash_init
+func_80081264 FighterStateDash_tick
+D_80067F5C FIGHTER_STATE_DASH_VTABLE
+func_800C8CD0 Item_clampToArena
+func_800C8B0C Item_move
+func_80070DBC Fight_showWinner
+func_80080D38 FighterStateJump_steer
+func_800747F8 SideHud_drawEvolutionGlow

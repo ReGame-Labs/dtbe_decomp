@@ -41,8 +41,8 @@ void padManagerSetRepeat(PadManager *this, s32 delay, s32 rate) {
     }
 }
 
-/* Resets both pads. */
-void resetPads(void) {
+/* Resets both pads (a pad manager method: the guide's and the character select's tasks pass the manager). */
+void resetPads(PadManager *this) {
     Pad *pad = PADS;
     s32 i;
 
@@ -128,7 +128,7 @@ void padManagerSetDeadZone(PadManager *this, s32 deadZone) {
 /* Pauses or resumes reading the pads, resetting them when that changes. */
 void padManagerSetPaused(PadManager *this, s32 paused) {
     if (PADS_PAUSED != paused) {
-        resetPads();
+        resetPads(this);
     }
     PADS_PAUSED = paused;
 }

@@ -1,7 +1,11 @@
 /* The credits (/credit.txt, /credit.k15, /title/credit.tim). */
 
 #include "common.h"
+#include "engine/cd/read.h"
+#include "engine/cd/file_load.h"
+#include "engine/gfx/display.h"
 #include "engine/gfx/fade.h"
+#include "engine/gfx/prim/alloc_poly_ft4.h"
 #include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
@@ -28,7 +32,59 @@ typedef struct CreditsTask {
 
 extern TickTaskVtable CREDITS_TASK_VTABLE;
 
-INCLUDE_ASM("title/nonmatchings/credits", creditsTaskInit);
+/* the path of the credits' text, a pointer to the "/credit.txt" kept after STR_CREDITS_TASK_NAME */
+extern char *CREDITS_TEXT_PATH;
+
+/* creditsTaskInit's strings, kept as data: "no name" is followed by the "/credit.txt" of CREDITS_TEXT_PATH, and
+ * "/title/credit.tim" by four zero bytes nothing reads, neither of which the literals of a C function give. */
+INCLUDE_RODATA("title/nonmatchings/credits", STR_CREDITS_TASK_NAME);
+extern char STR_CREDITS_TASK_NAME[]; /* "no name" */
+INCLUDE_RODATA("title/nonmatchings/credits", PATH_CREDIT_K15);
+extern char PATH_CREDIT_K15[]; /* "/credit.k15" */
+INCLUDE_RODATA("title/nonmatchings/credits", PATH_CREDIT_TIM);
+extern char PATH_CREDIT_TIM[]; /* "/title/credit.tim" */
+
+s32 creditsCountLines(const u8 *text);
+void splitLines(u8 **lines, u8 *text);
+void setTimClutsStp(u32 *tims);
+
+/* The credits' task: a 512 by 240 black screen, the text of CREDITS_TEXT_PATH cut into lines, the font
+ * /credit.k15 and the pictures of /title/credit.tim, a fade in over 90 frames and music track 16 from its start. */
+CreditsTask *creditsTaskInit(CreditsTask *this) {
+    Display *display;
+    u32 size;
+    u32 *tims;
+
+    taskInit(&this->task, 0, STR_CREDITS_TASK_NAME);
+    this->task.vtable = &CREDITS_TASK_VTABLE.task;
+    display = CURRENT_DISPLAY;
+    displaySetSize(display, 512, 240);
+    displaySetVsyncMode(display, 0);
+    displaySetClearColor(display, 0, 0, 0);
+    displayClear(display);
+    size = getFileSize(CREDITS_TEXT_PATH);
+    this->text = operatorVecNew(size + 1);
+    loadFileSync(this->text, CREDITS_TEXT_PATH, 0, 0);
+    this->text[size] = '\0';
+    this->lineCount = creditsCountLines(this->text);
+    this->lines = operatorVecNew(this->lineCount * sizeof(u8 *));
+    splitLines(this->lines, this->text);
+    this->fontData = loadFile(PATH_CREDIT_K15);
+    this->font = fontInit(operatorNew(sizeof(Font)), this->fontData);
+    cacheReset(&getFontCache()->cache);
+    tims = loadFile(PATH_CREDIT_TIM);
+    setTimClutsStp(tims);
+    uploadTims(tims);
+    mainHeapFree(tims);
+    fadeControlFadeOut(&FADE_CONTROL, 0);
+    fadeControlFadeIn(&FADE_CONTROL, 90);
+    this->scroll = 0xFFF10000;
+    this->frame = 0;
+    this->leaving = 0;
+    seekMusicTrack(16, 1);
+    soundControlResumeMusic(&SOUND_CONTROL);
+    return this;
+}
 
 /* Sets the STP bit of every CLUT color of a run of TIMs (/title/credit.tim), before they go to VRAM. */
 void setTimClutsStp(u32 *tims) {
@@ -155,7 +211,40 @@ void drawCreditsEndPicture(u_long *ot, s32 x, s32 y, s32 brightness) {
     }
 }
 
-INCLUDE_ASM("title/nonmatchings/credits", drawCreditsSlide);
+/* Draws slide (0 to 6) of /title/credit.tim at x, y: its 112 x 240 texture stretched to 222 x 239, as bright as
+ * brightness and semi-transparent; in VRAM slides 0 to 4 are texture pages from x 0x200 at y 0, 5 and 6 from
+ * x 0x200 at y 0x100, each with its clut on row 0xFF - slide. Nothing at brightness 0. */
+void drawCreditsSlide(u_long *ot, s32 x, s32 y, s32 slide, s32 brightness) {
+    if (brightness != 0) {
+        POLY_FT4 *poly = allocPolyFT4();
+        s32 tx;
+        u16 ty;
+
+        setRGB0(poly, brightness, brightness, brightness);
+        poly->x0 = x;
+        poly->y0 = y;
+        poly->x1 = x + 0xDE;
+        poly->y1 = y;
+        poly->x2 = x;
+        poly->y2 = y + 0xEF;
+        poly->x3 = x + 0xDE;
+        poly->y3 = y + 0xEF;
+        setUV4(poly, 0, 0, 0x6F, 0, 0, 0xEF, 0x6F, 0xEF);
+        if (slide < 5) {
+            tx = slide * 64 + 0x200;
+            ty = 0;
+        } else {
+            tx = slide * 64 + 0xC0;
+            ty = 0x100;
+        }
+        /* The match depends on ty being a u16 and on the x bits or-ed with the modes before ty's bit (srl, then
+         * the ori on the x bits). */
+        poly->tpage = (ty >> 4) | (((tx & 0x3FF) >> 6) | getTPage(1, 1, 0, 0));
+        poly->clut = getClut(0x200, 0xFF - slide);
+        SetSemiTrans(poly, 1);
+        AddPrim(ot, poly);
+    }
+}
 
 /* Update: keeps arg and runs the task's tick. */
 void CreditsTask_update(TickTask *this, s32 arg) {

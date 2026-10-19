@@ -31,18 +31,6 @@ extern VtableEntry FIGHTER_STATE_GROUND_VTABLE[];
 extern VtableEntry D_800680E4[];
 extern VtableEntry D_8006811C[];
 
-/* A g++ 2.95 pointer to member function: index -1 for a non-virtual function, which is then func; else virtual,
- * entry index - 1 of the virtual table at vtableOffset in the object. The game keeps such constants in .rodata
- * (D_80067C54 and the ones around it, each {0xFFFF0000, function}). */
-typedef struct MemberFunction {
-    /* 0x0 */ s16 delta; /* how far to move `this` */
-    /* 0x2 */ s16 index;
-    union {
-        /* 0x4 */ void (*func)();
-        /* 0x4 */ s16 vtableOffset;
-    } u;
-} MemberFunction;
-
 typedef struct FighterStateJump {
     /* 0x00 */ FighterState base;
     /* 0x10 */ s32 jumpCount; /* the jumps made: a second one while it is below 2 */
@@ -58,7 +46,7 @@ typedef struct Unk80081874 {
 FighterState *func_80080778(FighterState *this, s32 state);
 void FighterState_playClip(FighterState *this, s32 clip, s32 blendFrames);
 void func_8007FC50(FighterState *this, s32 clip, s32 blendFrames);
-void FighterStateFlinch_init(FighterState *this, s32 hitBits);
+FighterState *FighterStateFlinch_init(FighterState *this, s32 hitBits);
 /* Constructs, in place, the attack `state` (virtual table FIGHTER_STATE_ATTACK_VTABLE, on func_80081A20's) with
  * its step function, which it then calls. */
 FighterState *FighterStateAttack_init(FighterState *this, s32 state, MemberFunction step);
@@ -78,14 +66,14 @@ extern MemberFunction D_80067CEC;
 extern MemberFunction D_80067CF4;
 /* Constructs, in place, the attack chain's `state` (virtual table D_80067D94, on FighterState_init's) with its
  * step function at 0x14. */
-FighterState *func_800823EC(FighterState *this, s32 state, MemberFunction step);
+FighterState *FighterStateChain_init(FighterState *this, s32 state, MemberFunction step);
 extern MemberFunction D_80067D04;
 extern MemberFunction D_80067D0C;
 extern VtableEntry D_80067D14[];
 extern VtableEntry D_80067D54[];
 FighterState *func_8008230C(FighterState *this);
 FighterState *func_80080FDC(FighterState *this, s32 state);
-FighterState *func_80081200(FighterState *this, s32 state);
+FighterState *FighterStateDash_init(FighterState *this, s32 state);
 FighterState *func_80082690(FighterState *this);
 FighterState *func_800826E8(FighterState *this);
 
@@ -114,8 +102,8 @@ s32 FighterState_isAttackIdle(FighterState *this) {
 
 /* Whether the fighter's flag of func_80079AF8 is clear. */
 s32 func_8007F98C(FighterState *this) {
-    /* The match depends on the ^ 1 after the mask: ! xors before masking. */
-    return ((this->fighter->flags >> FIGHTER_FLAG_80079AF8_BIT) & 1) ^ 1;
+    /* The match depends on the ^ 1 after the read: ! xors before masking. */
+    return this->fighter->flags.bits.unk80079AF8 ^ 1;
 }
 
 /* Whether the fighter's last input (InputHistory_getHeld) holds the guard button (0x4). */
@@ -678,7 +666,7 @@ INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067AD4);
 
 /* A ground state's tick: off the ground the fighter falls (FighterStateFall_init); else unless it guarded
  * (FighterState_updateGuard) or crouched (FighterState_updateCrouch, when not attacking): idle, jumping, falling or
- * walking and not attacking, a side press (readSideTap) makes it walk (func_80080FDC) or dash (func_80081200);
+ * walking and not attacking, a side press (readSideTap) makes it walk (func_80080FDC) or dash (FighterStateDash_init);
  * otherwise, once the side's life is out, it is knocked out (FighterStateDown_init). */
 void FighterStateGround_tick(FighterState *this) {
     if (!Fighter_isOnGround(this->fighter)) {
@@ -710,10 +698,10 @@ void FighterStateGround_tick(FighterState *this) {
             func_80080FDC(this, FIGHTER_STATE_WALK_RIGHT);
             return;
         case 3:
-            func_80081200(this, FIGHTER_STATE_DASH_LEFT);
+            FighterStateDash_init(this, FIGHTER_STATE_DASH_LEFT);
             return;
         case 4:
-            func_80081200(this, FIGHTER_STATE_DASH_RIGHT);
+            FighterStateDash_init(this, FIGHTER_STATE_DASH_RIGHT);
             return;
         }
     } while (0);
@@ -783,10 +771,11 @@ FighterStateJump *func_80080C5C(FighterStateJump *this, s32 state, s32 jumpCount
 }
 
 Vec3 *func_8007FBB0(FighterState *this);
-void func_80080D38(FighterStateJump *this);
+void FighterStateJump_steer(FighterStateJump *this);
 
 /* The jump's tick: once the fighter stops rising (velocity vy not negative) it falls (FighterStateFall_init, from
- * a jump); else, from the second frame on, pushes its force.vy by its mass times 0x71C, then runs func_80080D38.
+ * a jump); else, from the second frame on, pushes its force.vy by its mass times 0x71C, then steers
+ * (FighterStateJump_steer).
  * The match depends on the step being a local of its own: added in place, the old vy takes the step's register. */
 void FighterStateJump_tick(FighterStateJump *this) {
     s32 vy = func_8007FBB0(&this->base)->vy;
@@ -801,11 +790,37 @@ void FighterStateJump_tick(FighterStateJump *this) {
             fighter->force.vy += delta;
         }
         this->frames = 1;
-        func_80080D38(this);
+        FighterStateJump_steer(this);
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_80080D38);
+/* The air control of the jump and the fall: unless func_8007782C's flag was set (it clears it), PAD_LEFT pushes the
+ * fighter towards a velocity.vx of -0x1C70 and turns it left (func_8007FBBC), else PAD_RIGHT towards 0x1C70 and
+ * right (func_8007FBF4): the push is the speed missing (none past it, at most 0x1C70) times the mass. */
+void FighterStateJump_steer(FighterStateJump *this) {
+    Fighter *fighter = this->base.fighter;
+    u32 held;
+    s32 push;
+    s32 delta;
+
+    if (func_8007782C(fighter)) {
+        return;
+    }
+    held = InputHistory_getHeld(Fighter_getInput(this->base.fighter));
+    if (held & PAD_LEFT) {
+        push = -0x1C70 - fighter->velocity.vx;
+        push = push < -0x1C70 ? -0x1C70 : (push > 0 ? 0 : push);
+        delta = ((s64)push * fighter->mass) >> 16;
+        fighter->force.vx += delta;
+        func_8007FBBC(&this->base);
+    } else if (held & PAD_RIGHT) {
+        push = 0x1C70 - fighter->velocity.vx;
+        push = push < 0 ? 0 : (push > 0x1C70 ? 0x1C70 : push);
+        delta = ((s64)push * fighter->mass) >> 16;
+        fighter->force.vx += delta;
+        func_8007FBF4(&this->base);
+    }
+}
 
 /* The jump (slot 0x10) of the jump and the fall: clears the frames, then for a positive arg, when not attacking
  * and with fewer than 2 jumps made, jumps again (FighterStateJump_init). */
@@ -830,7 +845,7 @@ FighterState *FighterStateFall_init(FighterState *this, s32 jumpCount, s32 fromJ
 
 /* The fall's tick: on the ground with its 0x48C down to 0, the fighter lands: dust on both sides
  * (Fighter_spawnDust: 2 or 3 by Fighter_canEvolve), the landing sound (9), and it stands idle
- * (FighterStateGround_init); else runs func_80080D38. */
+ * (FighterStateGround_init); else runs FighterStateJump_steer. */
 void FighterStateFall_tick(FighterStateFall *this) {
     Fighter *fighter = this->base.base.fighter;
     s32 arg;
@@ -842,7 +857,7 @@ void FighterStateFall_tick(FighterStateFall *this) {
         soundControlPlaySound(&SOUND_CONTROL, 9, 0);
         FighterStateGround_init(&this->base.base, FIGHTER_STATE_IDLE);
     } else {
-        func_80080D38(&this->base);
+        FighterStateJump_steer(&this->base);
     }
 }
 
@@ -865,7 +880,7 @@ FighterState *func_80080FDC(FighterState *this, s32 state) {
 
 /* The walk's tick: off the ground the fighter falls (FighterStateFall_init); else unless it guarded
  * (FighterState_updateGuard), by the side press (readSideTap): none, or attacking, it stands idle; left or right
- * walks that way (func_80080FDC unless already) and steps; a double press dashes (func_80081200). */
+ * walks that way (func_80080FDC unless already) and steps; a double press dashes (FighterStateDash_init). */
 void func_80081054(FighterState *this) {
     s32 press;
     s32 state;
@@ -906,10 +921,10 @@ void func_80081054(FighterState *this) {
         func_8007FD84(this);
         break;
     case 3:
-        func_80081200(this, FIGHTER_STATE_DASH_LEFT);
+        FighterStateDash_init(this, FIGHTER_STATE_DASH_LEFT);
         break;
     case 4:
-        func_80081200(this, FIGHTER_STATE_DASH_RIGHT);
+        FighterStateDash_init(this, FIGHTER_STATE_DASH_RIGHT);
         break;
     }
 }
@@ -922,15 +937,15 @@ void func_800811B8(FighterState *this, s32 arg) {
     }
 }
 
-extern VtableEntry D_80067F5C[];
+extern VtableEntry FIGHTER_STATE_DASH_VTABLE[];
 
-/* Dashes (`state`, virtual table D_80067F5C, on the walk's constructor), then pushes left (func_8007FDC8) or
- * right (func_8007FE0C) by the state. */
-FighterState *func_80081200(FighterState *this, s32 state) {
+/* Dashes (`state`, virtual table FIGHTER_STATE_DASH_VTABLE, on the walk's constructor), then pushes left
+ * (func_8007FDC8) or right (func_8007FE0C) by the state. */
+FighterState *FighterStateDash_init(FighterState *this, s32 state) {
     s32 current;
 
     func_80080FDC(this, state);
-    this->vtable = D_80067F5C;
+    this->vtable = FIGHTER_STATE_DASH_VTABLE;
     current = this->state;
     if (current == FIGHTER_STATE_DASH_LEFT) {
         func_8007FDC8(this);
@@ -941,7 +956,34 @@ FighterState *func_80081200(FighterState *this, s32 state) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_80081264);
+/* The dash's tick: off the ground the fighter falls (FighterStateFall_init); else it pushes left (func_8007FDC8) or
+ * right (func_8007FE0C) by the state, then brakes: the brake is velocity.vx * -0x195 (4.12); once it is under 0x200
+ * either way, or the fighter's model stopped, the fighter stands idle; else the brake times the mass (16.16) goes
+ * into the force. */
+void FighterStateDash_tick(FighterState *this) {
+    s32 state;
+    s32 brake;
+    s32 delta;
+
+    if (!Fighter_isOnGround(this->fighter)) {
+        FighterStateFall_init(this, 0, 0);
+        return;
+    }
+    state = this->state;
+    if (state == FIGHTER_STATE_DASH_LEFT) {
+        func_8007FDC8(this);
+    }
+    if (state == FIGHTER_STATE_DASH_RIGHT) {
+        func_8007FE0C(this);
+    }
+    brake = ((s64)this->fighter->velocity.vx * -0x195) >> 12;
+    if ((brake >= 0 ? brake : -brake) < 0x200 || Fighter_isModelStopped(this->fighter)) {
+        FighterStateGround_init(this, FIGHTER_STATE_IDLE);
+        return;
+    }
+    delta = ((s64)brake * this->fighter->mass) >> 16;
+    this->fighter->force.vx += delta;
+}
 
 /* Guards (FIGHTER_STATE_GUARD, a ground state), then runs func_8007FED8. */
 FighterState *FighterStateGround_initGuard(FighterState *this) {
@@ -966,8 +1008,6 @@ FighterState *FighterStateGround_initCrouchGuard(FighterState *this) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0f", FighterStateFlinch_init);
-
 /* The flinch (FighterStateFlinch_init, virtual table FIGHTER_STATE_FLINCH_VTABLE): a FighterState with a frame
  * count at 0x10. */
 typedef struct FighterStateFlinch {
@@ -975,7 +1015,38 @@ typedef struct FighterStateFlinch {
     /* 0x10 */ s32 frames; /* counted down */
 } FighterStateFlinch;
 
+extern VtableEntry FIGHTER_STATE_FLINCH_VTABLE[];
+
 FighterState *FighterStateAirFlinch_init(FighterState *this);
+
+/* Flinches from a hit (FIGHTER_STATE_FLINCH): plays sound 1 and clears the fighter's 0x494; a hit with
+ * HIT_FLAG_STUN fills the side's stun count. A hit with HIT_FLAG_KNOCK_DOWN, or a side stunned to its limit, knocks
+ * the fighter down (FighterStateDown_init); a hit with HIT_FLAG_LAUNCH flinches it in the air; else it flinches for
+ * 14 frames (func_8007FFA4). */
+FighterState *FighterStateFlinch_init(FighterState *this, s32 hitBits) {
+    Fighter *fighter;
+    BattleSide *side;
+
+    FighterState_init(this, FIGHTER_STATE_FLINCH);
+    fighter = this->fighter;
+    this->vtable = FIGHTER_STATE_FLINCH_VTABLE;
+    side = func_8007758C(fighter);
+    soundControlPlaySound(&SOUND_CONTROL, 1, 0);
+    func_8007A12C(fighter, 0);
+    if (hitBits & HIT_FLAG_STUN) {
+        func_8007F184(side);
+    }
+    if ((hitBits & HIT_FLAG_KNOCK_DOWN) || func_8007F1C0(side)) {
+        FighterStateDown_init(this, FIGHTER_STATE_KNOCKED_DOWN);
+    } else if (hitBits & HIT_FLAG_LAUNCH) {
+        FighterStateAirFlinch_init(this);
+    } else {
+        ((FighterStateFlinch *)this)->frames = 14;
+        func_8007FFA4(this);
+    }
+    return this;
+}
+
 
 /* The flinch's tick: counts the frames down; off the ground the fighter flinches in the air
  * (FighterStateAirFlinch_init), once the side's life is out it is knocked out (FighterStateDown_init), else when the
@@ -1331,7 +1402,52 @@ void func_80081FC4(FighterState *this, InputHistory *input) {
 
 INCLUDE_ASM("game/nonmatchings/game_0f", FighterStateAttack_init);
 
-INCLUDE_ASM("game/nonmatchings/game_0f", FighterStateAttack_tick);
+/* An attack's state (FighterStateAttack_init, virtual table FIGHTER_STATE_ATTACK_VTABLE): a FighterState with a
+ * timeout and the step function the attack runs every frame. */
+typedef struct FighterStateAttack {
+    /* 0x00 */ FighterState base;
+    /* 0x10 */ s32 frames; /* 240 at the start: the attack ends when they run out */
+    /* 0x14 */ MemberFunction step;
+} FighterStateAttack;
+
+/* An attack's tick: once its 240 frames run out, ends the fighter's move (its endMove slot), becomes attack idle
+ * and stops no action clip (func_8007FC50 with -1); else runs the step function and, once the action clip is done,
+ * ends the move and becomes attack idle. */
+void FighterStateAttack_tick(FighterStateAttack *this) {
+    VirtualFunction method;
+    void (*func)();
+    s32 index;
+    s32 delta;
+    s32 offset;
+
+    if (--this->frames == 0) {
+        Fighter *fighter = this->base.fighter;
+        FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
+
+        vtable->endMove.func((u8 *)fighter + vtable->endMove.delta);
+        FighterAttackIdle_init(&this->base);
+        func_8007FC50(&this->base, -1, 0);
+        return;
+    }
+    /* (this->*step)(), as g++ 2.95 expands it */
+    index = this->step.index;
+    if (index >= 0) {
+        method = (*(VirtualFunction **)((u8 *)this + this->step.u.vtableOffset))[index - 1];
+        func = method.entry.func;
+    } else {
+        func = this->step.u.func;
+    }
+    delta = this->step.delta;
+    offset = index >= 0 ? method.entry.delta + delta : delta;
+    func((u8 *)this + offset);
+    if (FighterState_isClipDone(&this->base, 1)) {
+        Fighter *fighter = this->base.fighter;
+        FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
+
+        vtable->endMove.func((u8 *)fighter + vtable->endMove.delta);
+        FighterAttackIdle_init(&this->base);
+    }
+}
 
 /* An attack's hit (slot 0x28): ends the fighter's move (its endMove slot), makes the attack state idle and stops
  * no action clip (func_8007FC50 with -1). */
@@ -1351,20 +1467,13 @@ void FighterStateAttack_attack(FighterState *this, s32 attack) {
     }
 }
 
-/* The attack chain's state (func_800823EC, virtual table D_80067D94): a FighterState with a flag at 0x10 and the
- * step function at 0x14. */
-typedef struct Unk800823EC {
+/* The attack chain's state (FighterStateChain_init, virtual table D_80067D94): a FighterState with a queued flag at
+ * 0x10 and the step function at 0x14. */
+typedef struct FighterStateChain {
     /* 0x00 */ FighterState base;
-    /* 0x10 */ s32 unk10;
+    /* 0x10 */ s32 nextQueued; /* an attack came in during this link: the tick goes on to the next one */
     /* 0x14 */ MemberFunction step;
-} Unk800823EC;
-
-/* A virtual table entry that fits a register pair (g++ keeps the one a pointer to member function reaches in
- * one). */
-typedef union VirtualFunction {
-    VtableEntry entry;
-    u64 pair;
-} VirtualFunction;
+} FighterStateChain;
 
 extern VtableEntry D_80067D94[];
 /* the chain's first step: func_8008002C */
@@ -1375,7 +1484,7 @@ extern const MemberFunction D_80067CFC;
  * The match depends on D_80067CFC being const (.rodata: both words load before the stores) and on the step's delta
  * read once before the two sums are chosen. */
 FighterState *func_8008230C(FighterState *this) {
-    Unk800823EC *chain = (Unk800823EC *)this;
+    FighterStateChain *chain = (FighterStateChain *)this;
     VirtualFunction method;
     void (*func)();
     s32 index;
@@ -1386,7 +1495,7 @@ FighterState *func_8008230C(FighterState *this) {
     chain->base.vtable = D_80067D94;
     Fighter_setMoveReward(chain->base.fighter, MOVE_ATTACK1, 100);
     chain->step = D_80067CFC;
-    chain->unk10 = 0;
+    chain->nextQueued = 0;
     /* (chain->*step)(), as g++ 2.95 expands it */
     index = chain->step.index;
     if (index >= 0) {
@@ -1402,16 +1511,48 @@ FighterState *func_8008230C(FighterState *this) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_800823EC);
+INCLUDE_ASM("game/nonmatchings/game_0f", FighterStateChain_init);
 
-INCLUDE_ASM("game/nonmatchings/game_0f", func_800824B8);
+/* The attack chain's tick: runs the step function; once the action clip is done, goes on to the next link of the
+ * chain (slot 0x30) when an attack came in during this one (0x10), else ends the fighter's move (its endMove slot)
+ * and becomes attack idle. */
+void FighterStateChain_tick(FighterStateChain *this) {
+    VirtualFunction method;
+    void (*func)();
+    s32 index;
+    s32 delta;
+    s32 offset;
+
+    /* (this->*step)(), as g++ 2.95 expands it */
+    index = this->step.index;
+    if (index >= 0) {
+        method = (*(VirtualFunction **)((u8 *)this + this->step.u.vtableOffset))[index - 1];
+        func = method.entry.func;
+    } else {
+        func = this->step.u.func;
+    }
+    delta = this->step.delta;
+    offset = index >= 0 ? method.entry.delta + delta : delta;
+    func((u8 *)this + offset);
+    if (FighterState_isClipDone(&this->base, 1)) {
+        if (this->nextQueued) {
+            this->base.vtable[6].func((u8 *)this + this->base.vtable[6].delta);
+        } else {
+            Fighter *fighter = this->base.fighter;
+            FighterVtable *vtable = GET_FIGHTER_VTABLE(fighter);
+
+            vtable->endMove.func((u8 *)fighter + vtable->endMove.delta);
+            FighterAttackIdle_init(&this->base);
+        }
+    }
+}
 
 /* The attack chain's attack (slot 0x20 of D_80067D54 and D_80067D94): for an attack (not a special), unless
  * func_8007F98C holds, sets 0x10, sets no action clip (func_8007FC50 with -1) and runs its slot 0x30, the next
  * link of the chain (func_8008261C in D_80067D94). */
-void func_800825AC(Unk800823EC *this, s32 attack) {
+void func_800825AC(FighterStateChain *this, s32 attack) {
     if (!func_8007F98C(&this->base) && attack == 0) {
-        this->unk10 = 1;
+        this->nextQueued = 1;
         func_8007FC50(&this->base, -1, 0);
         this->base.vtable[6].func((u8 *)this + this->base.vtable[6].delta);
     }
@@ -1436,7 +1577,7 @@ FighterState *func_80082670(FighterState *this) {
 /* Starts the chain's second attack (FIGHTER_STATE_ATTACK2, virtual table D_80067D54, step D_80067D04), with its
  * reward. */
 FighterState *func_80082690(FighterState *this) {
-    func_800823EC(this, FIGHTER_STATE_ATTACK2, D_80067D04);
+    FighterStateChain_init(this, FIGHTER_STATE_ATTACK2, D_80067D04);
     this->vtable = D_80067D54;
     Fighter_setMoveReward(this->fighter, MOVE_ATTACK2, 100);
     return this;
@@ -1445,7 +1586,7 @@ FighterState *func_80082690(FighterState *this) {
 /* Starts the chain's third attack (FIGHTER_STATE_ATTACK3, virtual table D_80067D14, step D_80067D0C), with its
  * reward. */
 FighterState *func_800826E8(FighterState *this) {
-    func_800823EC(this, FIGHTER_STATE_ATTACK3, D_80067D0C);
+    FighterStateChain_init(this, FIGHTER_STATE_ATTACK3, D_80067D0C);
     this->vtable = D_80067D14;
     Fighter_setMoveReward(this->fighter, MOVE_ATTACK3, 200);
     return this;
@@ -1518,7 +1659,7 @@ INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_GET_UP_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_DOWN_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_AIR_FLINCH_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_FLINCH_VTABLE);
-INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067F5C);
+INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_DASH_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0f", D_80067F94);
 INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_FALL_VTABLE);
 INCLUDE_RODATA("game/nonmatchings/game_0f", FIGHTER_STATE_JUMP_VTABLE);

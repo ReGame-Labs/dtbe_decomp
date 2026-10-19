@@ -30,6 +30,29 @@ typedef struct {
 #endif
 } VtableEntryS32;
 
+/* A g++ 2.95 pointer to member function: index -1 for a non-virtual function, which is then func; else virtual,
+ * entry index - 1 of the virtual table at vtableOffset in the object. The game keeps such constants in .rodata
+ * (game_0f's D_80067C54 and the ones around it, each {0xFFFF0000, function}). */
+typedef struct MemberFunction {
+    /* 0x0 */ s16 delta; /* how far to move `this` */
+    /* 0x2 */ s16 index;
+    union {
+#ifdef __cplusplus
+        /* 0x4 */ void (*func)(...);
+#else
+        /* 0x4 */ void (*func)();
+#endif
+        /* 0x4 */ s16 vtableOffset;
+    } u;
+} MemberFunction;
+
+/* A virtual table entry that fits a register pair (g++ keeps the one a pointer to member function reaches in
+ * one). */
+typedef union VirtualFunction {
+    VtableEntry entry;
+    u64 pair;
+} VirtualFunction;
+
 /* the flags a deleting destructor is called with */
 #define DESTROY_FREE 1   /* free the object's memory afterwards */
 #define DESTROY_BASES 2  /* destroy the virtual bases too: a whole object */

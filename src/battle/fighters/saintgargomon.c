@@ -7,6 +7,7 @@
 #include "engine/gfx/prim/build_line_f3.h"
 #include "engine/gfx/prim/build_line_g2.h"
 #include "engine/gfx/prim_buffer.h"
+#include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 
 /* Entities with a second base at 0x18: the virtual tables of that base move
@@ -18,7 +19,8 @@ typedef struct Unk800ACD74 {
 
 /* the end of an Unk800AC470: spawns two entities and deletes it */
 void func_800AC674(Unk800AC470 *this);
-Entity *func_800AD5BC(Entity *this, Fighter *arg1, Fight *arg2, Vec3 *pos, s32 arg4, s32 arg5);
+struct Unk800AD7CC *func_800AD5BC(struct Unk800AD7CC *this, Fighter *fighter, Fight *list, Vec3 *position, s32 radius,
+                                  s32 damage);
 extern VtableEntry D_8006B314[];
 extern EntityVtable D_8006B334;
 extern VtableEntry D_8006B35C[];
@@ -128,7 +130,7 @@ void SaintGargomon_throw(Fighter *this, s32 frame) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", SaintGargomon_special2);
 
-void SaintGargomon_spawnSpecial1Hitbox(Fighter *this, s32 arg);
+void SaintGargomon_spawnSpecial1Hitbox(Fighter *this, s32 velocityY);
 
 /* Special move 1: Fighter's; the voice at frame 0, the hitbox (spawnSpecial1Hitbox(-21)) and sound 0xDB at frame 7;
  * until frame 8 the force brakes a sixteenth of the horizontal velocity. */
@@ -169,15 +171,73 @@ void SaintGargomon_airSpecial1(Fighter *this, s32 frame) {
     }
 }
 
+/* The special move 1's hitbox (SaintGargomon_spawnSpecial1Hitbox spawns one from each of two nodes). */
+typedef struct SaintGargomonSpecial1Hitbox {
+    /* 0x00 */ UnkPartsEntity38 parts;
+    /* 0x80 */ Fighter *owner;
+    /* 0x84 */ Fight *fight;
+    /* 0x88 */ Vec3 position;
+    /* 0x94 */ s32 positionPad;
+    /* 0x98 */ Vec3 velocity;
+    /* 0xA4 */ s32 velocityPad;
+    /* 0xA8 */ Vec3 target; /* the opponent's position, 0x180 to one side */
+    /* 0xB4 */ s32 targetPad;
+    /* 0xB8 */ s32 unkB8;
+    /* 0xBC */ s32 unkBC;
+    /* 0xC0 */ s16 unkC0;
+    /* 0xC2 */ s16 unkC2;
+    /* 0xC4 */ s16 unkC4;
+    /* 0xC6 */ s16 vramY; /* Fighter_getVramY of the owner */
+} SaintGargomonSpecial1Hitbox; /* size 0xC8 */
+
+SaintGargomonSpecial1Hitbox *SaintGargomonSpecial1Hitbox_init(SaintGargomonSpecial1Hitbox *this, Fighter *fighter,
+                                                              Fight *fight, Vec3 *position, Vec3 *velocity,
+                                                              Vec3 *target);
+
+extern VECTOR D_8006B1F4;
+extern VECTOR D_8006B204;
+
 INCLUDE_RODATA("game/nonmatchings/fighters/saintgargomon", D_8006B1F4);
 INCLUDE_RODATA("game/nonmatchings/fighters/saintgargomon", D_8006B204);
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", SaintGargomon_spawnSpecial1Hitbox);
+/* Spawns the special move 1's two hitboxes, both moving 64 forward and velocityY down: from node 18 (moved by
+ * D_8006B1F4) toward 0x180 left of the opponent, and from node 19 (moved by D_8006B204) toward the opponent. */
+void SaintGargomon_spawnSpecial1Hitbox(Fighter *this, s32 velocityY) {
+    Vec3 position;
+    Vec3 velocity;
+    Vec3 target;
+    Fight *fight;
+    Entity *child;
+
+    fight = Fighter_getScene(this);
+    Fighter_getOpponentPosition(this, &target);
+    Fighter_getNodePosition(this, (VECTOR *)&position, 18, &D_8006B1F4);
+    velocity.vx = Fighter_getFacing(this) << 6;
+    velocity.vy = velocityY;
+    velocity.vz = 0;
+    target.vx -= 0x180;
+    child = allocEntityMemory(0xC8);
+    if (child != NULL) {
+        SaintGargomonSpecial1Hitbox_init(entityOperatorNewAt(0xC8, child), this, fight, &position, &velocity, &target);
+    }
+    Fighter_addEntity(this, child);
+    Fighter_getNodePosition(this, (VECTOR *)&position, 19, &D_8006B204);
+    velocity.vx = Fighter_getFacing(this) << 6;
+    velocity.vy = velocityY;
+    velocity.vz = 0;
+    target.vx += 0x180;
+    child = allocEntityMemory(0xC8);
+    if (child != NULL) {
+        SaintGargomonSpecial1Hitbox_init(entityOperatorNewAt(0xC8, child), this, fight, &position, &velocity, &target);
+    }
+    Fighter_addEntity(this, child);
+    func_80079B0C(this, 30);
+}
 
 void func_800AADB0(SaintGargomon *this, s32 arg);
 void func_800AB09C(SaintGargomon *this, s32 step);
 void func_800AAF30(SaintGargomon *this, s32 step);
-void func_800AB4EC(SaintGargomon *this, s32 arg);
+void func_800AB4EC(SaintGargomon *this, s32 step);
 
 /* Special move 3: Fighter's; frame 0 spends a gauge bar, plays the voice and sets 10 invulnerable frames; frame 0x13
  * starts the sound, which frame 0x47 stops; in between it spawns the hitboxes: func_800AB09C every frame (after
@@ -208,19 +268,173 @@ void SaintGargomon_special3(SaintGargomon *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AADB0);
+struct Unk800ABE6C *func_800ABE6C(struct Unk800ABE6C *this, Fighter *fighter, Vec3 *position, VECTOR *velocity,
+                                  Fight *list);
+
+/* Spawns two Unk800ABE6C hitboxes, from node 2 and node 3 moved 0x70 up and by 1/200 of the cosine and sine of
+ * frame * 0x80 along x and z, flying 128 forward. */
+void func_800AADB0(SaintGargomon *this, s32 frame) {
+    VECTOR position;
+    VECTOR velocity;
+    VECTOR offset;
+    s32 facing;
+    s32 cos, sin;
+    Fight *list;
+    Entity *child;
+
+    facing = Fighter_getFacing(&this->base);
+    /* s32 locals: a constant divisor of the s16 itself would shorten the division to 16 bits */
+    cos = COS_SIN_TABLE[(frame << 7) & 0xFFF].cos;
+    sin = COS_SIN_TABLE[(frame << 7) & 0xFFF].sin;
+    offset.vx = cos / 200;
+    offset.vy = 0x70;
+    offset.vz = sin / 200;
+    list = Fighter_getScene(&this->base);
+    velocity.vx = facing << 7;
+    velocity.vy = 0;
+    velocity.vz = 0;
+    Fighter_getNodePosition(&this->base, &position, 2, &offset);
+    child = allocEntityMemory(0xC0);
+    if (child != NULL) {
+        func_800ABE6C(entityOperatorNewAt(0xC0, child), &this->base, (Vec3 *)&position, &velocity, list);
+    }
+    Fighter_addEntity(&this->base, child);
+    Fighter_getNodePosition(&this->base, &position, 3, &offset);
+    child = allocEntityMemory(0xC0);
+    if (child != NULL) {
+        func_800ABE6C(entityOperatorNewAt(0xC0, child), &this->base, (Vec3 *)&position, &velocity, list);
+    }
+    Fighter_addEntity(&this->base, child);
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/saintgargomon", D_8006B214);
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AAF30);
+/* the offset from nodes 16 and 15 where func_800AAF30 spawns its hitboxes */
+extern VECTOR D_8006B214;
+
+Unk800AD050 *func_800AD050(Unk800AD050 *this, Fighter *fighter, Vec3 *position, VECTOR *velocity, Fight *list);
+
+/* Spawns two Unk800AD050 hitboxes, from node 16 and node 15 moved by D_8006B214, flying 64 and 48 forward and
+ * 0x20 + 2 * step up. */
+void func_800AAF30(SaintGargomon *this, s32 step) {
+    VECTOR position;
+    VECTOR velocity;
+    VECTOR offset;
+    s32 facing;
+    s32 velocityY;
+    Fight *list;
+    Entity *child;
+
+    facing = Fighter_getFacing(&this->base);
+    offset = D_8006B214;
+    list = Fighter_getScene(&this->base);
+    velocityY = -(step * 2 + 0x20);
+    velocity.vx = facing << 6;
+    velocity.vy = velocityY;
+    velocity.vz = 0;
+    Fighter_getNodePosition(&this->base, &position, 16, &offset);
+    child = allocEntityMemory(0xD0);
+    if (child != NULL) {
+        func_800AD050(entityOperatorNewAt(0xD0, child), &this->base, (Vec3 *)&position, &velocity, list);
+    }
+    Fighter_addEntity(&this->base, child);
+    velocity.vx = facing * 48;
+    velocity.vy = velocityY;
+    velocity.vz = 0;
+    Fighter_getNodePosition(&this->base, &position, 15, &offset);
+    child = allocEntityMemory(0xD0);
+    if (child != NULL) {
+        func_800AD050(entityOperatorNewAt(0xD0, child), &this->base, (Vec3 *)&position, &velocity, list);
+    }
+    Fighter_addEntity(&this->base, child);
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/saintgargomon", D_8006B224);
 
 INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AB09C);
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AB4EC);
+Unk800ACA60 *func_800ACA60(Unk800ACA60 *this, Fighter *owner, VECTOR *pos, VECTOR *vel, Fight *arg4);
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", SaintGargomonSpecial1Hitbox_init);
+/* Spawns an Unk800ACA60 from node 18 on odd steps, else node 19, moved by 1/200 of the cosine and sine of step * 0x80,
+ * flying 96 forward and 96 up. */
+void func_800AB4EC(SaintGargomon *this, s32 step) {
+    VECTOR position;
+    VECTOR velocity;
+    VECTOR offset;
+    s32 cos, sin;
+    Fight *list;
+    Entity *child;
+
+    /* s32 locals: a constant divisor of the s16 itself would shorten the division to 16 bits */
+    cos = COS_SIN_TABLE[(step << 7) & 0xFFF].cos;
+    sin = COS_SIN_TABLE[(step << 7) & 0xFFF].sin;
+    offset.vx = cos / 200;
+    offset.vy = sin / 200;
+    offset.vz = 0;
+    list = Fighter_getScene(&this->base);
+    velocity.vx = Fighter_getFacing(&this->base) * 96;
+    velocity.vy = -96;
+    velocity.vz = 0;
+    if (step & 1) {
+        Fighter_getNodePosition(&this->base, &position, 18, &offset);
+    } else {
+        Fighter_getNodePosition(&this->base, &position, 19, &offset);
+    }
+    child = allocEntityMemory(0xB0);
+    if (child != NULL) {
+        func_800ACA60(entityOperatorNewAt(0xB0, child), &this->base, &position, &velocity, list);
+    }
+    Fighter_addEntity(&this->base, child);
+}
+
+/* Builds a special move 1 hitbox for fighter: a 0xC0 sphere at position (no damage yet) on fighter's side of fight,
+ * with copies of position, velocity and target. */
+SaintGargomonSpecial1Hitbox *SaintGargomonSpecial1Hitbox_init(SaintGargomonSpecial1Hitbox *this, Fighter *fighter,
+                                                              Fight *fight, Vec3 *position, Vec3 *velocity,
+                                                              Vec3 *target) {
+    s32 x, y, z;
+    s32 vx, vy, vz;
+    s32 tx, ty, tz;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    /* ZERO_VECTOR is a VECTOR; only its first three words are read here */
+    Hit_init(&this->parts.base, fighter, 0, (Vec3 *)&ZERO_VECTOR, 0);
+    this->parts.base.vtable = SAINTGARGOMON_SPECIAL1_HITBOX_HIT_VTABLE;
+    this->parts.entity.vtable = &SAINTGARGOMON_SPECIAL1_HITBOX_VTABLE;
+    CollisionSphere_init(&this->parts.part, position, 0xC0, &this->parts.base);
+    this->parts.part.entity = &this->parts.entity;
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(fight, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->parts.part.link);
+    }
+    this->owner = fighter;
+    this->fight = fight;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    vx = velocity->vx;
+    vy = velocity->vy;
+    vz = velocity->vz;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
+    tx = target->vx;
+    ty = target->vy;
+    tz = target->vz;
+    this->target.vx = tx;
+    this->target.vy = ty;
+    this->target.vz = tz;
+    this->unkBC = 0;
+    this->unkB8 = 0;
+    this->unkC2 = 0;
+    this->unkC4 = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    return this;
+}
 
 /* The special move 1's hitbox's destructor. */
 void SaintGargomonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
@@ -359,7 +573,7 @@ void func_800AC080(Unk800ABE6C *this, void *sum) {
         }
         entityAddSibling(&this->entity, child);
         this->unkBC = 1;
-        this->unk38.flags |= COLLISION_SHAPE_DISABLED;
+        this->unk38.flags.bits.disabled = 1;
     }
 }
 
@@ -500,14 +714,6 @@ void func_800AC7A8(Unk800AC470 *this, s32 arg) {
         func_800AC674(this);
     }
 }
-
-/* The shape buildPolyG4 projects (engine/gfx/prim/build_line_f3.h takes it as void *): four corners and a color
- * for each. */
-typedef struct PolyG4Shape {
-    /* 0x00 */ u32 flags;
-    /* 0x04 */ SVECTOR *corners[4];
-    /* 0x14 */ u32 colors[4];
-} PolyG4Shape; /* size 0x24 */
 
 /* PolyFT4Shape's uv words as their u and v bytes: game_classes.h types them u16, and the game stores the bytes
  * (RESULT.md). */
@@ -900,7 +1106,48 @@ INCLUDE_RODATA("game/nonmatchings/fighters/saintgargomon", D_8006B2F0);
 
 INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AD450);
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AD5BC);
+/* func_800AD5BC's class with its own fields (Unk800AD5BC is the part it shares with GuilmonSpecial2Hitbox_init's). */
+typedef struct Unk800AD7CC {
+    /* 0x00 */ UnkPartsEntity38 parts;
+    /* 0x80 */ Fighter *owner;
+    /* 0x84 */ Vec3 position;
+    /* 0x90 */ u8 unk90[0xA4 - 0x90];
+    /* 0xA4 */ s32 frames;
+    /* 0xA8 */ s32 radius; /* the part's */
+    /* 0xAC */ s16 vramY; /* the owner's 0x440 (Fighter_getVramY) */
+    /* 0xAE */ s16 unkAE;
+} Unk800AD7CC;
+
+/* Builds a still hitbox of radius and damage at position on the fighter's side; it lasts 8 frames (func_800AD7CC). */
+Unk800AD7CC *func_800AD5BC(Unk800AD7CC *this, Fighter *fighter, Fight *list, Vec3 *position, s32 radius, s32 damage) {
+    s32 x, y, z;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    /* ZERO_VECTOR is a VECTOR; only its first three words are read here */
+    Hit_init(&this->parts.base, fighter, damage, (Vec3 *)&ZERO_VECTOR, 1);
+    this->parts.base.vtable = D_8006B314;
+    this->parts.entity.vtable = &D_8006B334;
+    CollisionSphere_init(&this->parts.part, position, radius, &this->parts.base);
+    Hit_setKnockback(&this->parts.base, &ZERO_VECTOR);
+    this->owner = fighter;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->radius = radius;
+    this->frames = 0;
+    this->unkAE = 0;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->vramY = Fighter_getVramY(fighter);
+    this->parts.part.entity = &this->parts.entity;
+    if (Fighter_getSide(this->owner) == 0) {
+        Fight_addSide0Shape(list, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(list, &this->parts.part.link);
+    }
+    return this;
+}
 
 /* The destructor of the UnkPartsEntity38 class of vtables D_8006B334 and D_8006B314, which
  * func_800AD5BC installs. */
@@ -928,18 +1175,6 @@ void func_800AD798(Unk800AD5BC *this, void *arg) {
     Hit_apply(&this->unk18, arg);
     this->unk44 |= 1;
 }
-
-/* func_800AD5BC's class with its own fields (Unk800AD5BC is the part it shares with GuilmonSpecial2Hitbox_init's). */
-typedef struct Unk800AD7CC {
-    /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Fighter *owner;
-    /* 0x84 */ Vec3 position;
-    /* 0x90 */ u8 unk90[0xA4 - 0x90];
-    /* 0xA4 */ s32 frames;
-    /* 0xA8 */ s32 unkA8;
-    /* 0xAC */ s16 vramY; /* the owner's 0x440 (Fighter_getVramY) */
-    /* 0xAE */ s16 unkAE;
-} Unk800AD7CC;
 
 /* The tick of func_800AD5BC's entity: puts its part at the position, and deletes itself after 8 frames.
  * The match depends on the unit's -fno-cse-follow-jumps (Makefile): the else block reloads 0xA4. */

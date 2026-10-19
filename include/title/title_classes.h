@@ -37,6 +37,10 @@ typedef struct TitleImage {
     } wh;
 } TitleImage;
 
+/* The constructor of StepperGroup (engine/menu/stepper.h), a C++ class, as the C of title.bin calls it (inCharge
+ * 1: it builds the virtual base too). */
+void *stepperGroupInit(void *group, s32 inCharge, const void *buttons);
+
 /* The destructor of StepperGroup (engine/menu/stepper.h), a C++ class, as the C of title.bin calls it. */
 void stepperGroupDestroy(void *group, s32 flags) __asm__("_._12StepperGroup");
 
@@ -136,6 +140,11 @@ typedef struct NameEntry {
 #define NAME_ENTRY_MODE_NAME 0 /* a name for the ranking */
 #define NAME_ENTRY_MODE_CODE 1 /* a code, from the options */
 
+/* NameEntry.cellButton: the grid's buttons */
+#define NAME_ENTRY_BUTTON_END (-1)   /* A: confirms the name (a code is tried) */
+#define NAME_ENTRY_BUTTON_ERASE (-2) /* B: erases a character */
+#define NAME_ENTRY_BUTTON_EXIT (-3)  /* C: leaves the code entry */
+
 void NameEntry_destroy(NameEntry *entry, s32 flags);
 
 /* The table of the ranking's records (constructor RankingTable_init, destructor RankingTable_destroy), sorted by
@@ -160,6 +169,25 @@ typedef struct RankingRecord {
 RankingTable *RankingTable_init(RankingTable *table, RankingRecord *entries, u32 count);
 void RankingTable_destroy(RankingTable *table, s32 flags);
 s32 RankingTable_insertScore(RankingTable *table, s32 score);
+RankingRecord *RankingTable_first(RankingTable *table);
+RankingRecord *RankingTable_next(RankingTable *table);
+
+EXTERN_C_END
+
+#ifdef __cplusplus
+
+/* The zascii printer (ZasciiPrinter_init, ZASCII_PRINTER_VTABLE, zascii_printer.c): a Printer that draws its
+ * characters as 16 by 16 sprites of /zascii.tim into ot. The name entry builds one on the stack. The C files
+ * see it as the struct in the #else part. */
+class ZasciiPrinter : public Printer {
+public:
+    /* 0x0C */ u_long *ot;
+    /* 0x10 */ u32 color; /* 0xBBGGRR, with the semi-transparency bit of the code (0x02) above */
+
+    ZasciiPrinter(u_long *ot) __asm__("ZasciiPrinter_init");
+};
+
+#else
 
 /* The zascii printer (ZasciiPrinter_init, ZASCII_PRINTER_VTABLE, zascii_printer.c): a Printer that draws its
  * characters as 16 by 16 sprites of /zascii.tim into ot. The name entry builds one on the stack. */
@@ -169,12 +197,18 @@ typedef struct ZasciiPrinter {
     /* 0x10 */ u32 color; /* 0xBBGGRR, with the semi-transparency bit of the code (0x02) above */
 } ZasciiPrinter;
 
+#endif /* __cplusplus */
+
+EXTERN_C_BEGIN
+
+#ifndef __cplusplus
 ZasciiPrinter *ZasciiPrinter_init(ZasciiPrinter *printer, u_long *ot);
+#endif
 void ZasciiPrinter_drawChar(ZasciiPrinter *printer, s32 x, s32 y, u32 code);
 
 #ifndef __cplusplus
 /* Tasks whose update keeps its argument and calls their own per-frame method, tick (at 0x20 of the virtual
- * table): BOOT_LOGO_TASK_VTABLE, TITLE_LOGO_TASK_VTABLE, CHARACTER_SELECT_TASK_VTABLE,
+ * table): BOOT_LOGO_TASK_VTABLE, TITLE_LOGO_TASK_VTABLE, _vt.19CharacterSelectTask,
  * GUIDE_LOGO_TASK_VTABLE, RANKING_TASK_VTABLE and CREDITS_TASK_VTABLE here, and BOOT_LOGO_SPRITES in game.bin
  * (Unk8006ECEC there). The same update in every one of them is probably an inline virtual of a shared header,
  * written out once per source file. */

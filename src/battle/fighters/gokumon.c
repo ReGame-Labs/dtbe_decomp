@@ -17,7 +17,7 @@ s32 Gokumon_getAttackTrailColor(Fighter *this);
 
 /* whether the character's fighter (by Fighter_getSide) has the other colors (altColor) */
 s32 Gokumon_hasAltColor(Fighter *this);
-Entity *GokumonSpecial1Hitbox_init(Entity *this, Fighter *arg);
+GokumonSpecial1Hitbox *GokumonSpecial1Hitbox_init(GokumonSpecial1Hitbox *this, Fighter *fighter);
 Entity *GokumonSpecial3Hitbox_init(Entity *this, Fighter *arg, Vec3 *vec);
 extern EntityVtable GOKUMON_SPECIAL3_HITBOX_VTABLE;
 extern EntityVtable GOKUMON_SPECIAL1_HITBOX_VTABLE;
@@ -295,7 +295,61 @@ void Gokumon_spawnSpecial3Hitbox(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", func_800C00EC);
+/* The special move 3's reach, unless the opponent is getting up, dizzy or held (US: or the round is over): an
+ * opponent more than 0x200 away across and not 0x300 above is pushed 0xE38 farther along x; else, when it guards and
+ * is within both fighters' func_80079DD8 plus 0x200, the fighter gets 2 invulnerable frames. The match depends on
+ * one if per state (an || chain folds 0xF and 0x10 into a range test) and on the push picked into a local. */
+void func_800C00EC(Fighter *this) {
+    Fighter *opponent;
+    s32 state;
+    VECTOR delta;
+    Vec3 point;
+    s32 x, y, z;
+    s32 push;
+#if VERSION_US
+    Fight *fight = Fighter_getScene(this);
+#endif
+
+    opponent = Fighter_getOpponent(this);
+    state = Fighter_getBodyStateId(opponent);
+    if (state == FIGHTER_STATE_GET_UP) {
+        return;
+    }
+    if (state == FIGHTER_STATE_DIZZY) {
+        return;
+    }
+    if (state == FIGHTER_STATE_HELD) {
+        return;
+    }
+#if VERSION_US
+    if (Fight_isRoundOver(fight)) {
+        return;
+    }
+#endif
+    func_8007A650(this, (Vec3 *)&delta);
+    func_8007A6CC(this, &point);
+    /* The match depends on the vecSubInPlace shape: read delta whole, subtract, then store. */
+    x = delta.vx;
+    y = delta.vy;
+    z = delta.vz;
+    x -= point.vx;
+    y -= point.vy;
+    z -= point.vz;
+    delta.vx = x;
+    delta.vy = y;
+    delta.vz = z;
+    if (abs(x) > 0x200 && y >= -0x2FF) {
+        push = x < 0 ? -0xE38 : 0xE38;
+        opponent->force.vx += push;
+        return;
+    }
+    if (Fighter_isGuarding(opponent)) {
+        delta.vz = 0;
+        if (func_80079DD8(this) + func_80079DD8(opponent) + 0x200 >= vecGetLength(&delta)) {
+            this->invulnerableFrames = 2;
+        }
+    }
+}
 
 /* Spawns the special move 3's burst (ParticleBurst_init) at the fighter. */
 void Gokumon_spawnSpecial3Burst(Fighter *this) {
@@ -383,7 +437,47 @@ INCLUDE_ASM("game/nonmatchings/fighters/gokumon", func_800C0434);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/gokumon", D_8006CD60);
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial1Hitbox_init);
+/* the offset from the owner's node 5 where the special move 1 hitbox sits */
+extern VECTOR D_8006CD60;
+
+/* Builds the special move 1's hitbox for fighter: a sphere at its node 5 (damage word 0x45A81500, kind 1, no
+ * knockback yet) that grows from 0x40, and plays sound 0x111. */
+GokumonSpecial1Hitbox *GokumonSpecial1Hitbox_init(GokumonSpecial1Hitbox *this, Fighter *fighter) {
+    Fight *list;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    this->parts.entity.vtable = &GOKUMON_SPECIAL1_HITBOX_VTABLE;
+    Hit_init(&this->parts.base, fighter, 0x45A81500, (Vec3 *)&ZERO_VECTOR, 1);
+    CollisionSphere_init(&this->parts.part, (Vec3 *)&this->position, 0, &this->parts.base);
+    Fighter_getNodePosition(fighter, &this->position, 5, &D_8006CD60);
+    this->owner = fighter;
+    this->facing = Fighter_getFacing(fighter);
+    this->size = 0x40;
+    this->animFrame = 0;
+    this->brightness = 0xFF;
+    this->frames = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    list = Fighter_getScene(fighter);
+    {
+        s32 x = this->position.vx;
+        s32 y = this->position.vy;
+        s32 z = this->position.vz;
+
+        /* The match depends on this store sitting between the position's reads and its stores */
+        this->parts.part.entity = &this->parts.entity;
+        this->parts.part.position.vx = x;
+        this->parts.part.position.vy = y;
+        this->parts.part.position.vz = z;
+    }
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(list, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(list, &this->parts.part.link);
+    }
+    this->parts.part.flags.bits.disabled = 1;
+    this->soundHandle = soundControlPlaySound(&SOUND_CONTROL, 0x111, 0);
+    return this;
+}
 
 /* The special move 1 hitbox's destructor: stops its sound, takes the part out of its list, then destroys the entity. */
 void GokumonSpecial1Hitbox_destroy(GokumonSpecial1Hitbox *this, s32 flags) {
@@ -442,7 +536,7 @@ INCLUDE_ASM("game/nonmatchings/fighters/gokumon", func_800C12A4);
 INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial3Hitbox_draw);
 
 /* the frame of func_800C16F8's sprite */
-extern u16 D_8006CD94[];
+extern SpriteAnimRow D_8006CD94;
 
 /* the virtual table of func_800C16F8's sprite class */
 extern EntityVtable D_8006CDAC;
@@ -452,7 +546,7 @@ INCLUDE_RODATA("game/nonmatchings/fighters/gokumon", D_8006CD94);
 /* Constructs a sprite entity of the class of vtable D_8006CDAC: Particle_init with the frame D_8006CD94, size 0x40
  * and grey. */
 Particle *func_800C16F8(Particle *this, VECTOR *pos, VECTOR *vel, s32 flags) {
-    Particle_init(this, D_8006CD94, pos, vel, 0x40, 0x808080, flags);
+    Particle_init(this, &D_8006CD94, pos, vel, 0x40, 0x808080, flags);
     this->entity.vtable = &D_8006CDAC;
     return this;
 }

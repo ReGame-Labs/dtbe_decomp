@@ -1,21 +1,33 @@
 // st05.bin's own names (config/jp/st05.yaml)
 
 // the names tools/rename.py gave (tools/renames/), in address order
+ST05_BACKGROUND_CLUT_RECT = 0x800D3984;
+ST05_BACKGROUND_IMAGE_RECT = 0x800D398C;
+ST05_LIGHT_DIRECTION = 0x800D3994;
+ST05_LIGHT_COLOR = 0x800D39A4;
+ST05_SCENERY_POINT = 0x800D3A74;
+ST05_PULSING_CLUT_RECTS = 0x800D3A9C;
 ST05_SHARD_VTABLE = 0x800D3B44;
 ST05_FADE_VTABLE = 0x800D3B6C;
 ST05_EMBER_VTABLE = 0x800D3BBC;
 ST05_HIT_VTABLE = 0x800D3C0C;
 STAGE_VOLCANO_VTABLE = 0x800D3C2C;
+ST05_ITEM_SPAWN_POINTS = 0x800D3CA4;
 StageVolcano_init = 0x800D3CEC; // type:func
 StageVolcano_destroy = 0x800D3FC0; // type:func
 StageVolcano_startRound = 0x800D40CC; // type:func
 StageVolcano_tickScenery = 0x800D4210; // type:func
 StageVolcano_tick = 0x800D44CC; // type:func
 st05_clampFighterX = 0x800D4570; // type:func
+st05_burnFighter = 0x800D45E0; // type:func
 StageVolcano_isFallen = 0x800D47D4; // type:func
 StageVolcano_drawWorld = 0x800D47E8; // type:func
 StageVolcano_lightFighter = 0x800D4814; // type:func
 StageVolcano_updateCamera = 0x800D4A10; // type:func
+st05_drawScenery = 0x800D4BB4; // type:func
+st05_loadPulsingCluts = 0x800D5004; // type:func
+st05_drawBackdropSprites = 0x800D5144; // type:func
+st05_drawRedGlow = 0x800D5254; // type:func
 st05_startSound = 0x800D5364; // type:func
 st05_stopSound = 0x800D53A8; // type:func
 St05Ember_init = 0x800D5968; // type:func

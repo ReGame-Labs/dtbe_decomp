@@ -3,7 +3,9 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/prim/alloc_poly_ft4.h"
 #include "engine/gfx/prim/alloc_sprt.h"
+#include "engine/math/sin_cos.h"
 #include "engine/text/console.h"
 
 /* A gauge of the side HUD (its life and its evolution gauge), each set up by sideGaugeInit with 0x10000 at 0xC. */
@@ -46,6 +48,9 @@ extern EntityVtable SIDE_HUD_VTABLE;
 
 void sideGaugeInit(SideGauge *this, s32 value, s32 unkC);
 void hitCounterClear(HitCounter *counter);
+void sideGaugeUpdate(SideGauge *this, s32 length);
+void hitCounterTick(HitCounter *counter);
+void hitCounterSet(HitCounter *counter, s32 count);
 
 /* Inline copies of game_0e.c's BattleSide getters (BattleSide_getLife, _getLifeMax, _getGauge: no callers, the
  * out-of-line copies of inline methods). */
@@ -94,7 +99,43 @@ SideHud *SideHud_init(SideHud *this, BattleSide *owner, s32 side, s32 unk48) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/side_hud", SideHud_tick);
+/* Sets the life and the evolution gauge to the side's and steps their lengths (120 and 70 px).
+ * The match depends on the gauges passed as pointers: the game keeps the evolution gauge's in a saved register. */
+static inline void updateGauges(SideGauge *life, SideGauge *evolutionGauge, BattleSide *owner) {
+    life->value = getLifeInline(owner);
+    evolutionGauge->value = getGaugeInline(owner);
+    sideGaugeUpdate(life, 120);
+    sideGaugeUpdate(evolutionGauge, 70);
+}
+
+/* Reads the side each frame: the current fighter's character (a change starts the portrait's flash), the gauges,
+ * the time, the score, the round wins and the hit count, whether the round goes on, the pulse and the frame. */
+void SideHud_tick(SideHud *this) {
+    Fighter *fighter = this->owner->current;
+    Fight *fight = CURRENT_FIGHT;
+
+    this->character = Fighter_getCharacter(fighter);
+    if (this->character != this->lastCharacter) {
+        this->previousCharacter = this->lastCharacter;
+        this->changeFlash = 0x80;
+    }
+    this->lastCharacter = this->character;
+    if (this->changeFlash > 0) {
+        this->changeFlash -= 8;
+    }
+    updateGauges(&this->life, &this->evolutionGauge, this->owner);
+    this->timeLeft = fight->timeLeft;
+    this->score = Fight_getScore(fight, this->side);
+    this->roundWins = Fight_getWins(fight, this->side);
+    hitCounterSet(&this->hitCounter, Fighter_getComboHits(fighter));
+    hitCounterTick(&this->hitCounter);
+    this->visible = Fight_isRoundOver(fight) ^ 1;
+    this->pulse += 8;
+    if (this->pulse >= 0x100) {
+        this->pulse = 0x80;
+    }
+    this->frame++;
+}
 
 /* Sets up a gauge with its value and unkC, its lengths at 0. */
 void sideGaugeInit(SideGauge *this, s32 value, s32 unkC) {
@@ -240,11 +281,88 @@ INCLUDE_ASM("game/nonmatchings/side_hud", func_80073D78);
 
 INCLUDE_ASM("game/nonmatchings/side_hud", SideHud_drawRoundWins);
 
-INCLUDE_ASM("game/nonmatchings/side_hud", SideHud_drawTimer);
+/* Draws the round's seconds left (timeLeft / 30, at most 99) at (x, y): two 12x16 digits of the HUD texture's row at
+ * v 0x58. The match depends on the digits' x copied from x after the clamp (the game copies the parameter there),
+ * and on each digit's u computed before allocSprt. */
+void SideHud_drawTimer(SideHud *this, u_long *ot, s32 x, s32 y) {
+    s32 digits[2];
+    s32 seconds = this->timeLeft / 30;
+    s32 digitX;
+    s32 i;
+
+    if (seconds > 99) {
+        seconds = 99;
+    }
+    digitX = x;
+    digits[0] = seconds / 10;
+    digits[1] = seconds % 10;
+    for (i = 0; i < 2; i++) {
+        s32 u = digits[i] * 12;
+        SPRT *sprt = allocSprt();
+
+        sprt->r0 = 0x80;
+        sprt->g0 = 0x80;
+        sprt->b0 = 0x80;
+        sprt->x0 = digitX;
+        sprt->y0 = y;
+        sprt->u0 = u;
+        sprt->v0 = 0x58;
+        sprt->clut = getClut(0x3C0, 0x7B);
+        sprt->w = 12;
+        sprt->h = 16;
+        AddPrim(ot, sprt);
+        digitX += 12;
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/side_hud", SIDE_HUD_DECIMAL_PLACES);
 
-INCLUDE_ASM("game/nonmatchings/side_hud", SideHud_drawScore);
+/* 100000 down to 1, then 0: the decimal places of the score (SideHud_drawScore). */
+extern s32 SIDE_HUD_DECIMAL_PLACES[];
+
+/* The smaller of a and b. */
+static inline s32 min(s32 a, s32 b) {
+    return a < b ? a : b;
+}
+
+/* Draws the score (at most 999999) at (x, y): six 8x10 digits of the HUD texture's row at v 0x6B, the leading zeros
+ * semi-transparent. */
+void SideHud_drawScore(SideHud *this, u_long *ot, s32 x, s32 y) {
+    /* The match depends on the clamp going through min: the game clamps in a temporary that starts at 999999 and
+     * copies it to score; a ternary in place starts from the score. */
+    s32 score = min(this->score, 999999);
+    s32 leading = 1;
+    s32 *places = SIDE_HUD_DECIMAL_PLACES;
+    s32 place;
+
+    while ((place = *places++) != 0) {
+        s32 u = 0;
+        SPRT *sprt;
+
+        while (score >= place) {
+            leading = 0;
+            score -= place;
+            u += 8;
+        }
+        if (place == 1) {
+            leading = 0;
+        }
+        sprt = allocSprt();
+        sprt->r0 = 0x80;
+        sprt->g0 = 0x80;
+        sprt->b0 = 0x80;
+        sprt->x0 = x;
+        sprt->y0 = y;
+        sprt->u0 = u;
+        sprt->v0 = 0x6B;
+        sprt->clut = getClut(0x3C0, 0x7B);
+        sprt->w = 8;
+        sprt->h = 10;
+        setSemiTrans(sprt, leading);
+        AddPrim(ot, sprt);
+        x += 8;
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/side_hud", D_80065060);
 INCLUDE_RODATA("game/nonmatchings/side_hud", D_80065064);
@@ -257,7 +375,31 @@ INCLUDE_RODATA("game/nonmatchings/side_hud", D_80065088);
 
 INCLUDE_ASM("game/nonmatchings/side_hud", SideHud_drawEvolutionGauge);
 
-INCLUDE_ASM("game/nonmatchings/side_hud", func_800747F8);
+/* The evolution gauge's glow (SideHud_drawEvolutionGauge), while the side's fighter can evolve: a semi-transparent
+ * 40x32 sprite centred on (x, y), 0x46 further right for side 1, its size pulsing by a quarter with the sine
+ * of the frame (a full turn every 8 frames). The match depends on the sizes written as size * sin >> 14. */
+void SideHud_drawEvolutionGlow(SideHud *this, u_long *ot, s32 x, s32 y) {
+    RECT rect;
+    s32 sin;
+    POLY_FT4 *poly;
+
+    if (!Fighter_canEvolve(this->owner->current)) {
+        return;
+    }
+    sin = COS_SIN_TABLE[(this->frame << 9) & 0xE00].sin;
+    rect.w = ((sin * 40) >> 14) + 40;
+    rect.h = ((sin * 32) >> 14) + 32;
+    rect.x = x - rect.w / 2 + this->side * 0x46;
+    rect.y = y - rect.h / 2;
+    poly = allocPolyFT4();
+    setRGB0(poly, 0x80, 0x80, 0x80);
+    setXYWH(poly, rect.x, rect.y, rect.w, rect.h);
+    setUVWH(poly, 0x80, 0x98, 0x27, 0x1F);
+    poly->tpage = 0xF;
+    poly->clut = 0x1FBC;
+    setSemiTrans(poly, 1);
+    AddPrim(ot, poly);
+}
 
 /* Draws the side's 156 x 43 semi-transparent backdrop at x, y: side 0's image at u 4, v 0 of clut row 0x78, side
  * 1's at u 0, v 0x2C of row 0x79. */

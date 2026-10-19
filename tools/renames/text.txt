@@ -42,6 +42,8 @@ func_80032600 fontCacheDestroy
 func_80032620 textPrinterDestroy
 func_80032640 addNestedOt
 func_800326E8 findCodeIndex
+# Printer's destructor: its symbol is g++'s _._7Printer (renamed by hand), which the C files reach through an
+# __asm__ label on printerDestroy
 func_8003277C printerDestroy
 func_800327B0 printerPrint
 func_80032870 printerIgnoreColor

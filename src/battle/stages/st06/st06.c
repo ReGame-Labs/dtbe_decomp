@@ -1,12 +1,16 @@
 #include "common.h"
+#include <abs.h>
 #include "battle/game.h"
 #include "battle/game_classes.h"
 #include "psyq.h"
+#include "engine/gfx/box.h"
 #include "engine/gfx/camera.h"
+#include "engine/gfx/color.h"
 #include "engine/gfx/display.h"
 #include "engine/gfx/lights.h"
 #include "engine/gfx/mesh_scene.h"
 #include "engine/gfx/prim/alloc_dr_move.h"
+#include "engine/gfx/prim/alloc_sprt.h"
 #include "engine/math/matrix.h"
 #include "engine/math/random.h"
 #include "engine/math/sin_cos.h"
@@ -26,14 +30,15 @@ typedef struct StageBoss {
     /* 0x000 */ Fight base;
     /* 0xD38 */ St06LevelEntry levels[4]; /* st06_setLevel */
     /* 0xD58 */ MeshSceneLink collisionLink; /* lines of the arena itself, in COLLISION_LINKS (StageBoss_init) */
-    /* 0xD70 */ s32 unkD70;
-    /* 0xD74 */ s32 scrollX; /* the x its meshes are put at (st06_getScrollX) */
-    /* 0xD78 */ s32 unkD78;
+    /* 0xD70 */ s32 rounds; /* the rounds started (StageBoss_startRound) */
+    /* 0xD74 */ s32 scrollX; /* the x its meshes are put at: the fighters' centre (StageBoss_tick) */
+    /* 0xD78 */ s32 frames; /* the scenery ticks of the round (StageBoss_tickScenery) */
     /* 0xD7C */ u32 freezeFrame; /* set: copy the shown buffer once, a frozen frame (StageBoss_drawWorld) */
     /* 0xD80 */ u32 sound; /* a sound's handle (StageBoss_startRound plays it), stopped by the destructor */
 } StageBoss;
 
 void st06_applyLevel(St06LevelEntry *entry);
+void st06_setLevel(StageBoss *this, s32 index, s32 level);
 
 /* The entity class of virtual table D_800D3A4C (0x28 bytes). */
 typedef struct Unk800D5164 {
@@ -81,12 +86,12 @@ extern EntityVtable D_800D3B5C;
 /* The entity class of virtual table D_800D3B2C (func_800D4468 constructs it). */
 typedef struct Unk800D4468 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 unk18;
-    /* 0x1C */ s16 unk1C;
-    /* 0x1E */ u8 unk1E;
-    /* 0x1F */ u8 unk1F;
+    /* 0x18 */ s32 level; /* 0..0xFF (func_800D4520); drawn while above 0 */
+    /* 0x1C */ s16 hue;
+    /* 0x1E */ u8 saturation;
+    /* 0x1F */ u8 value;
     /* 0x20 */ s32 unk20; /* func_800D4468's second argument */
-    /* 0x24 */ s32 unk24;
+    /* 0x24 */ s32 frames;
 } Unk800D4468;
 
 void func_800D45BC(Unk800D4468 *this, s32 arg);
@@ -117,7 +122,7 @@ StageBoss *StageBoss_init(StageBoss *this) {
     }
     /* MeshSceneLink.lines is typed by the engine's own lines; the stage's are TerrainLines */
     addCollisionLink(&this->collisionLink, (s32 *)ST06_TERRAIN_LINES, 1);
-    this->unkD70 = 0;
+    this->rounds = 0;
     this->sound = 0;
     return this;
 }
@@ -138,13 +143,166 @@ void StageBoss_destroy(StageBoss *this, s32 flags) {
     Fight_destroy(&this->base, flags);
 }
 
-INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_startRound);
+/* the spawn points of the stage's item spawner (createItemSpawner), in its .rodata */
+extern u8 ST06_ITEM_SPAWN_POINTS[];
+
+/* The stage's sounds when its first round starts. */
+#define ST06_SOUND_START 0x6A
+#define ST06_SOUND_LOOP 0x6B
+
+Unk800D4468 *func_800D4468(Unk800D4468 *this, s32 arg);
+Unk800D557C *func_800D557C(Unk800D557C *this);
+Unk800D5040 *func_800D5040(Unk800D5040 *this);
+
+/* The stage's round start: Fight_startRound, the node entities, its bounds and scroll, a func_800D4468 entity kept as
+ * levels[0], then by round: the first plays ST06_SOUND_START and ST06_SOUND_LOOP (kept in sound) with every level 0;
+ * the second gives levels[1] 0xFF; later ones give levels[0] 0x6E and add a func_800D557C sprite. Then it passes every
+ * level on and makes the item spawner. */
+void StageBoss_startRound(StageBoss *this) {
+    Entity *entity;
+    s32 i;
+
+    Fight_startRound(&this->base);
+    Fight_createNodeEntities(&this->base);
+    this->base.hasBackground = 0;
+    Fight_setBounds(&this->base, -0xA00, 0xA00, -0x4000, 0x400, 0);
+    this->scrollX = 0;
+    this->frames = 0;
+    this->freezeFrame = 1;
+    entity = &func_800D4468(entityOperatorNew(sizeof(Unk800D4468)), this->rounds)->entity;
+    Fight_addStageEntity(&this->base, entity);
+    this->levels[0].handle = entityGetHandle(entity);
+    switch (++this->rounds) {
+    case 1:
+        this->levels[0].level = 0;
+        this->levels[1].level = 0;
+        this->levels[2].level = 0;
+        this->levels[3].level = 0;
+        soundControlPlaySound(&SOUND_CONTROL, ST06_SOUND_START, 0);
+        this->sound = soundControlPlaySound(&SOUND_CONTROL, ST06_SOUND_LOOP, 0);
+        break;
+    case 2:
+        st06_setLevel(this, 0, 0);
+        this->levels[1].level = 0xFF;
+        this->levels[2].level = 0;
+        this->levels[3].level = 0;
+        break;
+    default:
+        st06_setLevel(this, 0, 0x6E);
+        this->levels[1].level = 0;
+        this->levels[2].level = 0;
+        Fight_addStageEntity(&this->base, NEW_ENTITY(sizeof(Unk800D557C), func_800D557C));
+        break;
+    }
+    for (i = 0; i < 4; i++) {
+        st06_applyLevel(&this->levels[i]);
+    }
+    createItemSpawner(&this->base, ST06_ITEM_SPAWN_POINTS, 3);
+}
+
+/* The entity class func_800D4958 constructs (virtual table D_800D3AFC): 18 rings of 12 points each, x from -0x2000 by
+ * 0x3C3, z from -0x5D1 by 0x5D1, whose colors the tick sets from a hue that turns. */
+typedef struct St06RingPoint {
+    /* 0x0 */ Vec3 position;
+    /* 0xC */ u32 color; /* a CVECTOR as a word */
+} St06RingPoint;
+
+typedef struct Unk800D4958 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ s32 level; /* func_800D5914 sets it; the tick's value is half of it */
+    /* 0x1C */ HsvColor hsv;
+    /* 0x20 */ s32 scrollX; /* the stage's, each tick */
+    /* 0x24 */ St06RingPoint points[18][12];
+} Unk800D4958;
+
+/* The four St06Spinners of the meshes of ST06_SPIN_NODES, by handle (St06SpinGroup_init, virtual table
+ * ST06_SPIN_GROUP_VTABLE, 0x2C bytes). */
+typedef struct St06SpinGroup {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ s32 level; /* St06SpinGroup_setLevel's */
+    /* 0x1C */ u32 children[4];
+} St06SpinGroup;
 
 INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_createNodeEntity);
 
-INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_tickScenery);
+/* x kept within low to high. StageBoss_tick's match depends on this single expression on a local (an if/else chain,
+ * or a clamp of the position field itself, allocates otherwise). */
+#define CLAMP(x, low, high) ((x) < (low) ? (low) : (x) > (high) ? (high) : (x))
 
-INCLUDE_ASM("st06/nonmatchings/st06", StageBoss_tick);
+/* The stage's scenery tick: Fight_tickScenery, a frozen frame each frame and, while the group at 0x5C is empty, the
+ * levels by round and frame: the first round raises levels 2 and 1 and gives level 0 a falling cosine; the second
+ * fades level 1 out over 0x100 frames, then sets level 0 to 0xA0 - frames clamped to 0x78..0xA0 (always 0x78 by
+ * then), adds a func_800D5040 entity at frame 0x100 and a func_800D557C sprite at 0x180. */
+void StageBoss_tickScenery(StageBoss *this) {
+    Fight_tickScenery(&this->base);
+    this->freezeFrame = 1;
+    if (func_8006F104(&this->base)) {
+        return;
+    }
+    switch (this->rounds) {
+    case 1:
+        st06_setLevel(this, 2, this->frames * 4);
+        st06_setLevel(this, 1, this->frames);
+        st06_setLevel(this, 0, (0x1000 - COS_SIN_TABLE[(this->frames * 4) & 0xFFF].sin) >> 4);
+        break;
+    case 2:
+        if (this->frames >= 0x100) {
+            st06_setLevel(this, 0, CLAMP(0xA0 - this->frames, 0x78, 0xA0));
+        } else {
+            st06_setLevel(this, 1, 0xFF - this->frames);
+        }
+        if (this->frames == 0x100) {
+            Fight_addStageEntity(&this->base, NEW_ENTITY(sizeof(Unk800D5040), func_800D5040));
+        }
+        if (this->frames == 0x180) {
+            Fight_addStageEntity(&this->base, NEW_ENTITY(sizeof(Unk800D557C), func_800D557C));
+        }
+        break;
+    }
+    this->frames++;
+}
+
+/* The stage's tick: after Fight_tick, unless the continue screen is up, keeps both fighters within x +-0x6800,
+ * centres the arena's bounds (and scrollX) between them and, when they stand more than 0x1000 apart, puts them
+ * 0x800 each side of that centre. */
+void StageBoss_tick(StageBoss *this) {
+    Fighter *fighter0;
+    Fighter *fighter1;
+    Vec3 position0;
+    Vec3 position1;
+    s32 x0;
+    s32 x1;
+    s32 center;
+
+    Fight_tick(&this->base);
+    if (Fight_isContinueShown(&this->base)) {
+        return;
+    }
+    fighter0 = Fight_getFighter(&this->base, 0);
+    fighter1 = Fight_getFighter(&this->base, 1);
+    Fighter_getPosition(fighter0, &position0);
+    Fighter_getPosition(fighter1, &position1);
+    x0 = position0.vx;
+    x1 = position1.vx;
+    x0 = CLAMP(x0, -0x6800, 0x6800);
+    x1 = CLAMP(x1, -0x6800, 0x6800);
+    center = (x0 + x1) >> 1;
+    Fight_setBounds(&this->base, center - 0xA00, center + 0xA00, -0x4000, 0x400, 0);
+    this->scrollX = center;
+    if (abs(x1 - x0) > 0x1000) { /* abs, not ABS: the match takes the builtin's bgez */
+        if (x0 < x1) {
+            x0 = center - 0x800;
+            x1 = center + 0x800;
+        } else {
+            x0 = center + 0x800;
+            x1 = center - 0x800;
+        }
+    }
+    position0.vx = x0;
+    position1.vx = x1;
+    Fighter_setPosition(fighter0, &position0);
+    Fighter_setPosition(fighter1, &position1);
+}
 
 /* The stage's override of Fight_drawWorld: after it, when freezeFrame is set, clears it and queues a copy of the
  * shown buffer to x 0x200 in the camera's first-drawn slot. */
@@ -211,13 +369,13 @@ extern EntityVtable D_800D3B2C;
 Unk800D4468 *func_800D4468(Unk800D4468 *this, s32 arg) {
     entityInit(&this->entity, 0);
     /* The match depends on clearing 0x18 before installing the virtual table. */
-    this->unk18 = 0;
+    this->level = 0;
     this->entity.vtable = &D_800D3B2C;
-    this->unk1C = 0;
-    this->unk1E = 0;
-    this->unk1F = 0;
+    this->hue = 0;
+    this->saturation = 0;
+    this->value = 0;
     this->unk20 = arg;
-    this->unk24 = 0;
+    this->frames = 0;
     return this;
 }
 
@@ -227,18 +385,18 @@ static inline s16 getCosInline(s32 angle) {
     return COS_SIN_TABLE[angle & 0xFFF].cos;
 }
 
-/* Unk800D4468's tick: 0x1C climbs by 8 when 0x20 is 0, else follows a cosine of the 0x24 count. */
+/* Unk800D4468's tick: the hue climbs by 8 when 0x20 is 0, else follows a cosine of the frame count. */
 void func_800D44C4(Unk800D4468 *this) {
     if (this->unk20 == 0) {
-        this->unk1C += 8;
+        this->hue += 8;
     } else {
-        this->unk1C = -0x1C0 - (getCosInline(this->unk24 << 3) >> 5);
+        this->hue = -0x1C0 - (getCosInline(this->frames << 3) >> 5);
     }
-    this->unk24++;
+    this->frames++;
 }
 
-/* Unk800D4468's own method (0x20 of its virtual table): clamps the level to 0..0xFF and keeps it at 0x18;
- * when 0x20 is 0, 0x1E gets half of it and 0x1F the complement of three quarters, else both get it. */
+/* Unk800D4468's own method (0x20 of its virtual table): clamps the level to 0..0xFF and keeps it; when 0x20 is 0,
+ * the saturation gets half of it and the value the complement of three quarters, else both get it. */
 void func_800D4520(Unk800D4468 *this, s32 level) {
     if (level >= 0) {
         if (level >= 0x100) {
@@ -247,13 +405,13 @@ void func_800D4520(Unk800D4468 *this, s32 level) {
     } else {
         level = 0;
     }
-    this->unk18 = level;
+    this->level = level;
     if (this->unk20 == 0) {
-        this->unk1E = level >> 1;
-        this->unk1F = ~((level * 3 << 6) >> 8);
+        this->saturation = level >> 1;
+        this->value = ~((level * 3 << 6) >> 8);
     } else {
-        this->unk1E = level;
-        this->unk1F = level;
+        this->saturation = level;
+        this->value = level;
     }
 }
 
@@ -266,7 +424,43 @@ void func_800D457C(Unk800D4468 *this, s32 arg) {
     }
 }
 
-INCLUDE_ASM("st06/nonmatchings/st06", func_800D45BC);
+/* The frozen frame at x 0x200, from its second line (StageBoss_drawWorld copies the shown buffer there). */
+extern const RECT ST06_FROZEN_FRAME_RECT;
+
+/* Unk800D4468's draw when 0x20 is 0: while it has a level, copies the frozen frame one line up into the buffer being
+ * drawn, then subtracts its color from the whole screen. */
+void func_800D45BC(Unk800D4468 *this, s32 arg) {
+    Camera *camera = (Camera *)arg;
+    CVECTOR rgb;
+    RECT *shown;
+    RECT frozen;
+    u_long *ot;
+    s32 y;
+    DR_MOVE *move;
+    DR_TPAGE *tpage;
+    TileWords *tile;
+
+    if (this->level > 0) {
+        ot = camera->ot.firstDrawn;
+        convertHsvToRgb(&rgb, this->hue, this->saturation, this->value);
+        shown = getShownBufferRect();
+        frozen = ST06_FROZEN_FRAME_RECT;
+        y = 0;
+        if (shown->y == 0) {
+            y = 0xF0;
+        }
+        move = allocDrMove(&frozen, 0, y);
+        tpage = allocDrTpage(getTPage(0, 2, 0x140, 0));
+        tile = (TileWords *)allocTile();
+        rgb.cd = ((TILE *)tile)->code | PRIM_SEMI_TRANS;
+        tile->rgbCode = *(u32 *)&rgb; /* the color and code at once: a word on the stack */
+        tile->xy = 0;
+        tile->wh = 0xF00140;
+        AddPrim(ot, tile);
+        AddPrim(ot, tpage);
+        AddPrim(ot, move);
+    }
+}
 
 INCLUDE_ASM("st06/nonmatchings/st06", func_800D46C4);
 
@@ -286,14 +480,6 @@ typedef struct St06Spinner {
     /* 0x30 */ s32 speed;    /* the angle's step, 1 to 8 */
     /* 0x34 */ s32 scale;    /* of the three axes (St06SpinGroup_setLevel) */
 } St06Spinner;
-
-/* The four St06Spinners of the meshes of ST06_SPIN_NODES, by handle (St06SpinGroup_init, virtual table
- * ST06_SPIN_GROUP_VTABLE, 0x2C bytes). */
-typedef struct St06SpinGroup {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ s32 level; /* St06SpinGroup_setLevel's */
-    /* 0x1C */ u32 children[4];
-} St06SpinGroup;
 
 extern EntityVtable ST06_SPIN_GROUP_VTABLE;
 extern EntityVtable ST06_SPINNER_VTABLE;

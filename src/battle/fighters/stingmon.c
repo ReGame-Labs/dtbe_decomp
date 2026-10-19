@@ -4,10 +4,12 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "battle/stage_objects.h"
 #include "engine/gfx/camera.h"
 #include "engine/gfx/prim/build_line_g2.h"
 #include "engine/gfx/prim_buffer.h"
 #include "engine/math/matrix.h"
+#include "engine/math/sin_cos.h"
 
 void Stingmon_spawnSpecial1Projectile(Fighter *this, s32 air);
 extern VtableEntry STINGMON_ATTACK3_HITBOX_HIT_VTABLE[];
@@ -22,7 +24,7 @@ extern EntityVtable STINGMON_VTABLE;
 /* Stingmon's class (CHARACTER_STINGMON). */
 typedef struct Stingmon {
     /* 0x000 */ Fighter base;
-    /* 0x4A4 */ s16 unk4A4;
+    /* 0x4A4 */ u16 inSpecial3; /* set every frame of the special move 3, cleared by endMove */
 } Stingmon;
 
 /* The special move 3's hitbox: sixteen points around a centre; it can hold the opponent. */
@@ -32,9 +34,12 @@ typedef struct StingmonSpecial3Hitbox {
     /* 0x034 */ u8 unk34[0x38 - 0x34];
     /* 0x038 */ CollisionSphere part;
     /* 0x080 */ Fighter *fighter;
-    /* 0x084 */ u8 unk84[0x8A - 0x84];
+    /* 0x084 */ u8 unk84[0x88 - 0x84];
+    /* 0x088 */ u16 unk88;           /* 60 - unk8E when it takes hold of the opponent */
     /* 0x08A */ u16 holdingOpponent; /* while set, the destructor releases the opponent (Fighter_hold(0)) */
-    /* 0x08C */ u8 unk8C[0xAC - 0x8C];
+    /* 0x08C */ u16 unk8C;
+    /* 0x08E */ u16 unk8E;
+    /* 0x090 */ u8 unk90[0xAC - 0x90];
     /* 0x0AC */ Vec3 unkAC;
     /* 0x0B8 */ u8 unkB8[4];
     /* 0x0BC */ Vec3 unkBC; /* StingmonSpecial3Hitbox_init's third argument */
@@ -47,7 +52,7 @@ void Stingmon_spawnAttack3Hitbox(Stingmon *this);
 Stingmon *Stingmon_init(Stingmon *this) {
     Fighter_init(&this->base);
     this->base.entity.vtable = &STINGMON_VTABLE;
-    this->unk4A4 = 0;
+    this->inSpecial3 = 0;
     return this;
 }
 
@@ -62,7 +67,7 @@ void Stingmon_destroy(Entity *this, s32 flags) {
 
 /* Ends a move: clears 0x4A4. */
 void Stingmon_endMove(Stingmon *this) {
-    this->unk4A4 = 0;
+    this->inSpecial3 = 0;
 }
 
 /* Stingmon_dashAttack's local table of four entries, copied whole from its constant (.rodata stays in asm). */
@@ -98,7 +103,42 @@ void Stingmon_attack3(Stingmon *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_throw);
+/* Throw: Fighter's; at frame 0 the opponent is held (6) flinching and both fighters stop; at frame 6 the fighter
+ * lets go unless it is on the ground, else hits the opponent forward and up; from frame 21 func_80079AF8. */
+void Stingmon_throw(Fighter *this, s32 frame) {
+    Fighter *opponent;
+    Vec3 vel;
+    s16 side;
+
+    Fighter_throw(this, frame);
+    opponent = Fighter_getOpponent(this);
+    if (frame == 0) {
+        Fighter_hold(opponent, 6);
+        Fighter_setClip(opponent, FIGHTER_CLIP_FLINCH, 0, 0);
+        opponent->velocity.vx = 0;
+        opponent->velocity.vy = 0;
+        opponent->velocity.vz = 0;
+        opponent->velocityPad = 0;
+        this->velocity.vx = 0;
+        this->velocity.vy = 0;
+        this->velocity.vz = 0;
+        this->velocityPad = 0;
+    }
+    if (frame == 6) {
+        if (!Fighter_isOnGround(this)) {
+            Fighter_stopActionClip(this);
+            return;
+        }
+        side = Fighter_getFacing(this);
+        vel.vx = side * 0xE38;
+        vel.vy = -0x71C0;
+        vel.vz = 0;
+        Fighter_takeHit(opponent, 0x5B8C2700, &vel, 2);
+    }
+    if (frame >= 21) {
+        func_80079AF8(this);
+    }
+}
 
 /* Special move 1: its clip and the voice at frame 0, the projectile at frame 10. */
 void Stingmon_special1(Fighter *this, s32 frame) {
@@ -153,13 +193,145 @@ void Stingmon_special2(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_special3);
+Unk8008E9B4 *func_800B146C(Unk8008E9B4 *this, Fighter *owner, Fight *unk228, Vec3 *pos, s32 size);
+void Stingmon_spawnSpecial3Effect(Stingmon *this);
+void Stingmon_spawnSpecial3Hitbox(Stingmon *this);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_airUpAttack);
+/* Special move 3 (no Fighter_special3): at frame 0 its clip, the gauge cost, sixteen sparks (func_800B146C) of growing
+ * size at the fighter, the voice and 12 invulnerable frames; at frame 10 the effect and the hitbox. Every frame sets
+ * inSpecial3. */
+void Stingmon_special3(Stingmon *this, s32 frame) {
+    switch (frame) {
+    case 0: {
+        Fight *unk228;
+        Vec3 position;
+        s32 i;
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_airSpecial1);
+        Fighter_playActionClip(&this->base, FIGHTER_CLIP_SPECIAL3, 0, 0, -1);
+        Fighter_addGauge(&this->base, -0x10000);
+        unk228 = Fighter_getScene(&this->base);
+        Fighter_getPosition(&this->base, &position);
+        for (i = 0; i < 16; i++) {
+            Entity *spark = allocEntityMemory(0x58);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_airSpecial2);
+            if (spark != NULL) {
+                func_800B146C(entityOperatorNewAt(0x58, spark), &this->base, unk228, &position, 0x400 + i * 0x180);
+            }
+            Fighter_addEntity(&this->base, spark);
+        }
+        Fighter_playVoice(&this->base, 0xF1);
+        this->base.invulnerableFrames = 12;
+        break;
+    }
+    case 10:
+        Stingmon_spawnSpecial3Effect(this);
+        Stingmon_spawnSpecial3Hitbox(this);
+        break;
+    }
+    this->inSpecial3 = 1;
+}
+
+/* Up attack in the air (no Fighter_airUpAttack run): parts 0x10 hit up from frame 0 with attack 2's damage, a lift at
+ * frame 3, parts 0x20 hit forward from frame 13 until frame 20; a rise is braked every frame, and from frame 17
+ * func_80079AF8. */
+void Stingmon_airUpAttack(Fighter *this, s32 frame) {
+    FighterParams *params = Fighter_getParams(this);
+
+    switch (frame) {
+    case 0:
+        Fighter_playActionClip(this, FIGHTER_CLIP_AIR_UP_ATTACK, 2, 0, -1);
+        this->velocity.vy = 0;
+        Fighter_setAttackParts(this, 0x10);
+        this->hitDamage = params->attacks[1].hitDamage;
+        this->hitKnockback.vy = -0x7FF8;
+        break;
+    case 3:
+        this->force.vy -= ((s64)this->mass * 0x6388) >> 16;
+        break;
+    case 13:
+        this->attackParts = 0;
+        Fighter_setAttackParts(this, 0x20);
+        this->hitDamage = params->attacks[1].hitDamage;
+        this->hitKnockback.vx = Fighter_getFacing(this) * 0x1554;
+        this->hitKnockback.vy = -0xE38;
+        break;
+    case 20:
+        this->attackParts = 0;
+        break;
+    }
+    if (this->velocity.vy > 0) {
+        this->force.vy -= this->velocity.vy;
+    }
+    if (frame >= 17) {
+        func_80079AF8(this);
+    }
+}
+
+/* Special move 1 in the air: its clip and the voice at frame 0; at frame 9 the fighter stops, is pushed back and up
+ * and fires the projectile; frames 10-21 brake a fall. */
+void Stingmon_airSpecial1(Fighter *this, s32 frame) {
+    switch (frame) {
+    case 0:
+        Fighter_playActionClip(this, FIGHTER_CLIP_AIR_SPECIAL1, 2, 0, -1);
+        Fighter_playVoice(this, 0xEF);
+        break;
+    case 9: {
+        s32 push = ((s64)this->mass * 0x1554) >> 16;
+
+        this->velocity.vx = this->velocity.vy = 0;
+        this->force.vx += push * -Fighter_getFacing(this);
+        this->force.vy -= ((s64)this->mass * 0x4718) >> 16;
+        Stingmon_spawnSpecial1Projectile(this, 1);
+        break;
+    }
+    }
+    if (frame >= 10 && frame < 22) {
+        if (this->velocity.vy > 0) {
+            this->force.vy -= this->velocity.vy;
+        }
+    }
+}
+
+/* Special move 2 in the air: its clip, a stop and lift and the voice at frame 0; frames 1-7 brake a fall; at frame 8
+ * the hitbox and a push forward and down; even frames 10-18 the effect; func_80079AF8 from frame 24. */
+void Stingmon_airSpecial2(Fighter *this, s32 frame) {
+    switch (frame) {
+    case 0:
+        Fighter_playActionClip(this, FIGHTER_CLIP_AIR_SPECIAL2, 2, 0, -1);
+        this->velocity.vy = 0;
+        this->force.vy -= ((s64)this->mass * 0x38E0) >> 16;
+        Fighter_playVoice(this, 0xF0);
+        break;
+    case 8: {
+        s32 push;
+        s32 drop;
+
+        Stingmon_spawnSpecial2Hitbox(this, 1);
+        push = ((s64)this->mass * 0x38E0) >> 16;
+        this->force.vx += push * Fighter_getFacing(this);
+        /* The match depends on the downward push in its own local, like the forward one. */
+        drop = ((s64)this->mass * 0x1C70) >> 16;
+        this->force.vy += drop;
+        break;
+    }
+    }
+    if (frame >= 9 && frame < 19) {
+        /* The match depends on even being a value (do_store_flag's xori/andi), not a test in the if. */
+        s32 even = (frame & 1) == 0;
+
+        if (even) {
+            Stingmon_spawnSpecial2Effect(this, 1);
+        }
+    }
+    if (frame >= 1 && frame < 8) {
+        if (this->velocity.vy > 0) {
+            this->force.vy -= this->velocity.vy;
+        }
+    }
+    if (frame >= 24) {
+        func_80079AF8(this);
+    }
+}
 
 /* Up attack: frame 0 its clip, the velocity stopped; frame 4 a push forward of 0xE38 times the mass (16.16) and attack
  * parts 0x20 with hit 0x439012E6 and an upward knockback of 0x6388 times the opponent's mass; frame 10 a trail (a copy
@@ -223,8 +395,8 @@ void Stingmon_upAttack(Fighter *this, s32 frame) {
 extern EntityVtable D_8006BC7C;
 
 /* Constructs an Unk8008E9B4 with vtable D_8006BC7C (see func_8008E9B4), with 12 in unk4C and 24 in unk50. */
-Unk8008E9B4 *func_800B146C(Unk8008E9B4 *this, Fighter *owner, s32 arg2, Vec3 *pos, s32 arg4) {
-    func_800C3CFC(&this->base, pos, arg4, 0xFFC080);
+Unk8008E9B4 *func_800B146C(Unk8008E9B4 *this, Fighter *owner, Fight *unk228, Vec3 *pos, s32 size) {
+    func_800C3CFC(&this->base, pos, size, 0xFFC080);
     this->base.entity.vtable = &D_8006BC7C;
     this->unk54 = owner;
     this->base.unk4C = 12;
@@ -332,29 +504,86 @@ void Stingmon_spawnSpecial2Effect(Fighter *this, s32 arg) {
     Fighter_addEntity(this, child);
 }
 
+/* Stingmon_spawnSpecial3Hitbox's local table: the points of its four trails, two each, copied whole from its
+ * constant (.rodata stays in asm). */
+typedef struct Unk8006B93C {
+    TrailPoint trails[4][2];
+} Unk8006B93C;
+
+extern Unk8006B93C D_8006B93C;
+
 INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006B93C);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", Stingmon_spawnSpecial3Hitbox);
+StingmonSpecial3Hitbox *StingmonSpecial3Hitbox_init(StingmonSpecial3Hitbox *this, Stingmon *fighter, Vec3 *position,
+                                                    VECTOR *knockback, Fight *fight);
 
-Entity *StingmonSpecial3Effect_init(Entity *this, Fighter *fighter, Vec3 *position);
+/* Spawns the special move 3's hitbox 640 in front of the fighter and 0xF0 up, with no knockback, then four trails
+ * (two points each from D_8006B93C, 8 long, recorded 60 frames). */
+void Stingmon_spawnSpecial3Hitbox(Stingmon *this) {
+    Unk8006B93C table;
+    Vec3 position;
+    VECTOR knockback;
+    Fight *fight;
+    Entity *child;
+    s32 i;
+
+    table = D_8006B93C;
+    fight = Fighter_getScene(&this->base);
+    Fighter_getPosition(&this->base, &position);
+    position.vx += Fighter_getFacing(&this->base) * 640;
+    position.vy -= 0xF0;
+    knockback.vx = 0;
+    knockback.vy = 0;
+    knockback.vz = 0;
+    knockback.pad = 0;
+    child = allocEntityMemory(0x22C);
+    if (child != NULL) {
+        StingmonSpecial3Hitbox_init(entityOperatorNewAt(0x22C, child), this, &position, &knockback, fight);
+    }
+    Fighter_addEntity(&this->base, child);
+    for (i = 0; i < 4; i++) {
+        child = allocEntityMemory(0x690);
+        if (child != NULL) {
+            Trail_init(entityOperatorNewAt(0x690, child), &this->base, table.trails[i], 2, 8, 60);
+        }
+        Fighter_addEntity(&this->base, child);
+    }
+}
+
+struct StingmonSpecial3Effect *StingmonSpecial3Effect_init(struct StingmonSpecial3Effect *this, Stingmon *owner,
+                                                           Vec3 *position);
 
 /* Spawns the special move 3's effect 640 ahead of the fighter and 0xF0 up. */
-void Stingmon_spawnSpecial3Effect(Fighter *this) {
+void Stingmon_spawnSpecial3Effect(Stingmon *this) {
     Vec3 position;
     Entity *child;
 
-    Fighter_getPosition(this, &position);
-    position.vx += Fighter_getFacing(this) * 640;
+    Fighter_getPosition(&this->base, &position);
+    position.vx += Fighter_getFacing(&this->base) * 640;
     position.vy -= 0xF0;
     child = allocEntityMemory(0x1F4);
     if (child != NULL) {
         StingmonSpecial3Effect_init(entityOperatorNewAt(0x1F4, child), this, &position);
     }
-    Fighter_addEntity(this, child);
+    Fighter_addEntity(&this->base, child);
 }
 
-UnkPartsEntity38 *StingmonAttack3Hitbox_init(UnkPartsEntity38 *this, Fighter *fighter, Vec3 *position, VECTOR *velocity,
-                                             Fight *list);
+/* The attack 3's hitbox (virtual tables STINGMON_ATTACK3_HITBOX_VTABLE and STINGMON_ATTACK3_HITBOX_HIT_VTABLE): a hit
+ * part of radius 0x80 drawn as a textured quad. */
+typedef struct StingmonAttack3Hitbox {
+    /* 0x00 */ UnkPartsEntity38 parts;
+    /* 0x80 */ Fighter *owner;
+    /* 0x84 */ u8 shade; /* the quad's gray level: up to 0x80, then down to 0 */
+    /* 0x86 */ u16 state;
+    /* 0x88 */ u16 frames;
+    /* 0x8A */ s16 vramY; /* Fighter_getVramY of the owner */
+    /* 0x8C */ Vec3 position;
+    /* 0x98 */ s32 positionPad;
+    /* 0x9C */ SVECTOR corners[4]; /* x -0x20, y 0x54 or 0x17C, z +-0x20 */
+} StingmonAttack3Hitbox; /* size 0xBC */
+
+StingmonAttack3Hitbox *StingmonAttack3Hitbox_init(StingmonAttack3Hitbox *this, Fighter *fighter, Vec3 *position,
+                                                  VECTOR *velocity, Fight *list);
 
 /* Spawns the attack 3's hitbox at the fighter's position, flying forward at 0x38E0 and up at 0x1C70 times the mass
  * (16.16). */
@@ -429,8 +658,8 @@ void StingmonSpecial2Hitbox_tick(StingmonSpecial2Hitbox *this) {
         if (this->unk88 == 10 && this->frame < 3) {
             break;
         }
-        this->parts.part.flags &= ~2;
-        this->parts.part.flags &= ~COLLISION_SHAPE_DISABLED;
+        this->parts.part.flags.bits.touched = 0;
+        this->parts.part.flags.bits.disabled = 0;
         this->state++;
     case 1:
         this->unk89 += (0x84 - this->unk89) >> 2;
@@ -460,7 +689,7 @@ void StingmonSpecial2Hitbox_tick(StingmonSpecial2Hitbox *this) {
         s64 speed;
         s32 vx, vy;
 
-        this->parts.part.flags &= ~2;
+        this->parts.part.flags.bits.touched = 0;
         Hit_set(&this->parts.base, 0x47AC1FD9, 2);
         speed = ((s64)this->fighter->mass * 0x1554) >> 16;
         vx = (s32)speed * Fighter_getFacing(this->fighter);
@@ -469,14 +698,14 @@ void StingmonSpecial2Hitbox_tick(StingmonSpecial2Hitbox *this) {
         velocity.vy = vy;
         velocity.vz = 0;
         Hit_setKnockback(&this->parts.base, &velocity);
-        this->parts.part.flags &= ~COLLISION_SHAPE_DISABLED;
+        this->parts.part.flags.bits.disabled = 0;
     }
     if (this->unk88 == 10) {
         if (this->frame >= 23) {
-            this->parts.part.flags |= COLLISION_SHAPE_DISABLED;
+            this->parts.part.flags.bits.disabled = 1;
         }
     } else if (this->frame >= 16) {
-        this->parts.part.flags |= COLLISION_SHAPE_DISABLED;
+        this->parts.part.flags.bits.disabled = 1;
     }
     Fighter_getNodePosition(this->fighter, &this->position, 20, &D_800D344C);
     this->parts.part.position.vx = this->position.vx;
@@ -846,7 +1075,33 @@ void StingmonSpecial3Hitbox_destroy(StingmonSpecial3Hitbox *this, s32 flags) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Hitbox_tick);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Hitbox_hit);
+/* On a hit: Hit_apply; then a fighter hit that is not guarding is taken hold of, once: the sphere is disabled, the
+ * owner gains 0x3000 of life, the fighter takes hit 0x7B00001 (kind 1) and stops, and the sphere leaves its list. */
+void StingmonSpecial3Hitbox_hit(StingmonSpecial3Hitbox *this, CollisionSphere *sum) {
+    Fighter *opponent;
+    ListNode *node;
+
+    Hit_apply(&this->unk18, sum);
+    opponent = (Fighter *)getHitFighter(sum);
+    if (opponent != NULL && !this->holdingOpponent && !Fighter_isGuarding(opponent)) {
+        /* The match depends on taking the node here, before the calls (it lives in a saved register). */
+        node = &this->part.link;
+        this->part.flags.bits.disabled = 1;
+        Fighter_addLife(this->fighter, 0x3000);
+        this->unk88 = 60 - this->unk8E;
+        Fighter_takeHit(opponent, 0x7B00001, (Vec3 *)&ZERO_VECTOR, 1);
+        opponent->velocity.vx = 0;
+        opponent->velocity.vy = 0;
+        opponent->velocity.vz = 0;
+        opponent->velocityPad = 0;
+        /* listRemove(&this->part.link), in the access order the game's compiler used */
+        this->part.link.next->prev = this->part.link.prev;
+        node->prev->next = this->part.link.next;
+        this->part.link.next = node;
+        this->part.link.prev = node;
+        this->holdingOpponent = 1;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/stingmon", func_800B34D0);
 
@@ -860,7 +1115,54 @@ INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006BAB0);
 
 INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Hitbox_draw);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Effect_init);
+/* The special move 3's effect: six rings of nine points, each ring twice the size of the previous one and 64 further
+ * back, with shades from 0x80 down by 21. */
+typedef struct StingmonSpecial3Effect {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ Stingmon *owner;
+    /* 0x1C */ u16 state;  /* the tick's: grow, hold 20 frames, fade, delete */
+    /* 0x1E */ u16 frames; /* in the state */
+    /* 0x20 */ u16 ticks;
+    /* 0x22 */ s16 vramY;  /* Fighter_getVramY of the owner */
+    /* 0x24 */ s32 unk24;  /* eases from 0 toward 0x1000, stops at 0xFFF */
+    /* 0x28 */ s32 unk28;  /* ticks * 32, a 4096th of a turn */
+    /* 0x2C */ Vec3 position;
+    /* 0x38 */ s32 positionPad;
+    /* 0x3C */ u8 shades[6];
+    /* 0x42 */ s16 unk42;
+    /* 0x44 */ GridVertex rings[6][9];
+} StingmonSpecial3Effect; /* size 0x1F4 */
+
+/* Builds the special move 3's effect for owner at position. */
+StingmonSpecial3Effect *StingmonSpecial3Effect_init(StingmonSpecial3Effect *this, Stingmon *owner, Vec3 *position) {
+    s32 x, y, z;
+    s32 i, j;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &STINGMON_SPECIAL3_EFFECT_VTABLE;
+    this->vramY = Fighter_getVramY(&owner->base);
+    this->owner = owner;
+    this->state = 0;
+    this->ticks = 0;
+    this->unk24 = 0;
+    this->unk28 = 0;
+    this->frames = 0;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    for (i = 0; i < 6; i++) {
+        this->shades[i] = 0x80 - i * 21;
+        for (j = 0; j < 9; j++) {
+            this->rings[i][j].vx = COS_SIN_TABLE[(j << 9) & 0xFFF].sin >> (7 - i);
+            this->rings[i][j].vy = COS_SIN_TABLE[(j << 9) & 0xFFF].cos >> (7 - i);
+            this->rings[i][j].vz = -(i * 64);
+        }
+    }
+    return this;
+}
 
 /* The special move 3 effect's destructor. */
 void StingmonSpecial3Effect_destroy(Entity *this, s32 flags) {
@@ -871,11 +1173,86 @@ void StingmonSpecial3Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Effect_tick);
+/* Follows the owner through its special move 3, holds 20 frames, then fades its shades out and deletes itself. */
+void StingmonSpecial3Effect_tick(StingmonSpecial3Effect *this) {
+    s32 i;
+
+    if (this->owner->inSpecial3 == 0) {
+        entityDelete(&this->entity);
+        return;
+    }
+    Fighter_getPosition(&this->owner->base, &this->position);
+    this->position.vx += Fighter_getFacing(&this->owner->base) * 640;
+    this->position.vy -= 0xF0;
+    switch (this->state) {
+    case 0:
+        this->unk24 += (0x1000 - this->unk24) >> 3;
+        if (this->unk24 < 0xFF0) {
+            break;
+        }
+        this->unk24 = 0xFFF;
+        this->frames = 0;
+        this->state++;
+        /* fall through */
+    case 1:
+        if (++this->frames < 20) {
+            break;
+        }
+        this->state++;
+        /* fall through */
+    case 2:
+        for (i = 0; i < 6; i++) {
+            this->shades[i] += -this->shades[i] >> 2;
+        }
+        if (this->shades[0] >= 5) {
+            break;
+        }
+        this->state++;
+        /* fall through */
+    case 3:
+        entityDelete(&this->entity);
+        return;
+    }
+    this->unk28 = (this->ticks << 5) & 0xFFF;
+    this->ticks++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Effect_draw);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonAttack3Hitbox_init);
+/* Builds the attack 3's hitbox at position, knocking back by velocity, on the owner's side. */
+StingmonAttack3Hitbox *StingmonAttack3Hitbox_init(StingmonAttack3Hitbox *this, Fighter *fighter, Vec3 *position,
+                                                  VECTOR *velocity, Fight *list) {
+    s32 x, y, z;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    /* only the first three words of the velocity are read */
+    Hit_init(&this->parts.base, fighter, 0x43882D00, (Vec3 *)velocity, 1);
+    this->parts.base.vtable = STINGMON_ATTACK3_HITBOX_HIT_VTABLE;
+    this->parts.entity.vtable = &STINGMON_ATTACK3_HITBOX_VTABLE;
+    CollisionSphere_init(&this->parts.part, position, 0x80, &this->parts.base);
+    this->vramY = Fighter_getVramY(fighter);
+    this->owner = fighter;
+    this->state = 0;
+    this->frames = 0;
+    this->shade = 0;
+    this->corners[0].vx = this->corners[1].vx = this->corners[2].vx = this->corners[3].vx = -0x20;
+    this->corners[0].vy = this->corners[1].vy = 0x54;
+    this->corners[2].vy = this->corners[3].vy = 0x17C;
+    this->corners[0].vz = this->corners[2].vz = 0x20;
+    this->corners[1].vz = this->corners[3].vz = -0x20;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(list, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(list, &this->parts.part.link);
+    }
+    return this;
+}
 
 /* The attack 3 hitbox's destructor. */
 void StingmonAttack3Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
@@ -897,9 +1274,41 @@ void StingmonAttack3Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
+extern VECTOR D_8006BAD0;
+
 INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006BAD0);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonAttack3Hitbox_tick);
+/* Fades the quad in to 0x80, holds 10 frames, fades it out and deletes itself; follows the owner's node 19 meanwhile. */
+void StingmonAttack3Hitbox_tick(StingmonAttack3Hitbox *this) {
+    switch (this->state) {
+    case 0:
+        this->shade += (0x82 - this->shade) >> 1;
+        if (this->shade < 0x80) {
+            break;
+        }
+        this->frames = 0;
+        this->state++;
+        /* fall through */
+    case 1:
+        if (++this->frames < 10) {
+            break;
+        }
+        this->state++;
+        /* fall through */
+    case 2:
+        this->shade -= (this->shade + 2) >> 1;
+        if (this->shade != 0) {
+            break;
+        }
+        this->state++;
+        /* fall through */
+    case 3:
+        entityDelete(&this->parts.entity);
+        return;
+    }
+    Fighter_getNodePosition(this->owner, (VECTOR *)&this->position, 19, &D_8006BAD0);
+    this->parts.part.position = this->position;
+}
 
 /* On a hit: Hit_apply with arg, then sets bit 0 of 0x44 when getHitFighter finds a fighter in arg. */
 void StingmonAttack3Hitbox_hit(Unk800AD5BC *this, void *arg) {

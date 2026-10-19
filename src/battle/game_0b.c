@@ -204,7 +204,40 @@ s32 InputHistory_findHeldFor(InputHistory *this, u32 buttons, s32 frames, s32 an
     return found;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0b", InputHistory_findPresses);
+/* Looks back from the search place for count presses of buttons (frames that match where the frame before does
+ * not); on the last one keeps the place for the next search and returns 1, else 0. The match depends on the first
+ * frame's left-- as its own statement after the calls (searchFrames - 1 as the initializer folds it into the
+ * loop's). */
+s32 InputHistory_findPresses(InputHistory *this, u32 buttons, s32 count, s32 any) {
+    s32 i = this->searchIndex;
+    s32 left = this->searchFrames;
+    u32 wanted = InputHistory_mirror(this, buttons);
+    u32 mask = getButtonGroup(wanted);
+    s32 last;
+    s32 match;
+    s32 pressed;
+    u16 held;
+
+    /* the newest frame only sets last */
+    left--;
+    last = matchButtons(this->history[i] & mask, wanted, any);
+    for (;;) {
+        held = this->history[i] & mask;
+        i = (i - 1) & 0xFF;
+        if (--left < 0) {
+            break;
+        }
+        match = matchButtons(held, wanted, any);
+        pressed = !match && last;
+        last = match;
+        if (pressed && --count <= 0) {
+            this->searchIndex = i;
+            this->searchFrames = left;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 /* buttons with PAD_LEFT and PAD_RIGHT swapped, when mirrored and only one of them is in it. */
 u32 InputHistory_mirror(InputHistory *this, u32 buttons) {
@@ -324,7 +357,34 @@ void boxFitCorners(Box *this, VECTOR *points) {
     this->max.vz = maxZ;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0b", func_80075848);
+/* Writes the eight corners of the box to corners: 0-3 on the near face (min z) and 4-7 on the far one, each face
+ * going min x min y, max x min y, max x max y, min x max y. */
+void boxGetCorners(Box *this, SVECTOR *corners) {
+    corners[0].vx = this->min.vx;
+    corners[3].vx = this->min.vx;
+    corners[4].vx = this->min.vx;
+    corners[7].vx = this->min.vx;
+    corners[1].vx = this->max.vx;
+    corners[2].vx = this->max.vx;
+    corners[5].vx = this->max.vx;
+    corners[6].vx = this->max.vx;
+    corners[0].vy = this->min.vy;
+    corners[1].vy = this->min.vy;
+    corners[4].vy = this->min.vy;
+    corners[5].vy = this->min.vy;
+    corners[2].vy = this->max.vy;
+    corners[3].vy = this->max.vy;
+    corners[6].vy = this->max.vy;
+    corners[7].vy = this->max.vy;
+    corners[0].vz = this->min.vz;
+    corners[1].vz = this->min.vz;
+    corners[2].vz = this->min.vz;
+    corners[3].vz = this->min.vz;
+    corners[4].vz = this->max.vz;
+    corners[5].vz = this->max.vz;
+    corners[6].vz = this->max.vz;
+    corners[7].vz = this->max.vz;
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0b", func_80075968);
 
@@ -334,9 +394,43 @@ MATRIX *boxGetMatrix(MATRIX *out, Box *box) {
     return out;
 }
 
-void collideShapes(CollisionSphere *this, CollisionSphere *other);
+/* Tells owner of a touch of other (its slot 0x08), when there is one. */
+static inline void tellOwner(CollisionOwner *owner, CollisionSphere *other) {
+    if (owner != NULL) {
+        owner->vtable[1].func((u8 *)owner + owner->vtable[1].delta, other);
+    }
+}
 
-INCLUDE_ASM("game/nonmatchings/game_0b", collideShapes);
+/* Whether this touches other (its slot 0x08), unless this is disabled (or other, in the USA release): on a touch,
+ * both get flags.bits.touched and both owners are told, each with the other shape. Returns the touch. */
+s32 collideShapes(CollisionSphere *this, CollisionSphere *other) {
+    VtableEntryS32 *touches;
+    s32 touch;
+
+    if (this->flags.bits.disabled) {
+        return 0;
+    }
+#if !VERSION_JP
+    /* the USA release skips a disabled other too */
+    if (other->flags.bits.disabled) {
+        return 0;
+    }
+#endif
+    touches = (VtableEntryS32 *)&this->vtable[1];
+    touch = touches->func((u8 *)this + touches->delta, other);
+    if (!touch) {
+        return 0;
+    }
+    /* The match depends on or-ing the touch into the touched bit by hand, mask first: a bit-field store
+     * (flags.bits.touched |= touch != 0) computes the new bit first, and branches on the touch */
+    this->flags.word =
+        (this->flags.word & ~COLLISION_SHAPE_TOUCHED) | ((((this->flags.word >> 1) & 1) | (touch != 0)) << 1);
+    other->flags.word =
+        (other->flags.word & ~COLLISION_SHAPE_TOUCHED) | ((((other->flags.word >> 1) & 1) | (touch != 0)) << 1);
+    tellOwner(this->owner, other);
+    tellOwner(other->owner, this);
+    return touch;
+}
 
 /* Adds node at the end of the list head; returns head. */
 ListNode *listAppend(ListNode *head, ListNode *node) {
@@ -370,7 +464,64 @@ void shapeListCollide(ListNode *list, CollisionSphere *other) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0b", shapeListFindNearest);
+/* The shape of list nearest to point (vecGetLength), skipping the disabled ones and those with unk10 set; copies
+ * a position to nearest and returns the shape, or NULL. The game keeps a pointer to the loop's own position copy,
+ * so nearest gets the position of the last shape looked at, not the nearest one's. The match depends on that
+ * pointer taken at the top of the block (`candidate`, kept in a saved register) and on found set first (the game
+ * puts it in the branch's delay slot). */
+CollisionSphere *shapeListFindNearest(ListNode *list, Vec3 *point, Vec3 *nearest) {
+    s32 best = 0x7FFFFFFF;
+    CollisionSphere *found = NULL;
+    VECTOR *foundPosition = NULL;
+    ListNode *node;
+    ListNode *next;
+
+    for (node = list->next; node != list; node = next) {
+        CollisionSphere *shape = (CollisionSphere *)node;
+
+        next = node->next;
+        if (!shape->flags.bits.disabled && shape->unk10 == 0) {
+            VECTOR position;
+            VECTOR *candidate = &position;
+            VECTOR offset;
+            s32 length;
+            s32 x, y, z;
+            s32 dx, dy, dz;
+
+            x = shape->position.vx;
+            y = shape->position.vy;
+            z = shape->position.vz;
+            position.vx = x;
+            position.vy = y;
+            position.vz = z;
+            dx = point->vx;
+            dy = point->vy;
+            dz = point->vz;
+            dx -= x;
+            dy -= y;
+            dz -= z;
+            offset.vx = dx;
+            offset.vy = dy;
+            offset.vz = dz;
+            length = vecGetLength(&offset);
+            if (length < best) {
+                found = shape;
+                best = length;
+                foundPosition = candidate;
+            }
+        }
+    }
+    if (found != NULL) {
+        s32 x = foundPosition->vx;
+        s32 y = foundPosition->vy;
+        s32 z = foundPosition->vz;
+
+        nearest->vx = x;
+        nearest->vy = y;
+        nearest->vz = z;
+    }
+    return found;
+}
 
 /* Calls the virtual method at 0x18 of every CollisionSphere of list with arg. */
 void shapeListDraw(ListNode *list, s32 arg) {

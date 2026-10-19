@@ -3,6 +3,8 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/prim/alloc_poly_ft4.h"
+#include "engine/math/matrix.h"
 #include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 #include "engine/system/memory.h"
@@ -11,8 +13,8 @@
 
 struct ItemSpawner *ItemSpawner_init(struct ItemSpawner *this, Fight *scene, void *spawnPoints, s32 arg3);
 Unk800C3CFC *func_800CAEF0(Unk800C3CFC *this, Vec3 *pos, s32 arg2, s32 arg3);
-Entity *Item_init(Entity *this, struct ItemSpawner *arg1, s32 arg2, Fight *arg3, s32 arg4, Vec3 *arg5,
-                      s32 arg6);
+Entity *Item_init(Entity *entity, struct ItemSpawner *spawner, s32 slot, Fight *fight, s32 kind, Vec3 *position,
+                  s32 life);
 struct ItemPopup *ItemPopup_init(struct ItemPopup *this, Fighter *fighter, s32 itemKind);
 struct ItemEffectIcon *ItemEffectIcon_init(struct ItemEffectIcon *this, Fighter *fighter, s32 itemKind);
 struct Unk800CAACC *func_800CAACC(struct Unk800CAACC *this, Fighter *fighter, s32 arg2, s32 arg3, s32 arg4,
@@ -26,6 +28,7 @@ extern EntityVtable D_8006DAF0;
 extern EntityVtable D_8006DA90;
 extern EntityVtable D_8006DB20;
 extern VtableEntry ITEM_HIT_LISTENER_VTABLE[];
+extern EntityVtable ITEM_VTABLE;
 extern EntityVtable ITEM_SPAWNER_VTABLE;
 
 /* The item an ItemHitListener forwards to, seen as Item_callTouch sees it: its entity's virtual table (at 0x14)
@@ -56,26 +59,32 @@ typedef struct Item {
     /* 0x68 */ s32 kind;     /* ITEM_KIND_POOLS resolved (resolveItemKind): its effect (Item_giveTo) */
     /* 0x6C */ Vec3 position;
     /* 0x78 */ u8 unk78[0x7C - 0x78];
-    /* 0x7C */ Vec3 velocity; /* added to the position each frame (func_800C8B0C) */
+    /* 0x7C */ Vec3 velocity; /* added to the position each frame (Item_move) */
     /* 0x88 */ s32 velocityPad;
     /* 0x8C */ s32 slot;     /* its slot of ITEM_SLOTS (ItemSpawner_removeItem) */
-    /* 0x90 */ u8 unk90[0xA4 - 0x90];
+    /* 0x90 */ s32 turned; /* GAME_STATE.arena is 2, the arena turned by Fight.unk258 (Item_init) */
+    /* 0x94 */ VECTOR turnedPosition; /* the position in the turned arena: rotated back by its angle when turned,
+                                       * else the position (Item_init) */
     /* 0xA4 */ void *spawner; /* the ItemSpawner it came from, or NULL (ItemSpawner_addItem) */
-    /* 0xA8 */ u8 unkA8[0xAC - 0xA8];
+    /* 0xA8 */ Fight *fight;
     /* 0xAC */ s32 life;     /* frames; the item box's opening adds 150 */
-    /* 0xB0 */ s32 unkB0;
-    /* 0xB4 */ s32 unkB4;
+    /* 0xB0 */ s32 partDelay; /* frames until its part is enabled again (Item_tick) */
+    /* 0xB4 */ s32 expiring;  /* set once age passes life: it shrinks away (Item_tick) */
     /* 0xB8 */ s32 unkB8;
-    /* 0xBC */ u8 unkBC[0xC4 - 0xBC];
+    /* 0xBC */ s32 scale;     /* the draw scale: grows to ONE, then shrinks to 0 while expiring (Item_tick) */
+    /* 0xC0 */ s32 age;       /* frames */
 } Item;
 
 void func_800C9140(Item *this, s32 arg);
 void func_800C9288(Item *this, s32 arg);
+s32 Item_hitsMap(Item *this);
+void Item_clampToArena(Item *this);
 
 /* the destructor of Item, the entity class others derive from */
 void Item_destroy(Item *this, s32 flags);
 void Item_callTouch(Unk800C8DFC *object, s32 arg);
-void Item_tick(void *this);
+void Item_tick(Item *this);
+void Item_move(Item *this);
 void Item_syncSlot(Item *this);
 
 /* A slot of ITEM_SLOTS: where an item of the spawner is. */
@@ -111,13 +120,13 @@ typedef struct ItemSpawner {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Fight *scene;
     /* 0x1C */ ItemSpawnPoint *spawnPoints;
-    /* 0x20 */ s32 unk20;           /* ItemSpawner_init's last argument (st04 passes 2) */
+    /* 0x20 */ s32 maxItems;        /* how many items may be out at once (st04 passes 2) */
     /* 0x24 */ ItemSlots *slots;
     /* 0x28 */ s32 spawnPointCount; /* ItemSpawner_countSpawnPoints */
-    /* 0x2C */ s32 unk2C;
+    /* 0x2C */ s32 nextPoint;       /* where ItemSpawner_tick looks for a free slot first */
     /* 0x30 */ s32 spawnTimer;      /* 90 from ItemSpawner_init and ItemSpawner_removeItem */
     /* 0x34 */ s32 healCooldown;    /* 300 at first, 600 after a healing item */
-    /* 0x38 */ s32 unk38;
+    /* 0x38 */ s32 frames;          /* counted up while the round goes on */
 } ItemSpawner; /* size 0x3C */
 
 /* Returns ITEM_SLOTS. */
@@ -127,11 +136,11 @@ ItemSlots *getItemSlots(void) {
 
 /* Creates the stage's item spawner (0x3C bytes) with its spawn points and adds it to the fight's stage entities
  * (the stages call it with a list of their .data). */
-void createItemSpawner(Fight *this, void *spawnPoints, s32 arg2) {
+void createItemSpawner(Fight *this, void *spawnPoints, s32 maxItems) {
     Entity *child = allocEntityMemory(0x3C);
 
     if (child != NULL) {
-        ItemSpawner_init(entityOperatorNewAt(0x3C, child), this, spawnPoints, arg2);
+        ItemSpawner_init(entityOperatorNewAt(0x3C, child), this, spawnPoints, maxItems);
     }
     Fight_addStageEntity(this, child);
 }
@@ -492,7 +501,7 @@ void ItemSpawner_countSpawnPoints(ItemSpawner *this);
 /* Constructs the item spawner of scene with its spawn points: empties ITEM_SLOTS, then counts the points. The
  * match depends on the table read into a local after the count is cleared and on the slots cleared from the
  * last. */
-ItemSpawner *ItemSpawner_init(ItemSpawner *this, Fight *scene, void *spawnPoints, s32 arg3) {
+ItemSpawner *ItemSpawner_init(ItemSpawner *this, Fight *scene, void *spawnPoints, s32 maxItems) {
     ItemSlots *table;
     s32 i;
 
@@ -501,11 +510,11 @@ ItemSpawner *ItemSpawner_init(ItemSpawner *this, Fight *scene, void *spawnPoints
     this->slots = &ITEM_SLOTS;
     this->scene = scene;
     this->spawnPoints = spawnPoints;
-    this->unk20 = arg3;
-    this->unk2C = 0;
+    this->maxItems = maxItems;
+    this->nextPoint = 0;
     this->spawnTimer = 90;
     this->healCooldown = 300;
-    this->unk38 = 0;
+    this->frames = 0;
     ITEM_SLOTS.count = 0;
     table = this->slots;
     for (i = 15; i >= 0; i--) {
@@ -524,7 +533,36 @@ void ItemSpawner_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", ItemSpawner_tick);
+void ItemSpawner_spawnItem(ItemSpawner *this, s32 index);
+
+/* Each frame of the round: the healing cooldown runs down; when the spawn timer is out and fewer than maxItems
+ * items are out, spawns one at the next spawn point with a free slot (from nextPoint, back to 0 past the last);
+ * else the timer runs down. */
+void ItemSpawner_tick(ItemSpawner *this) {
+    if (Fight_isRoundOver(this->scene)) {
+        return;
+    }
+    if (this->healCooldown != 0) {
+        this->healCooldown--;
+    }
+    if (this->spawnTimer == 0) {
+        if (this->slots->count < this->maxItems) {
+            while (this->nextPoint < this->spawnPointCount) {
+                if (this->slots->slots[this->nextPoint].flags == 0) {
+                    ItemSpawner_spawnItem(this, this->nextPoint++);
+                    break;
+                }
+                this->nextPoint++;
+            }
+            if (this->nextPoint >= this->spawnPointCount) {
+                this->nextPoint = 0;
+            }
+        }
+    } else {
+        this->spawnTimer--;
+    }
+    this->frames++;
+}
 
 /* Counts the spawn points, up to the one whose first halfword is -1. */
 void ItemSpawner_countSpawnPoints(ItemSpawner *this) {
@@ -639,9 +677,72 @@ void ItemHitListener_onHit(ItemHitListener *this, s32 arg) {
     Item_callTouch(this->item, arg);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", Item_init);
+/* Inverts the rigid m in place and returns it. */
+static inline MATRIX *invertRigid(MATRIX *m) {
+    matrixInvertRigid(m, m);
+    return m;
+}
 
-extern EntityVtable ITEM_VTABLE;
+/* Constructs an item of kind at position for life frames, from slot of spawner (or none): its hit sphere (radius
+ * 0xA0) owned by its listener, still and unscaled, its position in the turned arena (arena 2, turned by the
+ * fight's unk258) or the position itself, then puts the sphere among the fight's stage shapes, tells the spawner,
+ * and plays sound 0x4F. The match depends on each position copy reading the three words first (the else arm's in
+ * locals of its own) and on the inverse taken through invertRigid (the game keeps &m in a saved register). */
+Entity *Item_init(Entity *entity, ItemSpawner *spawner, s32 slot, Fight *fight, s32 kind, Vec3 *position,
+                  s32 life) {
+    Item *this = (Item *)entity;
+    s32 x, y, z;
+
+    entityInit(&this->entity, ENTITY_KIND_ITEM);
+    this->entity.vtable = &ITEM_VTABLE;
+    CollisionSphere_init(&this->part, position, 0xA0, &this->listener);
+    this->listener.base.vtable = ITEM_HIT_LISTENER_VTABLE;
+    this->listener.item = (Unk800C8DFC *)this;
+    this->part.entity = &this->entity;
+    this->spawner = spawner;
+    this->slot = slot;
+    this->fight = fight;
+    this->kind = kind;
+    this->part.flags.bits.disabled = 1;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->life = life;
+    this->velocity.vx = 0;
+    this->velocity.vy = 0;
+    this->velocity.vz = 0;
+    this->velocityPad = 0;
+    this->partDelay = 30;
+    this->expiring = 0;
+    this->unkB8 = 0;
+    this->scale = 0;
+    this->age = 0;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->turned = GAME_STATE.arena == 2;
+    if (this->turned) {
+        MATRIX m;
+
+        matrixInitRotationZ(&m, fight->unk258);
+        matrixTransformVec(invertRigid(&m), &this->turnedPosition, (VECTOR *)position);
+    } else {
+        s32 turnedX = position->vx;
+        s32 turnedY = position->vy;
+        s32 turnedZ = position->vz;
+
+        this->turnedPosition.vx = turnedX;
+        this->turnedPosition.vy = turnedY;
+        this->turnedPosition.vz = turnedZ;
+    }
+    Fight_addStageShape(fight, &this->part.link);
+    if (this->spawner != NULL) {
+        ItemSpawner_addItem(this->spawner, this);
+    }
+    soundControlPlaySound(&SOUND_CONTROL, 0x4F, 0);
+    return &this->entity;
+}
+
 
 /* The destructor of the entity class of vtable ITEM_VTABLE, which Item_init installs. */
 void Item_destroy(Item *this, s32 flags) {
@@ -663,9 +764,95 @@ void Item_destroy(Item *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", Item_tick);
+/* The tick of an item: its part is enabled again once partDelay runs out; it moves, its part follows it, and its
+ * velocity in x and y halves (-1 stops at 0). Past its life it starts expiring: its scale grows to ONE until then
+ * and shrinks by 0x200 after, and at 0 the item leaves its spawner and is deleted; otherwise its slot follows it
+ * and it ages. */
+void Item_tick(Item *this) {
+    if (this->partDelay != 0 && --this->partDelay == 0) {
+        this->part.flags.bits.disabled = 0;
+    }
+    Item_move(this);
+    this->part.position.vx = this->position.vx;
+    this->part.position.vy = this->position.vy;
+    this->part.position.vz = this->position.vz;
+    this->velocity.vx >>= 1;
+    if (this->velocity.vx == -1) {
+        this->velocity.vx = 0;
+    }
+    this->velocity.vy >>= 1;
+    if (this->velocity.vy == -1) {
+        this->velocity.vy = 0;
+    }
+    if (this->age > this->life) {
+        this->expiring = 1;
+    }
+    if (!this->expiring) {
+        this->scale += 0x100;
+        if (this->scale > ONE) {
+            this->scale = ONE;
+        }
+    } else {
+        this->scale -= 0x200;
+        if (this->scale <= 0) {
+            if (this->spawner != NULL) {
+                ItemSpawner_removeItem(this->spawner, this);
+            }
+            entityDelete(&this->entity);
+            return;
+        }
+    }
+    Item_syncSlot(this);
+    this->age++;
+}
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8B0C);
+/* Moves the item by its velocity. In the turned arena it moves from turnedPosition (turned into the position, moved,
+ * turned back) and is kept inside only while the angle is a multiple of 0x400; elsewhere it moves unless the step
+ * hits the map (Item_hitsMap), and is kept inside (Item_clampToArena). Its position is a VECTOR here (the word after
+ * it is its pad). */
+void Item_move(Item *this) {
+    if (!this->turned) {
+        if (!Item_hitsMap(this)) {
+            s32 x, y, z;
+
+            x = this->position.vx;
+            y = this->position.vy;
+            z = this->position.vz;
+            x += this->velocity.vx;
+            y += this->velocity.vy;
+            z += this->velocity.vz;
+            this->position.vx = x;
+            this->position.vy = y;
+            this->position.vz = z;
+            Item_clampToArena(this);
+        }
+    } else {
+        MATRIX rotation;
+        MATRIX inverse;
+        s32 angle = this->fight->unk258;
+
+        matrixInitRotationZ(&rotation, angle);
+        matrixInvertRigid(&inverse, &rotation);
+        matrixTransformVec(&rotation, (VECTOR *)&this->position, &this->turnedPosition);
+        {
+            s32 x, y, z;
+
+            x = this->position.vx;
+            y = this->position.vy;
+            z = this->position.vz;
+            x += this->velocity.vx;
+            y += this->velocity.vy;
+            z += this->velocity.vz;
+            this->position.vx = x;
+            this->position.vy = y;
+            this->position.vz = z;
+        }
+        matrixTransformVec(&inverse, &this->turnedPosition, (VECTOR *)&this->position);
+        if ((angle & 0x3FF) == 0) {
+            Item_clampToArena(this);
+        }
+    }
+}
 
 /* Whether the item's next step hits the map: a ray from its position to the position plus its velocity, reaching
  * 0xB3 further ahead in x; 0 when it does not move in x or y. The match depends on the position's y and z read
@@ -688,7 +875,43 @@ s32 Item_hitsMap(Item *this) {
     return castMapRay(&to, &this->position);
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800C8CD0);
+/* Keeps the item inside its arena's walls: arena 1 has a wall on the left, arena 2 (turned) a square of 0x84C on
+ * each side of its centre, arena 5 a ledge on the left (between heights -0x998 and -0x881) and a wall on the right
+ * below -0x300. The match depends on the ledge's two height tests in nested ifs: in one && chain, fold merges them
+ * into one unsigned range test. */
+void Item_clampToArena(Item *this) {
+    switch (this->fight->arena) {
+    case 1:
+        if (this->position.vx < -0xD80) {
+            this->position.vx = -0xD80;
+        }
+        break;
+    case 2:
+        if (this->turnedPosition.vx < -0x84C) {
+            this->turnedPosition.vx = -0x84C;
+        }
+        if (this->turnedPosition.vx > 0x84C) {
+            this->turnedPosition.vx = 0x84C;
+        }
+        if (this->turnedPosition.vy < -0x84C) {
+            this->turnedPosition.vy = -0x84C;
+        }
+        if (this->turnedPosition.vy > 0x84C) {
+            this->turnedPosition.vy = 0x84C;
+        }
+        break;
+    case 5:
+        if (this->position.vy >= -0x998) {
+            if (this->position.vy < -0x880 && this->position.vx < -0x933) {
+                this->position.vx = -0x933;
+            }
+        }
+        if (this->position.vy >= -0x2FF && this->position.vx > 0x880) {
+            this->position.vx = 0x880;
+        }
+        break;
+    }
+}
 
 /* Runs the item's touch slot (0x20, Item_touch) with arg. */
 void Item_callTouch(Unk800C8DFC *object, s32 arg) {
@@ -1030,7 +1253,7 @@ void func_800C9B5C(Unk800C9AF4 *this) {
     if (this->unkC4 && this->base.unkB8) {
         this->base.unkB8 = (this->base.unkB8 + 0x200) & 0xFFF;
     }
-    Item_tick(this);
+    Item_tick(&this->base);
 }
 
 void Item_touch(Item *this, CollisionSphere *arg);
@@ -1040,7 +1263,7 @@ void func_800C9C58(Unk800C9AF4 *this);
  * item's, nor a fighter's that func_800C8F7C refuses, opens it (func_800C9C58); once open, Item_touch when 0xB8
  * is 0. */
 void func_800C9BA4(Unk800C9AF4 *this, CollisionSphere *arg) {
-    if (this->unkC4 == 0 && this->base.unkB4 == 0) {
+    if (this->unkC4 == 0 && this->base.expiring == 0) {
         /* The match depends on a switch over the entity kinds with three cases: the game's compare tree has
          * 0x20000 at its root (tests ==, then > to the default arm, then 0x10000), which gcc builds only from a
          * third case above 0x20000 that shares the default arm. The kinds above it are ENTITY_KIND_FIGHTER_OBJECT
@@ -1065,12 +1288,12 @@ void func_800C9BA4(Unk800C9AF4 *this, CollisionSphere *arg) {
     }
 }
 
-/* Opens the item box: sets 0xC4, disables its part, 0xB0 to 30, 150 more frames of life, and clears its
+/* Opens the item box: sets 0xC4, disables its part for 30 frames, 150 more frames of life, and clears its
  * slot's closed bit (Item_clearSlotFlags with 2). */
 void func_800C9C58(Unk800C9AF4 *this) {
     this->unkC4 = 1;
-    this->base.unkB0 = 30;
-    this->base.part.flags |= COLLISION_SHAPE_DISABLED;
+    this->base.partDelay = 30;
+    this->base.part.flags.bits.disabled = 1;
     this->base.life += 150;
     Item_clearSlotFlags(&this->base, 2);
 }
@@ -1096,9 +1319,8 @@ typedef struct Unk800C9D0CItem {
 } Unk800C9D0CItem;
 
 typedef struct Unk800C9D0C {
-    /* 0x00 */ Entity entity;
-    /* 0x18 */ u8 unk18[0xC4 - 0x18];
-    /* 0xC4 */ s32 unkC4;
+    /* 0x00 */ Item base;
+    /* 0xC4 */ s32 unkC4; /* 3 once a fighter set it off (func_800CA028) */
     /* 0xC8 */ Unk800C9D0CItem unkC8[4];
 } Unk800C9D0C;
 
@@ -1108,8 +1330,8 @@ Unk800C9D0C *func_800C9D0C(Unk800C9D0C *this, ItemSpawner *arg1, s32 arg2, Fight
                            s32 arg6) {
     s32 i;
 
-    Item_init(&this->entity, arg1, arg2, arg3, arg4, arg5, arg6);
-    this->entity.vtable = &D_8006DA90;
+    Item_init(&this->base.entity, arg1, arg2, arg3, arg4, arg5, arg6);
+    this->base.entity.vtable = &D_8006DA90;
     this->unkC4 = 0;
     /* The match depends on the loop running from the last record (the game clears 0x134 first). */
     for (i = 3; i >= 0; i--) {
@@ -1120,7 +1342,57 @@ Unk800C9D0C *func_800C9D0C(Unk800C9D0C *this, ItemSpawner *arg1, s32 arg2, Fight
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800C9D74);
 
-INCLUDE_ASM("game/nonmatchings/game_0i", func_800CA028);
+/* The trap item's touch (slot 0x20 of D_8006DA90). Before it goes off (0xC4 clear): another item's touch does
+ * nothing, a fighter's knocks it away when func_800C8F7C says so and else sets it off, anything else stops it
+ * (func_800C8F34). Once set off, a fighter's touch knocks that fighter down away from its facing (a hit of level 1,
+ * damage 0x1800, pushed by its mass), and every touch disables the item's part. The switches have Item_touch's
+ * three-case tree. The match depends on the backward push kept as an s64 across Fighter_getFacing and on both push
+ * components computed into locals before the stores. */
+void func_800CA028(Unk800C9D0C *this, CollisionSphere *sphere) {
+    if (this->unkC4 == 0) {
+        switch (getToucherKind(this, sphere)) {
+        case ENTITY_KIND_ITEM:
+            break;
+        case ENTITY_KIND_FIGHTER: {
+            Fighter *fighter = (Fighter *)getHitFighter(sphere);
+
+            if (func_800C8F7C(&this->base, &fighter->entity)) {
+                Item_knockAway(&this->base, fighter);
+            } else {
+                this->unkC4 = 3;
+            }
+            break;
+        }
+        case ENTITY_KIND_FIGHTER_OBJECT:
+        default:
+            func_800C8F34(&this->base);
+            break;
+        }
+        return;
+    }
+    switch (getToucherKind(this, sphere)) {
+    case ENTITY_KIND_ITEM:
+        break;
+    case ENTITY_KIND_FIGHTER: {
+        Fighter *fighter = (Fighter *)getHitFighter(sphere);
+        s64 back = ((s64)fighter->mass * -0x1C70) >> 16;
+        s32 x = (s32)back * Fighter_getFacing(fighter);
+        s32 y = -(s32)(((s64)fighter->mass * 0x4718) >> 16);
+        Vec3 push;
+
+        push.vx = x;
+        push.vy = y;
+        push.vz = 0;
+        Fighter_takeHit(fighter, HIT_FLAG_KNOCK_DOWN | 0x1001800, &push, 0);
+        this->unkC4 = 3;
+        break;
+    }
+    case ENTITY_KIND_FIGHTER_OBJECT:
+    default:
+        break;
+    }
+    this->base.part.flags.bits.disabled = 1;
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0i", func_800CA1B4);
 
@@ -1177,7 +1449,33 @@ void ItemPopup_tick(ItemPopup *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0i", ItemPopup_draw);
+/* The popup's draw, three slots into the camera's last drawn ones: the item's 24x24 icon (clut row 0x78 + kind)
+ * drawn 48x48 around (x, y - 6), then its 64x96 frame (clut row 0x85) around (x, y). */
+void ItemPopup_draw(ItemPopup *this, Camera *camera) {
+    s32 kind = this->itemKind;
+    u_long *ot = camera->ot.lastDrawn + 3;
+    s32 clutY = kind + 0x78;
+    u8 u = (kind & 3) * 24 + 0xA0;
+    u8 v = (kind / 4) * 24;
+    s32 x = this->x;
+    s32 y = this->y;
+    POLY_FT4 *poly = allocPolyFT4();
+
+    setRGB0(poly, 0x80, 0x80, 0x80);
+    setXYWH(poly, x - 0x18, y - 0x1E, 0x30, 0x30);
+    setUVWH(poly, u, v, 23, 23);
+    poly->tpage = 0xF;
+    poly->clut = getClut(0x3F0, clutY);
+    AddPrim(ot, poly);
+
+    poly = allocPolyFT4();
+    setRGB0(poly, 0x80, 0x80, 0x80);
+    setXYWH(poly, x - 0x20, y - 0x30, 0x40, 0x60);
+    setUVWH(poly, 0xA0, 0x48, 0x1F, 0x2F);
+    poly->tpage = 0xF;
+    poly->clut = getClut(0x3F0, 0x85);
+    AddPrim(ot, poly);
+}
 
 /* The HUD icon of a fighter's item effect (ItemEffectIcon_init, virtual table ITEM_EFFECT_ICON_VTABLE): at
  * (0x2C or 0x114, 0xAC) by the side of the fighter it keeps the handle of, while that fighter lives. */
@@ -1187,7 +1485,7 @@ typedef struct ItemEffectIcon {
     /* 0x1C */ s32 itemKind;
     /* 0x20 */ s16 x;
     /* 0x22 */ s16 y;
-    /* 0x24 */ s32 unk24;
+    /* 0x24 */ s32 halfSize;   /* the icon is twice it wide and high (ItemEffectIcon_draw) */
     /* 0x28 */ s32 effectKind; /* the fighter's itemEffect.kind */
     /* 0x2C */ s32 frame;
 } ItemEffectIcon;
@@ -1207,7 +1505,7 @@ ItemEffectIcon *ItemEffectIcon_init(ItemEffectIcon *this, Fighter *fighter, s32 
     }
     this->x = x;
     this->y = 0xAC;
-    this->unk24 = 0;
+    this->halfSize = 0;
     this->effectKind = fighter->itemEffect.kind;
     this->frame = 0;
     return this;
@@ -1224,7 +1522,48 @@ void ItemEffectIcon_destroy(Entity *this, s32 flags) {
 
 INCLUDE_ASM("game/nonmatchings/game_0i", ItemEffectIcon_tick);
 
-INCLUDE_ASM("game/nonmatchings/game_0i", ItemEffectIcon_draw);
+/* Draws the icon while its fighter lives: a square of twice halfSize around (x, y), the item kind's 24x24 cell of
+ * the icon sheet (4 a row from u 0xA0) with the clut of row 0x78 + kind, in the camera's last drawn slot. */
+void ItemEffectIcon_draw(ItemEffectIcon *this, Camera *camera) {
+    POLY_FT4 *poly;
+    u_long *ot;
+    s32 kind;
+    s32 size;
+    s32 clutY;
+    u8 u;
+    u8 v;
+
+    if (getEntityByHandle(this->fighterHandle) == NULL) {
+        return;
+    }
+    kind = this->itemKind;
+    size = this->halfSize * 2;
+    ot = camera->ot.lastDrawn;
+    clutY = kind + 0x78;
+    u = (kind & 3) * 24 + 0xA0;
+    v = (kind / 4) * 24;
+    poly = allocPolyFT4();
+    setRGB0(poly, 0x80, 0x80, 0x80);
+    poly->x0 = this->x - this->halfSize;
+    poly->y0 = this->y - this->halfSize;
+    poly->x1 = this->x - this->halfSize + size;
+    poly->y1 = this->y - this->halfSize;
+    poly->x2 = this->x - this->halfSize;
+    poly->y2 = this->y - this->halfSize + size;
+    poly->x3 = this->x - this->halfSize + size;
+    poly->y3 = this->y - this->halfSize + size;
+    poly->u0 = u;
+    poly->v0 = v;
+    poly->u1 = u + 23;
+    poly->v1 = v;
+    poly->u2 = u;
+    poly->v2 = v + 23;
+    poly->u3 = u + 23;
+    poly->v3 = v + 23;
+    poly->tpage = 0xF;
+    poly->clut = getClut(0x3F0, clutY);
+    AddPrim(ot, poly);
+}
 
 /* The entity class of virtual table D_8006DA18 (func_800CAACC): follows the point (func_8007A650) of the fighter it
  * keeps the handle of for 8 frames, while 0x3C and 0x40 move in opposite directions (which by unk1C). */
@@ -1377,7 +1716,7 @@ typedef struct Unk800CB338 {
     /* 0x5C */ s32 angle;
 } Unk800CB338;
 
-extern u16 ITEM_PROJECTILE_PIECE_ANIMS[][10];
+extern SpriteAnimRow ITEM_PROJECTILE_PIECE_ANIMS[];
 extern EntityVtable D_8006D980;
 
 INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_PROJECTILE_PIECE_ANIMS);
@@ -1386,9 +1725,9 @@ INCLUDE_RODATA("game/nonmatchings/game_0i", ITEM_PROJECTILE_PIECE_ANIMS);
  * color 0x404040. */
 Unk800CB338 *func_800CB338(Unk800CB338 *this, VECTOR *position, VECTOR *velocity, s32 index, s32 angle) {
     /* The match depends on the table's address taken into a local first (the game computes it before index * 20). */
-    u16 (*frames)[10] = ITEM_PROJECTILE_PIECE_ANIMS;
+    SpriteAnimRow *frames = ITEM_PROJECTILE_PIECE_ANIMS;
 
-    Particle_init(&this->base, frames[index], position, velocity, 0x80, 0x404040, 0);
+    Particle_init(&this->base, &frames[index], position, velocity, 0x80, 0x404040, 0);
     this->base.entity.vtable = &D_8006D980;
     this->index = index;
     this->angle = angle;

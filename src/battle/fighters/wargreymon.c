@@ -5,6 +5,10 @@
 #include "common.h"
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/math/sin_cos.h"
+#include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 
 void WarGreymon_spawnAttackTrails(Fighter *this, s32 kind, s32 arg2, s32 arg3, s32 rgb);
@@ -18,11 +22,6 @@ extern EntityVtable WARGREYMON_VTABLE;
 /* 4 bytes func_800BE39C copies to 0x94 of its entity */
 extern CVECTOR D_8006C964;
 
-/* The class func_800BE39C constructs (virtual table D_8006C9AC, and D_8006C98C for its base at 0x18),
- * derived from func_800A926C's. */
-typedef struct Unk800BE39C {
-    /* 0x00 */ Unk800A9944 base;
-} Unk800BE39C;
 
 extern VtableEntry D_8006C98C[];
 extern EntityVtable D_8006C9AC;
@@ -128,9 +127,62 @@ INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C844);
 
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymon_throw);
 
-INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C8A4);
+/* The offset of point 16 the throw holds the opponent at. */
+extern VECTOR WARGREYMON_THROW_GRIP_OFFSET;
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BB5F8);
+INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", WARGREYMON_THROW_GRIP_OFFSET);
+
+/* The throw's hold (WarGreymon_throw): turns the opponent to face the fighter and puts it at point 16, raised by its
+ * height, with no force or velocity, its model moved there at once. When the map is in the way across its width
+ * (castMapRay), the fighter steps back. */
+void WarGreymon_holdOpponent(Fighter *this) {
+    VECTOR offset = WARGREYMON_THROW_GRIP_OFFSET;
+    Fighter *opponent;
+    s32 height;
+    s32 facing;
+    Vec3 grip;
+    Vec3 from;
+    Vec3 to;
+    Vec3 *position;
+    s32 x, y, z;
+    Model *model;
+
+    opponent = Fighter_getOpponent(this);
+    height = Fighter_getParams(opponent)->height;
+    facing = Fighter_getFacing(this);
+    if (facing > 0) {
+        Fighter_faceLeft(opponent, 0);
+    } else {
+        Fighter_faceRight(opponent, 0);
+    }
+    Fighter_getNodePosition(this, (VECTOR *)&grip, 16, &offset);
+    grip.vz = 0;
+    grip.vy += height;
+    /* The match depends on the three words read before any is stored, as vecCopy does. */
+    position = Fighter_getPosition(opponent, &from);
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    to.vy = y;
+    to.vz = z;
+    from.vx -= height * facing;
+    to.vx = x + height * facing;
+    if (castMapRay(&to, &from)) {
+        Fighter_accelerateTo(this, -(Fighter_getFacing(this) * 0x71C));
+    }
+    Fighter_setPosition(opponent, &grip);
+    opponent->force.vx = 0;
+    opponent->force.vy = 0;
+    opponent->force.vz = 0;
+    opponent->forcePad = 0;
+    opponent->velocity.vx = 0;
+    opponent->velocity.vy = 0;
+    opponent->velocity.vz = 0;
+    opponent->velocityPad = 0;
+    model = opponent->model;
+    model->group.object.transform.valid = 0;
+    Fighter_getOpponentPosition(this, (Vec3 *)model->group.object.transform.local.m.t);
+}
 
 /* The throw's effect: it throws the opponent of a character (Fighter_getOpponent) toward a side. */
 typedef struct WarGreymonThrowEffect {
@@ -164,7 +216,46 @@ WarGreymonThrowEffect *WarGreymonThrowEffect_init(WarGreymonThrowEffect *this, F
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymonThrowEffect_tick);
+/* Follows the thrown opponent: while it falls less than 0x800 a tick its height is kept; once on the ground it is
+ * stopped where it lies, hit with velocity (facing * 0x4718, -0x2AA8, 0) and raises dust both ways. The effect ends
+ * then, or when the opponent is gone or falls 0x800 or more. */
+void WarGreymonThrowEffect_tick(WarGreymonThrowEffect *this, s32 arg) {
+    Fighter *opponent;
+    VECTOR position;
+
+    opponent = (Fighter *)getEntityByHandle(this->handle);
+    if (opponent != NULL) {
+        /* position is a VECTOR (the velocity below is copied into it whole); its first three words are a Vec3 */
+        Fighter_getPosition(opponent, (Vec3 *)&position);
+        if (position.vy - this->y >= -0x800) {
+            this->y = position.vy;
+            if (!Fighter_isOnGround(opponent)) {
+                return;
+            }
+            {
+                VECTOR velocity;
+
+                memset(&velocity, 0, sizeof(velocity));
+                velocity.vx = this->facing * 0x4718;
+                velocity.vy = -0x2AA8;
+                position = velocity;
+            }
+            opponent->position.vz = opponent->lastPosition.vz = 0;
+            opponent->velocity.vx = 0;
+            opponent->velocity.vy = 0;
+            opponent->velocity.vz = 0;
+            opponent->velocityPad = 0;
+            opponent->force.vx = 0;
+            opponent->force.vy = 0;
+            opponent->force.vz = 0;
+            opponent->forcePad = 0;
+            Fighter_takeHit(opponent, 0x408C4000, (Vec3 *)&position, 0);
+            Fighter_spawnDust(opponent, 1, 0x60, 3);
+            Fighter_spawnDust(opponent, -1, 0x60, 3);
+        }
+    }
+    entityDelete(&this->entity);
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C8B4);
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C8FC);
@@ -176,10 +267,10 @@ void func_800BC0E0(WarGreymon *this, s32 arg);
 void func_800BC13C(WarGreymon *this);
 void func_800BC258(WarGreymon *this);
 void func_800BC424(WarGreymon *this, s32 angle);
-s32 func_800BC444(WarGreymon *this, s32 *angle, s32 from);
+s32 WarGreymon_readAimAngle(WarGreymon *this, s32 *angle, s32 from);
 
 /* Special move 2: frame 0 the voice (its own for CHARACTER_WARGREYMON), the move started with func_800BC0CC(2) and
- * func_800BC0E0(0x18), and the angle func_800BC444 gives, kept when within 0x400 of straight ahead; then by its frame
+ * func_800BC0E0(0x18), and the angle WarGreymon_readAimAngle gives, kept when within 0x400 of straight ahead; then by its frame
  * count at 0x4C0 it turns toward the angle (frame 8), finishes (frame 9), cancels the velocity (frames 0-8), looks
  * again from frame 0x11 and runs func_800BC258 from frame 10. */
 void WarGreymon_special2(WarGreymon *this, s32 frame) {
@@ -200,7 +291,7 @@ void WarGreymon_special2(WarGreymon *this, s32 frame) {
         facing = Fighter_getFacing(&this->base);
         /* The match depends on shifting the facing at each use: the shift then comes after the
          * other arguments */
-        func_800BC444(this, &angle, facing << 10);
+        WarGreymon_readAimAngle(this, &angle, facing << 10);
         this->unk4B8 = abs(angle) <= 0x400 ? angle : facing << 10;
     }
     switch (this->unk4C0) {
@@ -219,7 +310,7 @@ void WarGreymon_special2(WarGreymon *this, s32 frame) {
         this->base.force.vz = -this->base.velocity.vz;
         this->base.forcePad = 0;
     }
-    if (this->unk4C0 >= 0x11 && func_800BC444(this, &target, this->base.rotation.vz)) {
+    if (this->unk4C0 >= 0x11 && WarGreymon_readAimAngle(this, &target, this->base.rotation.vz)) {
         this->unk4B0 = 0;
         this->unk4B8 = target;
         func_800BC0E0(this, 0x19);
@@ -234,7 +325,7 @@ void WarGreymon_special2(WarGreymon *this, s32 frame) {
 }
 
 /* Special move 2 in the air: WarGreymon_special2 with func_800BC0E0(0x19) and 0x4B0 cleared first, keeping
- * func_800BC444's angle as it is, and frames 3, 11 and 4 for 9, 0x11 and 10. */
+ * WarGreymon_readAimAngle's angle as it is, and frames 3, 11 and 4 for 9, 0x11 and 10. */
 void WarGreymon_airSpecial2(WarGreymon *this, s32 frame) {
     s32 angle;
     s32 target;
@@ -250,7 +341,7 @@ void WarGreymon_airSpecial2(WarGreymon *this, s32 frame) {
         func_800BC0CC(this, 2);
         func_800BC0E0(this, 0x19);
         angle = Fighter_getFacing(&this->base) << 10;
-        func_800BC444(this, &angle, angle);
+        WarGreymon_readAimAngle(this, &angle, angle);
         this->unk4B8 = angle;
     }
     switch (this->unk4C0) {
@@ -269,7 +360,7 @@ void WarGreymon_airSpecial2(WarGreymon *this, s32 frame) {
         this->base.force.vz = -this->base.velocity.vz;
         this->base.forcePad = 0;
     }
-    if (this->unk4C0 >= 11 && func_800BC444(this, &target, this->base.rotation.vz)) {
+    if (this->unk4C0 >= 11 && WarGreymon_readAimAngle(this, &target, this->base.rotation.vz)) {
         this->unk4B0 = 0;
         this->unk4B8 = target;
         func_800BC0E0(this, 0x19);
@@ -305,7 +396,36 @@ void func_800BC0E0(WarGreymon *this, s32 clip) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BC13C);
+/* While 0x4B4 is above 0: takes one from it and launches the fighter along its target angle (0x6388 of its mass),
+ * plus a lift of 0x2AA8 of its mass while unk4B0 is set (0xE38 without), with all attack parts, its sound and
+ * func_80079B14(0x32). */
+void func_800BC13C(WarGreymon *this) {
+    s32 push;
+    s32 sin, cos;
+
+    if (this->unk4B4 > 0) {
+        push = ((s64)this->base.mass * 0x6388) >> 16;
+        this->unk4B4--;
+        sin = COS_SIN_TABLE[this->base.targetRotation.vz & 0xFFF].sin;
+        cos = COS_SIN_TABLE[this->base.targetRotation.vz & 0xFFF].cos;
+        this->base.force.vx = (push * sin) >> 12;
+        this->base.force.vy = -(push * cos) >> 12;
+        /* The match depends on the table read through the field in both lines, before any store, and on the lift
+         * written whole in each arm (cross-jumped to one multiply). */
+        if (this->unk4B0) {
+            this->base.force.vy -= ((s64)this->base.mass * 0x2AA8) >> 16;
+        } else {
+            this->base.force.vy -= ((s64)this->base.mass * 0xE38) >> 16;
+        }
+        this->base.attackParts = -1;
+        if (Fighter_getCharacter(&this->base) == CHARACTER_WARGREYMON) {
+            Fighter_playSound(&this->base, 0x108);
+        } else {
+            Fighter_playSound(&this->base, 0x11A);
+        }
+        func_80079B14(&this->base, 0x32);
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BC258);
 
@@ -327,11 +447,109 @@ void func_800BC424(WarGreymon *this, s32 angle) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BC444);
+/* While 0x4B4 is positive and triangle is pressed, sets *angle from the d-pad held (0 up, 0x200 a step clockwise, from
+ * when no direction or another mix is held) and returns 1; else returns 0. */
+s32 WarGreymon_readAimAngle(WarGreymon *this, s32 *angle, s32 from) {
+    InputHistory *input;
+    s32 held;
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymon_special3);
+    if (this->unk4B4 > 0) {
+        input = Fighter_getInput(&this->base);
+        InputHistory_setMirrored(input, 0);
+        held = InputHistory_getHeld(input);
+        if (InputHistory_getPressed(input) & PADRup) {
+            switch (held & (PAD_UP | PAD_RIGHT | PAD_DOWN | PAD_LEFT)) {
+            case PAD_UP:
+                *angle = 0;
+                break;
+            case PAD_UP | PAD_RIGHT:
+                *angle = 0x200;
+                break;
+            case PAD_RIGHT:
+                *angle = 0x400;
+                break;
+            case PAD_RIGHT | PAD_DOWN:
+                *angle = 0x600;
+                break;
+            case PAD_DOWN:
+                *angle = 0x800;
+                break;
+            case PAD_DOWN | PAD_LEFT:
+                *angle = -0x600;
+                break;
+            case PAD_LEFT:
+                *angle = -0x400;
+                break;
+            case PAD_LEFT | PAD_UP:
+                *angle = -0x200;
+                break;
+            default:
+                *angle = from;
+                break;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymon_airSpecial3);
+/* Special move 3: frame 0 the voice and the slot 0x128 hitbox at (144 forward, 144) (arg 0x2A), frame 4 a push back
+ * and up; from frame 5 a fall is stopped and half the velocity pushes against it. */
+void WarGreymon_special3(WarGreymon *this, s32 frame) {
+    Vec3 offset;
+    WarGreymonVtable *vtable;
+
+    Fighter_special3(&this->base, frame);
+    func_80079AE4(&this->base);
+    switch (frame) {
+    case 0:
+        Fighter_playVoice(&this->base, 0x10F);
+        offset.vx = Fighter_getFacing(&this->base) * 144;
+        offset.vy = 144;
+        offset.vz = 0;
+        vtable = GET_WARGREYMON_VTABLE(this);
+        vtable->unk128.func((u8 *)this + vtable->unk128.delta, &offset, 0x2A);
+        break;
+    case 4: {
+        s64 push = ((s64)this->base.mass * 0x1C70) >> 16;
+
+        this->base.force.vx -= (s32)push * Fighter_getFacing(&this->base);
+        this->base.velocity.vy = 0;
+        this->base.force.vy -= ((s64)this->base.mass * 0x71C0) >> 16;
+        break;
+    }
+    }
+    if (frame >= 5 && this->base.velocity.vy > 0) {
+        this->base.velocity.vy = 0;
+        this->base.force.vx = -this->base.velocity.vx >> 1;
+    }
+}
+
+/* Special move 3 in the air: frame 0 the voice (its own for CHARACTER_WARGREYMON) and the slot 0x128 hitbox at
+ * (144 forward, 144) (arg 0x21); a fall is stopped and a sixteenth of the velocity pushes against it. */
+void WarGreymon_airSpecial3(WarGreymon *this, s32 frame) {
+    Vec3 offset;
+    WarGreymonVtable *vtable;
+
+    Fighter_airSpecial3(&this->base, frame);
+    func_80079AE4(&this->base);
+    if (frame == 0) {
+        if (Fighter_getCharacter(&this->base) == CHARACTER_WARGREYMON) {
+            Fighter_playVoice(&this->base, 0x10F);
+        } else {
+            Fighter_playVoice(&this->base, 0x121);
+        }
+        offset.vx = Fighter_getFacing(&this->base) * 144;
+        offset.vy = 144;
+        offset.vz = 0;
+        vtable = GET_WARGREYMON_VTABLE(this);
+        vtable->unk128.func((u8 *)this + vtable->unk128.delta, &offset, 0x21);
+    }
+    if (this->base.velocity.vy > 0) {
+        this->base.velocity.vy = 0;
+        this->base.force.vx = -this->base.velocity.vx >> 4;
+    }
+}
 
 /* Creates an entity of func_800BDA50's class (0xD4 bytes) at pos with g++'s new and hands it to Fighter_addEntity, then
  * plays sound 0x109, sets unk498 to 10 and takes the level of the object at 0x238 down to 0. */
@@ -477,74 +695,156 @@ void func_800BCE1C(Unk800BCAD8 *this, s32 arg) {
     vtable->unk20.func((u8 *)this + vtable->unk20.delta, arg);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymonSpecial1Effect_init);
-
-/* The special move 1's effect: a matrix at the character's position, turned to its facing, that moves along x; 0x40
- * eases to 0x44, then 0x48 fades. */
+/* The special move 1's effect: a matrix at the character's position, turned to its facing, that moves along x; its quad
+ * grows to targetLength, then fades. */
 typedef struct WarGreymonSpecial1Effect {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ MATRIX matrix;
+    /* 0x18 */ MatrixWords matrix;
     /* 0x38 */ s32 x;      /* the translation along the matrix's x, 4 more each frame */
     /* 0x3C */ s32 facing; /* Fighter_getFacing */
-    /* 0x40 */ s32 unk40;  /* eases to unk44, by half the difference each frame */
-    /* 0x44 */ s32 unk44;  /* WarGreymonSpecial1Effect_init's third argument */
-    /* 0x48 */ s32 unk48;  /* 0x80, then 0x10 less each frame once unk4C is set */
-    /* 0x4C */ s32 unk4C;  /* set once unk40 reaches unk44 */
+    /* 0x40 */ s32 length;       /* of the drawn quad along x; eases to targetLength, by half the difference a frame */
+    /* 0x44 */ s32 targetLength; /* WarGreymonSpecial1Effect_init's third argument */
+    /* 0x48 */ s32 shade;        /* of the quad's far end: 0x80, then 0x10 less each frame once fading */
+    /* 0x4C */ s32 fading;       /* set once length reaches targetLength */
     /* 0x50 */ s32 frames;
     /* 0x54 */ s32 vramY;  /* Fighter_getVramY */
 } WarGreymonSpecial1Effect;
 
-/* The special move 1 effect's tick: moves the matrix by x, x += 4; eases unk40 to unk44, then fades unk48 by
+extern EntityVtable WARGREYMON_SPECIAL1_EFFECT_VTABLE;
+
+/* Sets the matrix to a translation by v, as matrixInitTranslationVec (engine/math/matrix_ops.c) does. The match
+ * depends on this taking the effect, not the matrix: the stores go through this. */
+static inline void WarGreymonSpecial1Effect_placeAt(WarGreymonSpecial1Effect *this, VECTOR *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    this->matrix.words[0] = 0x1000;
+    this->matrix.words[1] = 0;
+    this->matrix.words[2] = 0x1000;
+    this->matrix.words[3] = 0;
+    this->matrix.words[4] = 0x1000;
+    this->matrix.m.t[0] = x;
+    this->matrix.m.t[1] = y;
+    this->matrix.m.t[2] = z;
+}
+
+/* Builds the special move 1's effect at fighter's position, tilt / 4 higher, turned by tilt against its facing (and
+ * half a turn about y when it faces left); length eases from 0 to targetLength. */
+WarGreymonSpecial1Effect *WarGreymonSpecial1Effect_init(WarGreymonSpecial1Effect *this, Fighter *fighter, s32 targetLength,
+                                                        s32 tilt) {
+    VECTOR position;
+    s32 facing;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &WARGREYMON_SPECIAL1_EFFECT_VTABLE;
+    facing = Fighter_getFacing(fighter);
+    Fighter_getPosition(fighter, (Vec3 *)&position);
+    position.vy -= tilt >> 2;
+    WarGreymonSpecial1Effect_placeAt(this, &position);
+    matrixRotateZ(&this->matrix.m, -tilt * facing);
+    if (Fighter_getFacing(fighter) < 0) {
+        matrixRotateY(&this->matrix.m, 0x800);
+    }
+    this->x = 0;
+    this->facing = facing;
+    this->length = 0;
+    this->targetLength = targetLength;
+    this->shade = 0x80;
+    this->fading = 0;
+    this->frames = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    return this;
+}
+
+/* The special move 1 effect's tick: moves the matrix by x, x += 4; eases length to targetLength, then fades shade by
  * 0x10 and deletes the entity once it is below 0. */
 void WarGreymonSpecial1Effect_tick(WarGreymonSpecial1Effect *this) {
     s32 step;
 
-    matrixTranslate(&this->matrix, this->x, 0, 0);
+    matrixTranslate(&this->matrix.m, this->x, 0, 0);
     this->x += 4;
-    if (this->unk4C != 0) {
-        this->unk48 -= 0x10;
-        if (this->unk48 < 0) {
+    if (this->fading != 0) {
+        this->shade -= 0x10;
+        if (this->shade < 0) {
             entityDelete(&this->entity);
             return;
         }
     } else {
-        step = (this->unk44 - this->unk40) >> 1;
-        this->unk40 += step;
+        step = (this->targetLength - this->length) >> 1;
+        this->length += step;
         if (step == 0) {
-            this->unk4C = 1;
+            this->fading = 1;
         }
     }
     this->frames++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymonSpecial1Effect_draw);
+/* Draws the effect: a quad from length / 8 to length along the matrix's x, 0x200 high, black at the near end and shade
+ * (red, half green and blue) at the far end, with the 32 by 32 picture of frame & 3, semi-transparent. */
+void WarGreymonSpecial1Effect_draw(WarGreymonSpecial1Effect *this, Camera *camera) {
+    SVECTOR corners[4];
+    PolyGT4Shape shape;
+    s32 length;
+    s32 vramY;
+    u8 u;
+    s32 half;
+    u_long *ot;
+    s32 shift;
+
+    setModelMatrix(&this->matrix.m);
+    corners[0].vy = corners[2].vy = 0x100;
+    corners[1].vy = corners[3].vy = -0x100;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = 0;
+    shape.v0 = shape.v1 = 0xC0;
+    shape.v2 = shape.v3 = 0xDF;
+    shape.colors[0] = shape.colors[1] = 0;
+    length = this->length;
+    corners[0].vx = corners[1].vx = length >> 3;
+    corners[2].vx = corners[3].vx = length;
+    u = (this->frames & 3) << 5;
+    shape.u0 = shape.u2 = u;
+    shape.u1 = shape.u3 = u + 0x1F;
+    vramY = this->vramY;
+    ot = camera->ot.slots;
+    shift = camera->zShift;
+    half = this->shade >> 1;
+    shape.colors[2] = shape.colors[3] = this->shade | (half << 8) | (half << 16);
+    shape.clut = getClut(0x1C0, vramY + 0xF7);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    shape.flags = 9;
+    PRIM_BUFFER_FREE = buildPolyGT4(&shape, PRIM_BUFFER_FREE, ot, shift);
+}
 
 /* The entity func_800BD1C4 constructs (0x48 bytes, virtual table D_8006CA54): a piece thrown up from a
  * position, falling and growing in one side and shrinking in the other for 0x14 frames (func_800BD254). */
 typedef struct Unk800BD1C4 {
     /* 0x00 */ Entity entity;
-    /* 0x18 */ Vec3 position;
-    /* 0x24 */ u8 unk24[0x28 - 0x24];
+    /* 0x18 */ VECTOR position;
     /* 0x28 */ Vec3 velocity; /* vy grows by 1 each frame; vx takes a random term */
     /* 0x34 */ u8 unk34[0x38 - 0x34];
-    /* 0x38 */ s32 unk38; /* 0x40, 2 more each frame */
-    /* 0x3C */ s32 unk3C; /* 0x40, 2 less each frame */
-    /* 0x40 */ s32 life;  /* frames left: the entity deletes itself below 0 */
-    /* 0x44 */ s32 unk44; /* func_800BD1C4's last argument */
+    /* 0x38 */ s32 scaleX; /* 0x40, 2 more each frame: the draw's matrix's x scale */
+    /* 0x3C */ s32 scaleY; /* 0x40, 2 less each frame: its y scale */
+    /* 0x40 */ s32 life;   /* frames left: the entity deletes itself below 0 */
+    /* 0x44 */ s32 vramY;  /* func_800BD1C4's last argument: the VRAM half of the clut and tpage */
 } Unk800BD1C4;
 
 extern EntityVtable D_8006CA54;
 
 /* Constructs func_800BD1C4's entity at position, thrown up at 0x14, for 0x14 frames. */
-Unk800BD1C4 *func_800BD1C4(Unk800BD1C4 *this, VECTOR position, s32 arg) {
+Unk800BD1C4 *func_800BD1C4(Unk800BD1C4 *this, VECTOR position, s32 vramY) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &D_8006CA54;
     this->velocity.vx = 0;
     this->velocity.vy = -0x14;
     this->velocity.vz = 0;
-    this->unk3C = 0x40;
-    this->unk38 = 0x40;
-    this->unk44 = arg;
+    this->scaleY = 0x40;
+    this->scaleX = 0x40;
+    this->vramY = vramY;
     this->life = 0x14;
     this->position.vx = position.vx;
     this->position.vy = position.vy;
@@ -552,15 +852,95 @@ Unk800BD1C4 *func_800BD1C4(Unk800BD1C4 *this, VECTOR position, s32 arg) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BD254);
+/* func_800BD1C4's tick: moves by the velocity, halves its vx and adds a random -7..7, falls faster by 1, grows unk38
+ * and shrinks unk3C by 2, and deletes itself once its frames run out. The match depends on reading the position whole
+ * before adding (as vecAddInPlace). */
+void func_800BD254(Unk800BD1C4 *this) {
+    s32 x, y, z;
+
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    x += this->velocity.vx;
+    y += this->velocity.vy;
+    z += this->velocity.vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->velocity.vx = (this->velocity.vx >> 1) + (s32)mersenneTwisterGenerate(&RANDOM) % 8;
+    this->velocity.vy++;
+    this->scaleX += 2;
+    this->scaleY -= 2;
+    this->life--;
+    if (this->life < 0) {
+        entityDelete(&this->entity);
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BD334);
+
+/* The entity func_800BD490 constructs (0x120 bytes, virtual table D_8006CA2C): the effect the WarGreymonVtable slot
+ * 0x120 spawns, drawn as a band of 8 quads. */
+typedef struct Unk800BD490 {
+    /* 0x00 */ Entity entity;
+    /* 0x18 */ s32 unk18;
+    /* 0x1C */ MATRIX matrix;          /* func_800BD8DC's model matrix */
+    /* 0x3C */ SVECTOR band[8][2];     /* the band's points, two per step */
+    /* 0xBC */ u8 unkBC[0x114 - 0xBC];
+    /* 0x114 */ s32 shade;             /* red, and a quarter of it green */
+    /* 0x118 */ s32 unk118;
+    /* 0x11C */ s32 vramY;             /* the VRAM half of the clut and tpage */
+} Unk800BD490;
 
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BD490);
 
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BD650);
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BD8DC);
+/* Draws func_800BD490's effect: 8 quads around the band, each from a step's first point to the next step's two
+ * points and the second point of the step after, with the 32 by 32 picture at (0xE0, 0xC0), black at the start and
+ * shade at the end, semi-transparent. The match depends on reading vramY once and on both following steps
+ * computed before either wraps. */
+void func_800BD8DC(Unk800BD490 *this, Camera *camera) {
+    PolyGT4Shape shape;
+    u_long *ot;
+    s32 shift;
+    u8 *packet;
+    s32 i;
+    s32 next;
+    s32 after;
+    s32 vramY;
+
+    setModelMatrix(&this->matrix);
+    ot = camera->ot.slots;
+    shift = camera->zShift;
+    packet = PRIM_BUFFER_FREE;
+    shape.u0 = shape.u2 = 0xE0;
+    shape.u1 = shape.u3 = 0xFF;
+    shape.v0 = shape.v1 = 0xC0;
+    shape.v2 = shape.v3 = 0xDF;
+    shape.colors[0] = shape.colors[1] = 0;
+    shape.flags = 9;
+    shape.colors[2] = shape.colors[3] = this->shade | ((this->shade >> 2) << 8);
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xFA);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    for (i = 0; i < 8; i++) {
+        next = i + 1;
+        after = i + 2;
+        if (next >= 8) {
+            next -= 8;
+        }
+        if (after >= 8) {
+            after -= 8;
+        }
+        shape.corners[0] = &this->band[i][0];
+        shape.corners[1] = &this->band[next][0];
+        shape.corners[2] = &this->band[next][1];
+        shape.corners[3] = &this->band[after][1];
+        packet = buildPolyGT4(&shape, packet, ot, shift);
+    }
+    PRIM_BUFFER_FREE = packet;
+}
 
 /* Constructs func_800BDA50's entity for owner at pos: its base at 0x18 (Hit_init, 0x5B04000) and its
  * member at 0x38 (CollisionSphere_init) on no velocity, the owner's handle, arg3 at 0xC8 and arg4 at 0xB8. */

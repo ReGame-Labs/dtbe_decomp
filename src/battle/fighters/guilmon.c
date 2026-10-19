@@ -44,7 +44,64 @@ void Guilmon_attack3(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", Guilmon_throw);
+/* Throw: Fighter's; at frame 0 the opponent is held (10) flinching and both fighters stop; at frame 10 it is attached
+ * to node 15 with its model moved to (0x20, 0x48, 0) if the fighter is on the ground, else let go; at frame 32 it is
+ * hit, let go and pushed forward. */
+void Guilmon_throw(Fighter *this, s32 frame) {
+    Fighter *opponent;
+    Model *model;
+    Vec3 push;
+    s16 side;
+
+    Fighter_throw(this, frame);
+    opponent = Fighter_getOpponent(this);
+    switch (frame) {
+    case 0:
+        Fighter_hold(opponent, 10);
+        Fighter_setClip(opponent, FIGHTER_CLIP_FLINCH, 0, 0);
+        opponent->velocity.vx = 0;
+        opponent->velocity.vy = 0;
+        opponent->velocity.vz = 0;
+        opponent->velocityPad = 0;
+        this->velocity.vx = 0;
+        this->velocity.vy = 0;
+        this->velocity.vz = 0;
+        this->velocityPad = 0;
+        break;
+    case 10:
+        if (Fighter_isOnGround(this)) {
+            Fighter_attachTo(opponent, this, 15);
+            model = opponent->model;
+            model->group.object.transform.valid = 0;
+            model->group.object.transform.local.m.t[0] = 0x20;
+            model->group.object.transform.local.m.t[1] = 0x48;
+            model->group.object.transform.local.m.t[2] = 0;
+        } else {
+            Fighter_detach(opponent);
+            Fighter_stopActionClip(this);
+        }
+        break;
+    case 32: {
+        s32 x, y, z;
+
+        side = Fighter_getFacing(this);
+        push.vx = side * 27300;
+        push.vy = 0;
+        push.vz = 0;
+        /* ZERO_VECTOR is a VECTOR; only its first three words are read here */
+        Fighter_takeHit(opponent, 0x598C2000, (Vec3 *)&ZERO_VECTOR, 2);
+        Fighter_detach(opponent);
+        /* The match depends on the vector read into x, y and z before it is stored. */
+        x = push.vx;
+        y = push.vy;
+        z = push.vz;
+        opponent->force.vx = x;
+        opponent->force.vy = y;
+        opponent->force.vz = z;
+        break;
+    }
+    }
+}
 
 void Guilmon_spawnSpecial1Hitbox(Fighter *this, s32 air);
 
@@ -64,7 +121,33 @@ void Guilmon_special1(Fighter *this, s32 frame) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/guilmon", Guilmon_special2);
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", Guilmon_airSpecial1);
+/* Special move 1 in the air: at frame 0 its clip, a stop, func_80079B0C(27) and the voice; at frame 5 a push back
+ * and the hitbox; from frame 6 a rise is braked and the horizontal velocity loses 1/128 a frame. */
+void Guilmon_airSpecial1(Fighter *this, s32 frame) {
+    func_80079AE4(this);
+    switch (frame) {
+    case 0:
+        Fighter_playActionClip(this, FIGHTER_CLIP_AIR_SPECIAL1, 0, 0, -1);
+        this->velocity.vx = 0;
+        this->velocity.vy = 0;
+        func_80079B0C(this, 27);
+        Fighter_playVoice(this, 0x8B);
+        break;
+    case 5: {
+        s32 push = ((s64)this->mass * 0x1C70) >> 16;
+
+        this->force.vx += push * -Fighter_getFacing(this);
+        Guilmon_spawnSpecial1Hitbox(this, 1);
+        break;
+    }
+    }
+    if (frame >= 6) {
+        if (this->velocity.vy > 0) {
+            this->force.vy -= this->velocity.vy;
+        }
+        this->force.vx -= this->velocity.vx >> 7;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/guilmon", Guilmon_airSpecial2);
 

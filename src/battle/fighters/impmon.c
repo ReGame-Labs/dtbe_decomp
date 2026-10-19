@@ -32,13 +32,14 @@ typedef struct ImpmonIntroEffect {
     /* 0x54 */ s16 vramY;    /* Fighter_getVramY of the character */
 } ImpmonIntroEffect;
 void Impmon_spawnSpecial1Projectile(Fighter *this);
+void Impmon_spawnThrowParticle(Fighter *this);
 /* the constructor of the throw's particle */
 Entity *ImpmonThrowParticle_init(Entity *this, Fighter *fighter, Vec3 *position, Vec3 *velocity);
 
 /* Impmon's class (CHARACTER_IMPMON). */
 typedef struct Impmon {
     /* 0x000 */ Fighter base;
-    /* 0x4A4 */ s32 unk4A4;
+    /* 0x4A4 */ s32 throwCooldown; /* counts down each input step; while set, a throw stops at frame 0 */
     /* 0x4A8 */ s32 special2Stopped; /* cleared at special2's frame 0, set by Impmon_stopSpecial2 */
     /* 0x4AC */ s32 special2Frames; /* counts special2's frames until it stops; nothing reads it */
     /* 0x4B0 */ Vec3 special2Start;  /* the fighter's position at special2's frame 0 */
@@ -50,7 +51,7 @@ extern FaceEntry IMPMON_FACES[];
 Impmon *Impmon_init(Impmon *this) {
     Fighter_init(&this->base);
     this->base.entity.vtable = &IMPMON_VTABLE;
-    this->unk4A4 = 0;
+    this->throwCooldown = 0;
     Fighter_setFaceTable(&this->base, IMPMON_FACES);
     return this;
 }
@@ -66,24 +67,24 @@ void Impmon_destroy(Entity *this, s32 flags) {
 
 void Impmon_stopSpecial2(Impmon *this);
 
-/* Fighter's input step, then unk4A4 counts down; it is set to 30 while the opponent's clip is 15, or while it runs and
- * this one's clip is attack 1 or 2. */
+/* Fighter's input step, then throwCooldown counts down; it is set to 30 while the opponent's clip is 15, or while it
+ * runs and this one's clip is attack 1 or 2. */
 void Impmon_handleInput(Impmon *this, void *input) {
     s32 clip;
 
     Fighter_handleInput(this, input);
-    if (this->unk4A4 != 0) {
-        this->unk4A4--;
+    if (this->throwCooldown != 0) {
+        this->throwCooldown--;
     }
     if (func_80079E2C(Fighter_getOpponent(&this->base)) == 15) {
-        this->unk4A4 = 30;
+        this->throwCooldown = 30;
     }
-    if (this->unk4A4 != 0) {
+    if (this->throwCooldown != 0) {
         clip = func_80079E2C(&this->base);
         /* The match depends on the two tests being nested ifs: && folds them into one range test. */
         if (clip < FIGHTER_CLIP_ATTACK3) {
             if (clip >= FIGHTER_CLIP_ATTACK1) {
-                this->unk4A4 = 30;
+                this->throwCooldown = 30;
             }
         }
     }
@@ -119,7 +120,33 @@ void Impmon_attack3(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/impmon", Impmon_throw);
+/* Throw: Fighter's, and while throwCooldown runs frame 0 stops the clip. Otherwise the fighter brakes by half its
+ * velocity, holds the opponent (frame 0, with a sound), sheds a particle every 8 frames up to frame 24, and at frame 20
+ * hits the opponent if it is still in reach, which starts a 60-frame cooldown. */
+void Impmon_throw(Impmon *this, s32 frame) {
+    Fighter *opponent;
+
+    func_80079AE4(&this->base);
+    Fighter_throw(&this->base, frame);
+    if (frame == 0 && this->throwCooldown != 0) {
+        Fighter_stopActionClip(&this->base);
+        return;
+    }
+    opponent = Fighter_getOpponent(&this->base);
+    this->base.force.vx = ((s64)this->base.velocity.vx * -0x800) >> 12;
+    if (frame == 0) {
+        Fighter_playSound(&this->base, 0xA9);
+        Fighter_hold(opponent, 20);
+    }
+    if (frame < 25 && (frame & 7) == 0) {
+        Impmon_spawnThrowParticle(&this->base);
+    }
+    if (frame == 20 && Fighter_getOpponentInReach(&this->base, 0) != NULL) {
+        /* ZERO_VECTOR is a VECTOR; only its first three words are read here */
+        Fighter_takeHit(opponent, 0x208C0000, (Vec3 *)&ZERO_VECTOR, 0);
+        this->throwCooldown = 60;
+    }
+}
 
 /* Spawns the throw's particle 0x84 above the fighter, 24 a frame forward. */
 void Impmon_spawnThrowParticle(Fighter *this) {
@@ -286,12 +313,12 @@ void Impmon_spawnSpecial2Effect(Impmon *this) {
     Fighter_addEntity(&this->base, child);
 }
 
-extern u16 D_800696EC[];
+extern SpriteAnimRow D_800696EC;
 extern EntityVtable IMPMON_THROW_PARTICLE_VTABLE;
 
 /* Builds the throw's particle: Particle_init with the cell D_800696EC, size 0x33, grey, and the fighter's vramY. */
 Entity *ImpmonThrowParticle_init(Entity *this, Fighter *fighter, Vec3 *position, Vec3 *velocity) {
-    Particle_init((Particle *)this, D_800696EC, (VECTOR *)position, (VECTOR *)velocity, 0x33, 0x646464,
+    Particle_init((Particle *)this, &D_800696EC, (VECTOR *)position, (VECTOR *)velocity, 0x33, 0x646464,
                   Fighter_getVramY(fighter));
     this->vtable = &IMPMON_THROW_PARTICLE_VTABLE;
     return this;
