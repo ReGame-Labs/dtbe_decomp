@@ -119,7 +119,50 @@ void Guilmon_special1(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", Guilmon_special2);
+void Guilmon_spawnSpecial2Hitbox(Fighter *this, s32 air);
+
+void Guilmon_special2(Fighter *this, s32 frame) {
+    Fighter *opponent;
+    s32 push;
+    s32 opponentPush;
+
+    func_80079AE4(this);
+    opponent = Fighter_getOpponent(this);
+    switch (frame) {
+    case 0:
+        Fighter_playActionClip(this, FIGHTER_CLIP_SPECIAL2, 0, 0, -1);
+        push = ((s64)this->mass * 0x38E0) >> 16;
+        this->velocity.vx = 0;
+        this->force.vy -= push;
+        this->force.vx += push * Fighter_getFacing(this);
+        Guilmon_spawnSpecial2Hitbox(this, 0);
+        this->hitDamage = 0x81AC12E6;
+        Fighter_setAttackParts(this, 2);
+        opponentPush = ((s64)opponent->mass * 0x1C70) >> 16;
+        opponentPush = opponentPush * Fighter_getFacing(this);
+        this->hitKnockback.vy = -(((s64)opponent->mass * 0x1C70) >> 16);
+        this->hitKnockback.vz = 0;
+        this->hitKnockback.vx = opponentPush;
+        Fighter_playVoice(this, 0x8C);
+        func_80079B14(this, 31);
+        break;
+    case 20:
+        this->attackParts = 0;
+        break;
+    }
+    if (frame >= 1 && frame <= 14) {
+        if (this->velocity.vy > 0) {
+            this->force.vy -= this->velocity.vy;
+        }
+    }
+    if (frame >= 16) {
+        this->force.vx -= this->velocity.vx >> 4;
+    }
+    if (Fighter_isActionClipDone(this)) {
+        this->force.vx = 0;
+        this->velocity.vx = 0;
+    }
+}
 
 /* Special move 1 in the air: at frame 0 its clip, a stop, func_80079B0C(27) and the voice; at frame 5 a push back
  * and the hitbox; from frame 6 a rise is braked and the horizontal velocity loses 1/128 a frame. */
@@ -149,9 +192,69 @@ void Guilmon_airSpecial1(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", Guilmon_airSpecial2);
+void Guilmon_airSpecial2(Fighter *this, s32 frame) {
+    Fighter *opponent;
+    s32 push;
+    s32 opponentPush;
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", Guilmon_spawnSpecial1Hitbox);
+    func_80079AE4(this);
+    opponent = Fighter_getOpponent(this);
+    switch (frame) {
+    case 0:
+        Fighter_playActionClip(this, FIGHTER_CLIP_AIR_SPECIAL2, 2, 0, -1);
+        push = ((s64)this->mass * 0x1C70) >> 16;
+        this->force.vx += push * Fighter_getFacing(this);
+        this->hitDamage = 0x81AC12E6;
+        Fighter_setAttackParts(this, 2);
+        opponentPush = ((s64)opponent->mass * 0x1C70) >> 16;
+        opponentPush = opponentPush * Fighter_getFacing(this);
+        this->hitKnockback.vy = -(((s64)opponent->mass * 0x1C70) >> 16);
+        this->hitKnockback.vz = 0;
+        this->hitKnockback.vx = opponentPush;
+        Fighter_playVoice(this, 0x8C);
+        func_80079B14(this, 31);
+        break;
+    case 2:
+        Guilmon_spawnSpecial2Hitbox(this, 1);
+        break;
+    case 10:
+        this->attackParts = 0;
+        break;
+    }
+    if (frame < 5) {
+        if (this->velocity.vy > 0) {
+            this->force.vy -= this->velocity.vy;
+        }
+    }
+}
+
+UnkPartsEntity38 *GuilmonSpecial1Hitbox_init(UnkPartsEntity38 *this, Fighter *fighter, Vec3 *position,
+                                             VECTOR *velocity, Fight *list);
+
+/* Spawns the special move 1's hitbox at the fighter's position minus 144 on y, flying forward at 80 per frame.
+ * Both the ground and air versions shift y by 144. */
+void Guilmon_spawnSpecial1Hitbox(Fighter *this, s32 air) {
+    Vec3 position;
+    VECTOR velocity;
+    Fight *list;
+    Entity *child;
+
+    list = Fighter_getScene(this);
+    Fighter_getPosition(this, &position);
+    if (air) {
+        position.vy -= 144;
+    } else {
+        position.vy -= 144;
+    }
+    velocity.vx = Fighter_getFacing(this) * 80;
+    velocity.vy = 0;
+    velocity.vz = 0;
+    child = allocEntityMemory(0x134);
+    if (child != NULL) {
+        GuilmonSpecial1Hitbox_init(entityOperatorNewAt(0x134, child), this, &position, &velocity, list);
+    }
+    Fighter_addEntity(this, child);
+}
 
 UnkPartsEntity38 *GuilmonSpecial2Hitbox_init(UnkPartsEntity38 *this, Fighter *fighter, Vec3 *position, VECTOR *velocity,
                                              Fight *list);
