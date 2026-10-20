@@ -457,7 +457,149 @@ void GuilmonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", GuilmonSpecial2Hitbox_tick);
+typedef struct GuilmonSpecial2Hitbox {
+    /* 0x00 */ UnkPartsEntity38 base;
+    /* 0x80 */ Fighter *fighter;
+    /* 0x84 */ s16 unk84;
+    /* 0x86 */ u16 unk86;
+    /* 0x88 */ s16 unk88;
+    /* 0x8A */ u16 unk8A;
+    /* 0x8C */ u16 unk8C;
+    /* 0x8E */ u16 unk8E;
+    /* 0x90 */ s16 unk90;
+    /* 0x92 */ s16 unk92[10];
+    /* 0xA6 */ s16 unkA6[10];
+    /* 0xBA */ s16 unkBA[10];
+    /* 0xCE */ s16 unkCE;
+    /* 0xD0 */ s32 unkD0;
+    /* 0xD4 */ s32 unkD4;
+    /* 0xD8 */ u8 unkD8[0xE4 - 0xD8];
+    /* 0xE4 */ VECTOR unkE4;
+} GuilmonSpecial2Hitbox;
+
+void GuilmonSpecial2Hitbox_tick(GuilmonSpecial2Hitbox *this) {
+    VECTOR offset_vec;
+    s32 active;
+    s32 step;
+    s32 offset;
+    s32 i;
+    s16 *pA6;
+    u16 unk8E;
+    s32 cond;
+    s32 one;
+    s16 *pBA;
+
+    offset_vec = GUILMON_SPECIAL2_HITBOX_OFFSET;
+    Fighter_getNodePosition(this->fighter, (VECTOR *)&this->unkE4, 16, &offset_vec);
+    func_8007A650(this->fighter, (Vec3 *)&this->unkD4);
+    unk8E = this->unk8E;
+    this->unkD4 += (s32)this->unk84 << 6;
+
+    active = 0;
+
+    switch ((s16)this->unk8E) {
+    case 0:
+        if (++this->unk8A < 4) {
+            break;
+        }
+        this->unk8A = 4;
+        this->unk90 = 0;
+        this->unk8E = unk8E + 1;
+        /* fallthrough */
+    case 1:
+        if (++this->unk90 < 6) {
+            break;
+        }
+        this->unk8E++;
+        /* fallthrough */
+    case 2:
+        if (++this->unk8A < 10) {
+            break;
+        }
+        this->unk8A = 10;
+        this->unk8E++;
+        break;
+    }
+
+    step = (this->unk8C == 0) ? 8 : 16;
+
+    i = 0;
+    if (i < this->unk8A) {
+        one = 1;
+        pA6 = this->unkA6;
+        offset = 0;
+        do {
+            if (*pA6 == one) {
+                goto case1;
+            }
+            if (*pA6 < 2) {
+                if (*pA6 == 0) {
+                    goto case0;
+                }
+                goto next;
+            }
+            if (*pA6 == 2) {
+                goto case2;
+            }
+            goto next;
+
+        case0:
+            pA6[-10] += 0x40 + step;
+            if ((s16)pA6[-10] < 0x80) {
+                active = 1;
+                goto next;
+            }
+            pA6[-10] = 0x80;
+            (*pA6)++;
+            /* fallthrough */
+        case1:
+            pBA = this->unkBA;
+            cond = (s16)this->unk8E < 2;
+            active = 1;
+            if (!cond) {
+                (*(s16 *)((u8 *)pBA + offset))++;
+            }
+            if (*(s16 *)((u8 *)pBA + offset) < 8) {
+                goto next;
+            }
+            (*pA6)++;
+            /* fallthrough */
+        case2:
+            pA6[-10] -= 0x10 + step;
+            active = 1;
+            if ((s16)pA6[-10] > 0) {
+                goto next;
+            }
+            pA6[-10] = 0;
+            (*pA6)++;
+            goto next;
+
+        next:
+            pA6++;
+            offset += 2;
+        } while (++i < this->unk8A);
+    }
+
+    if (active == 0) {
+        entityDelete(&this->base.entity);
+        return;
+    }
+
+    if (this->unk8C == 0) {
+        cond = this->unk86 < 11;
+    } else {
+        cond = this->unk86 < 5;
+    }
+    if (!cond) {
+        this->base.part.flags.word |= 1;
+        this->unkD0 += (-this->unkD0) >> 3;
+    }
+
+    this->base.part.position.vx = this->unkE4.vx;
+    this->base.part.position.vy = this->unkE4.vy;
+    this->base.part.position.vz = this->unkE4.vz;
+    this->unk86++;
+}
 
 /* On a hit: sets bit 0 of 0x44 (its tick reads it). */
 void GuilmonSpecial2Hitbox_hit(Unk800AD5BC *this) {
