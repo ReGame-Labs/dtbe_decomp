@@ -271,8 +271,28 @@ void Guilmon_spawnSpecial1Hitbox(Fighter *this, s32 air) {
     Fighter_addEntity(this, child);
 }
 
-UnkPartsEntity38 *GuilmonSpecial2Hitbox_init(UnkPartsEntity38 *this, Fighter *fighter, Vec3 *position, VECTOR *velocity,
-                                             Fight *list);
+typedef struct GuilmonSpecial2Hitbox {
+    /* 0x00 */ UnkPartsEntity38 base;
+    /* 0x80 */ Fighter *fighter;
+    /* 0x84 */ s16 unk84;
+    /* 0x86 */ u16 unk86;
+    /* 0x88 */ s16 unk88;
+    /* 0x8A */ u16 unk8A;
+    /* 0x8C */ u16 unk8C;
+    /* 0x8E */ u16 unk8E;
+    /* 0x90 */ s16 unk90;
+    /* 0x92 */ s16 unk92[10];
+    /* 0xA6 */ s16 unkA6[10];
+    /* 0xBA */ s16 unkBA[10];
+    /* 0xCE */ s16 unkCE;
+    /* 0xD0 */ s32 unkD0;
+    /* 0xD4 */ s32 unkD4;
+    /* 0xD8 */ u8 unkD8[0xE4 - 0xD8];
+    /* 0xE4 */ VECTOR unkE4;
+} GuilmonSpecial2Hitbox;
+
+GuilmonSpecial2Hitbox *GuilmonSpecial2Hitbox_init(GuilmonSpecial2Hitbox *this, Fighter *fighter, Vec3 *position,
+                                                 VECTOR *velocity, Fight *list);
 extern VECTOR GUILMON_SPECIAL2_HITBOX_OFFSET;
 
 /* Spawns the special move 2's hitbox at the fighter's point 16 (moved by GUILMON_SPECIAL2_HITBOX_OFFSET), flying
@@ -530,7 +550,74 @@ void GuilmonSpecial1Hitbox_hit(GuilmonSpecial1Hitbox *this, CollisionSphere *sum
 
 INCLUDE_ASM("game/nonmatchings/fighters/guilmon", GuilmonSpecial1Hitbox_draw);
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", GuilmonSpecial2Hitbox_init);
+GuilmonSpecial2Hitbox *GuilmonSpecial2Hitbox_init(GuilmonSpecial2Hitbox *this, Fighter *fighter, Vec3 *position,
+                                                 VECTOR *velocity, Fight *list) {
+    VECTOR offset;
+    VECTOR knockback;
+    s32 vx;
+    s32 i;
+    Hit *base;
+    CollisionSphere *part;
+    s16 *p92, *pA6, *pBA;
+
+    entityInit(&this->base.entity, 0x30000);
+    base = &this->base.base;
+    Hit_init(base, fighter, 0x85AC1B00, (Vec3 *)velocity, 0);
+    part = &this->base.part;
+    this->base.base.vtable = GUILMON_SPECIAL2_HITBOX_HIT_VTABLE;
+    this->base.entity.vtable = &GUILMON_SPECIAL2_HITBOX_VTABLE;
+    CollisionSphere_init(part, position, 0x60, base);
+
+    offset = GUILMON_SPECIAL2_HITBOX_OFFSET;
+    vx = velocity->vx << 6;
+    knockback.pad = velocity->pad;
+    knockback.vz = 0;
+    knockback.vx = vx;
+    knockback.vy = -(vx < 0 ? -vx : vx);
+    Hit_setKnockback(base, &knockback);
+
+    this->unk88 = Fighter_getVramY(fighter);
+    this->fighter = fighter;
+    this->unk8A = 0;
+    this->unk86 = 0;
+    this->unk90 = 0;
+    this->unkD0 = 0x1000;
+    this->unk8C = velocity->vz;
+    this->unk84 = Fighter_getFacing(fighter);
+    this->base.part.entity = &this->base.entity;
+
+    if (Fighter_getSide(this->fighter) == 0) {
+        Fight_addSide0Shape(list, (ListNode *)part);
+    } else {
+        Fight_addSide1Shape(list, (ListNode *)part);
+    }
+
+    Fighter_getNodePosition(this->fighter, (VECTOR *)&this->unkE4, 16, &offset);
+    func_8007A650(this->fighter, (Vec3 *)&this->unkD4);
+
+    pBA = this->unkBA;
+    pA6 = this->unkA6;
+    p92 = this->unk92;
+    i = 9;
+    this->unkD4 += (s32)this->unk84 << 6;
+    do {
+        *p92 = 0;
+        *pA6 = 0;
+        *pBA = 0;
+        pBA++;
+        pA6++;
+        p92++;
+    } while (--i >= 0);
+
+    if (this->unk8C == 0) {
+        this->unk8E = 0;
+    } else {
+        this->unk8E = 2;
+    }
+
+    Fighter_playSound(this->fighter, 0x88);
+    return this;
+}
 
 /* The special move 2 hitbox's destructor. */
 void GuilmonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
@@ -551,26 +638,6 @@ void GuilmonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
         entityOperatorDelete(this);
     }
 }
-
-typedef struct GuilmonSpecial2Hitbox {
-    /* 0x00 */ UnkPartsEntity38 base;
-    /* 0x80 */ Fighter *fighter;
-    /* 0x84 */ s16 unk84;
-    /* 0x86 */ u16 unk86;
-    /* 0x88 */ s16 unk88;
-    /* 0x8A */ u16 unk8A;
-    /* 0x8C */ u16 unk8C;
-    /* 0x8E */ u16 unk8E;
-    /* 0x90 */ s16 unk90;
-    /* 0x92 */ s16 unk92[10];
-    /* 0xA6 */ s16 unkA6[10];
-    /* 0xBA */ s16 unkBA[10];
-    /* 0xCE */ s16 unkCE;
-    /* 0xD0 */ s32 unkD0;
-    /* 0xD4 */ s32 unkD4;
-    /* 0xD8 */ u8 unkD8[0xE4 - 0xD8];
-    /* 0xE4 */ VECTOR unkE4;
-} GuilmonSpecial2Hitbox;
 
 void GuilmonSpecial2Hitbox_tick(GuilmonSpecial2Hitbox *this) {
     VECTOR offset_vec;
