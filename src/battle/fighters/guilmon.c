@@ -228,8 +228,23 @@ void Guilmon_airSpecial2(Fighter *this, s32 frame) {
     }
 }
 
-UnkPartsEntity38 *GuilmonSpecial1Hitbox_init(UnkPartsEntity38 *this, Fighter *fighter, Vec3 *position,
-                                             VECTOR *velocity, Fight *list);
+typedef struct GuilmonSpecial1Hitbox {
+    /* 0x000 */ UnkPartsEntity38 base;
+    /* 0x080 */ Fighter *fighter;
+    /* 0x084 */ u16 unk84;
+    /* 0x086 */ u16 vramY;
+    /* 0x088 */ u16 unk88;
+    /* 0x08A */ u8 unk8A[6];
+    /* 0x090 */ u16 unk90[6];
+    /* 0x09C */ VECTOR positions[5];
+    /* 0x0EC */ s32 unkEC[5];
+    /* 0x100 */ VECTOR velocity;
+    /* 0x110 */ SVECTOR corners[4];
+    /* 0x130 */ s32 length;
+} GuilmonSpecial1Hitbox;
+
+GuilmonSpecial1Hitbox *GuilmonSpecial1Hitbox_init(GuilmonSpecial1Hitbox *this, Fighter *fighter, Vec3 *position,
+                                                 VECTOR *velocity, Fight *list);
 
 /* Spawns the special move 1's hitbox at the fighter's position minus 144 on y, flying forward at 80 per frame.
  * Both the ground and air versions shift y by 144. */
@@ -284,7 +299,103 @@ void Guilmon_spawnSpecial2Hitbox(Fighter *this, s32 air) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", GuilmonSpecial1Hitbox_init);
+GuilmonSpecial1Hitbox *GuilmonSpecial1Hitbox_init(GuilmonSpecial1Hitbox *this, Fighter *fighter, Vec3 *position,
+                                                 VECTOR *velocity, Fight *list) {
+    VECTOR knockback;
+    s32 vx;
+    s32 i;
+    s32 alpha;
+    VECTOR *pPos;
+    u16 *p90;
+    s32 *pEC;
+    u8 *p8A;
+    Hit *base;
+    ListNode *node;
+
+    entityInit(&this->base.entity, 0x30000);
+    base = &this->base.base;
+    Hit_init(base, fighter, 0x5A81E00, (Vec3 *)velocity, 3);
+    this->base.base.vtable = GUILMON_SPECIAL1_HITBOX_HIT_VTABLE;
+    this->base.entity.vtable = &GUILMON_SPECIAL1_HITBOX_VTABLE;
+    CollisionSphere_init(&this->base.part, position, 0x80, base);
+
+    vx = velocity->vx << 6;
+    knockback.pad = velocity->pad;
+    knockback.vz = 0;
+    knockback.vx = vx;
+    knockback.vy = -(vx < 0 ? -vx : vx);
+    Hit_setKnockback(base, &knockback);
+
+    this->vramY = Fighter_getVramY(fighter);
+    this->fighter = fighter;
+
+    if (velocity->vx > 0) {
+        this->corners[0].vx = this->corners[2].vx = -0x80;
+        this->corners[1].vx = this->corners[3].vx = 0x80;
+    } else {
+        this->corners[0].vx = this->corners[2].vx = 0x80;
+        this->corners[1].vx = this->corners[3].vx = -0x80;
+    }
+
+    this->corners[1].vy = -0x80;
+    this->corners[0].vy = -0x80;
+    this->corners[3].vy = 0x80;
+    this->corners[2].vy = 0x80;
+    this->corners[3].vz = 0;
+    this->corners[2].vz = 0;
+    this->corners[1].vz = 0;
+    this->corners[0].vz = 0;
+
+    {
+        s32 x = velocity->vx;
+        s32 y = velocity->vy;
+        s32 z = velocity->vz;
+        this->velocity.vx = x;
+        this->velocity.vy = y;
+        this->velocity.vz = z;
+    }
+    this->length = vecGetLength(velocity);
+
+    i = 0;
+    node = &this->base.part.link;
+    p8A = this->unk8A;
+    pPos = this->positions;
+    pEC = this->unkEC;
+    p90 = this->unk90;
+    alpha = -0x80;
+    this->unk84 = 0;
+    this->unk88 = 0;
+
+    do {
+        s32 x, y, z;
+        p8A[i] = alpha;
+        *p90 = 0;
+        *pEC = 0;
+        pEC++;
+        p90++;
+        alpha -= 0x19;
+        x = position->vx;
+        y = position->vy;
+        z = position->vz;
+        i++;
+        pPos->vx = x;
+        pPos->vy = y;
+        pPos->vz = z;
+        pPos++;
+    } while (i < 5);
+
+    this->base.part.entity = &this->base.entity;
+    if (Fighter_getSide(this->fighter) == 0) {
+        Fight_addSide0Shape(list, node);
+    } else {
+        Fight_addSide1Shape(list, node);
+    }
+
+    this->base.part.flags.word |= 1;
+    Fighter_playSound(this->fighter, 0x87);
+
+    return this;
+}
 
 /* The special move 1 hitbox's destructor. */
 void GuilmonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
@@ -305,22 +416,6 @@ void GuilmonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
         entityOperatorDelete(this);
     }
 }
-
-/* The special move 1's hitbox (an UnkPartsEntity38). */
-typedef struct GuilmonSpecial1Hitbox {
-    /* 0x000 */ UnkPartsEntity38 base;
-    /* 0x080 */ Fighter *fighter;
-    /* 0x084 */ u16 unk84;
-    /* 0x086 */ u16 vramY;
-    /* 0x088 */ u16 unk88;
-    /* 0x08A */ u8 unk8A[6];
-    /* 0x090 */ u16 unk90[6];
-    /* 0x09C */ VECTOR positions[5];
-    /* 0x0EC */ s32 unkEC[5];
-    /* 0x100 */ VECTOR velocity;
-    /* 0x110 */ SVECTOR corners[4];
-    /* 0x130 */ s32 length;
-} GuilmonSpecial1Hitbox;
 
 void GuilmonSpecial1Hitbox_tick(GuilmonSpecial1Hitbox *this) {
     s32 active;
