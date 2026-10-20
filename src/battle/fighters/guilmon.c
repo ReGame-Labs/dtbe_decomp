@@ -306,20 +306,114 @@ void GuilmonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", GuilmonSpecial1Hitbox_tick);
-
-/* The special move 1's hitbox (an UnkPartsEntity38), as far as GuilmonSpecial1Hitbox_hit needs it. */
+/* The special move 1's hitbox (an UnkPartsEntity38). */
 typedef struct GuilmonSpecial1Hitbox {
     /* 0x000 */ UnkPartsEntity38 base;
     /* 0x080 */ Fighter *fighter;
-    /* 0x084 */ u8 unk84[0x9C - 0x84];
-    /* 0x09C */ Vec3 unk9C; /* the first of a run of positions */
-    /* 0x0A8 */ u8 unkA8[0x100 - 0xA8];
-    /* 0x100 */ Vec3 unk100; /* a constructor argument */
-    /* 0x10C */ u8 unk10C[0x110 - 0x10C];
+    /* 0x084 */ u16 unk84;
+    /* 0x086 */ u16 vramY;
+    /* 0x088 */ u16 unk88;
+    /* 0x08A */ u8 unk8A[6];
+    /* 0x090 */ u16 unk90[6];
+    /* 0x09C */ VECTOR positions[5];
+    /* 0x0EC */ s32 unkEC[5];
+    /* 0x100 */ VECTOR velocity;
     /* 0x110 */ SVECTOR corners[4];
-    /* 0x130 */ s32 unk130; /* the length of unk100 */
+    /* 0x130 */ s32 length;
 } GuilmonSpecial1Hitbox;
+
+void GuilmonSpecial1Hitbox_tick(GuilmonSpecial1Hitbox *this) {
+    s32 active;
+    s32 i;
+    u16 *p90;
+    VECTOR *pPos;
+    u8 *p8A;
+    s32 *pEC;
+    s32 len;
+    u32 alpha;
+    s32 x, y, z;
+    s32 val;
+    s32 state;
+    int new_var;
+
+    if (++this->unk88 < 6) {
+    } else {
+        this->unk88 = 5;
+    }
+
+    active = 0;
+    i = 0;
+
+    if (this->unk88 != 0) {
+        new_var = 1;
+        p90 = this->unk90;
+        pPos = this->positions;
+        p8A = this->unk8A;
+        pEC = this->unkEC;
+        do {
+            state = *p90;
+            if (state == new_var) {
+                goto state1_block;
+            }
+            if (state >= 2) {
+                goto next;
+            }
+            if (state != 0) {
+                goto next;
+            }
+
+            x = pPos->vx;
+            y = pPos->vy;
+            z = pPos->vz;
+            x += this->velocity.vx;
+            y += this->velocity.vy;
+            z += this->velocity.vz;
+            pPos->vx = x;
+            pPos->vy = y;
+            pPos->vz = z;
+
+            val = *pEC;
+            len = this->length;
+            val += len < 0 ? -len : len;
+            *pEC = val;
+            active = 1;
+            if (*pEC >= 0xA01) {
+                (*p90)++;
+            } else {
+                goto next;
+            }
+
+        state1_block:
+            alpha = *p8A;
+            alpha -= alpha >> 2;
+            *p8A = alpha;
+            active = 1;
+            if ((u8)alpha < 5) {
+                (*p90)++;
+            }
+
+        next:
+            p90++;
+            pPos++;
+            p8A++;
+            pEC++;
+        } while (++i < this->unk88);
+    }
+
+    if (this->unk84 == 2) {
+        this->base.part.flags.word &= ~1;
+    }
+
+    if (active == 0) {
+        entityDelete(&this->base.entity);
+        return;
+    }
+
+    this->base.part.position.vx = this->positions[0].vx;
+    this->base.part.position.vy = this->positions[0].vy;
+    this->base.part.position.vz = this->positions[0].vz;
+    this->unk84++;
+}
 
 /* On a hit: Hit_apply, a hit spark on the fighter it struck, a burst of 6 particles at 0x9C, and it deletes itself. */
 void GuilmonSpecial1Hitbox_hit(GuilmonSpecial1Hitbox *this, CollisionSphere *sum) {
@@ -329,11 +423,11 @@ void GuilmonSpecial1Hitbox_hit(GuilmonSpecial1Hitbox *this, CollisionSphere *sum
     Hit_apply(&this->base.base, sum);
     target = getHitFighter(sum);
     if (target != NULL) {
-        entityAddSibling(&this->base.entity, createHitSpark(target, &this->unk100, 0x80));
+        entityAddSibling(&this->base.entity, createHitSpark(target, (Vec3 *)&this->velocity, 0x80));
     }
     child = allocEntityMemory(0x3C);
     if (child != NULL) {
-        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->unk9C, this->unk130 >> 2, 0x60, 6, 0x808080);
+        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, (Vec3 *)&this->positions[0], this->length >> 2, 0x60, 6, 0x808080);
     }
     entityAddSibling(&this->base.entity, child);
     entityDelete(&this->base.entity);
