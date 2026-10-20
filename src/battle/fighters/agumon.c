@@ -3,6 +3,9 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/gfx/prim/build_line_g2.h"
 
 struct AgumonSpecial2Effect *AgumonSpecial2Effect_init(struct AgumonSpecial2Effect *this, Fighter *fighter);
 struct AgumonSpecial1Effect *AgumonSpecial1Effect_init(struct AgumonSpecial1Effect *this, Vec3 *position, s32 arg2,
@@ -221,8 +224,37 @@ void Agumon_special2(Fighter *this, s32 frame) {
 }
 
 INCLUDE_RODATA("game/nonmatchings/fighters/agumon", AGUMON_SPECIAL2_HITS);
+typedef struct AgumonHitParams {
+    /* 0x00 */ s32 forceX;
+    /* 0x04 */ s32 forceY;
+    /* 0x08 */ s32 damage;
+    /* 0x0C */ s32 kind;
+    /* 0x10 */ s32 knockbackX;
+    /* 0x14 */ s32 knockbackY;
+} AgumonHitParams;
 
-INCLUDE_ASM("game/nonmatchings/fighters/agumon", Agumon_startSpecial2Hit);
+extern AgumonHitParams AGUMON_SPECIAL2_HITS[3];
+
+/* Starts hit of the special move 2: adds its force (forward and up), sets its damage, kind and knockback, and spawns
+ * dust. */
+void Agumon_startSpecial2Hit(Fighter *this, s32 hitIndex) {
+    AgumonHitParams *hits = AGUMON_SPECIAL2_HITS;
+    AgumonHitParams *hit = &hits[hitIndex];
+    s32 facing;
+    s32 vx;
+
+    Fighter_accelerateTo(this, 0);
+    facing = Fighter_getFacing(this);
+    this->force.vx += hit->forceX * facing;
+    this->force.vy += hit->forceY;
+    this->hitDamage = hit->damage;
+    this->hitKind = hit->kind;
+    vx = hit->knockbackX * Fighter_getFacing(this);
+    this->hitKnockback.vy = hit->knockbackY;
+    this->hitKnockback.vz = 0;
+    this->hitKnockback.vx = vx;
+    Fighter_spawnDust(this, -1, 0x60, 4);
+}
 
 /* Spawns the special move 2's effect. */
 void Agumon_spawnSpecial2Effect(Fighter *this) {
@@ -337,7 +369,90 @@ void AgumonSpecial1Projectile_hit(AgumonSpecial1Projectile *this, CollisionSpher
     Projectile_hit(&this->base, sum);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/agumon", AgumonSpecial1Projectile_draw);
+void AgumonSpecial1Projectile_draw(AgumonSpecial1Projectile *this, Camera *camera) {
+    s32 doubleRadius;
+    s32 prod1;
+    s32 prod2;
+    MatrixWords m;
+    SVECTOR corners[4];
+    int new_var;
+    PolyGT4Shape shape;
+    Vec3 *pos;
+    u_long *ot;
+    s32 zShift;
+    s32 dir;
+    s32 radius;
+    s32 vramY;
+    u8 u;
+    s32 x;
+    s32 y;
+    s32 z;
+    s16 vx;
+    s16 vx2;
+    s32 tpage;
+
+    pos = &this->base.position;
+    x = pos->vx;
+    y = pos->vy;
+    z = pos->vz;
+    m.words[0] = 4096;
+    new_var = 0x1C0 & 0x3ff;
+    m.words[1] = 0;
+    m.words[2] = 4096;
+    m.words[3] = 0;
+    m.words[4] = 4096;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    setModelMatrix(&m.m);
+
+    dir = 1;
+    if (this->base.velocity.vx < 0) {
+        dir = -1;
+    }
+
+    corners[0].vz = 0;
+    corners[1].vz = 0;
+    corners[2].vz = 0;
+    corners[3].vz = 0;
+    shape.flags = 0;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.v1 = 0;
+    shape.v0 = 0;
+    shape.v3 = 0x1F;
+    shape.v2 = 0x1F;
+
+    radius = this->base.radius;
+    shape.colors[0] = (shape.colors[2] = 0x80);
+    shape.colors[1] = (shape.colors[3] = 0xC0C0C0);
+    doubleRadius = radius * 2;
+    corners[0].vy = ((u32) (-radius)) >> 1;
+    corners[1].vy = -radius;
+    prod1 = dir * doubleRadius;
+    corners[2].vy = ((u32) radius) >> 1;
+    corners[3].vy = radius;
+
+    u = (this->cell << 5) & 0xFF;
+    shape.u0 = (shape.u2 = u);
+    vramY = this->base.unkBC;
+    shape.u1 = (shape.u3 = u + 0x1F);
+    prod1 = -prod1;
+    shape.clut = ((vramY + 0xFC) << 6) | ((0x1D0 >> 4) & 0x3f);
+    prod2 = dir * radius;
+    tpage = (((vramY & 0x100) >> 4) | (new_var >> 6)) | ((vramY & 0x200) << 2);
+    vx = prod1;
+    vx2 = prod2;
+    corners[2].vx = (corners[0].vx = vx);
+    corners[3].vx = (corners[1].vx = vx2);
+    shape.tpage = tpage;
+
+    PRIM_BUFFER_FREE = buildPolyGT4(&shape, PRIM_BUFFER_FREE, ot, zShift);
+}
 
 /* The burst of the special move 1, where the projectile starts and where it hits: it grows until it reaches its
  * maximum, then deletes itself. */
@@ -381,8 +496,75 @@ void AgumonSpecial1Effect_tick(AgumonSpecial1Effect *this) {
         entityDelete(&this->entity);
     }
 }
+/* Draws the burst using two additive PolyFT4 quads rotated in opposite directions around Z. */
+void AgumonSpecial1Effect_draw(AgumonSpecial1Effect *this, Camera *camera) {
+    VECTOR pos;
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    s32 zShift;
+    u_long *ot;
+    void *packet;
+    s32 angle;
+    s32 alpha;
+    s16 size;
+    s32 maxSize;
+    s32 vramY;
+    s16 size2;
+    VECTOR *v;
+    s32 x, y, z;
 
-INCLUDE_ASM("game/nonmatchings/fighters/agumon", AgumonSpecial1Effect_draw);
+    packet = PRIM_BUFFER_FREE;
+    angle = this->unk30;
+    pos = *(VECTOR *) &this->position;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    matrixInitRotationZ(&m.m, -angle);
+    v = &pos;
+    x = v->vx;
+    y = v->vy;
+    z = v->vz;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    setModelMatrix(&m.m);
+
+    size = this->size;
+    corners[3].vz = 0;
+    corners[2].vz = 0;
+    corners[1].vz = 0;
+    corners[0].vz = 0;
+
+    corners[1].vx = (corners[3].vx = size);
+    size2 = (s16) (size * 2);
+    corners[0].vx = (corners[2].vx = -size);
+    corners[0].vy = (corners[1].vy = -size2);
+    corners[2].vy = (corners[3].vy = size2);
+
+    maxSize = this->maxSize;
+    alpha = (maxSize - size) * 255 / maxSize;
+
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.color = alpha | ((alpha >> 1) << 8) | ((alpha >> 2) << 16);
+
+    ((u8 *) (&shape.uv0))[0] = (((u8 *) (&shape.uv2))[0] = 0xC0);
+    ((u8 *) (&shape.uv1))[0] = (((u8 *) (&shape.uv3))[0] = 0xEF);
+    ((u8 *) (&shape.uv0))[1] = (((u8 *) (&shape.uv1))[1] = 0x20);
+    ((u8 *) (&shape.uv2))[1] = (((u8 *) (&shape.uv3))[1] = 0x5F);
+
+    vramY = this->vramY;
+    shape.flags = 9;
+    shape.clut = ((vramY + 0xFD) << 6) | ((0x1D0 >> 4) & 0x3f);
+    shape.tpage = (((((0 & 0x3) << 7) | ((1 & 0x3) << 5)) | ((vramY & 0x100) >> 4)) | ((0x1C0 & 0x3ff) >> 6)) | ((vramY & 0x200) << 2);
+
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    matrixSetRotationZ(&m.m, angle);
+    setModelMatrix(&m.m);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* The special move 2's effect, at the fighter's node 2. */
 typedef struct AgumonSpecial2Effect {
@@ -453,25 +635,180 @@ void AgumonSpecial2Effect_tick(AgumonSpecial2Effect *this) {
     Fighter_getNodePosition(this->fighter, &this->position, 2, &ZERO_VECTOR);
 }
 
-void func_8008391C(AgumonSpecial2Effect *this, s32 arg);
-void func_80083B90(AgumonSpecial2Effect *this, s32 arg);
+void func_8008391C(AgumonSpecial2Effect *this, Camera *camera);
+void func_80083B90(AgumonSpecial2Effect *this, Camera *camera);
 
 /* Draws by its state: func_8008391C's part, and in state 1 func_80083B90's too. */
-void AgumonSpecial2Effect_draw(AgumonSpecial2Effect *this, s32 arg) {
+void AgumonSpecial2Effect_draw(AgumonSpecial2Effect *this, Camera *camera) {
     switch (this->state) {
     case 0:
-        func_8008391C(this, arg);
+        func_8008391C(this, camera);
         break;
     case 1:
-        func_8008391C(this, arg);
-        func_80083B90(this, arg);
+        func_8008391C(this, camera);
+        func_80083B90(this, camera);
         break;
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/agumon", func_8008391C);
+void func_8008391C(AgumonSpecial2Effect *this, Camera *camera) {
+    VECTOR temp;
+    VECTOR pos;
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    s32 zShift;
+    u_long *ot;
+    void *packet;
+    s32 facing;
+    s32 offset;
+    s32 cell;
+    u8 u;
+    VECTOR *v;
+    s32 x;
+    s32 y;
+    s32 z;
+    s32 vramY;
+    u16 unk2C;
+    s16 unk30;
+    s32 prod;
+    s32 vx;
 
-INCLUDE_ASM("game/nonmatchings/fighters/agumon", func_80083B90);
+    if ((this->ticks / 3) >= 3) {
+        return;
+    }
+
+    zShift = camera->zShift + 1;
+    ot = camera->ot.slots;
+    packet = PRIM_BUFFER_FREE;
+    facing = Fighter_getFacing(this->fighter);
+    offset = facing * 160;
+    memset(&pos, 0, sizeof(pos));
+    pos.vx = this->position.vx + offset;
+    pos.vy = this->position.vy;
+    pos.vz = this->position.vz;
+    temp = pos;
+    v = &temp;
+    x = v->vx;
+    y = v->vy;
+    z = v->vz;
+    m.words[0] = 4096;
+    m.words[1] = 0;
+    m.words[2] = 4096;
+    m.words[3] = 0;
+    m.words[4] = 4096;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    setModelMatrix(&m.m);
+
+    corners[3].vx = 0;
+    corners[1].vx = 0;
+    corners[3].vz = 0;
+    corners[2].vz = 0;
+    corners[1].vz = 0;
+    corners[0].vz = 0;
+
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    ((u8 *) (&shape.uv1))[1] = 0x20;
+    ((u8 *) (&shape.uv0))[1] = 0x20;
+    ((u8 *) (&shape.uv3))[1] = 0x5F;
+    ((u8 *) (&shape.uv2))[1] = 0x5F;
+    shape.color = 0x505050;
+    shape.flags = 9;
+
+    unk2C = this->unk2C;
+    unk30 = (s16) this->unk30;
+    vramY = this->unk48;
+    prod = this->unk30 * facing;
+    corners[0].vy = (corners[1].vy = (-unk2C) - unk30);
+    corners[2].vy = (corners[3].vy = -unk2C);
+
+    shape.clut = ((vramY + 0xFE) << 6) | ((0x1D0 >> 4) & 0x3f);
+    shape.tpage = (((((0 & 0x3) << 7) | ((1 & 0x3) << 5)) | ((vramY & 0x100) >> 4)) | ((0x1C0 & 0x3ff) >> 6)) | ((vramY & 0x200) << 2);
+
+    vx = -((s16) prod);
+    corners[0].vx = (corners[2].vx = vx);
+
+    cell = this->ticks / 3;
+    u = (cell << 6) & 0xFF;
+    ((u8 *) (&shape.uv0))[0] = (((u8 *) (&shape.uv2))[0] = u);
+    ((u8 *) (&shape.uv1))[0] = (((u8 *) (&shape.uv3))[0] = u + 0x3F);
+
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vy = (corners[1].vy = -((u16) corners[0].vy));
+    corners[2].vy = (corners[3].vy = -((u16) corners[2].vy));
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
+
+void func_80083B90(AgumonSpecial2Effect *this, Camera *camera) {
+    VECTOR temp;
+    VECTOR pos;
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    s32 zShift;
+    u_long *ot;
+    s32 offset;
+    s32 size;
+    u8 u;
+    VECTOR *v;
+    s32 x;
+    s32 y;
+    s32 z;
+    s32 vramY;
+
+    zShift = camera->zShift + 1;
+    ot = camera->ot.slots;
+    offset = Fighter_getFacing(this->fighter) * 160;
+    memset(&pos, 0, sizeof(pos));
+    pos.vx = this->position.vx + offset;
+    pos.vy = this->position.vy;
+    pos.vz = this->position.vz;
+    temp = pos;
+    v = &temp;
+    x = v->vx;
+    y = v->vy;
+    z = v->vz;
+    m.words[0] = 4096;
+    m.words[1] = 0;
+    m.words[2] = 4096;
+    m.words[3] = 0;
+    m.words[4] = 4096;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    setModelMatrix(&m.m);
+    corners[3].vz = 0;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    corners[2].vz = 0;
+    corners[1].vz = 0;
+    corners[0].vz = 0;
+    shape.flags = 0;
+    ((u8 *) (&shape.uv1))[1] = 0x60;
+    ((u8 *) (&shape.uv0))[1] = 0x60;
+    ((u8 *) (&shape.uv3))[1] = 0x7F;
+    ((u8 *) (&shape.uv2))[1] = 0x7F;
+    shape.color = 0x808080;
+    size = (s16) this->unk38;
+    u = ((u8) this->unk3C << 5) & 0xFF;
+    corners[0].vx = (corners[2].vx = -size);
+    corners[1].vx = (corners[3].vx = size);
+    corners[0].vy = (corners[1].vy = -size);
+    corners[2].vy = (corners[3].vy = size);
+    ((u8 *) (&shape.uv0))[0] = (((u8 *) (&shape.uv2))[0] = u);
+    vramY = this->unk48;
+    ((u8 *) (&shape.uv1))[0] = (((u8 *) (&shape.uv3))[0] = u + 0x1F);
+    shape.clut = ((vramY + 0xFF) << 6) | ((0x1D0 >> 4) & 0x3f);
+    shape.tpage = (((((0 & 0x3) << 7) | ((0 & 0x3) << 5)) | ((vramY & 0x100) >> 4)) | ((0x1C0 & 0x3ff) >> 6)) | ((vramY & 0x200) << 2);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, zShift);
+}
 
 /* Agumon's destructor. */
 void Agumon_destroy(Entity *this, s32 flags) {
