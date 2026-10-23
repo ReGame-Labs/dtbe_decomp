@@ -3,6 +3,8 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
 
 extern FaceEntry GUILMON_FACES[];
 extern VtableEntry GUILMON_SPECIAL2_HITBOX_HIT_VTABLE[];
@@ -548,7 +550,95 @@ void GuilmonSpecial1Hitbox_hit(GuilmonSpecial1Hitbox *this, CollisionSphere *sum
     entityDelete(&this->base.entity);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", GuilmonSpecial1Hitbox_draw);
+static inline VECTOR *inline_fn(VECTOR *arg0) {
+    return arg0;
+}
+
+void GuilmonSpecial1Hitbox_draw(GuilmonSpecial1Hitbox *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    s32 dir;
+    s32 scale;
+    u8 *packet;
+    u_long *slots;
+    s32 zShift;
+    MATRIX *matrix;
+    s32 angle;
+    s32 i;
+    s32 j;
+    VECTOR *point;
+    s32 x;
+    s32 y;
+    s32 z;
+    u32 half;
+    u8 u;
+    u8 alpha;
+
+    half = this->unk84 >> 1;
+    u = (half % 5) * 32;
+
+    dir = 1;
+    if (this->unk84 & 1) {
+        dir = -1;
+    }
+
+    do {
+        scale = 0x1000;
+    } while (0);
+    packet = PRIM_BUFFER_FREE;
+
+    shape.corners[0] = &this->corners[0];
+    shape.corners[1] = &this->corners[1];
+    shape.corners[2] = &this->corners[2];
+    shape.corners[3] = &this->corners[3];
+    ((u8 *)(&shape.uv3))[0] = u + 0x1F;
+    ((u8 *)(&shape.uv1))[0] = u + 0x1F;
+    ((u8 *)(&shape.uv2))[0] = u;
+    ((u8 *)(&shape.uv0))[0] = u;
+    ((u8 *)(&shape.uv1))[1] = 0;
+    ((u8 *)(&shape.uv0))[1] = 0;
+    ((u8 *)(&shape.uv3))[1] = 0x1F;
+    ((u8 *)(&shape.uv2))[1] = 0x1F;
+    shape.flags = 9;
+    shape.tpage = (((((0 & 0x3) << 7) | ((1 & 0x3) << 5)) | ((this->vramY & 0x100) >> 4)) |
+                   ((0x1C0 & 0x3FF) >> 6)) |
+                  ((this->vramY & 0x200) << 2);
+    shape.clut = ((this->vramY + 0x7F) << 6) | ((0x1C0 >> 4) & 0x3F);
+
+    slots = camera->ot.slots;
+    zShift = camera->zShift;
+
+    for (i = 0; i < this->unk88; i++) {
+        if (this->unk90[i] == 2) {
+            continue;
+        }
+        matrix = &m.m;
+        point = inline_fn(&this->positions[i]);
+        x = point->vx;
+        y = point->vy;
+        z = point->vz;
+        m.words[0] = 0x1000;
+        m.words[1] = 0;
+        m.words[2] = 0x1000;
+        m.words[3] = 0;
+        m.words[4] = 0x1000;
+        m.m.t[0] = x;
+        m.m.t[1] = y;
+        m.m.t[2] = z;
+        angle = dir * scale;
+        matrixScale(matrix, angle, scale, scale);
+        scale -= 0x200;
+        setModelMatrix(matrix);
+        alpha = this->unk8A[i];
+        shape.color = (alpha | (alpha << 8)) | (alpha << 16);
+        j = 1;
+        do {
+            packet = buildPolyFT4(&shape, packet, slots, zShift);
+        } while ((--j) >= 0);
+    }
+
+    PRIM_BUFFER_FREE = packet;
+}
 
 GuilmonSpecial2Hitbox *GuilmonSpecial2Hitbox_init(GuilmonSpecial2Hitbox *this, Fighter *fighter, Vec3 *position,
                                                  VECTOR *velocity, Fight *list) {
