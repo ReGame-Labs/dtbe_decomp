@@ -125,7 +125,69 @@ void WarGreymon_spawnAttackTrails(Fighter *this, s32 kind, s32 arg2, s32 arg3, s
 
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C844);
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymon_throw);
+struct WarGreymonThrowEffect *WarGreymonThrowEffect_init(struct WarGreymonThrowEffect *this, Fighter *fighter, s32 facing);
+extern s32 D_8006C844[];
+void WarGreymon_holdOpponent(Fighter *this);
+
+void WarGreymon_throw(WarGreymon *this, s32 frame) {
+    Fighter *opponent;
+    s32 x, y, z;
+
+    Fighter_throw(&this->base, frame);
+    opponent = Fighter_getOpponent(&this->base);
+    if (frame < 8) {
+        Fighter_accelerateTo(&this->base, 0);
+        x = this->base.velocity.vx;
+        y = this->base.velocity.vy;
+        z = this->base.velocity.vz;
+        opponent->velocity.vx = x;
+        opponent->velocity.vy = y;
+        opponent->velocity.vz = z;
+        x = this->base.force.vx;
+        y = this->base.force.vy;
+        z = this->base.force.vz;
+        opponent->force.vx = x;
+        opponent->force.vy = y;
+        opponent->force.vz = z;
+    }
+    switch (frame) {
+    case 0:
+        Fighter_hold(opponent, 8);
+        break;
+    case 8: {
+        s32 clip;
+
+        Fighter_takeHit(opponent, 0x800800, (Vec3 *)&ZERO_VECTOR, 0);
+        Fighter_hold(opponent, 57);
+        clip = D_8006C844[Fighter_getCharacter(opponent)];
+        Fighter_setClip(opponent, clip, 0, 0);
+        break;
+    }
+    case 30:
+        if (func_8007758C(opponent)->life <= 0) {
+            Fighter_stopActionClip(&this->base);
+            return;
+        }
+        break;
+    case 34:
+        this->base.force.vy -= ((s64)this->base.mass * 0x7FF8) >> 16;
+        break;
+    case 57: {
+        Entity *entity = (Entity *)NEW_ENTITY(0x28, WarGreymonThrowEffect_init, &this->base, Fighter_getFacing(&this->base));
+        Fighter_addEntity(&this->base, entity);
+        break;
+    }
+    }
+    if (frame >= 34 && frame < 57) {
+        if (this->base.velocity.vy > 0) {
+            this->base.force.vy -= this->base.velocity.vy;
+        }
+    }
+    if (frame >= 8 && frame < 57) {
+        WarGreymon_holdOpponent(&this->base);
+    }
+}
+
 
 /* The offset of point 16 the throw holds the opponent at. */
 extern VECTOR WARGREYMON_THROW_GRIP_OFFSET;
@@ -614,7 +676,20 @@ WarGreymonSpecial1Hitbox *WarGreymonSpecial1Hitbox_init(WarGreymonSpecial1Hitbox
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymonSpecial1Hitbox_tick);
+void WarGreymonSpecial1Hitbox_tick(WarGreymonSpecial1Hitbox *this) {
+    this->position.vx += this->speed;
+    this->speed += this->acceleration;
+    this->radius += 8;
+    this->parts.part.position.vx = this->position.vx;
+    this->parts.part.position.vy = this->position.vy;
+    this->parts.part.position.vz = this->position.vz;
+    this->frames++;
+    this->parts.part.radius = this->radius;
+
+    if (this->frames >= 13) {
+        entityDelete(&this->parts.entity);
+    }
+}
 
 /* On a hit: Hit_apply with sum, then the hitbox deletes itself when getHitFighter finds a fighter in sum. */
 void WarGreymonSpecial1Hitbox_hit(UnkPartsEntity38 *this, CollisionSphere *sum) {
@@ -672,7 +747,30 @@ void func_800BCB4C(Unk800BCAD8 *this, CollisionSphere *sum) {
     Trail_tick(&this->base, sum);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BCBD8);
+void func_800BCBD8(Unk800BCAD8 *this) {
+    s32 delta;
+    s32 i;
+    s32 j;
+    s32 count = this->base.length - 1;
+    s32 valid = this->base.validCount - 1;
+    s32 head = this->base.head;
+
+    if (valid < count) {
+        count = valid;
+    }
+
+    delta = this->x >> 2;
+    for (i = 0; i < 2; i++, delta >>= 2) {
+        TrailSample *samples = this->base.samples[i];
+
+        for (j = 0; j <= count; j++) {
+            TrailSample *sample = &samples[(head - j) & 0x1F];
+
+            sample->x -= delta;
+        }
+    }
+}
+
 
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BCC7C);
 

@@ -5,6 +5,12 @@
 #include "battle/game_classes.h"
 #include "engine/gfx/prim/build_line_g2.h"
 #include "engine/gfx/prim_buffer.h"
+#include "engine/math/sin_cos.h"
+#include "engine/gfx/camera.h"
+#include "engine/math/matrix.h"
+
+extern SVECTOR D_80068B8C[];
+
 
 extern FaceEntry GUILMON_FACES[];
 extern VtableEntry GUILMON_SPECIAL2_HITBOX_HIT_VTABLE[];
@@ -278,7 +284,7 @@ typedef struct GuilmonSpecial2Hitbox {
     /* 0x80 */ Fighter *fighter;
     /* 0x84 */ s16 unk84;
     /* 0x86 */ u16 unk86;
-    /* 0x88 */ s16 unk88;
+    /* 0x88 */ u16 unk88;
     /* 0x8A */ u16 unk8A;
     /* 0x8C */ u16 unk8C;
     /* 0x8E */ u16 unk8E;
@@ -858,7 +864,261 @@ void GuilmonSpecial2Hitbox_hit(Unk800AD5BC *this) {
     this->unk44 |= 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/guilmon", GuilmonSpecial2Hitbox_draw);
+/* Draws the special move 2's flame aura: an initial POLY_FT4 sprite at offset (0, 0, 0)
+ * followed by 9 rotating POLY_GT4 quads radiating outwards. */
+void GuilmonSpecial2Hitbox_draw(GuilmonSpecial2Hitbox *this, Camera *camera) {
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    SVECTOR *new_var7;
+    PolyGT4Shape shape2;
+    int new_var5;
+    MATRIX *mat;
+    s32 i;
+    VECTOR *point;
+    s32 x;
+    s32 y;
+    s32 z;
+    s32 dist0;
+    s32 dist1;
+    s32 angle0;
+    s32 angle1;
+    s32 cos0;
+    int new_var6;
+    s32 sin0;
+    s32 cos1;
+    s32 sin1;
+    u8 c0;
+    unsigned long c1;
+    u32 color0;
+    u32 color1;
+    s16 *pA6;
+    s16 *p92;
+    s32 v5f;
+    s32 v20;
+    int new_var3;
+    s32 v40;
+    s32 v7f;
+    CosSin *table;
+    PolyGT4Shape *s2_ptr;
+    SVECTOR *corn0;
+    SVECTOR *corn1;
+    SVECTOR *corn2;
+    SVECTOR *corn3;
+    s32 next_i;
+    s32 zero = 0;
+
+    mat = &m.m;
+    shape.flags = 0;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    m.m.t[0] = 0;
+    m.m.t[1] = 0;
+    m.m.t[2] = 0;
+    m.words[4] = (m.words[2] = (m.words[0] = *(u16 *)&this->unkD0));
+    point = inline_fn((VECTOR *)&this->unkE4);
+    x = point->vx;
+    y = point->vy;
+    z = point->vz;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    setModelMatrix(mat);
+
+    shape.tpage = (((((0 & 0x3) << 7) | ((1 & 0x3) << 5)) | ((this->unk88 & 0x100) >> 4)) | ((0x1C0 & 0x3ff) >> 6)) |
+                  ((this->unk88 & 0x200) << 2);
+    shape.flags = (shape.flags & (~3)) | 9;
+    if ((this->unk86 ^ 1) & 1) {
+        ((u8 *)(&shape.uv0))[0] = 0xB0;
+        ((u8 *)(&shape.uv1))[0] = 0xEF;
+        ((u8 *)(&shape.uv2))[0] = 0xB0;
+        ((u8 *)(&shape.uv3))[0] = 0xEF;
+    } else {
+        ((u8 *)(&shape.uv0))[0] = 0xEF;
+        ((u8 *)(&shape.uv1))[0] = 0xB0;
+        ((u8 *)(&shape.uv2))[0] = 0xEF;
+        ((u8 *)(&shape.uv3))[0] = 0xB0;
+    }
+    ((u8 *)(&shape.uv0))[1] = 0xC0;
+    ((u8 *)(&shape.uv1))[1] = 0xC0;
+    ((u8 *)(&shape.uv2))[1] = 0xFF;
+    ((u8 *)(&shape.uv3))[1] = 0xFF;
+    shape.color = 0x808080;
+    shape.corners[0] = &D_80068B8C[0];
+    shape.corners[1] = &D_80068B8C[1];
+    new_var7 = &D_80068B8C[2];
+    shape.corners[2] = new_var7;
+    shape.corners[3] = &D_80068B8C[3];
+    shape.clut = ((this->unk88 + 0xF8) << 6) | ((0x1C0 >> 4) & 0x3f);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
+
+    shape2.flags = 0;
+    if (this->unk84 >= (0 + 1)) {
+        m.words[0] = 0x1000;
+        m.words[1] = 0;
+        m.words[2] = 0x1000;
+        m.words[3] = 0;
+        m.words[4] = 0x1000;
+        m.m.t[0] = 0;
+        m.m.t[1] = 0;
+        m.m.t[2] = 0;
+    } else {
+        matrixInitRotationY(&m.m, 0x800);
+    }
+    {
+        VECTOR *pos = (VECTOR *)&this->unkD4;
+        m.m.t[0] = pos->vx;
+        m.m.t[1] = pos->vy;
+        m.m.t[2] = pos->vz;
+    }
+    mat = &m.m;
+    setModelMatrix(mat);
+
+    v5f = 0x5F;
+    v20 = 0x20;
+    v40 = 0x40;
+    v7f = 0x7F;
+    i = 0;
+    pA6 = this->unkA6;
+    corn0 = &corners[0];
+    corn1 = &corners[1];
+    corn2 = &corners[2];
+    corn3 = &corners[3];
+    s2_ptr = &shape2;
+    table = COS_SIN_TABLE;
+    shape2.tpage = (((((0 & 0x3) << 7) | ((1 & 0x3) << 5)) | ((this->unk88 & 0x100) >> 4)) | ((0x1C0 & 0x3ff) >> 6)) |
+                   ((this->unk88 & 0x200) << 2);
+    p92 = this->unk92;
+    shape2.flags = (shape2.flags & (~3)) | 9;
+
+    for (; i < 9; i++) {
+        switch (i) {
+        case 0:
+            new_var5 = 0x3F;
+            do {
+                shape2.clut = ((this->unk88 + 0x7D) << 6) | ((0x1C0 >> 4) & 0x3f);
+                shape2.u0 = 0;
+                shape2.v0 = v5f;
+                shape2.u1 = new_var5;
+                shape2.v1 = v5f;
+                shape2.u2 = 0;
+                shape2.v2 = v20;
+                shape2.u3 = new_var5;
+                shape2.v3 = v20;
+            } while (0);
+            break;
+
+        case 8:
+            if ((this->unk86 ^ 1) & 1) {
+                shape2.u0 = 0x80;
+                shape2.u1 = 0xBF;
+                shape2.u2 = 0x80;
+                shape2.u3 = 0xBF;
+                shape2.clut = ((this->unk88 + 0x7E) << 6) | ((0x1C0 >> 4) & 0x3f);
+            } else {
+                shape2.u0 = 0xC0;
+                shape2.u1 = 0xFF;
+                shape2.u2 = 0xC0;
+                shape2.u3 = 0xFF;
+                shape2.clut = ((this->unk88 + 0x7B) << 6) | ((0x1C0 >> 4) & 0x3f);
+            }
+            shape2.v0 = v5f;
+            shape2.v1 = v5f;
+            shape2.v2 = v20;
+            shape2.v3 = v20;
+            break;
+
+        default:
+            if ((this->unk86 ^ 1) & 1) {
+                shape2.u0 = v40;
+                shape2.u1 = v7f;
+                shape2.u2 = v40;
+                shape2.u3 = v7f;
+            } else if (camera) {
+                shape2.u0 = v7f;
+                shape2.u1 = v40;
+                shape2.u2 = v7f;
+                shape2.u3 = v40;
+            } else {
+                shape2.u0 = v7f;
+                shape2.u1 = v40;
+                shape2.u2 = v7f;
+                shape2.u3 = v40;
+            }
+            shape2.v0 = v5f;
+            shape2.v1 = v5f;
+            shape2.v2 = v20;
+            shape2.v3 = v20;
+            shape2.clut = ((this->unk88 + 0x7C) << 6) | ((0x1C0 >> 4) & 0x3f);
+            break;
+        }
+
+        {
+            u16 unk8c;
+            s32 base_dist;
+            next_i = i + 1;
+            unk8c = this->unk8C;
+            if (zero == 0) {
+                base_dist = i * 32;
+                if (unk8c == 0 && i >= 5) {
+                    new_var6 = i << 3;
+                    new_var6 -= 8;
+                    dist0 = i * new_var6;
+                    dist1 = next_i * (i << 3);
+                } else {
+                    dist0 = base_dist;
+                    dist1 = next_i * 32;
+                }
+            }
+        }
+
+        if (*(pA6 = pA6, pA6 + i) >= 2) {
+            dist0 += 0x80 - *(p92 = p92, p92 + i);
+        }
+        if (2 <= *(pA6 = pA6, pA6 + next_i)) {
+            dist1 += 0x80 - *(p92 = p92, p92 + next_i);
+        }
+
+        dist0 += 0x50;
+        dist1 += 0x50;
+
+        shape2.corners[0] = corn0;
+        shape2.corners[1] = corn1;
+        shape2.corners[2] = corn2;
+        shape2.corners[3] = corn3;
+        corners[3].vz = 0;
+        corners[2].vz = 0;
+        new_var3 = 1;
+        corners[1].vz = 0;
+        corners[0].vz = 0;
+
+        angle0 = ((i << 8) - 0x100) & 0xFFF;
+        cos0 = table[angle0].cos;
+        sin0 = -COS_SIN_TABLE[angle0].sin;
+        corners[0].vx = (cos0 * 19) >> 10;
+        corners[0].vy = (sin0 * 19) >> 10;
+        corners[new_var3].vx = (cos0 * dist0) >> 12;
+        corners[new_var3].vy = (sin0 * dist0) >> 12;
+
+        angle1 = ((next_i << 8) - 0x100) & 0xFFF;
+        cos1 = table[angle1].cos;
+        sin1 = -COS_SIN_TABLE[angle1].sin;
+        corners[2].vx = (cos1 * 19) >> 10;
+        corners[2].vy = (sin1 * 19) >> 10;
+        corners[3].vx = (cos1 * dist1) >> 12;
+        corners[3].vy = (sin1 * dist1) >> 12;
+
+        c0 = *(u8 *)(p92 = p92, (u8 *)p92 + (9 - i) * 2);
+        c1 = *(u8 *)(p92 = p92, (u8 *)p92 + (9 - next_i) * 2);
+        color0 = (c0 | (c0 << 8)) | (c0 << 16);
+        color1 = (c1 | (c1 << 8)) | (c1 << 16);
+        shape2.colors[0] = (shape2.colors[1] = color0);
+        shape2.colors[2] = (shape2.colors[3] = color1);
+
+        PRIM_BUFFER_FREE = buildPolyGT4(s2_ptr, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
+    }
+}
+
 
 INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", D_80068B1C);
 INCLUDE_RODATA("game/nonmatchings/fighters/guilmon", D_80068B24);
