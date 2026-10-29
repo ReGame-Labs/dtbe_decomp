@@ -676,7 +676,20 @@ WarGreymonSpecial1Hitbox *WarGreymonSpecial1Hitbox_init(WarGreymonSpecial1Hitbox
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymonSpecial1Hitbox_tick);
+void WarGreymonSpecial1Hitbox_tick(WarGreymonSpecial1Hitbox *this) {
+    this->position.vx += this->speed;
+    this->speed += this->acceleration;
+    this->radius += 8;
+    this->parts.part.position.vx = this->position.vx;
+    this->parts.part.position.vy = this->position.vy;
+    this->parts.part.position.vz = this->position.vz;
+    this->frames++;
+    this->parts.part.radius = this->radius;
+
+    if (this->frames >= 13) {
+        entityDelete(&this->parts.entity);
+    }
+}
 
 /* On a hit: Hit_apply with sum, then the hitbox deletes itself when getHitFighter finds a fighter in sum. */
 void WarGreymonSpecial1Hitbox_hit(UnkPartsEntity38 *this, CollisionSphere *sum) {
