@@ -12,6 +12,8 @@
 #include "engine/sound/sound_control.h"
 
 void WarGreymon_spawnAttackTrails(Fighter *this, s32 kind, s32 arg2, s32 arg3, s32 rgb);
+Unk800A9944 *func_800A926C(Unk800A9944 *this, s32 fighter, Vec3 *position);
+void func_800BE4AC(Unk800BE39C *this);
 void func_800BE7D0(Entity *this, s32 arg);
 void func_800BEA1C(Entity *this, s32 arg);
 extern VtableEntry WARGREYMON_SPECIAL1_HITBOX_HIT_VTABLE[];
@@ -1132,9 +1134,138 @@ void func_800BDFCC(Unk800BDA50 *this, s32 arg) {
     soundControlPlaySound(&SOUND_CONTROL, 0x10A, 0);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BE0C4);
+#define UV_BYTES(uv) ((u8 *)&(uv))
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BE39C);
+static inline void setTranslation(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws the explosion as two frames of four corners around this->unk84, with the
+ * 32 by 32 picture at (0x1C0, vramY). The empty asm adds two references to camera
+ * without emitting code: flow1 then gives camera ($s5) priority over ot ($s6), and
+ * the corner stores are ordered so sched1 reproduces the target schedule. */
+void func_800BE0C4(Unk800BDA50 *this, Camera *camera) {
+    MATRIX matrix;
+    MATRIX *m = &matrix;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    PolyFT4Shape *s;
+    u8 *packet;
+    u_long *ot;
+    s32 vramY;
+    s32 fade;
+    s32 val;
+    s32 new_var;
+
+    ot = camera->ot.slots;
+    packet = PRIM_BUFFER_FREE;
+    matrix = camera->view->rotation;
+    setTranslation(matrix.t, (Vec3 *)&this->unk84);
+    new_var = ~3;
+    matrixRotateZ(m, this->unkBC);
+    setModelMatrix(m);
+    __asm__("" : : "r"(camera), "r"(camera));
+
+    corners[3].vz = 0;
+    corners[2].vz = 0;
+    corners[1].vz = 0;
+    corners[0].vz = 0;
+
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+
+    shape.flags = 9;
+
+    corners[1].vy = -this->unkB4;
+    corners[0].vy = -this->unkB4;
+    corners[2].vx = -this->unkB4;
+    corners[0].vx = -this->unkB4;
+
+    vramY = this->vramY;
+
+    corners[3].vy = this->unkB4;
+    corners[2].vy = this->unkB4;
+    corners[3].vx = this->unkB4;
+    corners[1].vx = this->unkB4;
+
+    shape.tpage = ((((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2));
+    s = &shape;
+
+    if (this->unkC0 < 0x80) {
+        fade = 0x80 - this->unkC0;
+        shape.color = fade | (fade << 8) | (fade << 16);
+        UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0xC0;
+        UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xDF;
+        UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0xC0;
+        UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xDF;
+        shape.clut = getClut(0x1C0, vramY + 0xFB);
+        packet = buildPolyFT4(s, packet, ot, camera->zShift);
+    }
+
+    fade = this->unkC0;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0x80;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xBF;
+    shape.clut = getClut(0x1C0, vramY + 0xFC);
+    val = (*(u8 *)&this->unkCC & 1) << 6;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = val;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = val + 0x3F;
+    shape.color = fade | (fade << 8) | (fade << 16);
+    packet = buildPolyFT4(s, packet, ot, camera->zShift);
+
+    shape.color = (fade >> 1) | ((fade >> 1) << 8) | ((fade >> 1) << 16);
+    shape.clut = getClut(0x1C0, vramY + 0xFD);
+    shape.tpage = ((((vramY & 0x100) >> 4) | 0x47) | ((vramY & 0x200) << 2));
+    shape.flags = (shape.flags & new_var) | 0xA;
+    packet = buildPolyFT4(s, packet, ot, camera->zShift);
+
+    PRIM_BUFFER_FREE = packet;
+}
+
+/* Builds func_800BE39C's class (virtual table D_8006C9AC, D_8006C98C for its Hit at 0x18):
+ * func_800A926C's constructor, then sets its knockback and color. */
+Unk800BE39C *func_800BE39C(Unk800BE39C *this, s32 fighter, Vec3 *position, u32 damage, s32 arg4, CVECTOR *color) {
+    Hit *hit;
+    ListNode *node;
+    VECTOR knockback;
+
+    func_800A926C(&this->base, fighter, position);
+    hit = &this->base.unk18;
+    this->base.unk18.vtable = D_8006C98C;
+    this->base.entity.vtable = &D_8006C9AC;
+
+    if (damage == 0) {
+        node = &this->base.unk38.link;
+        this->base.unk38.link.next->prev = this->base.unk38.link.prev;
+        node->prev->next = this->base.unk38.link.next;
+        this->base.unk38.link.next = node;
+        this->base.unk38.link.prev = node;
+    } else {
+        knockback.vx = 0;
+        knockback.vy = -0x1C70;
+        knockback.vz = 0;
+        Hit_setKnockback(hit, &knockback);
+        Hit_set(hit, damage, 8);
+    }
+
+    this->base.color = *color;
+    this->base.unk98 = 0x80;
+    this->base.unk9A = 0x80;
+    this->base.unk9C = 0x40;
+    this->base.unk9E = 0x40;
+    this->unkD8 = arg4;
+    this->unkDC = 0;
+    this->base.clut = getClut(0x1C0, this->base.vramY + 0xFE);
+    func_800BE4AC(this);
+    return this;
+}
 
 /* Stops the sound at 0xD4. */
 void func_800BE4AC(Unk800BE39C *this) {
