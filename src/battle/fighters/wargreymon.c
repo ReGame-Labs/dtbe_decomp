@@ -1305,7 +1305,115 @@ Unk800BDA50 *func_800BDA50(Unk800BDA50 *this, Fighter *owner, Vec3 *pos, s32 arg
 
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C944);
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BDB80);
+extern VECTOR D_8006C944[2];
+VECTOR *Fighter_getNodesMidpoint(Fighter *this, VECTOR *out, s32 node0, VECTOR *offset0, s32 node1, VECTOR *offset1);
+
+/* Ticks func_800BDA50's entity, a state machine in unkC4: 0 holds it between the owner's nodes 0x10 and 5
+ * (offsets D_8006C944 raised by the radius, which swells as a cosine of unkCC over unkC8), then gives the hit
+ * its knockback, adds the sphere to the owner's side and moves on (or fades out, 3, when the owner is gone, idle
+ * or in body state 0x13); 1 flies by the velocity with the sphere along until unkCC passes 0x80; 2 homes on unkA4
+ * by an eighth of the way each tick until within 0x100, then fades; 3 grows and fades until deleted. The match
+ * depends on state 2's own locals and the order of its loads and stores. */
+void func_800BDB80(Unk800BDA50 *this) {
+    Fight *fight = CURRENT_FIGHT;
+    Fighter *owner = (Fighter *)getEntityByHandle(this->unk80);
+    VECTOR offsets[2];
+    VECTOR kb;
+    s32 x, y, z;
+    s32 angle;
+
+    switch (this->unkC4) {
+    case 0:
+        if (owner != NULL && !Fighter_isAttackIdle(owner) && Fighter_getBodyStateId(owner) != 0x13) {
+            angle = (this->unkCC << 10) / this->unkC8;
+            this->unkB4 = this->unkB8 - ((this->unkB8 * COS_SIN_TABLE[angle & 0xFFF].cos) >> 12);
+            offsets[0] = D_8006C944[0];
+            offsets[1] = D_8006C944[1];
+            offsets[0].vy += this->unkB4;
+            offsets[1].vy += this->unkB4;
+            Fighter_getNodesMidpoint(owner, (VECTOR *)&this->unk84, 0x10, &offsets[1], 5, &offsets[0]);
+            if (this->unkCC > this->unkC8) {
+                memset(&kb, 0, sizeof(kb));
+                kb.vy = -0x4000;
+                kb.vx = this->unk94.vx << 7;
+                offsets[1] = kb;
+                offsets[0] = offsets[1];
+                Hit_setKnockback(&this->unk18, &offsets[0]);
+                if (Fighter_getSide(owner) == 0) {
+                    Fight_addSide0Shape(fight, &this->unk38.link);
+                } else {
+                    Fight_addSide1Shape(fight, &this->unk38.link);
+                }
+                this->unkC4++;
+            }
+        } else {
+            this->unkC4 = 3;
+            this->unk38.flags.word |= 1;
+        }
+        break;
+    case 1:
+        x = this->unk84;
+        y = this->unk88;
+        z = this->unk8C;
+        x += this->unk94.vx;
+        y += this->unk94.vy;
+        z += this->unk94.vz;
+        this->unk84 = x;
+        this->unk88 = y;
+        this->unk8C = z;
+        this->unk38.position.vx = x;
+        this->unk38.position.vy = y;
+        this->unk38.position.vz = z;
+        this->unk38.radius = this->unkB4;
+        if (this->unkCC <= 0x80) {
+            break;
+        }
+        goto destroy;
+    case 2: {
+        s32 x, y, z, tx, ty, tz;
+        x = this->unk84;
+        y = this->unk88;
+        z = this->unk8C;
+        tx = this->unkA4.vx;
+        ty = this->unkA4.vy;
+        x += this->unk94.vx;
+        tz = this->unkA4.vz;
+        y += this->unk94.vy;
+        z += this->unk94.vz;
+        tx -= x;
+        ty -= y;
+        this->unk84 = x;
+        this->unk88 = y;
+        this->unk94.vx = tx;
+        tz -= z;
+        this->unk8C = z;
+        this->unk94.vz = tz;
+        this->unk94.vy = ty;
+        }
+        this->unkB4 = vecGetLength((VECTOR *)&this->unk94);
+        this->unk94.vx >>= 3;
+        this->unk94.vy >>= 3;
+        this->unk94.vz >>= 3;
+        if (this->unkB4 < 0x100) {
+            goto destroy;
+        }
+    case 3:
+        this->unkB4 += 0x10;
+        this->unkC0 -= 8;
+        if (this->unkC0 <= 0) {
+        destroy:
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->unkC0 += 4;
+    if (this->unkC0 > 0x80) {
+        this->unkC0 = 0x80;
+    }
+    this->unkBC += 0x60;
+    this->unkCC++;
+}
 
 /* The virtual table of func_800BDA50's class (D_8006C9FC): Entity's methods, then the one at 0x20 (func_800BDFCC). */
 typedef struct Unk800BDA50Vtable {
