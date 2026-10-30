@@ -6,12 +6,15 @@
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
 #include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/lights.h"
 #include "engine/gfx/prim_buffer.h"
 #include "engine/math/sin_cos.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 
 void WarGreymon_spawnAttackTrails(Fighter *this, s32 kind, s32 arg2, s32 arg3, s32 rgb);
+Unk800A9944 *func_800A926C(Unk800A9944 *this, s32 fighter, Vec3 *position);
+void func_800BE4AC(Unk800BE39C *this);
 void func_800BE7D0(Entity *this, s32 arg);
 void func_800BEA1C(Entity *this, s32 arg);
 extern VtableEntry WARGREYMON_SPECIAL1_HITBOX_HIT_VTABLE[];
@@ -322,7 +325,102 @@ void WarGreymonThrowEffect_tick(WarGreymonThrowEffect *this, s32 arg) {
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C8B4);
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C8FC);
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymon_special1);
+extern TrailPoint D_8006C8B4[];
+extern TrailPoint D_8006C8FC[];
+struct WarGreymonSpecial1Hitbox;
+struct Unk800BCAD8;
+struct WarGreymonSpecial1Effect;
+struct WarGreymonSpecial1Hitbox *WarGreymonSpecial1Hitbox_init(struct WarGreymonSpecial1Hitbox *this, Fighter *fighter,
+                                                                Vec3 *knockback, s32 damage, s32 radius,
+                                                                s32 acceleration);
+struct Unk800BCAD8 *func_800BCAD8(struct Unk800BCAD8 *this, Fighter *fighter, TrailPoint *entries, s32 count,
+                                   s32 arg4, s32 arg5, s32 mode);
+struct WarGreymonSpecial1Effect *WarGreymonSpecial1Effect_init(struct WarGreymonSpecial1Effect *this, Fighter *fighter,
+                                                                s32 targetLength, s32 tilt);
+void Trail_record(Trail *this);
+void Trail_fadeColors(Trail *this);
+
+void WarGreymon_special1(WarGreymon *this, s32 frame) {
+    Entity *child;
+    s32 isWarGreymon;
+    Vec3 *facingKnockback;
+    s32 damage;
+    Vec3 knockback;
+    Vec3 *kb;
+    s32 *handle;
+    s32 i;
+
+    Fighter_special1(&this->base, frame);
+    isWarGreymon = Fighter_getCharacter(&this->base) == CHARACTER_WARGREYMON;
+    switch (frame) {
+    case 0:
+        Fighter_playVoice(&this->base, isWarGreymon ? 0x10D : 0x11F);
+        this->base.rotation.vy = this->base.targetRotation.vy;
+        child = NEW_ENTITY(0x6A0, func_800BCAD8, &this->base, D_8006C8B4, 3, 15, 2, 0);
+        if (child != NULL) {
+            Fighter_addEntity(&this->base, child);
+            this->unk4A4 = entityGetHandle(child);
+            Fighter_playSound(&this->base, isWarGreymon ? 0x107 : 0x119);
+        }
+        break;
+    case 1:
+        damage = 0x4A814CC;
+        knockback.vx = 0;
+        knockback.vy = -0x38E0;
+        kb = &knockback;
+        knockback.vz = 0;
+        if (isWarGreymon) {
+            damage = 0x4A81000;
+        }
+        child = NEW_ENTITY(0xA0, WarGreymonSpecial1Hitbox_init, &this->base, kb, damage, 0x100, 12);
+        Fighter_addEntity(&this->base, child);
+        break;
+    case 12:
+        child = NEW_ENTITY(0x6A0, func_800BCAD8, &this->base, D_8006C8FC, 3, 10, 7, 1);
+        if (child != NULL) {
+            Fighter_addEntity(&this->base, child);
+            this->unk4A8 = entityGetHandle(child);
+            Fighter_playSound(&this->base, isWarGreymon ? 0x107 : 0x119);
+        }
+        break;
+    case 13:
+        knockback.vx = Fighter_getFacing(&this->base) * 0x38E0;
+        facingKnockback = &knockback;
+        damage = 0x45A82999;
+        knockback.vy = -0x4718;
+        knockback.vz = 0;
+        if (isWarGreymon) {
+            damage = 0x45A82000;
+        }
+        kb = facingKnockback;
+        child = NEW_ENTITY(0xA0, WarGreymonSpecial1Hitbox_init, &this->base, kb, damage, 0x1C0, 4);
+        Fighter_addEntity(&this->base, child);
+        break;
+    }
+    if ((u32)(frame - 16) < 5) {
+        child = NEW_ENTITY(0x58, WarGreymonSpecial1Effect_init, &this->base, (frame - 16) * 64 + 0x380,
+                           (frame - 16) * 128 - 0x40);
+        Fighter_addEntity(&this->base, child);
+    }
+    modelUpdateAnimation(this->base.model);
+    handle = &this->unk4A4;
+    for (i = 0; i < 2; i++) {
+        Trail *trail = (Trail *)getEntityByHandle(*handle);
+
+        if (trail != NULL) {
+            if (trail->recordTimer > 0) {
+                Trail_record(trail);
+                Trail_fadeColors(trail);
+            }
+        } else {
+            *handle = 0;
+        }
+        handle++;
+    }
+    if (Fighter_isActionClipDone(&this->base)) {
+        func_80079B0C(&this->base, 15);
+    }
+}
 
 void func_800BC0CC(WarGreymon *this, s32 arg);
 void func_800BC0E0(WarGreymon *this, s32 arg);
@@ -489,7 +587,48 @@ void func_800BC13C(WarGreymon *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BC258);
+/* Special move 2's flight (from frame 10): brakes the velocity by 1/32, lifts by unk4BC (or 0x71C of the mass
+ * without unk4B0), whose lift grows by a sixth of it up to that; every other frame below 0x19 runs the
+ * vtable's slot 0x120; every 4 frames resets the hit (damage by character, knockback half the velocity back);
+ * every 8 frames sets hitKind to 1. */
+void func_800BC258(WarGreymon *this) {
+    s32 lift;
+    s32 *forceY;
+    s32 y;
+
+    this->base.force.vx -= this->base.velocity.vx >> 5;
+    this->base.force.vy -= this->base.velocity.vy >> 5;
+    forceY = &this->base.force.vy;
+    lift = ((s64)this->base.mass * 0x71C) >> 16;
+    if (this->unk4B0) {
+        y = this->base.force.vy - this->unk4BC;
+    } else {
+        y = this->base.force.vy - lift;
+    }
+    *forceY = y;
+    this->unk4BC += lift / 6;
+    if (lift < this->unk4BC) {
+        this->unk4BC = lift;
+    }
+    if (this->unk4C0 < 0x19 && (this->unk4C0 & 1)) {
+        WarGreymonVtable *vtable = GET_WARGREYMON_VTABLE(this);
+
+        vtable->unk120.func((u8 *)this + vtable->unk120.delta);
+    }
+    if ((this->unk4C0 & 3) == 0) {
+        if (Fighter_getCharacter(&this->base) == CHARACTER_WARGREYMON) {
+            this->base.hitDamage = 0x5AC0400;
+        } else {
+            this->base.hitDamage = 0x4AC0533;
+        }
+        this->base.hitKnockback.vz = 0;
+        this->base.hitKnockback.vx = -this->base.velocity.vx >> 1;
+        this->base.hitKnockback.vy = -this->base.velocity.vy;
+    }
+    if ((this->unk4C0 & 7) == 0) {
+        this->base.hitKind = 1;
+    }
+}
 
 /* Creates an entity of func_800BD490's class (0x120 bytes) with g++'s new, and hands it to Fighter_addEntity. */
 void func_800BC3C8(Fighter *this) {
@@ -772,7 +911,47 @@ void func_800BCBD8(Unk800BCAD8 *this) {
 }
 
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BCC7C);
+struct Unk800BD1C4;
+struct Unk800BD1C4 *func_800BD1C4(struct Unk800BD1C4 *this, VECTOR position, s32 vramY);
+
+/* Sheds a piece (func_800BD1C4) from each recorded sample of the third point, scattered in x by up to the speed
+ * and in y by a random 0..0x7F, as siblings of the trail. The match depends on RANDOM's address taken into a
+ * local before the loop, and on the position copied for the call only after entityOperatorNewAt. */
+void func_800BCC7C(Unk800BCAD8 *this) {
+    s32 i;
+    s32 spread;
+    s32 count = this->base.length - 1;
+    s32 valid = this->base.validCount - 1;
+    s32 head = this->base.head;
+    s32 vramY;
+    TrailSample *samples;
+    MersenneTwister *rng;
+
+    if (valid < count) {
+        count = valid;
+    }
+    spread = abs(this->speed) + 1;
+    vramY = Fighter_getVramY(this->base.fighter);
+    samples = this->base.samples[2];
+    rng = &RANDOM;
+    for (i = 0; i <= count; i++) {
+        TrailSample *sample = &samples[(head - i) & 0x1F];
+        VECTOR position;
+        VECTOR arg;
+        Entity *child;
+        s32 r;
+
+        position.vx = sample->x + this->x - mersenneTwisterGenerate(rng) % spread;
+        r = mersenneTwisterGenerate(rng);
+        position.vy = sample->y + r % 128;
+        position.vz = sample->z;
+        child = allocEntityMemory(0x48);
+        if (child != NULL) {
+            func_800BD1C4(entityOperatorNewAt(0x48, child), ({ arg = position; arg; }), vramY);
+        }
+        entityAddSibling(&this->base.entity, child);
+    }
+}
 
 /* The draw method of Unk800BCAD8: sets the model matrix to a translation by x, then runs the method at 0x20
  * (Trail_drawStrips). */
@@ -975,7 +1154,53 @@ void func_800BD254(Unk800BD1C4 *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BD334);
+/* func_800BD1C4's draw: SQUARE_CORNERS scaled by scaleX and scaleY at the position, with the 16 by 16 picture at
+ * (0, 0xE0), grey by life * 128 / 20, semi-transparent.
+ * The match depends on an empty asm after the y and z loads, which keeps them before the matrix stores. */
+void func_800BD334(Unk800BD1C4 *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    VECTOR *v;
+    u_long *ot;
+    s32 shift;
+    s32 shade;
+    s32 vramY;
+    s32 x, y, z;
+    s32 sy;
+
+    v = &this->position;
+    y = v->vy;
+    z = v->vz;
+    __asm__("");
+    x = this->position.vx;
+    sy = this->scaleY;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    m.words[0] = (u16)this->scaleX;
+    m.words[2] = sy & 0xFFFF;
+    ot = camera->ot.slots;
+    shift = camera->zShift;
+    setModelMatrix(&m.m);
+    shape.corners[0] = &SQUARE_CORNERS[0];
+    shape.corners[1] = &SQUARE_CORNERS[1];
+    shape.corners[2] = &SQUARE_CORNERS[2];
+    shape.corners[3] = &SQUARE_CORNERS[3];
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xF;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0xE0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xEF;
+    shape.flags = 9;
+    shade = this->life * 128 / 20;
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xF9);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    shape.color = shade | (shade << 8) | (shade << 16);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, shift);
+}
 
 /* The entity func_800BD490 constructs (0x120 bytes, virtual table D_8006CA2C): the effect the WarGreymonVtable slot
  * 0x120 spawns, drawn as a band of 8 quads. */
@@ -1080,7 +1305,115 @@ Unk800BDA50 *func_800BDA50(Unk800BDA50 *this, Fighter *owner, Vec3 *pos, s32 arg
 
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C944);
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BDB80);
+extern VECTOR D_8006C944[2];
+VECTOR *Fighter_getNodesMidpoint(Fighter *this, VECTOR *out, s32 node0, VECTOR *offset0, s32 node1, VECTOR *offset1);
+
+/* Ticks func_800BDA50's entity, a state machine in unkC4: 0 holds it between the owner's nodes 0x10 and 5
+ * (offsets D_8006C944 raised by the radius, which swells as a cosine of unkCC over unkC8), then gives the hit
+ * its knockback, adds the sphere to the owner's side and moves on (or fades out, 3, when the owner is gone, idle
+ * or in body state 0x13); 1 flies by the velocity with the sphere along until unkCC passes 0x80; 2 homes on unkA4
+ * by an eighth of the way each tick until within 0x100, then fades; 3 grows and fades until deleted. The match
+ * depends on state 2's own locals and the order of its loads and stores. */
+void func_800BDB80(Unk800BDA50 *this) {
+    Fight *fight = CURRENT_FIGHT;
+    Fighter *owner = (Fighter *)getEntityByHandle(this->unk80);
+    VECTOR offsets[2];
+    VECTOR kb;
+    s32 x, y, z;
+    s32 angle;
+
+    switch (this->unkC4) {
+    case 0:
+        if (owner != NULL && !Fighter_isAttackIdle(owner) && Fighter_getBodyStateId(owner) != 0x13) {
+            angle = (this->unkCC << 10) / this->unkC8;
+            this->unkB4 = this->unkB8 - ((this->unkB8 * COS_SIN_TABLE[angle & 0xFFF].cos) >> 12);
+            offsets[0] = D_8006C944[0];
+            offsets[1] = D_8006C944[1];
+            offsets[0].vy += this->unkB4;
+            offsets[1].vy += this->unkB4;
+            Fighter_getNodesMidpoint(owner, (VECTOR *)&this->unk84, 0x10, &offsets[1], 5, &offsets[0]);
+            if (this->unkCC > this->unkC8) {
+                memset(&kb, 0, sizeof(kb));
+                kb.vy = -0x4000;
+                kb.vx = this->unk94.vx << 7;
+                offsets[1] = kb;
+                offsets[0] = offsets[1];
+                Hit_setKnockback(&this->unk18, &offsets[0]);
+                if (Fighter_getSide(owner) == 0) {
+                    Fight_addSide0Shape(fight, &this->unk38.link);
+                } else {
+                    Fight_addSide1Shape(fight, &this->unk38.link);
+                }
+                this->unkC4++;
+            }
+        } else {
+            this->unkC4 = 3;
+            this->unk38.flags.word |= 1;
+        }
+        break;
+    case 1:
+        x = this->unk84;
+        y = this->unk88;
+        z = this->unk8C;
+        x += this->unk94.vx;
+        y += this->unk94.vy;
+        z += this->unk94.vz;
+        this->unk84 = x;
+        this->unk88 = y;
+        this->unk8C = z;
+        this->unk38.position.vx = x;
+        this->unk38.position.vy = y;
+        this->unk38.position.vz = z;
+        this->unk38.radius = this->unkB4;
+        if (this->unkCC <= 0x80) {
+            break;
+        }
+        goto destroy;
+    case 2: {
+        s32 x, y, z, tx, ty, tz;
+        x = this->unk84;
+        y = this->unk88;
+        z = this->unk8C;
+        tx = this->unkA4.vx;
+        ty = this->unkA4.vy;
+        x += this->unk94.vx;
+        tz = this->unkA4.vz;
+        y += this->unk94.vy;
+        z += this->unk94.vz;
+        tx -= x;
+        ty -= y;
+        this->unk84 = x;
+        this->unk88 = y;
+        this->unk94.vx = tx;
+        tz -= z;
+        this->unk8C = z;
+        this->unk94.vz = tz;
+        this->unk94.vy = ty;
+        }
+        this->unkB4 = vecGetLength((VECTOR *)&this->unk94);
+        this->unk94.vx >>= 3;
+        this->unk94.vy >>= 3;
+        this->unk94.vz >>= 3;
+        if (this->unkB4 < 0x100) {
+            goto destroy;
+        }
+    case 3:
+        this->unkB4 += 0x10;
+        this->unkC0 -= 8;
+        if (this->unkC0 <= 0) {
+        destroy:
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->unkC0 += 4;
+    if (this->unkC0 > 0x80) {
+        this->unkC0 = 0x80;
+    }
+    this->unkBC += 0x60;
+    this->unkCC++;
+}
 
 /* The virtual table of func_800BDA50's class (D_8006C9FC): Entity's methods, then the one at 0x20 (func_800BDFCC). */
 typedef struct Unk800BDA50Vtable {
@@ -1132,9 +1465,138 @@ void func_800BDFCC(Unk800BDA50 *this, s32 arg) {
     soundControlPlaySound(&SOUND_CONTROL, 0x10A, 0);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BE0C4);
+#define UV_BYTES(uv) ((u8 *)&(uv))
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BE39C);
+static inline void setTranslation(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws the explosion as two frames of four corners around this->unk84, with the
+ * 32 by 32 picture at (0x1C0, vramY). The empty asm adds two references to camera
+ * without emitting code: flow1 then gives camera ($s5) priority over ot ($s6), and
+ * the corner stores are ordered so sched1 reproduces the target schedule. */
+void func_800BE0C4(Unk800BDA50 *this, Camera *camera) {
+    MATRIX matrix;
+    MATRIX *m = &matrix;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    PolyFT4Shape *s;
+    u8 *packet;
+    u_long *ot;
+    s32 vramY;
+    s32 fade;
+    s32 val;
+    s32 new_var;
+
+    ot = camera->ot.slots;
+    packet = PRIM_BUFFER_FREE;
+    matrix = camera->view->rotation;
+    setTranslation(matrix.t, (Vec3 *)&this->unk84);
+    new_var = ~3;
+    matrixRotateZ(m, this->unkBC);
+    setModelMatrix(m);
+    __asm__("" : : "r"(camera), "r"(camera));
+
+    corners[3].vz = 0;
+    corners[2].vz = 0;
+    corners[1].vz = 0;
+    corners[0].vz = 0;
+
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+
+    shape.flags = 9;
+
+    corners[1].vy = -this->unkB4;
+    corners[0].vy = -this->unkB4;
+    corners[2].vx = -this->unkB4;
+    corners[0].vx = -this->unkB4;
+
+    vramY = this->vramY;
+
+    corners[3].vy = this->unkB4;
+    corners[2].vy = this->unkB4;
+    corners[3].vx = this->unkB4;
+    corners[1].vx = this->unkB4;
+
+    shape.tpage = ((((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2));
+    s = &shape;
+
+    if (this->unkC0 < 0x80) {
+        fade = 0x80 - this->unkC0;
+        shape.color = fade | (fade << 8) | (fade << 16);
+        UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0xC0;
+        UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xDF;
+        UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0xC0;
+        UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xDF;
+        shape.clut = getClut(0x1C0, vramY + 0xFB);
+        packet = buildPolyFT4(s, packet, ot, camera->zShift);
+    }
+
+    fade = this->unkC0;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0x80;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xBF;
+    shape.clut = getClut(0x1C0, vramY + 0xFC);
+    val = (*(u8 *)&this->unkCC & 1) << 6;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = val;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = val + 0x3F;
+    shape.color = fade | (fade << 8) | (fade << 16);
+    packet = buildPolyFT4(s, packet, ot, camera->zShift);
+
+    shape.color = (fade >> 1) | ((fade >> 1) << 8) | ((fade >> 1) << 16);
+    shape.clut = getClut(0x1C0, vramY + 0xFD);
+    shape.tpage = ((((vramY & 0x100) >> 4) | 0x47) | ((vramY & 0x200) << 2));
+    shape.flags = (shape.flags & new_var) | 0xA;
+    packet = buildPolyFT4(s, packet, ot, camera->zShift);
+
+    PRIM_BUFFER_FREE = packet;
+}
+
+/* Builds func_800BE39C's class (virtual table D_8006C9AC, D_8006C98C for its Hit at 0x18):
+ * func_800A926C's constructor, then sets its knockback and color. */
+Unk800BE39C *func_800BE39C(Unk800BE39C *this, s32 fighter, Vec3 *position, u32 damage, s32 arg4, CVECTOR *color) {
+    Hit *hit;
+    ListNode *node;
+    VECTOR knockback;
+
+    func_800A926C(&this->base, fighter, position);
+    hit = &this->base.unk18;
+    this->base.unk18.vtable = D_8006C98C;
+    this->base.entity.vtable = &D_8006C9AC;
+
+    if (damage == 0) {
+        node = &this->base.unk38.link;
+        this->base.unk38.link.next->prev = this->base.unk38.link.prev;
+        node->prev->next = this->base.unk38.link.next;
+        this->base.unk38.link.next = node;
+        this->base.unk38.link.prev = node;
+    } else {
+        knockback.vx = 0;
+        knockback.vy = -0x1C70;
+        knockback.vz = 0;
+        Hit_setKnockback(hit, &knockback);
+        Hit_set(hit, damage, 8);
+    }
+
+    this->base.color = *color;
+    this->base.unk98 = 0x80;
+    this->base.unk9A = 0x80;
+    this->base.unk9C = 0x40;
+    this->base.unk9E = 0x40;
+    this->unkD8 = arg4;
+    this->unkDC = 0;
+    this->base.clut = getClut(0x1C0, this->base.vramY + 0xFE);
+    func_800BE4AC(this);
+    return this;
+}
 
 /* Stops the sound at 0xD4. */
 void func_800BE4AC(Unk800BE39C *this) {
@@ -1142,7 +1604,123 @@ void func_800BE4AC(Unk800BE39C *this) {
     this->base.unkD4 = 0;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BE4DC);
+typedef struct UnkBE4DC {
+    u8 _00[0x14];
+    EntityVtable *vtable; /* 0x14 */
+    u8 _18[0x38 - 0x18];
+    ListNode link;        /* 0x38 */
+    u8 _40[0x7C - 0x40];
+    s32 unk7C;            /* 0x7C */
+    s32 unk80;            /* 0x80 */
+    Vec3 position;        /* 0x84 */
+    u8 _90[0x94 - 0x90];
+    CVECTOR color;        /* 0x94 */
+    u8 _98[0xA0 - 0x98];
+    u16 clut;             /* 0xA0 */
+    s16 facing;           /* 0xA2 */
+    u8 unkA4[5];          /* 0xA4 */
+    u8 unkA9[9];          /* 0xA9 */
+    u8 _B2[0xB4 - 0xB2];
+    s32 unkB4;            /* 0xB4 */
+    s32 unkB8;            /* 0xB8 */
+    s32 unkBC;            /* 0xBC */
+    s32 unkC0;            /* 0xC0 */
+    s32 unkC4;            /* 0xC4 */
+    s32 unkC8;            /* 0xC8 */
+    s32 unkCC;            /* 0xCC */
+    s32 vramY;            /* 0xD0 */
+    u32 unkD4;            /* 0xD4 */
+    s32 unkD8;            /* 0xD8 */
+    s32 unkDC;            /* 0xDC */
+} UnkBE4DC;
+
+void func_800BE4DC(UnkBE4DC *this) {
+    Entity *child;
+    register s32 diff asm("$2");
+    s32 end;
+    s32 newB8;
+    register s32 step asm("$4");
+    register s32 start asm("$3");
+    s32 i;
+    s32 v;
+    s32 shade;
+    s32 a2;
+    s32 b;
+    u8 *p;
+    u8 *q;
+    u8 *r;
+    ListNode *node;
+
+    switch (this->unkC8) {
+    case 0:
+        start = this->unkB8 - 8;
+        this->unkB8 += (this->unkD8 - start) >> 3;
+        if (this->unkB8 >= this->unkD8) {
+            this->unkC8 = 1;
+        }
+        break;
+    case 1:
+        if (this->unkCC >= 0x29) {
+            child = allocEntityMemory(0x3C);
+            if (child != NULL) {
+                func_800C6088(entityOperatorNewAt(0x3C, child), 9, &this->position, this->unkB8, 0x20, -0x50,
+                              *(s32 *)&this->color);
+            }
+            entityAddSibling((Entity *)this, child);
+            node = &this->link;
+            this->link.next->prev = this->link.prev;
+            node->prev->next = this->link.next;
+            this->link.next = node;
+            this->link.prev = node;
+            this->unkC8++;
+        }
+        break;
+    case 2:
+        end = this->unkD8 + 0x200;
+        start = this->unkB8;
+        diff = end - start;
+        step = diff >> 3;
+        newB8 = start + step;
+        __asm__ volatile("" ::: "memory");
+        if (diff < 0) {
+            diff = -diff;
+        }
+        diff >>= 2;
+        this->unkB8 = newB8;
+        if (diff < 0x80) {
+            shade = diff;
+        } else {
+            shade = 0x80;
+        }
+        __asm__("" : : "r"(step));
+        this->unkBC = shade;
+        if (shade < 8) {
+            entityDelete((Entity *)this);
+            return;
+        }
+        break;
+    }
+
+    a2 = (this->unkCC >> 1) & 0x3F;
+    b = (u8)this->unkCC & 0x3F;
+    if (this->facing > 0) {
+        a2 = (0x3F - a2) & 0xFF;
+    }
+    q = this->unkA9;
+    i = 4;
+    p = &this->unkA4[4];
+    do {
+        *p-- = a2 + i * 0x10;
+    } while (--i >= 0);
+    i = 8;
+    r = q + 8;
+    do {
+        *r-- = b + i * 8;
+    } while (--i >= 0);
+    this->unk7C = this->unkB8;
+    this->unkDC += (this->unkD8 - this->unkDC) >> 3;
+    this->unkCC++;
+}
 
 /* The second base's first method for virtual table D_8006C98C: Hit_apply with sum, then unlinks the part at
  * 0x38 when getHitFighter finds an entity in sum. */
@@ -1168,9 +1746,175 @@ void func_800BE788(Entity *this, s32 arg) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C968);
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BE7D0);
+typedef struct {
+    s32 words[8];
+} Corners4;
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BEA1C);
+extern Corners4 D_8006C968;
+
+static inline void setTranslationWG(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* The second draw of D_8006C9AC's entities: four quarters of a square of side 2 * (unkB8 - unkB8 / 4) facing the
+ * camera at the position, from D_8006C968's corners, with the 64 by 64 picture at (0xC0, 0x80), grey by unkBC / 2,
+ * semi-transparent. */
+void func_800BE7D0(Entity *arg, s32 cameraArg) {
+    UnkBE4DC *this = (UnkBE4DC *)arg;
+    Camera *camera = (Camera *)cameraArg;
+    MATRIX m;
+    MATRIX *mp = &m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    register u8 *packet asm("$16");
+    u_long *ot;
+    s32 shift;
+    s32 shade;
+
+    packet = PRIM_BUFFER_FREE;
+    m = camera->view->rotation;
+    cameraArg = this->unkB8 >> 2;
+    cameraArg = this->unkB8 - cameraArg;
+    setTranslationWG(m.t, &this->position);
+    ot = camera->ot.slots;
+    shift = camera->zShift;
+    matrixScale(mp, this->unkB8 - (this->unkB8 >> 2), this->unkB8 - (this->unkB8 >> 2), this->unkB8 - (this->unkB8 >> 2));
+    setModelMatrix(mp);
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0xC0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xFF;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0x80;
+    *(Corners4 *)corners = D_8006C968;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xBF;
+    shade = this->unkBC >> 1;
+    shape.color = shade | (shade << 8) | (shade << 16);
+    shape.clut = this->clut;
+    shape.tpage = (((this->vramY & 0x100) >> 4) | 0x27) | ((this->vramY & 0x200) << 2);
+    shape.flags = 9;
+    packet = buildPolyFT4(&shape, packet, ot, shift);
+    corners[0].vx = corners[2].vx = 0x1000;
+    packet = buildPolyFT4(&shape, packet, ot, shift);
+    corners[0].vy = corners[1].vy = 0x1000;
+    packet = buildPolyFT4(&shape, packet, ot, shift);
+    corners[0].vx = corners[2].vx = -0x1000;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, shift);
+}
+
+/* Sets w to the identity with translation v. The diagonal's later words copied from words[0] keep their stores
+ * relative to sp, as in the original. */
+static inline void setIdentityAt(MatrixWords *w, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    w->words[0] = 0x1000;
+    w->words[1] = 0;
+    w->words[2] = w->words[0];
+    w->words[3] = 0;
+    w->words[4] = w->words[0];
+    w->m.t[0] = x;
+    w->m.t[1] = y;
+    w->m.t[2] = z;
+}
+
+/* The third draw of D_8006C9AC's entities: a ring of 17 spokes (each a point at radius 0x1000 and one at 5/4 of it,
+ * at angles of 0x80 steps from the opposite direction), shaded by unkBC times the sine, drawn twice as 15
+ * POLY_GT4s with the 32 by 32 picture at ((unkCC & 3) * 32, 0xC0): at the position, turned by +0x200 and then
+ * -0x200 about z, by 0x80 about x and scaled by unkDC. */
+void func_800BEA1C(Entity *arg, s32 cameraArg) {
+    UnkBE4DC *this = (UnkBE4DC *)arg;
+    Camera *camera = (Camera *)cameraArg;
+    SVECTOR bandArr[17][2];
+    u32 colorArr[17];
+    PolyGT4Shape shape;
+    MatrixWords m;
+    SVECTOR (*band)[2];
+    MATRIX *mp;
+    u_long *ot;
+    s32 shift;
+    u8 *packet;
+    s32 i;
+    s32 scale;
+    s32 u;
+    s32 vramY;
+    s32 bc;
+    SVECTOR *p;
+    u32 *col;
+
+    ot = camera->ot.slots;
+    shift = camera->zShift;
+    packet = PRIM_BUFFER_FREE;
+    bc = this->unkBC;
+    band = bandArr;
+    col = colorArr;
+    for (i = 0; i < 17; i++) {
+        s32 angle = (i << 7) & 0xF80;
+        s16 c, s;
+        s32 shade;
+
+        p = band[i];
+        p[0].vy = 0;
+        p[1].vy = 0;
+        c = COS_SIN_TABLE[angle].cos;
+        s = COS_SIN_TABLE[angle].sin;
+        c = -c;
+        s = -s;
+        p[0].vx = c;
+        p[0].vz = s;
+        p[1].vx = c + (c >> 2);
+        p[1].vz = s + (s >> 2);
+        shade = -(s * bc) >> 12;
+        col[i] = shade | (shade << 8) | (shade << 16);
+    }
+    mp = &m.m;
+    shape.v0 = shape.v1 = 0xC0;
+    shape.v2 = shape.v3 = 0xDF;
+    shape.flags = 9;
+    u = ((u8)this->unkCC & 3) << 5;
+    shape.u0 = shape.u2 = u;
+    shape.u1 = shape.u3 = u + 0x1F;
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xF7);
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+    setIdentityAt(&m, &this->position);
+    scale = this->unkDC;
+    matrixSetRotationZ(mp, 0x200);
+    matrixRotateX(mp, 0x80);
+    matrixScale(mp, scale, scale, scale);
+    setModelMatrix(mp);
+    for (i = 0; i < 15; i++) {
+        shape.colors[0] = shape.colors[2] = col[i];
+        shape.colors[1] = shape.colors[3] = col[i + 2];
+        shape.corners[0] = &band[i][0];
+        shape.corners[1] = &band[i + 2][0];
+        shape.corners[2] = &band[i][1];
+        shape.corners[3] = &band[i + 2][1];
+        packet = buildPolyGT4(&shape, packet, ot, shift);
+    }
+    matrixSetRotationZ(mp, -0x200);
+    matrixRotateX(mp, 0x80);
+    matrixScale(mp, scale, scale, scale);
+    setModelMatrix(mp);
+    for (i = 0; i < 15; i++) {
+        shape.colors[0] = shape.colors[2] = col[i];
+        shape.colors[1] = shape.colors[3] = col[i + 2];
+        shape.corners[0] = &band[i][0];
+        shape.corners[1] = &band[i + 2][0];
+        shape.corners[2] = &band[i][1];
+        shape.corners[3] = &band[i + 2][1];
+        packet = buildPolyGT4(&shape, packet, ot, shift);
+    }
+    PRIM_BUFFER_FREE = packet;
+}
 
 /* WarGreymon's destructor. */
 void WarGreymon_destroy(Entity *this, s32 flags) {
