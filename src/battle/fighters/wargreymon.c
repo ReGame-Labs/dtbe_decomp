@@ -1701,7 +1701,112 @@ void func_800BE7D0(Entity *arg, s32 cameraArg) {
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, shift);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BEA1C);
+/* Sets w to the identity with translation v. The diagonal's later words copied from words[0] keep their stores
+ * relative to sp, as in the original. */
+static inline void setIdentityAt(MatrixWords *w, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    w->words[0] = 0x1000;
+    w->words[1] = 0;
+    w->words[2] = w->words[0];
+    w->words[3] = 0;
+    w->words[4] = w->words[0];
+    w->m.t[0] = x;
+    w->m.t[1] = y;
+    w->m.t[2] = z;
+}
+
+/* The third draw of D_8006C9AC's entities: a ring of 17 spokes (each a point at radius 0x1000 and one at 5/4 of it,
+ * at angles of 0x80 steps from the opposite direction), shaded by unkBC times the sine, drawn twice as 15
+ * POLY_GT4s with the 32 by 32 picture at ((unkCC & 3) * 32, 0xC0): at the position, turned by +0x200 and then
+ * -0x200 about z, by 0x80 about x and scaled by unkDC. */
+void func_800BEA1C(Entity *arg, s32 cameraArg) {
+    UnkBE4DC *this = (UnkBE4DC *)arg;
+    Camera *camera = (Camera *)cameraArg;
+    SVECTOR bandArr[17][2];
+    u32 colorArr[17];
+    PolyGT4Shape shape;
+    MatrixWords m;
+    SVECTOR (*band)[2];
+    MATRIX *mp;
+    u_long *ot;
+    s32 shift;
+    u8 *packet;
+    s32 i;
+    s32 scale;
+    s32 u;
+    s32 vramY;
+    s32 bc;
+    SVECTOR *p;
+    u32 *col;
+
+    ot = camera->ot.slots;
+    shift = camera->zShift;
+    packet = PRIM_BUFFER_FREE;
+    bc = this->unkBC;
+    band = bandArr;
+    col = colorArr;
+    for (i = 0; i < 17; i++) {
+        s32 angle = (i << 7) & 0xF80;
+        s16 c, s;
+        s32 shade;
+
+        p = band[i];
+        p[0].vy = 0;
+        p[1].vy = 0;
+        c = COS_SIN_TABLE[angle].cos;
+        s = COS_SIN_TABLE[angle].sin;
+        c = -c;
+        s = -s;
+        p[0].vx = c;
+        p[0].vz = s;
+        p[1].vx = c + (c >> 2);
+        p[1].vz = s + (s >> 2);
+        shade = -(s * bc) >> 12;
+        col[i] = shade | (shade << 8) | (shade << 16);
+    }
+    mp = &m.m;
+    shape.v0 = shape.v1 = 0xC0;
+    shape.v2 = shape.v3 = 0xDF;
+    shape.flags = 9;
+    u = ((u8)this->unkCC & 3) << 5;
+    shape.u0 = shape.u2 = u;
+    shape.u1 = shape.u3 = u + 0x1F;
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xF7);
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+    setIdentityAt(&m, &this->position);
+    scale = this->unkDC;
+    matrixSetRotationZ(mp, 0x200);
+    matrixRotateX(mp, 0x80);
+    matrixScale(mp, scale, scale, scale);
+    setModelMatrix(mp);
+    for (i = 0; i < 15; i++) {
+        shape.colors[0] = shape.colors[2] = col[i];
+        shape.colors[1] = shape.colors[3] = col[i + 2];
+        shape.corners[0] = &band[i][0];
+        shape.corners[1] = &band[i + 2][0];
+        shape.corners[2] = &band[i][1];
+        shape.corners[3] = &band[i + 2][1];
+        packet = buildPolyGT4(&shape, packet, ot, shift);
+    }
+    matrixSetRotationZ(mp, -0x200);
+    matrixRotateX(mp, 0x80);
+    matrixScale(mp, scale, scale, scale);
+    setModelMatrix(mp);
+    for (i = 0; i < 15; i++) {
+        shape.colors[0] = shape.colors[2] = col[i];
+        shape.colors[1] = shape.colors[3] = col[i + 2];
+        shape.corners[0] = &band[i][0];
+        shape.corners[1] = &band[i + 2][0];
+        shape.corners[2] = &band[i][1];
+        shape.corners[3] = &band[i + 2][1];
+        packet = buildPolyGT4(&shape, packet, ot, shift);
+    }
+    PRIM_BUFFER_FREE = packet;
+}
 
 /* WarGreymon's destructor. */
 void WarGreymon_destroy(Entity *this, s32 flags) {
