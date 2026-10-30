@@ -1371,7 +1371,8 @@ typedef struct UnkBE4DC {
     Vec3 position;        /* 0x84 */
     u8 _90[0x94 - 0x90];
     CVECTOR color;        /* 0x94 */
-    u8 _98[0xA2 - 0x98];
+    u8 _98[0xA0 - 0x98];
+    u16 clut;             /* 0xA0 */
     s16 facing;           /* 0xA2 */
     u8 unkA4[5];          /* 0xA4 */
     u8 unkA9[9];          /* 0xA9 */
@@ -1501,7 +1502,68 @@ void func_800BE788(Entity *this, s32 arg) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C968);
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BE7D0);
+typedef struct {
+    s32 words[8];
+} Corners4;
+
+extern Corners4 D_8006C968;
+
+static inline void setTranslationWG(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* The second draw of D_8006C9AC's entities: four quarters of a square of side 2 * (unkB8 - unkB8 / 4) facing the
+ * camera at the position, from D_8006C968's corners, with the 64 by 64 picture at (0xC0, 0x80), grey by unkBC / 2,
+ * semi-transparent. */
+void func_800BE7D0(Entity *arg, s32 cameraArg) {
+    UnkBE4DC *this = (UnkBE4DC *)arg;
+    Camera *camera = (Camera *)cameraArg;
+    MATRIX m;
+    MATRIX *mp = &m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    register u8 *packet asm("$16");
+    u_long *ot;
+    s32 shift;
+    s32 shade;
+
+    packet = PRIM_BUFFER_FREE;
+    m = camera->view->rotation;
+    cameraArg = this->unkB8 >> 2;
+    cameraArg = this->unkB8 - cameraArg;
+    setTranslationWG(m.t, &this->position);
+    ot = camera->ot.slots;
+    shift = camera->zShift;
+    matrixScale(mp, this->unkB8 - (this->unkB8 >> 2), this->unkB8 - (this->unkB8 >> 2), this->unkB8 - (this->unkB8 >> 2));
+    setModelMatrix(mp);
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0xC0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xFF;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0x80;
+    *(Corners4 *)corners = D_8006C968;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xBF;
+    shade = this->unkBC >> 1;
+    shape.color = shade | (shade << 8) | (shade << 16);
+    shape.clut = this->clut;
+    shape.tpage = (((this->vramY & 0x100) >> 4) | 0x27) | ((this->vramY & 0x200) << 2);
+    shape.flags = 9;
+    packet = buildPolyFT4(&shape, packet, ot, shift);
+    corners[0].vx = corners[2].vx = 0x1000;
+    packet = buildPolyFT4(&shape, packet, ot, shift);
+    corners[0].vy = corners[1].vy = 0x1000;
+    packet = buildPolyFT4(&shape, packet, ot, shift);
+    corners[0].vx = corners[2].vx = -0x1000;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, shift);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BEA1C);
 
