@@ -325,7 +325,102 @@ void WarGreymonThrowEffect_tick(WarGreymonThrowEffect *this, s32 arg) {
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C8B4);
 INCLUDE_RODATA("game/nonmatchings/fighters/wargreymon", D_8006C8FC);
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", WarGreymon_special1);
+extern TrailPoint D_8006C8B4[];
+extern TrailPoint D_8006C8FC[];
+struct WarGreymonSpecial1Hitbox;
+struct Unk800BCAD8;
+struct WarGreymonSpecial1Effect;
+struct WarGreymonSpecial1Hitbox *WarGreymonSpecial1Hitbox_init(struct WarGreymonSpecial1Hitbox *this, Fighter *fighter,
+                                                                Vec3 *knockback, s32 damage, s32 radius,
+                                                                s32 acceleration);
+struct Unk800BCAD8 *func_800BCAD8(struct Unk800BCAD8 *this, Fighter *fighter, TrailPoint *entries, s32 count,
+                                   s32 arg4, s32 arg5, s32 mode);
+struct WarGreymonSpecial1Effect *WarGreymonSpecial1Effect_init(struct WarGreymonSpecial1Effect *this, Fighter *fighter,
+                                                                s32 targetLength, s32 tilt);
+void Trail_record(Trail *this);
+void Trail_fadeColors(Trail *this);
+
+void WarGreymon_special1(WarGreymon *this, s32 frame) {
+    Entity *child;
+    s32 isWarGreymon;
+    Vec3 *facingKnockback;
+    s32 damage;
+    Vec3 knockback;
+    Vec3 *kb;
+    s32 *handle;
+    s32 i;
+
+    Fighter_special1(&this->base, frame);
+    isWarGreymon = Fighter_getCharacter(&this->base) == CHARACTER_WARGREYMON;
+    switch (frame) {
+    case 0:
+        Fighter_playVoice(&this->base, isWarGreymon ? 0x10D : 0x11F);
+        this->base.rotation.vy = this->base.targetRotation.vy;
+        child = NEW_ENTITY(0x6A0, func_800BCAD8, &this->base, D_8006C8B4, 3, 15, 2, 0);
+        if (child != NULL) {
+            Fighter_addEntity(&this->base, child);
+            this->unk4A4 = entityGetHandle(child);
+            Fighter_playSound(&this->base, isWarGreymon ? 0x107 : 0x119);
+        }
+        break;
+    case 1:
+        damage = 0x4A814CC;
+        knockback.vx = 0;
+        knockback.vy = -0x38E0;
+        kb = &knockback;
+        knockback.vz = 0;
+        if (isWarGreymon) {
+            damage = 0x4A81000;
+        }
+        child = NEW_ENTITY(0xA0, WarGreymonSpecial1Hitbox_init, &this->base, kb, damage, 0x100, 12);
+        Fighter_addEntity(&this->base, child);
+        break;
+    case 12:
+        child = NEW_ENTITY(0x6A0, func_800BCAD8, &this->base, D_8006C8FC, 3, 10, 7, 1);
+        if (child != NULL) {
+            Fighter_addEntity(&this->base, child);
+            this->unk4A8 = entityGetHandle(child);
+            Fighter_playSound(&this->base, isWarGreymon ? 0x107 : 0x119);
+        }
+        break;
+    case 13:
+        knockback.vx = Fighter_getFacing(&this->base) * 0x38E0;
+        facingKnockback = &knockback;
+        damage = 0x45A82999;
+        knockback.vy = -0x4718;
+        knockback.vz = 0;
+        if (isWarGreymon) {
+            damage = 0x45A82000;
+        }
+        kb = facingKnockback;
+        child = NEW_ENTITY(0xA0, WarGreymonSpecial1Hitbox_init, &this->base, kb, damage, 0x1C0, 4);
+        Fighter_addEntity(&this->base, child);
+        break;
+    }
+    if ((u32)(frame - 16) < 5) {
+        child = NEW_ENTITY(0x58, WarGreymonSpecial1Effect_init, &this->base, (frame - 16) * 64 + 0x380,
+                           (frame - 16) * 128 - 0x40);
+        Fighter_addEntity(&this->base, child);
+    }
+    modelUpdateAnimation(this->base.model);
+    handle = &this->unk4A4;
+    for (i = 0; i < 2; i++) {
+        Trail *trail = (Trail *)getEntityByHandle(*handle);
+
+        if (trail != NULL) {
+            if (trail->recordTimer > 0) {
+                Trail_record(trail);
+                Trail_fadeColors(trail);
+            }
+        } else {
+            *handle = 0;
+        }
+        handle++;
+    }
+    if (Fighter_isActionClipDone(&this->base)) {
+        func_80079B0C(&this->base, 15);
+    }
+}
 
 void func_800BC0CC(WarGreymon *this, s32 arg);
 void func_800BC0E0(WarGreymon *this, s32 arg);
