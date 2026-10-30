@@ -1273,7 +1273,122 @@ void func_800BE4AC(Unk800BE39C *this) {
     this->base.unkD4 = 0;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BE4DC);
+typedef struct UnkBE4DC {
+    u8 _00[0x14];
+    EntityVtable *vtable; /* 0x14 */
+    u8 _18[0x38 - 0x18];
+    ListNode link;        /* 0x38 */
+    u8 _40[0x7C - 0x40];
+    s32 unk7C;            /* 0x7C */
+    s32 unk80;            /* 0x80 */
+    Vec3 position;        /* 0x84 */
+    u8 _90[0x94 - 0x90];
+    CVECTOR color;        /* 0x94 */
+    u8 _98[0xA2 - 0x98];
+    s16 facing;           /* 0xA2 */
+    u8 unkA4[5];          /* 0xA4 */
+    u8 unkA9[9];          /* 0xA9 */
+    u8 _B2[0xB4 - 0xB2];
+    s32 unkB4;            /* 0xB4 */
+    s32 unkB8;            /* 0xB8 */
+    s32 unkBC;            /* 0xBC */
+    s32 unkC0;            /* 0xC0 */
+    s32 unkC4;            /* 0xC4 */
+    s32 unkC8;            /* 0xC8 */
+    s32 unkCC;            /* 0xCC */
+    s32 vramY;            /* 0xD0 */
+    u32 unkD4;            /* 0xD4 */
+    s32 unkD8;            /* 0xD8 */
+    s32 unkDC;            /* 0xDC */
+} UnkBE4DC;
+
+void func_800BE4DC(UnkBE4DC *this) {
+    Entity *child;
+    register s32 diff asm("$2");
+    s32 end;
+    s32 newB8;
+    register s32 step asm("$4");
+    register s32 start asm("$3");
+    s32 i;
+    s32 v;
+    s32 shade;
+    s32 a2;
+    s32 b;
+    u8 *p;
+    u8 *q;
+    u8 *r;
+    ListNode *node;
+
+    switch (this->unkC8) {
+    case 0:
+        start = this->unkB8 - 8;
+        this->unkB8 += (this->unkD8 - start) >> 3;
+        if (this->unkB8 >= this->unkD8) {
+            this->unkC8 = 1;
+        }
+        break;
+    case 1:
+        if (this->unkCC >= 0x29) {
+            child = allocEntityMemory(0x3C);
+            if (child != NULL) {
+                func_800C6088(entityOperatorNewAt(0x3C, child), 9, &this->position, this->unkB8, 0x20, -0x50,
+                              *(s32 *)&this->color);
+            }
+            entityAddSibling((Entity *)this, child);
+            node = &this->link;
+            this->link.next->prev = this->link.prev;
+            node->prev->next = this->link.next;
+            this->link.next = node;
+            this->link.prev = node;
+            this->unkC8++;
+        }
+        break;
+    case 2:
+        end = this->unkD8 + 0x200;
+        start = this->unkB8;
+        diff = end - start;
+        step = diff >> 3;
+        newB8 = start + step;
+        __asm__ volatile("" ::: "memory");
+        if (diff < 0) {
+            diff = -diff;
+        }
+        diff >>= 2;
+        this->unkB8 = newB8;
+        if (diff < 0x80) {
+            shade = diff;
+        } else {
+            shade = 0x80;
+        }
+        __asm__("" : : "r"(step));
+        this->unkBC = shade;
+        if (shade < 8) {
+            entityDelete((Entity *)this);
+            return;
+        }
+        break;
+    }
+
+    a2 = (this->unkCC >> 1) & 0x3F;
+    b = (u8)this->unkCC & 0x3F;
+    if (this->facing > 0) {
+        a2 = (0x3F - a2) & 0xFF;
+    }
+    q = this->unkA9;
+    i = 4;
+    p = &this->unkA4[4];
+    do {
+        *p-- = a2 + i * 0x10;
+    } while (--i >= 0);
+    i = 8;
+    r = q + 8;
+    do {
+        *r-- = b + i * 8;
+    } while (--i >= 0);
+    this->unk7C = this->unkB8;
+    this->unkDC += (this->unkD8 - this->unkDC) >> 3;
+    this->unkCC++;
+}
 
 /* The second base's first method for virtual table D_8006C98C: Hit_apply with sum, then unlinks the part at
  * 0x38 when getHitFighter finds an entity in sum. */
