@@ -6,6 +6,7 @@
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
 #include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/lights.h"
 #include "engine/gfx/prim_buffer.h"
 #include "engine/math/sin_cos.h"
 #include "engine/pad/pad.h"
@@ -1017,7 +1018,53 @@ void func_800BD254(Unk800BD1C4 *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BD334);
+/* func_800BD1C4's draw: SQUARE_CORNERS scaled by scaleX and scaleY at the position, with the 16 by 16 picture at
+ * (0, 0xE0), grey by life * 128 / 20, semi-transparent.
+ * The match depends on an empty asm after the y and z loads, which keeps them before the matrix stores. */
+void func_800BD334(Unk800BD1C4 *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    VECTOR *v;
+    u_long *ot;
+    s32 shift;
+    s32 shade;
+    s32 vramY;
+    s32 x, y, z;
+    s32 sy;
+
+    v = &this->position;
+    y = v->vy;
+    z = v->vz;
+    __asm__("");
+    x = this->position.vx;
+    sy = this->scaleY;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    m.words[0] = (u16)this->scaleX;
+    m.words[2] = sy & 0xFFFF;
+    ot = camera->ot.slots;
+    shift = camera->zShift;
+    setModelMatrix(&m.m);
+    shape.corners[0] = &SQUARE_CORNERS[0];
+    shape.corners[1] = &SQUARE_CORNERS[1];
+    shape.corners[2] = &SQUARE_CORNERS[2];
+    shape.corners[3] = &SQUARE_CORNERS[3];
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xF;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0xE0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xEF;
+    shape.flags = 9;
+    shade = this->life * 128 / 20;
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xF9);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    shape.color = shade | (shade << 8) | (shade << 16);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, shift);
+}
 
 /* The entity func_800BD490 constructs (0x120 bytes, virtual table D_8006CA2C): the effect the WarGreymonVtable slot
  * 0x120 spawns, drawn as a band of 8 quads. */
