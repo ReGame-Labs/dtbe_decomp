@@ -1154,32 +1154,34 @@ void func_800BD254(Unk800BD1C4 *this) {
     }
 }
 
+/* Copies v into a matrix's translation, the three words read before any is stored. */
+static inline void setTranslationWG(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
 /* func_800BD1C4's draw: SQUARE_CORNERS scaled by scaleX and scaleY at the position, with the 16 by 16 picture at
  * (0, 0xE0), grey by life * 128 / 20, semi-transparent.
- * The match depends on an empty asm after the y and z loads, which keeps them before the matrix stores. */
+ * The match depends on the translation copied first, through setTranslationWG. */
 void func_800BD334(Unk800BD1C4 *this, Camera *camera) {
     MatrixWords m;
     PolyFT4Shape shape;
-    VECTOR *v;
     u_long *ot;
     s32 shift;
     s32 shade;
     s32 vramY;
-    s32 x, y, z;
     s32 sy;
 
-    v = &this->position;
-    y = v->vy;
-    z = v->vz;
-    __asm__("");
-    x = this->position.vx;
+    setTranslationWG(m.m.t, (Vec3 *)&this->position);
     sy = this->scaleY;
     m.words[1] = 0;
     m.words[3] = 0;
     m.words[4] = 0x1000;
-    m.m.t[0] = x;
-    m.m.t[1] = y;
-    m.m.t[2] = z;
     m.words[0] = (u16)this->scaleX;
     m.words[2] = sy & 0xFFFF;
     ot = camera->ot.slots;
@@ -1209,14 +1211,23 @@ typedef struct Unk800BD490 {
     /* 0x18 */ s32 unk18;
     /* 0x1C */ MATRIX matrix;          /* func_800BD8DC's model matrix */
     /* 0x3C */ SVECTOR band[8][2];     /* the band's points, two per step */
-    /* 0xBC */ u8 unkBC[0x114 - 0xBC];
+    /* 0xBC */ VECTOR unkBC;           /* the newest point: out by 0x18 and up by unk10C a tick */
+    /* 0xCC */ VECTOR unkCC[4];        /* the last 4 of unkBC, by unk118 */
+    /* 0x10C */ s32 unk10C;            /* unkBC's rise, growing by 8 */
+    /* 0x110 */ s32 unk110;            /* the turn about y */
     /* 0x114 */ s32 shade;             /* red, and a quarter of it green */
     /* 0x118 */ s32 unk118;
     /* 0x11C */ s32 vramY;             /* the VRAM half of the clut and tpage */
 } Unk800BD490;
 
+/* Constructs func_800BD490's entity for a fighter: the fighter's model matrix and every point of unkBC, unkCC and
+ * the band at (0, -0x280, 0). It copies the matrix as a block move (four loads then four stores), which GCC 2.95.2
+ * does not emit for 32 bytes (see "Block moves" in TODO.md). */
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BD490);
 
+/* Ticks func_800BD490's effect: follows the fighter's model matrix while it attacks and rebuilds the band. It copies
+ * the matrix as a block move (four loads then four stores), which GCC 2.95.2 does not emit for 32 bytes (see "Block
+ * moves" in TODO.md). */
 INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BD650);
 
 /* Draws func_800BD490's effect: 8 quads around the band, each from a step's first point to the next step's two
@@ -1478,10 +1489,11 @@ static inline void setTranslation(long *t, Vec3 *v) {
 }
 
 /* Draws the explosion as two frames of four corners around this->unk84, with the
- * 32 by 32 picture at (0x1C0, vramY). The empty asm adds two references to camera
- * without emitting code: flow1 then gives camera ($s5) priority over ot ($s6), and
- * the corner stores are ordered so sched1 reproduces the target schedule. */
-void func_800BE0C4(Unk800BDA50 *this, Camera *camera) {
+ * 32 by 32 picture at (0x1C0, vramY). The match depends on the camera taken as an
+ * s32 and copied to a local (which gives camera $s5 over ot's $s6), and on the corner
+ * stores in this order. */
+void func_800BE0C4(Unk800BDA50 *this, s32 cameraArg) {
+    Camera *camera = (Camera *)cameraArg;
     MATRIX matrix;
     MATRIX *m = &matrix;
     SVECTOR corners[4];
@@ -1501,7 +1513,6 @@ void func_800BE0C4(Unk800BDA50 *this, Camera *camera) {
     new_var = ~3;
     matrixRotateZ(m, this->unkBC);
     setModelMatrix(m);
-    __asm__("" : : "r"(camera), "r"(camera));
 
     corners[3].vz = 0;
     corners[2].vz = 0;
@@ -1634,13 +1645,15 @@ typedef struct UnkBE4DC {
     s32 unkDC;            /* 0xDC */
 } UnkBE4DC;
 
+/* Ticks D_8006C9AC's entity: grows unkB8 toward unkD8 (state 0), spawns its func_800C6088 child once unkCC passes 0x28
+ * (state 1), then fades by the distance left to unkD8 + 0x200 (state 2), and scrolls its u and v bytes.
+ * The match depends on state 0's start in a block of its own and on state 2's shade clamped from a copy of
+ * abs(diff) >> 2. */
 void func_800BE4DC(UnkBE4DC *this) {
     Entity *child;
-    register s32 diff asm("$2");
+    s32 diff;
     s32 end;
-    s32 newB8;
-    register s32 step asm("$4");
-    register s32 start asm("$3");
+    s32 start;
     s32 i;
     s32 v;
     s32 shade;
@@ -1653,8 +1666,10 @@ void func_800BE4DC(UnkBE4DC *this) {
 
     switch (this->unkC8) {
     case 0:
-        start = this->unkB8 - 8;
-        this->unkB8 += (this->unkD8 - start) >> 3;
+        {
+            s32 s = this->unkB8 - 8;
+            this->unkB8 += (this->unkD8 - s) >> 3;
+        }
         if (this->unkB8 >= this->unkD8) {
             this->unkC8 = 1;
         }
@@ -1679,20 +1694,13 @@ void func_800BE4DC(UnkBE4DC *this) {
         end = this->unkD8 + 0x200;
         start = this->unkB8;
         diff = end - start;
-        step = diff >> 3;
-        newB8 = start + step;
-        __asm__ volatile("" ::: "memory");
-        if (diff < 0) {
-            diff = -diff;
-        }
-        diff >>= 2;
-        this->unkB8 = newB8;
-        if (diff < 0x80) {
-            shade = diff;
+        this->unkB8 = start + (diff >> 3);
+        v = abs(diff) >> 2;
+        if (v < 0x80) {
+            shade = v;
         } else {
             shade = 0x80;
         }
-        __asm__("" : : "r"(step));
         this->unkBC = shade;
         if (shade < 8) {
             entityDelete((Entity *)this);
@@ -1752,19 +1760,10 @@ typedef struct {
 
 extern Corners4 D_8006C968;
 
-static inline void setTranslationWG(long *t, Vec3 *v) {
-    s32 x = v->vx;
-    s32 y = v->vy;
-    s32 z = v->vz;
-
-    t[0] = x;
-    t[1] = y;
-    t[2] = z;
-}
-
 /* The second draw of D_8006C9AC's entities: four quarters of a square of side 2 * (unkB8 - unkB8 / 4) facing the
  * camera at the position, from D_8006C968's corners, with the 64 by 64 picture at (0xC0, 0x80), grey by unkBC / 2,
- * semi-transparent. */
+ * semi-transparent. The match depends on packet read from PRIM_BUFFER_FREE after the translation, ot and shift (which
+ * gives packet $s0 and this $s1), and on the dead store to cameraArg. */
 void func_800BE7D0(Entity *arg, s32 cameraArg) {
     UnkBE4DC *this = (UnkBE4DC *)arg;
     Camera *camera = (Camera *)cameraArg;
@@ -1772,18 +1771,18 @@ void func_800BE7D0(Entity *arg, s32 cameraArg) {
     MATRIX *mp = &m;
     SVECTOR corners[4];
     PolyFT4Shape shape;
-    register u8 *packet asm("$16");
+    u8 *packet;
     u_long *ot;
     s32 shift;
     s32 shade;
 
-    packet = PRIM_BUFFER_FREE;
     m = camera->view->rotation;
     cameraArg = this->unkB8 >> 2;
     cameraArg = this->unkB8 - cameraArg;
     setTranslationWG(m.t, &this->position);
     ot = camera->ot.slots;
     shift = camera->zShift;
+    packet = PRIM_BUFFER_FREE;
     matrixScale(mp, this->unkB8 - (this->unkB8 >> 2), this->unkB8 - (this->unkB8 >> 2), this->unkB8 - (this->unkB8 >> 2));
     setModelMatrix(mp);
     shape.corners[0] = &corners[0];
@@ -1808,7 +1807,6 @@ void func_800BE7D0(Entity *arg, s32 cameraArg) {
     corners[0].vx = corners[2].vx = -0x1000;
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, shift);
 }
-
 /* Sets w to the identity with translation v. The diagonal's later words copied from words[0] keep their stores
  * relative to sp, as in the original. */
 static inline void setIdentityAt(MatrixWords *w, Vec3 *v) {
