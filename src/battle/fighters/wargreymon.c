@@ -587,7 +587,48 @@ void func_800BC13C(WarGreymon *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BC258);
+/* Special move 2's flight (from frame 10): brakes the velocity by 1/32, lifts by unk4BC (or 0x71C of the mass
+ * without unk4B0), whose lift grows by a sixth of it up to that; every other frame below 0x19 runs the
+ * vtable's slot 0x120; every 4 frames resets the hit (damage by character, knockback half the velocity back);
+ * every 8 frames sets hitKind to 1. */
+void func_800BC258(WarGreymon *this) {
+    s32 lift;
+    s32 *forceY;
+    s32 y;
+
+    this->base.force.vx -= this->base.velocity.vx >> 5;
+    this->base.force.vy -= this->base.velocity.vy >> 5;
+    forceY = &this->base.force.vy;
+    lift = ((s64)this->base.mass * 0x71C) >> 16;
+    if (this->unk4B0) {
+        y = this->base.force.vy - this->unk4BC;
+    } else {
+        y = this->base.force.vy - lift;
+    }
+    *forceY = y;
+    this->unk4BC += lift / 6;
+    if (lift < this->unk4BC) {
+        this->unk4BC = lift;
+    }
+    if (this->unk4C0 < 0x19 && (this->unk4C0 & 1)) {
+        WarGreymonVtable *vtable = GET_WARGREYMON_VTABLE(this);
+
+        vtable->unk120.func((u8 *)this + vtable->unk120.delta);
+    }
+    if ((this->unk4C0 & 3) == 0) {
+        if (Fighter_getCharacter(&this->base) == CHARACTER_WARGREYMON) {
+            this->base.hitDamage = 0x5AC0400;
+        } else {
+            this->base.hitDamage = 0x4AC0533;
+        }
+        this->base.hitKnockback.vz = 0;
+        this->base.hitKnockback.vx = -this->base.velocity.vx >> 1;
+        this->base.hitKnockback.vy = -this->base.velocity.vy;
+    }
+    if ((this->unk4C0 & 7) == 0) {
+        this->base.hitKind = 1;
+    }
+}
 
 /* Creates an entity of func_800BD490's class (0x120 bytes) with g++'s new, and hands it to Fighter_addEntity. */
 void func_800BC3C8(Fighter *this) {
