@@ -774,7 +774,47 @@ void func_800BCBD8(Unk800BCAD8 *this) {
 }
 
 
-INCLUDE_ASM("game/nonmatchings/fighters/wargreymon", func_800BCC7C);
+struct Unk800BD1C4;
+struct Unk800BD1C4 *func_800BD1C4(struct Unk800BD1C4 *this, VECTOR position, s32 vramY);
+
+/* Sheds a piece (func_800BD1C4) from each recorded sample of the third point, scattered in x by up to the speed
+ * and in y by a random 0..0x7F, as siblings of the trail. The match depends on RANDOM's address taken into a
+ * local before the loop, and on the position copied for the call only after entityOperatorNewAt. */
+void func_800BCC7C(Unk800BCAD8 *this) {
+    s32 i;
+    s32 spread;
+    s32 count = this->base.length - 1;
+    s32 valid = this->base.validCount - 1;
+    s32 head = this->base.head;
+    s32 vramY;
+    TrailSample *samples;
+    MersenneTwister *rng;
+
+    if (valid < count) {
+        count = valid;
+    }
+    spread = abs(this->speed) + 1;
+    vramY = Fighter_getVramY(this->base.fighter);
+    samples = this->base.samples[2];
+    rng = &RANDOM;
+    for (i = 0; i <= count; i++) {
+        TrailSample *sample = &samples[(head - i) & 0x1F];
+        VECTOR position;
+        VECTOR arg;
+        Entity *child;
+        s32 r;
+
+        position.vx = sample->x + this->x - mersenneTwisterGenerate(rng) % spread;
+        r = mersenneTwisterGenerate(rng);
+        position.vy = sample->y + r % 128;
+        position.vz = sample->z;
+        child = allocEntityMemory(0x48);
+        if (child != NULL) {
+            func_800BD1C4(entityOperatorNewAt(0x48, child), ({ arg = position; arg; }), vramY);
+        }
+        entityAddSibling(&this->base.entity, child);
+    }
+}
 
 /* The draw method of Unk800BCAD8: sets the model matrix to a translation by x, then runs the method at 0x20
  * (Trail_drawStrips). */
