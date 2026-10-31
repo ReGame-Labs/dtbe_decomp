@@ -192,7 +192,50 @@ Fighter *Fighter_init(Fighter *this) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_setUp);
+/* Sets the fighter up as character on side with chara's model files: its params (FIGHTER_PARAMS' row), its
+ * collider's radius and entity, its mass and flags (flags.unk1 set by unk1 or FIGHTER_PARAM_UNK1), its starting
+ * facing, its model (modelInit, hidden until shown) and its VRAM row (0x100 for side 1). The match depends on the
+ * table taken into a local first (the game computes its address before the index) and the radius stored first. */
+void Fighter_setUp(Fighter *this, s32 character, s32 side, Chara *chara, s32 computer, s32 unk1) {
+    FighterParams *params;
+    FighterParams *table = FIGHTER_PARAMS;
+    TmdHeader *tmd;
+    Model *model;
+    AnimData *anim;
+    s32 angle;
+
+    this->character = character;
+    this->side = side;
+    this->chara = chara;
+    params = &table[character];
+    this->params = params;
+    this->collider.radius = params->height;
+    this->collider.entity = &this->entity;
+    this->mass = params->mass;
+    this->flags.bits.computer = computer;
+    this->flags.bits.unk1 = unk1 || (params->flags & FIGHTER_PARAM_UNK1);
+    if (params->flags & FIGHTER_PARAM_START_TURNED) {
+        angle = 0x800;
+    } else if (params->flags & FIGHTER_PARAM_START_UNTURNED) {
+        angle = 0;
+    } else if (side == 0) {
+        angle = 0x401;
+    } else {
+        angle = -0x401;
+    }
+    this->rotation.vy = angle;
+    this->targetRotation.vy = angle;
+    model = operatorNew(0x98);
+    tmd = charaGetTmd(chara);
+    anim = charaGetAnimData(chara);
+    this->model = modelInit(model, tmd, anim);
+    this->model->group.object.hidden = 1;
+    if (side != 0) {
+        this->vramY = 0x100;
+    } else {
+        this->vramY = 0;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighter", Fighter_prepare);
 
