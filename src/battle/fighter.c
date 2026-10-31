@@ -1343,7 +1343,29 @@ void Fighter_applyImpulse(Fighter *this) {
     this->forcePad = 0;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", func_80079C1C);
+/* Adds force / mass (divide16, 16.16) to velocity and sets move to the mean of the old and new velocity. The match
+ * depends on the new velocity's z stored first and the sums with the old velocity kept in the locals. */
+void func_80079C1C(Vec3 *move, Vec3 *velocity, Vec3 *force, s32 mass) {
+    s32 ax = divide16(force->vx, mass);
+    s32 ay = divide16(force->vy, mass);
+    s32 az = divide16(force->vz, mass);
+    s32 x = velocity->vx;
+    s32 y = velocity->vy;
+    s32 z = velocity->vz;
+    s32 nx = x + ax;
+    s32 ny = y + ay;
+    s32 nz = z + az;
+
+    velocity->vz = nz;
+    x += nx;
+    y += ny;
+    z += nz;
+    velocity->vx = nx;
+    velocity->vy = ny;
+    move->vx = x / 2;
+    move->vy = y / 2;
+    move->vz = z / 2;
+}
 extern s16 D_80065270[]; /* distances added by Fighter_getOpponentInReach, by its index */
 
 INCLUDE_RODATA("game/nonmatchings/fighter", D_80065270);
