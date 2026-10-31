@@ -915,7 +915,24 @@ s32 Fighter_isGuarding(Fighter *this) {
     return state >= FIGHTER_STATE_GUARD && state <= FIGHTER_STATE_CROUCH_GUARD;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_blocks);
+/* Whether the fighter's guard stops hit: a standing guard unless bit 28 of hit is set, a crouching one unless bit
+ * 27 is. The match depends on the early return for the states outside the guard range. */
+s32 Fighter_blocks(Fighter *this, u32 hit) {
+    s32 state = Fighter_getBodyState(this)->state;
+    u32 bit;
+
+    if (state < FIGHTER_STATE_GUARD || state > FIGHTER_STATE_CROUCH_GUARD) {
+        return 0;
+    }
+    if (state == FIGHTER_STATE_GUARD) {
+        bit = hit >> 28;
+    } else if (state == FIGHTER_STATE_CROUCH_GUARD) {
+        bit = hit >> 27;
+    } else {
+        return 0;
+    }
+    return !(bit & 1);
+}
 
 /* While an item's effect of kind 1 or 2 runs, scales the damage of hit by its power (in 1/256ths), keeping
  * the hit's flags. */
