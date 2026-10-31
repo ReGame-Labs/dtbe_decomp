@@ -6,6 +6,7 @@
 #include "engine/game/game_state.h"
 #include "engine/game/character.h"
 #include "engine/gfx/prim/alloc_dr_move.h"
+#include "engine/math/divide.h"
 #include "engine/math/vector.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
@@ -191,7 +192,50 @@ Fighter *Fighter_init(Fighter *this) {
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_setUp);
+/* Sets the fighter up as character on side with chara's model files: its params (FIGHTER_PARAMS' row), its
+ * collider's radius and entity, its mass and flags (flags.unk1 set by unk1 or FIGHTER_PARAM_UNK1), its starting
+ * facing, its model (modelInit, hidden until shown) and its VRAM row (0x100 for side 1). The match depends on the
+ * table taken into a local first (the game computes its address before the index) and the radius stored first. */
+void Fighter_setUp(Fighter *this, s32 character, s32 side, Chara *chara, s32 computer, s32 unk1) {
+    FighterParams *params;
+    FighterParams *table = FIGHTER_PARAMS;
+    TmdHeader *tmd;
+    Model *model;
+    AnimData *anim;
+    s32 angle;
+
+    this->character = character;
+    this->side = side;
+    this->chara = chara;
+    params = &table[character];
+    this->params = params;
+    this->collider.radius = params->height;
+    this->collider.entity = &this->entity;
+    this->mass = params->mass;
+    this->flags.bits.computer = computer;
+    this->flags.bits.unk1 = unk1 || (params->flags & FIGHTER_PARAM_UNK1);
+    if (params->flags & FIGHTER_PARAM_START_TURNED) {
+        angle = 0x800;
+    } else if (params->flags & FIGHTER_PARAM_START_UNTURNED) {
+        angle = 0;
+    } else if (side == 0) {
+        angle = 0x401;
+    } else {
+        angle = -0x401;
+    }
+    this->rotation.vy = angle;
+    this->targetRotation.vy = angle;
+    model = operatorNew(0x98);
+    tmd = charaGetTmd(chara);
+    anim = charaGetAnimData(chara);
+    this->model = modelInit(model, tmd, anim);
+    this->model->group.object.hidden = 1;
+    if (side != 0) {
+        this->vramY = 0x100;
+    } else {
+        this->vramY = 0;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighter", Fighter_prepare);
 
@@ -915,7 +959,24 @@ s32 Fighter_isGuarding(Fighter *this) {
     return state >= FIGHTER_STATE_GUARD && state <= FIGHTER_STATE_CROUCH_GUARD;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_blocks);
+/* Whether the fighter's guard stops hit: a standing guard unless bit 28 of hit is set, a crouching one unless bit
+ * 27 is. The match depends on the early return for the states outside the guard range. */
+s32 Fighter_blocks(Fighter *this, u32 hit) {
+    s32 state = Fighter_getBodyState(this)->state;
+    u32 bit;
+
+    if (state < FIGHTER_STATE_GUARD || state > FIGHTER_STATE_CROUCH_GUARD) {
+        return 0;
+    }
+    if (state == FIGHTER_STATE_GUARD) {
+        bit = hit >> 28;
+    } else if (state == FIGHTER_STATE_CROUCH_GUARD) {
+        bit = hit >> 27;
+    } else {
+        return 0;
+    }
+    return !(bit & 1);
+}
 
 /* While an item's effect of kind 1 or 2 runs, scales the damage of hit by its power (in 1/256ths), keeping
  * the hit's flags. */
@@ -1326,7 +1387,29 @@ void Fighter_applyImpulse(Fighter *this) {
     this->forcePad = 0;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", func_80079C1C);
+/* Adds force / mass (divide16, 16.16) to velocity and sets move to the mean of the old and new velocity. The match
+ * depends on the new velocity's z stored first and the sums with the old velocity kept in the locals. */
+void func_80079C1C(Vec3 *move, Vec3 *velocity, Vec3 *force, s32 mass) {
+    s32 ax = divide16(force->vx, mass);
+    s32 ay = divide16(force->vy, mass);
+    s32 az = divide16(force->vz, mass);
+    s32 x = velocity->vx;
+    s32 y = velocity->vy;
+    s32 z = velocity->vz;
+    s32 nx = x + ax;
+    s32 ny = y + ay;
+    s32 nz = z + az;
+
+    velocity->vz = nz;
+    x += nx;
+    y += ny;
+    z += nz;
+    velocity->vx = nx;
+    velocity->vy = ny;
+    move->vx = x / 2;
+    move->vy = y / 2;
+    move->vz = z / 2;
+}
 extern s16 D_80065270[]; /* distances added by Fighter_getOpponentInReach, by its index */
 
 INCLUDE_RODATA("game/nonmatchings/fighter", D_80065270);
@@ -1471,6 +1554,9 @@ void func_8007A718(Fighter *this) {
 }
 #endif
 
+/* Writes the model's node `node` moved by offset (matrixTransformVec of its world matrix) to out and returns it. It
+ * inlines transformGetWorld, which copies the local matrix as a block move (four loads then four stores), which
+ * GCC 2.95.2 does not emit for 32 bytes (see "Block moves" in TODO.md). */
 INCLUDE_ASM("game/nonmatchings/fighter", Fighter_getNodePosition);
 
 /* Writes the point halfway between the model's nodes node0 and node1 (each moved by its offset,

@@ -851,6 +851,7 @@ void func_800A9998(Entity *this, s32 arg);
 
 /* the constructors the functions below call */
 Fighter *Fighter_init(Fighter *this);
+void Fighter_setUp(Fighter *this, s32 character, s32 side, Chara *chara, s32 computer, s32 unk1);
 FighterState *FighterStateGround_init(FighterState *this, s32 arg);
 /* The entity class of ThrowLaunch_init (0x34 bytes, virtual table THROW_LAUNCH_VTABLE): it launches the thrower's
  * opponent, and ThrowLaunch_tick hits it again with hit when it lands. */
