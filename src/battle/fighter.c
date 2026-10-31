@@ -6,6 +6,7 @@
 #include "engine/game/game_state.h"
 #include "engine/game/character.h"
 #include "engine/gfx/prim/alloc_dr_move.h"
+#include "engine/math/divide.h"
 #include "engine/math/vector.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
@@ -1510,6 +1511,9 @@ void func_8007A718(Fighter *this) {
 }
 #endif
 
+/* Writes the model's node `node` moved by offset (matrixTransformVec of its world matrix) to out and returns it. It
+ * inlines transformGetWorld, which copies the local matrix as a block move (four loads then four stores), which
+ * GCC 2.95.2 does not emit for 32 bytes (see "Block moves" in TODO.md). */
 INCLUDE_ASM("game/nonmatchings/fighter", Fighter_getNodePosition);
 
 /* Writes the point halfway between the model's nodes node0 and node1 (each moved by its offset,
