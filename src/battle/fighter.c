@@ -775,7 +775,116 @@ void Fighter_updatePhysics(Fighter *this) {
     this->flags.bits.dashing = 0;
 }
 
+#if VERSION_JP
 INCLUDE_ASM("game/nonmatchings/fighter", func_80077F80);
+#else
+/* Keeps the fighter out of the walls, each physics step: clears unk4; when the last move was 0x80 or longer and
+ * the floor probe finds a line between the last and the new position, moves back to the hit point pushed by the
+ * normal's x times 0x80 and takes the velocity's part along the normal off it (vx and vy). Then casts a probe
+ * 0x400 each way at the height 0x40 up (0x80 when landed) and, for each side that hits a wall within 0x80, moves
+ * by the overlap (the mean when both sides hit). The match depends on the difference worked out in a block of
+ * locals, the pushes added first in the sums, the second hit or-ed in as `(hit | 1) != 0` and right.vx - 0x80
+ * in its own local. */
+void func_80077F80(Fighter *this) {
+    VECTOR pos;
+    VECTOR cur;
+    VECTOR diff;
+    VECTOR mid;
+    VECTOR left;
+    VECTOR right;
+    TerrainProbe probe;
+    TerrainProbe *floor = &this->floorProbe;
+    VECTOR *p;
+    s32 hit;
+    s32 x;
+    s32 y;
+    s32 unused[2]; /* unused, but it is in the original stack frame */
+
+    this->flags.bits.unk4 = 0;
+    Fighter_getLastPosition(this, (Vec3 *)&pos);
+    Fighter_getPosition(this, (Vec3 *)&cur);
+    p = &pos;
+    {
+        s32 x0 = pos.vx, y0 = pos.vy, z0 = pos.vz;
+        x0 -= cur.vx;
+        y0 -= cur.vy;
+        z0 -= cur.vz;
+        diff.vx = x0;
+        diff.vy = y0;
+        diff.vz = z0;
+    }
+    if (vecGetLength(&diff) >= 0x80 && TerrainProbe_cast(floor, (Vec3 *)p, (Vec3 *)&cur)) {
+        VECTOR *normal = TerrainProbe_getNormal(floor);
+        s32 d;
+
+        TerrainProbe_getHitPoint(floor, (Vec3 *)p);
+        {
+            s32 push = ((s64)normal->vx * 0x80) >> 12;
+            pos.vx = push + pos.vx;
+        }
+        d = -vecDot12((VECTOR *)&this->velocity, normal);
+        {
+            s32 dv = ((s64)d * normal->vx) >> 12;
+            this->velocity.vx = dv + this->velocity.vx;
+        }
+        {
+            s32 dv = ((s64)d * normal->vy) >> 12;
+            this->velocity.vy = dv + this->velocity.vy;
+        }
+        Fighter_setPosition(this, (Vec3 *)p);
+    }
+    hit = 0;
+    Fighter_getPosition(this, (Vec3 *)&pos);
+    mid = pos;
+    y = pos.vy - 0x40;
+    if (this->flags.bits.landed) {
+        y = pos.vy - 0x80;
+    }
+    left.vx = pos.vx - 0x80;
+    mid.vy = y;
+    left.vy = y;
+    left.vz = pos.vz;
+    left.pad = pos.pad;
+    right.vy = y;
+    right.vz = pos.vz;
+    right.pad = pos.pad;
+    right.vx = pos.vx + 0x80;
+    TerrainProbe_init(&probe);
+    x = mid.vx;
+    mid.vx = x + 0x400;
+    if (TerrainProbe_cast(&probe, (Vec3 *)&mid, (Vec3 *)&left)) {
+        TerrainProbe_getHitPoint(&probe, (Vec3 *)&diff);
+        if (diff.vx <= x) {
+            hit = 1;
+            *(Vec3 *)&left = *(Vec3 *)&diff;
+        }
+    }
+    mid.vx = x - 0x400;
+    if (TerrainProbe_cast(&probe, (Vec3 *)&mid, (Vec3 *)&right)) {
+        TerrainProbe_getHitPoint(&probe, (Vec3 *)&diff);
+        if (diff.vx >= x) {
+            hit = (hit | 1) != 0;
+            *(Vec3 *)&right = *(Vec3 *)&diff;
+        }
+    }
+    if (hit) {
+        s32 l, r, m;
+
+        l = left.vx + 0x80;
+        l -= x;
+        {
+            s32 rx = right.vx - 0x80;
+            r = rx - x;
+        }
+        m = l + r;
+        if (l != 0 && r != 0) {
+            m /= 2;
+        }
+        pos.vx += m;
+        this->position.vx = pos.vx << 8;
+    }
+}
+#endif
 
 /* Whether the fighter stands on the ground (Fighter_isOnGround) and the map node its floor probe found last
  * moves with matrix (TerrainProbe_getMatrix): it stands on that moving part of the stage. */
