@@ -7,6 +7,7 @@
 #include "engine/game/character.h"
 #include "engine/gfx/prim/alloc_dr_move.h"
 #include "engine/math/divide.h"
+#include "engine/math/random.h"
 #include "engine/math/vector.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
@@ -2032,9 +2033,58 @@ void Fighter_airFlinch(Fighter *this) {
     Fighter_setClip(this, FIGHTER_CLIP_AIR_FLINCH, 1, 0);
 }
 
+extern s16 FIGHTER_ATTACK_VOICES[]; /* the first of the two voices of a character's attacks, by CHARACTER_* */
+
 INCLUDE_RODATA("game/nonmatchings/fighter", FIGHTER_ATTACK_VOICES);
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_runAttack);
+/* Runs attack's frame: at frame 0 one of the character's two attack voices, the hit the attack lands, the lunge
+ * (scaled by the mass, x by the facing) added to the force, the knockback (x by the facing) and, on the ground, dust
+ * for a strong lunge; after it, the drag (velocity.vx * drag >> 12) added to the force. The parts hit in the active
+ * frames, and after the cancel frame the next attack may chain (func_80079AF8). The match depends on the voice summed
+ * in a local, the lunge's x product kept in an s64, the knockback's x stored last and the drag taken into a local. */
+void Fighter_runAttack(Fighter *this, s32 frame, Attack *attack, s32 kind) {
+    s32 damage = attack->hitDamage;
+    s32 *lunge = &attack->lungeX;
+    Vec3 *force;
+    s64 lungeX;
+    s32 voice;
+    s32 knockbackX;
+    s32 drag;
+
+    if (frame == 0) {
+        voice = mersenneTwisterGenerate(&RANDOM) & 1;
+        voice += FIGHTER_ATTACK_VOICES[this->character];
+        Fighter_playVoice(this, voice);
+        this->hitDamage = damage;
+        this->hitKind = kind;
+        lungeX = (s64)attack->lungeX * this->mass >> 16;
+        this->force.vx += (s32)lungeX * Fighter_getFacing(this);
+        force = &this->force;
+        this->force.vy -= (s64)lunge[1] * this->mass >> 16;
+        knockbackX = attack->knockbackX * Fighter_getFacing(this);
+        this->hitKnockback.vy = -attack->knockbackY;
+        this->hitKnockback.vz = 0;
+        this->hitKnockback.vx = knockbackX;
+        if (Fighter_isOnGround(this)) {
+            s32 length = vecGetLength((VECTOR *)force);
+
+            if (length >= 0x100) {
+                Fighter_spawnDust(this, -1, 0x60, length / 5460);
+            }
+        }
+    } else {
+        drag = (s64)this->velocity.vx * lunge[2] >> 12;
+        this->force.vx += drag;
+    }
+    if (frame >= attack->firstActiveFrame && frame <= attack->lastActiveFrame) {
+        Fighter_setAttackParts(this, attack->parts);
+    } else {
+        this->attackParts = 0;
+    }
+    if (frame > lunge[3]) {
+        func_80079AF8(this);
+    }
+}
 
 /* The attack1 slot: plays the attack 1 clip on its first frame, then runs the params' attack 1. */
 void Fighter_attack1(Fighter *this, s32 frame) {
