@@ -1137,7 +1137,81 @@ void Fighter_setMoveReward(Fighter *this, s32 move, s32 score) {
     MoveReward_set(&this->rewards[move], score, Fighter_getParams(this)->gaugeGains[move]);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_handleInput);
+/* The input step of every fighter (the handleInput slot): reads the held and pressed buttons (unmirrored), counts
+ * down the cooldowns at 0x334, 0x338 and 0x33C and, outside the bonus fight, takes the first button that acts: R1
+ * (cooldown 0x33C over) requests the evolution when the side can evolve, else action 3 when func_8007F674 allows it;
+ * circle spawns the item's projectiles for item effects 4 to 6, else action 1 (cooldown 0x334 over); triangle action
+ * 2 (cooldown 0x338 over); square action 0 (the actions go to both states' slot 4). Else, holding cross, it hands
+ * cross pressed with down held to slot 3, or whether cross was just pressed to slot 2. */
+void Fighter_handleInput(void *arg0, void *arg1) {
+    Fighter *this = arg0;
+    InputHistory *input = arg1;
+    u32 held;
+    u32 pressed;
+
+    InputHistory_setMirrored(input, 0);
+    held = InputHistory_getHeld(input);
+    pressed = InputHistory_getPressed(input);
+    if (this->unk334 > 0) {
+        this->unk334--;
+    }
+    if (this->unk338 > 0) {
+        this->unk338--;
+    }
+    if (this->unk33C > 0) {
+        this->unk33C--;
+    }
+    /* The match depends on the do/while (0) block the bonus fight's test breaks out of (a plain if around the
+     * buttons fills the branch's delay slot with the action's argument instead of the next test). */
+    do {
+        if (this->fight->modeFlags & FIGHT_MODE_BONUS) {
+            break;
+        }
+        if (this->unk33C <= 0 && (pressed & PADR1)) {
+            if (BattleSide_canEvolve(this->battleSide)) {
+                Fighter_requestEvolution(this);
+                return;
+            }
+            if (func_8007F674(this->battleSide)) {
+                this->bodyState->vtable[4].func((u8 *)this->bodyState + this->bodyState->vtable[4].delta, 3);
+                this->attackState->vtable[4].func((u8 *)this->attackState + this->attackState->vtable[4].delta, 3);
+                return;
+            }
+        }
+        if (pressed & PADRright) {
+            s32 index = this->itemEffect.kind - 4;
+
+            if ((u32)index < 3) {
+                spawnItemProjectiles(this, index);
+                return;
+            }
+            if (this->unk334 <= 0) {
+                this->bodyState->vtable[4].func((u8 *)this->bodyState + this->bodyState->vtable[4].delta, 1);
+                this->attackState->vtable[4].func((u8 *)this->attackState + this->attackState->vtable[4].delta, 1);
+                return;
+            }
+        }
+        if (this->unk338 <= 0 && (pressed & PADRup)) {
+            this->bodyState->vtable[4].func((u8 *)this->bodyState + this->bodyState->vtable[4].delta, 2);
+            this->attackState->vtable[4].func((u8 *)this->attackState + this->attackState->vtable[4].delta, 2);
+            return;
+        }
+        if (pressed & PADRleft) {
+            this->bodyState->vtable[4].func((u8 *)this->bodyState + this->bodyState->vtable[4].delta, 0);
+            this->attackState->vtable[4].func((u8 *)this->attackState + this->attackState->vtable[4].delta, 0);
+            return;
+        }
+    } while (0);
+    if (held & PADRdown) {
+        if ((pressed & PADRdown) && (held & PAD_DOWN)) {
+            this->bodyState->vtable[3].func((u8 *)this->bodyState + this->bodyState->vtable[3].delta);
+            this->attackState->vtable[3].func((u8 *)this->attackState + this->attackState->vtable[3].delta);
+        } else {
+            this->bodyState->vtable[2].func((u8 *)this->bodyState + this->bodyState->vtable[2].delta, (pressed >> 6) & 1);
+            this->attackState->vtable[2].func((u8 *)this->attackState + this->attackState->vtable[2].delta, (pressed >> 6) & 1);
+        }
+    }
+}
 
 /* Keeps the fighter's input and hands it to the handleInput slot (Fighter_tick calls it with what
  * Fight_getInput returns). */
