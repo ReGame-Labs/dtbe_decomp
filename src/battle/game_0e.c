@@ -124,6 +124,7 @@ void BattleSide_addGauge(BattleSide *this, s32 amount) {
 }
 
 void func_8007F7F4(BattleSide *this);
+void func_8007F7A0(BattleSide *this);
 
 /* Each frame, unless frozen: the stun count wears off by 0x44 while it is under the params' stunLimit; when the
  * fighter's params have FIGHTER_PARAM_EVOLVED and func_800777BC does not hold, the gauge drains by 0x49, and once
@@ -153,7 +154,98 @@ void BattleSide_tickGauges(BattleSide *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0e", BattleSide_tick);
+/* Counts timer down while above 0; whether it has just reached 0. The match depends on the result kept in a local
+ * set to 0 first (returning from both branches takes other registers). */
+static inline s32 countDown(s32 *timer) {
+    s32 done = 0;
+
+    if (*timer > 0) {
+        done = --*timer == 0;
+    }
+    return done;
+}
+
+/* The side's frame, before its fighter's (Fighter_tick); nonzero when the side takes the frame and the fighter skips
+ * it. Unless frozen: when swapDelay runs out, swaps the forms. When an evolution was asked for (unk30) and the
+ * opponent's side is not in its own evolution and still has life, starts the scene (unk34; unk10 is 60 frames, or 1
+ * when Fighter_beginEvolutionScene says so), lowers the music and pauses it, and clears the stun. Each time unk10
+ * runs out it steps unk18: shows the evolution message (40 frames), flashes (func_8007F7A0, 30 frames), then swaps
+ * the forms and holds the fighter for 60 frames (unkC). While unk10 runs the side takes the frame (ending the scene
+ * if its life is gone); when unkC runs out it ends the scene and brings the music back, and while it runs the
+ * fighter's velocity and force stay cleared. */
+s32 BattleSide_tick(BattleSide *this) {
+    Fighter *fighter = this->current;
+
+    if (this->frozen) {
+        return 0;
+    }
+    if (countDown(&this->swapDelay)) {
+        BattleSide_swapCharacter(this);
+        return 1;
+    }
+    if (this->unk30) {
+        BattleSide *other = func_8007758C(Fighter_getOpponent(fighter));
+
+        if (other->unk34) {
+            return 0;
+        }
+        if (other->life <= 0) {
+            return 0;
+        }
+        this->unk34 = 1;
+        this->unk30 = 0;
+        this->unk10 = Fighter_beginEvolutionScene(fighter) ? 60 : 1;
+        soundControlFadeTo(&SOUND_CONTROL, 0x20, 15);
+        soundControlCountPause(&SOUND_CONTROL, 1);
+        this->unk18 = 0;
+        func_8007F1B8(this);
+    }
+    if (countDown(&this->unk10)) {
+        switch (this->unk18) {
+        case 0:
+            entityAddSibling(&this->current->entity,
+                             BattleMessage_init(entityOperatorNew(0x59C), BATTLE_MESSAGE_EVOLUTION,
+                                                Fighter_getCharacter(this->current)));
+            this->unk10 = 40;
+            this->unk18++;
+            break;
+        case 1:
+            func_8007F7A0(this);
+            this->unk10 = 30;
+            this->unk18++;
+            break;
+        case 2:
+            BattleSide_swapCharacter(this);
+        case 3:
+            this->unkC = 60;
+            this->unk18 = -1;
+            return 1;
+        }
+    }
+    if (this->unk10 > 0) {
+        if (this->life <= 0) {
+            Fighter_endEvolutionScene(fighter);
+        }
+        return 1;
+    }
+    if (countDown(&this->unkC)) {
+        Fighter_endEvolutionScene(fighter);
+        soundControlFadeIn(&SOUND_CONTROL, 30);
+        soundControlCountPause(&SOUND_CONTROL, 0);
+        this->unk34 = 0;
+    }
+    if (this->unkC > 0) {
+        fighter->velocity.vx = 0;
+        fighter->velocity.vy = 0;
+        fighter->velocity.vz = 0;
+        fighter->velocityPad = 0;
+        fighter->force.vx = 0;
+        fighter->force.vy = 0;
+        fighter->force.vz = 0;
+        fighter->forcePad = 0;
+    }
+    return 0;
+}
 
 /* Freezes the side: its life, gauge and stun count stop changing. */
 void BattleSide_freeze(BattleSide *this) {
@@ -221,8 +313,6 @@ void func_8007F6FC(BattleSide *this) {
     entityRenewHandle(&this->current->entity);
     this->unk30 = 1;
 }
-
-void func_8007F7A0(BattleSide *this);
 
 /* When func_800777BC holds for the fighter and bit 1 of its params' flags is clear: func_8007F7A0, then 30 at 0x10
  * and 3 at 0x18. */

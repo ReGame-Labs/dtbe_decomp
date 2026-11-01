@@ -1119,6 +1119,9 @@ void *FighterStateHeld_init(FighterState *this, s32 arg);
 ListNode *listAppend(ListNode *head, ListNode *node);
 
 void InputHistory_record(InputHistory *this, u32 buttons);
+void BattleSide_swapCharacter(BattleSide *this);
+s32 Fighter_beginEvolutionScene(Fighter *this);
+void Fighter_endEvolutionScene(Fighter *this);
 s32 BattleSide_tick(BattleSide *this); /* nonzero when the side takes the frame (its fighter skips it) */
 void BattleSide_tickGauges(BattleSide *this);
 
