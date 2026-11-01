@@ -17,6 +17,7 @@
 #include "engine/gfx/prim/build_line_f2.h"
 #include "engine/gfx/prim_buffer.h"
 #include "engine/lib/string.h"
+#include "engine/math/block_copy.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 #include "engine/text/font.h"
@@ -322,7 +323,71 @@ void Fight_setBounds(Fight *this, s32 left, s32 right, s32 top, s32 bottom, s32 
     this->unk35C = size >> 1;
 }
 
+#if VERSION_JP
 INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_startRound);
+#else
+/* Starts a round: clears the display, adds both sides' fighters to the fighters' group and the entities, puts them
+ * at the arena's start positions and runs func_8007F730 on both sides; the camera's eye goes to (0, 0, -0x6400)
+ * and its target to 0. Clears the frame count and sets the time left (3000 frames, or 1 with no time limit),
+ * clears the bonus mode and bit 0 of unk318 and bit 2 of the flags, freezes the fighters, stops the clock, starts
+ * the wipe at 0x20 and resets the camera focus and the pause menu, then clears FIGHT_FLAG_ROUND_OVER and
+ * FIGHT_FLAG_SLOW. The match depends on the position passed through a pointer of its own block, the time left set
+ * in an if/else and the two flags cleared one by one. (US only: JP's pause menu has no pausePage.) */
+void Fight_startRound(Fight *this) {
+    Fighter *fighter0;
+    Fighter *fighter1;
+    DVECTOR *start;
+    Vec3 position;
+
+    displayClear(CURRENT_DISPLAY);
+    fighter0 = this->sides[0]->current;
+    fighter1 = this->sides[1]->current;
+    Fighter_addModelTo(fighter0, &this->fighterGroup);
+    Fighter_addModelTo(fighter1, &this->fighterGroup);
+    entityGroupAppend(&this->entities, &fighter0->entity);
+    entityGroupAppend(&this->entities, &fighter1->entity);
+    start = ARENA_START_POSITIONS[this->arena];
+    {
+        Vec3 *p = &position;
+
+        position.vx = start[0].vx;
+        position.vy = start[0].vy;
+        position.vz = 0;
+        Fighter_setPosition(fighter0, p);
+        position.vx = start[1].vx;
+        position.vy = start[1].vy;
+        position.vz = 0;
+        Fighter_setPosition(fighter1, p);
+    }
+    func_8007F730(this->sides[0]);
+    func_8007F730(this->sides[1]);
+    this->eye.vx = 0;
+    this->eye.vy = 0;
+    this->eye.vz = -0x6400;
+    this->target.vx = 0;
+    this->target.vy = 0;
+    this->target.vz = 0;
+    this->steps = 0;
+    if (func_8001DECC(&GAME_STATE)) {
+        this->timeLeft = 1;
+    } else {
+        this->timeLeft = 3000;
+    }
+    this->modeFlags &= ~FIGHT_MODE_BONUS;
+    this->unk318 &= ~1;
+    func_8006F124(this, 0);
+    Fight_freezeFighters(this);
+    Fight_holdClock(this);
+    this->wipe = 0x20;
+    this->cameraFocus = 0;
+    this->pauseCursor = 0;
+    this->pausePage = 0;
+    this->pauseSide = 0;
+    this->pauseButtons = 0;
+    this->flags &= ~FIGHT_FLAG_ROUND_OVER;
+    this->flags &= ~FIGHT_FLAG_SLOW;
+}
+#endif
 
 /* Creates the computer player of a side without a pad, for its side object; the bonus stages make their own. */
 void *Fight_createController(void *this, s32 side, BattleSide *battleSide) {
@@ -1428,7 +1493,18 @@ void Fight_releaseClock(Fight *this) {
     this->flags &= ~FIGHT_FLAG_HOLD_CLOCK;
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_lightFighter);
+/* Gives the fighter the camera's lights (its light and color matrices). The match depends on copy32Bytes (see
+ * engine/math/block_copy.h) and on the fighter parameter itself stepped to each matrix (a new pointer takes a
+ * register below the copy's words). */
+void Fight_lightFighter(Fight *this, Fighter *fighter) {
+    MatrixWords *src = (MatrixWords *)cameraGetLights(&this->camera);
+
+    fighter = (Fighter *)&fighter->lights;
+    copy32Bytes(fighter, src);
+    fighter = (Fighter *)((MatrixWords *)fighter + 1);
+    src++;
+    copy32Bytes(fighter, src);
+}
 
 /* Right after every round: nothing in the base class. */
 void Fight_endRound(void) {
