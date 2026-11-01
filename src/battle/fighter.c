@@ -847,7 +847,64 @@ void Fighter_updateRotation(Fighter *this) {
     stepAngle(&this->rotation.vz, dz);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_updateTransform);
+/* Rebuilds the model's local matrix: at unk3C8 + offset, turned by rotation.vz then vx about the point height above
+ * it (the params'), then by rotation.vy; shows the model and passes the fighter to the fight's virtual method at 0x28. While
+ * unk490 counts down its odd frames light the fighter white. The match depends on the position summed in locals,
+ * stored, then read back through a pointer before the identity's words are written. */
+void Fighter_updateTransform(Fighter *this, Vec3 *offset) {
+    s16 height = Fighter_getParams(this)->height;
+    Model *model = this->model;
+    MatrixWords *local;
+    Vec3 pos;
+    VECTOR white;
+    Fight *fight;
+    Lights *lights;
+
+    model->group.object.transform.valid = 0;
+    local = &model->group.object.transform.local;
+    this->model->group.object.hidden = 0;
+    {
+        s32 x = this->unk3C8.vx, y = this->unk3C8.vy, z = this->unk3C8.vz;
+        x += offset->vx;
+        y += offset->vy;
+        z += offset->vz;
+        pos.vx = x;
+        pos.vy = y;
+        pos.vz = z;
+    }
+    {
+        Vec3 *p = &pos;
+        s32 x = p->vx, y = p->vy, z = p->vz;
+        model->group.object.transform.local.words[0] = 0x1000;
+        model->group.object.transform.local.words[1] = 0;
+        model->group.object.transform.local.words[2] = 0x1000;
+        model->group.object.transform.local.words[3] = 0;
+        model->group.object.transform.local.words[4] = 0x1000;
+        model->group.object.transform.local.m.t[0] = x;
+        model->group.object.transform.local.m.t[1] = y;
+        model->group.object.transform.local.m.t[2] = z;
+    }
+    matrixTranslate(&local->m, 0, -height, 0);
+    matrixRotateZ(&local->m, this->rotation.vz);
+    matrixRotateX(&local->m, this->rotation.vx);
+    matrixTranslate(&local->m, 0, height, 0);
+    matrixRotateY(&local->m, this->rotation.vy);
+    fight = this->fight;
+    fight->vtable[5].func((u8 *)fight + fight->vtable[5].delta, this);
+    if (this->unk490 > 0) {
+        this->unk490--;
+    }
+    if (this->unk490 & 1) {
+        lights = &this->lights;
+        white.vx = 0x1000;
+        white.vy = 0x1000;
+        white.vz = 0x1000;
+        lightsSetBackColor(lights, &white);
+        lightsSetColor0(lights, &white);
+        lightsSetColor1(lights, &white);
+        lightsSetColor2(lights, &white);
+    }
+}
 
 /* Turns the fighter to face left (facing -1); at once when `now` is set. */
 void Fighter_faceLeft(Fighter *this, s32 now) {
