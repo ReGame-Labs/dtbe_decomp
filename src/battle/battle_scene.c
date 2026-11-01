@@ -22,6 +22,7 @@
 #include "engine/sound/sound_control.h"
 #include "engine/text/font.h"
 #include "engine/text/text_printer.h"
+#include "engine/system/main.h"
 #include "engine/system/memory.h"
 #include "stdio.h"
 
@@ -49,7 +50,83 @@ INCLUDE_RODATA("game/nonmatchings/battle_scene", LIGHT_COLOR_1);
 INCLUDE_RODATA("game/nonmatchings/battle_scene", LIGHT_COLOR_2);
 INCLUDE_RODATA("game/nonmatchings/battle_scene", BACK_COLOR);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_init);
+extern VECTOR LIGHT_DIRECTION_0;
+extern VECTOR LIGHT_DIRECTION_1;
+extern VECTOR LIGHT_DIRECTION_2;
+extern VECTOR LIGHT_COLOR_0;
+extern VECTOR LIGHT_COLOR_1;
+extern VECTOR LIGHT_COLOR_2;
+extern VECTOR BACK_COLOR;
+
+extern VtableEntry FIGHT_VTABLE[];
+
+void runFightThread(s32 unused, Fight *fight);
+void func_8006F1C4(Fight *this, s32 angle);
+
+/* Constructs the fight: its thread (runFightThread, 0x2000 of stack), the entity groups, the groups, the look-at
+ * and both cameras, the empty shape lists, the transform at 0x25C, the continue screen's lerps, the background and
+ * the random generator; it becomes CURRENT_FIGHT. The camera gets its view and the fight's lights; both input
+ * histories and the map's mesh scene are made, no side has a computer controller nor a chara yet, func_8006F1C4
+ * with 0, five rounds at most and two wins needed, no wins nor gauges. Seeds the random generator and applies the
+ * save's button maps. The match depends on GAME_STATE taken through a local pointer for the button maps. */
+Fight *Fight_init(Fight *this) {
+    this->vtable = FIGHT_VTABLE;
+    threadInit(&this->thread, runFightThread, 0x2000, this, 0);
+    entityGroupInit(&this->stageEntities);
+    entityGroupInit(&this->entities);
+    entityGroupInit(&this->unk5C);
+    groupInit(&this->fighterGroup);
+    groupInit(&this->unkCC);
+    lookAtInit(&this->lookAt);
+    cameraInit(&this->camera, 11);
+    cameraInitShared(&this->camera2, 11, &this->camera);
+    this->side1Shapes.next = &this->side1Shapes;
+    this->side1Shapes.prev = &this->side1Shapes;
+    this->side0Shapes.next = &this->side0Shapes;
+    this->side0Shapes.prev = &this->side0Shapes;
+    this->stageShapes.next = &this->stageShapes;
+    this->stageShapes.prev = &this->stageShapes;
+    transformInit((Transform *)this->unk25C);
+    *(s32 *)this->unk2B4 = 0;
+    lerpInit(&this->continueDistance, 0);
+    lerpInit(&this->continueTilt, 0);
+    spriteInit(&this->background);
+    mersenneTwisterInit(&this->random);
+    CURRENT_FIGHT = this;
+    cameraReset(&this->camera);
+    cameraSetFov(&this->camera, 0x238);
+    cameraSetFar(&this->camera, 0x3200);
+    cameraSetLightDirection0(&this->camera, &LIGHT_DIRECTION_0);
+    cameraSetLightDirection1(&this->camera, &LIGHT_DIRECTION_1);
+    cameraSetLightDirection2(&this->camera, &LIGHT_DIRECTION_2);
+    cameraSetLightColor0(&this->camera, &LIGHT_COLOR_0);
+    cameraSetLightColor1(&this->camera, &LIGHT_COLOR_1);
+    cameraSetLightColor2(&this->camera, &LIGHT_COLOR_2);
+    cameraSetBackColor(&this->camera, &BACK_COLOR);
+    this->inputs[0] = InputHistory_init(operatorNew(0x218));
+    this->inputs[1] = InputHistory_init(operatorNew(0x218));
+    this->controllers[0] = NULL;
+    this->controllers[1] = NULL;
+    this->meshScene = meshSceneInit(operatorNew(0x10C));
+    func_8006F1C4(this, 0);
+    this->charas[0] = NULL;
+    this->charas[1] = NULL;
+    this->charas[2] = NULL;
+    this->charas[3] = NULL;
+    this->roundsLeft = 5;
+    this->winsNeeded = 2;
+    this->wins[0] = 0;
+    this->wins[1] = 0;
+    this->gauges[0] = 0;
+    this->gauges[1] = 0;
+    seedRandom(&this->random);
+    {
+        GameState *state = &GAME_STATE;
+
+        saveDataApplyButtons(&state->save, &state->maps[0], &state->maps[1]);
+    }
+    return this;
+}
 
 /* Returns the fight's camera. */
 Camera *Fight_getCamera(Fight *this) {
@@ -159,7 +236,6 @@ MeshScene *Fight_getMeshScene(Fight *this) {
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006F1C4);
 
-extern VtableEntry FIGHT_VTABLE[];
 
 void Fight_destroySides(Fight *this);
 

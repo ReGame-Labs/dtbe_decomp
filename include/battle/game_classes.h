@@ -1118,6 +1118,7 @@ s32 FighterState_getClip(FighterState *this);
 void *FighterStateHeld_init(FighterState *this, s32 arg);
 ListNode *listAppend(ListNode *head, ListNode *node);
 
+void *InputHistory_init(void *this);
 void InputHistory_record(InputHistory *this, u32 buttons);
 void BattleSide_swapCharacter(BattleSide *this);
 s32 Fighter_beginEvolutionScene(Fighter *this);
