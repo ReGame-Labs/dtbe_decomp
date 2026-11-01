@@ -163,7 +163,67 @@ extern VtableEntry FIGHT_VTABLE[];
 
 void Fight_destroySides(Fight *this);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_destroy);
+/* Destroys the fight: its sides, both input histories, the charas and the map, the background, the three shape
+ * lists, both cameras, the groups, the entity groups and the thread; frees it when flags has bit 0. The match
+ * depends on each list's removal written out in a block of its own with its own node pointer. */
+void Fight_destroy(Fight *this, s32 flags) {
+    this->vtable = FIGHT_VTABLE;
+    Fight_destroySides(this);
+    operatorDelete(this->inputs[0]);
+    operatorDelete(this->inputs[1]);
+    if (this->charas[0] != NULL) {
+        charaDestroy(this->charas[0], 3);
+    }
+    if (this->charas[1] != NULL) {
+        charaDestroy(this->charas[1], 3);
+    }
+    if (this->charas[2] != NULL) {
+        charaDestroy(this->charas[2], 3);
+    }
+    if (this->charas[3] != NULL) {
+        charaDestroy(this->charas[3], 3);
+    }
+    if (this->meshScene != NULL) {
+        meshSceneDestroy(this->meshScene, 3);
+    }
+    spriteDestroy(&this->background, 2);
+    /* listRemove of the three shape lists, in the access order the game's compiler used */
+    {
+        ListNode *node = &this->stageShapes;
+
+        this->stageShapes.next->prev = this->stageShapes.prev;
+        node->prev->next = this->stageShapes.next;
+        this->stageShapes.next = node;
+        this->stageShapes.prev = node;
+    }
+    {
+        ListNode *node = &this->side0Shapes;
+
+        this->side0Shapes.next->prev = this->side0Shapes.prev;
+        node->prev->next = this->side0Shapes.next;
+        this->side0Shapes.next = node;
+        this->side0Shapes.prev = node;
+    }
+    {
+        ListNode *node = &this->side1Shapes;
+
+        this->side1Shapes.next->prev = this->side1Shapes.prev;
+        node->prev->next = this->side1Shapes.next;
+        this->side1Shapes.next = node;
+        this->side1Shapes.prev = node;
+    }
+    cameraDestroy(&this->camera2, 2);
+    cameraDestroy(&this->camera, 2);
+    groupDestroy(&this->unkCC, 2);
+    groupDestroy(&this->fighterGroup, 2);
+    entityGroupDestroy(&this->unk5C, 2);
+    entityGroupDestroy(&this->entities, 2);
+    entityGroupDestroy(&this->stageEntities, 2);
+    threadDestroy(&this->thread, 2);
+    if (flags & 1) {
+        operatorDelete(this);
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064D38);
 
