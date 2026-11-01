@@ -1247,6 +1247,11 @@ void Fighter_airSpecial1(Fighter *this, s32 arg);
 void Fighter_airSpecial2(Fighter *this, s32 arg);
 
 void Fighter_takeHit(Fighter *this, u32 unk, Vec3 *velocity, s32 unk3);
+s32 Fighter_countComboHit(Fighter *this);
+void func_8007F124(BattleSide *this, s32 amount);
+MoveReward *MoveReward_scale(MoveReward *this, s32 scale);
+void MoveReward_give(MoveReward *this, Fighter *fighter);
+void MoveReward_giveGauge(MoveReward *this, Fighter *fighter);
 
 void Hit_set(Hit *this, s32 damage, s32 kind);
 

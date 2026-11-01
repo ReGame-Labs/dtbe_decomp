@@ -1242,7 +1242,91 @@ s32 func_80078EB0(s32 row, s32 column, s32 value) {
     return value * (D_8006520C[row][column] + 100) / 100;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_takeHit);
+/* Applies a hit (its word, the knockback and the stun) to the fighter: detaches the opponent, vibrates the pad, stops
+ * the voice and scales the damage by the opponent's item effect and the percentage table (by the hit's kind, bits 24
+ * and 25, and the params' row); kinds 1 to 3 also start the second timed effect for 60 frames. Adds the knockback to
+ * the force and turns towards it, takes the params' unk16/256 off the damage and, when it blocks (Fighter_blocks),
+ * takes the knockback's vy back, gives the gauge of gaugeGains[14] and, for chip hits (0x4000000), the damage (a
+ * quarter of it from 5 up), and pays the opponent the gauge of the move's reward (bits 18 to 21). Else it gives the
+ * gauge of gaugeGains[13], sets unk490 to 10, pays a combo hit's (0x800000) whole reward scaled by the combo count,
+ * adds the stun and takes the damage, then hands the hit to the body and attack states (slot 5). The match depends
+ * on the hit copied to one damage variable at the top (worked on in place) and the force added through locals. */
+void Fighter_takeHit(Fighter *this, u32 hit, Vec3 *velocity, s32 stun) {
+    s32 damage = hit;
+    Fighter *opponent = Fighter_getOpponent(this);
+    u32 flags;
+    s32 kind;
+    FighterParams *params;
+    MoveReward *reward;
+
+    Fighter_detach(opponent);
+    Fighter_vibratePad(this, 0, 0xFF, 0xFF, 10, 0);
+    stopSound(this->voiceHandle);
+    this->voiceHandle = 0;
+    damage = Fighter_scaleDamage(opponent, damage);
+    flags = damage & ~HIT_DAMAGE_MASK;
+    damage &= HIT_DAMAGE_MASK;
+    kind = (flags >> 24) & 3;
+    damage = func_80078EB0(kind, (Fighter_getParams(this)->flags >> 8) & 3, damage);
+    switch (kind) {
+    case 0:
+        break;
+    case 1:
+        func_80077520(this, 1, 60, 0);
+        break;
+    case 2:
+        func_80077520(this, 2, 60, 0);
+        break;
+    case 3:
+        func_80077520(this, 3, 60, 0);
+        break;
+    }
+    {
+        s32 x = this->force.vx, y = this->force.vy, z = this->force.vz;
+        x += velocity->vx;
+        y += velocity->vy;
+        z += velocity->vz;
+        this->force.vx = x;
+        this->force.vy = y;
+        this->force.vz = z;
+    }
+    if (velocity->vx != 0) {
+        if (velocity->vx < 0) {
+            Fighter_faceRight(this, 1);
+        } else {
+            Fighter_faceLeft(this, 1);
+        }
+    }
+    params = Fighter_getParams(this);
+    reward = &opponent->rewards[(flags >> 18) & 0xF];
+    damage -= damage * params->unk16 / 256;
+    if (Fighter_blocks(this, flags)) {
+        this->force.vy -= velocity->vy;
+        if (damage > 0 && (Fighter_canEvolve(this) || func_800777BC(this))) {
+            BattleSide_addGauge(this->battleSide, params->gaugeGains[14]);
+        }
+        if (flags & 0x4000000) {
+            if (damage >= 5) {
+                damage /= 4;
+            }
+            BattleSide_takeDamage(this->battleSide, damage);
+        }
+        MoveReward_giveGauge(reward, opponent);
+        return;
+    }
+    if (damage > 0 && (Fighter_canEvolve(this) || func_800777BC(this))) {
+        BattleSide_addGauge(this->battleSide, params->gaugeGains[13]);
+    }
+    this->unk490 = 10;
+    if (flags & 0x800000) {
+        MoveReward_scale(reward, Fighter_countComboHit(this));
+        MoveReward_give(reward, opponent);
+    }
+    func_8007F124(this->battleSide, stun);
+    BattleSide_takeDamage(this->battleSide, damage);
+    this->bodyState->vtable[5].func((u8 *)this->bodyState + this->bodyState->vtable[5].delta, flags);
+    this->attackState->vtable[5].func((u8 *)this->attackState + this->attackState->vtable[5].delta, flags);
+}
 
 /* Asks for the win pose once the round ends. */
 void Fighter_requestWinPose(Fighter *this) {
@@ -1742,9 +1826,9 @@ s32 Fighter_getComboHits(Fighter *this) {
     return this->comboHits;
 }
 
-/* Counts a hit of the fighter's combo. */
-void Fighter_countComboHit(Fighter *this) {
-    this->comboHits++;
+/* Counts a hit of the fighter's combo; returns the new count. */
+s32 Fighter_countComboHit(Fighter *this) {
+    return ++this->comboHits;
 }
 
 /* With on, sets 0x494 to 5 unless it is above 0 already; else clears it. */
@@ -2665,8 +2749,6 @@ MoveReward *MoveReward_scale(MoveReward *this, s32 scale) {
     this->gauge += this->gauge * (scale - 1) / 100;
     return this;
 }
-
-void MoveReward_giveGauge(MoveReward *this, Fighter *fighter);
 
 /* Pays the score to fighter (Fighter_addScore) and the gauge with MoveReward_giveGauge, then clears the score. */
 void MoveReward_give(MoveReward *this, Fighter *fighter) {
