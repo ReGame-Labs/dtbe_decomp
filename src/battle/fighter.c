@@ -957,7 +957,31 @@ s32 Fighter_landOnFloor(Fighter *this) {
     return 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_accelerateTo);
+extern s32 ARENA_GRIP;
+
+/* Accelerates the fighter towards speed along x: takes the arena's friction (Fighter_getFriction) off the force, then
+ * adds (speed - velocity.vx) scaled by the mass and by ARENA_GRIP (both 16.16) to force.vx. The match depends on the
+ * friction taken off through locals (all three read before any write), before the grip's scale. */
+void Fighter_accelerateTo(Fighter *this, s32 speed) {
+    Vec3 friction;
+    Vec3 *f = Fighter_getFriction(this, &friction);
+    s32 accel = ((s64)(speed - this->velocity.vx) * this->mass) >> 16;
+
+    {
+        s32 x = this->force.vx;
+        s32 y = this->force.vy;
+        s32 z = this->force.vz;
+
+        x -= f->vx;
+        y -= f->vy;
+        z -= f->vz;
+        this->force.vx = x;
+        this->force.vy = y;
+        this->force.vz = z;
+    }
+    accel = ((s64)accel * ARENA_GRIP) >> 16;
+    this->force.vx += accel;
+}
 
 extern s32 ARENA_FRICTION;
 
