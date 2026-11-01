@@ -1649,7 +1649,91 @@ void func_8007A12C(Fighter *this, s32 on) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", func_8007A158);
+s32 func_8007A3EC(Vec3 *point, s32 dy, s32 width);
+
+/* Pushes two overlapping fighters apart (unless either is invulnerable): when their distance on x/y is under the sum
+ * of their func_80079DD8 radii, each moves half the overlap along the normalized direction between them (x only, at
+ * least sum if it is too steep; away from a's velocity when they are at the same point), except a side whose wall
+ * (func_8007A3EC) blocks it; then func_80077F80 for both. The match depends on the direction subtracted in locals,
+ * the side results reused for the pushes and the moves applied on all three axes, each in its own block. */
+void func_8007A158(Fighter *a, Fighter *b) {
+    Vec3 posA;
+    Vec3 posB;
+    VECTOR diff;
+    Vec3 moveA;
+    Vec3 moveB;
+    s32 sum;
+    s32 len;
+    s32 sideA;
+    s32 sideB;
+
+    if (Fighter_isInvulnerable(a) || Fighter_isInvulnerable(b)) {
+        return;
+    }
+    Fighter_getPosition(a, &posA);
+    Fighter_getPosition(b, &posB);
+    {
+        s32 bx = posB.vx, by = posB.vy, ax = posA.vx, ay = posA.vy;
+        diff.vz = 0;
+        bx -= ax;
+        by -= ay;
+        diff.vx = bx;
+        diff.vy = by;
+    }
+    sum = func_80079DD8(a) + func_80079DD8(b);
+    len = vecGetLength(&diff);
+    if (len >= sum) {
+        return;
+    }
+    if (len == 0) {
+        VectorNormal(&diff, (VECTOR *)&a->velocity);
+        diff.vx = -diff.vx;
+        diff.vy = -diff.vy;
+    } else {
+        VectorNormal(&diff, &diff);
+        if (abs(diff.vx) < sum / 3) {
+            diff.vx = sum;
+        }
+    }
+    sideA = func_8007A3EC(&posA, -0x33, Fighter_getParams(a)->height);
+    sideB = func_8007A3EC(&posB, -0x33, Fighter_getParams(b)->height);
+    len = (sum - len) / 2;
+    if (diff.vx > 0) {
+        sideA = sideA < 0 ? 0 : len;
+        sideB = sideB > 0 ? 0 : len;
+    } else {
+        sideA = sideA > 0 ? 0 : len;
+        sideB = sideB < 0 ? 0 : len;
+    }
+    moveA = *(Vec3 *)&diff;
+    moveB = *(Vec3 *)&diff;
+    moveA.vx = moveA.vx * sideA / 4096;
+    moveA.vy = 0;
+    moveB.vx = moveB.vx * sideB / 4096;
+    moveB.vy = 0;
+    {
+        s32 bx = posB.vx, by = posB.vy, bz = posB.vz;
+        bx += moveB.vx;
+        by += moveB.vy;
+        bz += moveB.vz;
+        posB.vx = bx;
+        posB.vy = by;
+        posB.vz = bz;
+    }
+    {
+        s32 ax = posA.vx, ay = posA.vy, az = posA.vz;
+        ax -= moveA.vx;
+        ay -= moveA.vy;
+        az -= moveA.vz;
+        posA.vx = ax;
+        posA.vy = ay;
+        posA.vz = az;
+    }
+    Fighter_setPosition(a, &posA);
+    Fighter_setPosition(b, &posB);
+    func_80077F80(a);
+    func_80077F80(b);
+}
 
 /* Tests castMapRay toward point (raised by dy) from both sides, a third more than width away: -1 for the left
  * one only, 1 for the right one only, else 0. */
