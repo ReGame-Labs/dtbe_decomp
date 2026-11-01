@@ -444,7 +444,76 @@ void Fight_updateSides(Fight *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_readInputs);
+s32 Controller_getButtons(Controller *this);
+u32 func_800C9938(Fighter *fighter, u32 buttons);
+
+
+/* Reads both pads into the sides' input histories. The buttons still held from the pause are taken out of the
+ * pausing side's pad until released; with FIGHT_FLAG_FREEZE both record nothing. The buttons go through the
+ * players' button maps; the bonus mode keeps only some of them (arena 9 keeps others). A computer side's buttons
+ * come from its controller, and outside the bonus mode item effect 3 changes them (func_800C9938). The match
+ * depends on the bonus mask set in an if/else on arena != 9. */
+void Fight_readInputs(Fight *this) {
+    PadManager *pads = PAD_MANAGER_INSTANCE;
+    Fighter *fighter0 = this->sides[0]->current;
+    Fighter *fighter1 = this->sides[1]->current;
+    u32 buttons0 = padManagerGetHeld(pads, 0);
+    u32 buttons1 = padManagerGetHeld(pads, 1);
+    u32 held = this->pauseButtons;
+
+    if (held) {
+        switch (this->pauseSide) {
+        case 0:
+            held &= buttons0;
+            buttons0 ^= held;
+            break;
+        case 1:
+            held &= buttons1;
+            buttons1 ^= held;
+            break;
+        }
+        this->pauseButtons = held;
+    }
+    if ((this->flags >> 5) & 1) {
+        InputHistory_record(this->inputs[0], 0);
+        InputHistory_record(this->inputs[1], 0);
+        return;
+    }
+    buttons0 = buttonMapApply(&GAME_STATE.maps[0], buttons0);
+    buttons1 = buttonMapApply(&GAME_STATE.maps[1], buttons1);
+    if (this->modeFlags & FIGHT_MODE_BONUS) {
+        u32 mask;
+
+        if (GAME_STATE.arena != 9) {
+            mask = 0xFFFF0F83;
+        } else {
+            mask = -0x507D;
+        }
+        buttons0 &= mask;
+        buttons1 &= mask;
+        if (fighter0->flags.bits.computer) {
+            buttons0 = Controller_getButtons(this->controllers[0]);
+        }
+        if (fighter1->flags.bits.computer) {
+            buttons1 = Controller_getButtons(this->controllers[1]);
+        }
+    } else {
+        if (fighter0->flags.bits.computer) {
+            buttons0 = Controller_getButtons(this->controllers[0]);
+        }
+        if (fighter1->flags.bits.computer) {
+            buttons1 = Controller_getButtons(this->controllers[1]);
+        }
+        if (fighter0->itemEffect.kind == 3) {
+            buttons0 = func_800C9938(fighter0, buttons0);
+        }
+        if (fighter1->itemEffect.kind == 3) {
+            buttons1 = func_800C9938(fighter1, buttons1);
+        }
+    }
+    InputHistory_record(this->inputs[0], buttons0);
+    InputHistory_record(this->inputs[1], buttons1);
+}
 
 typedef s32 (*FightIsFallenFunc)(void *this, Vec3 *position);
 
