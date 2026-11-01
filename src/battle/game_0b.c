@@ -266,14 +266,6 @@ s32 matchButtons(u32 held, u32 buttons, s32 any) {
     return (held ^ buttons) == 0;
 }
 
-/* A box a fighter hits or is hit with (Fighter_updateBoxes keeps them): the least and greatest corner of the eight it
- * was fitted to, and the matrix they were placed with. */
-typedef struct Box {
-    /* 0x00 */ VECTOR min;
-    /* 0x10 */ VECTOR max;
-    /* 0x20 */ MATRIX *matrix; /* what matrixMul returned (Fighter_updateBoxes) */
-} Box;
-
 /* Returns other when the two boxes overlap (touching counts), else NULL. */
 Box *boxOverlaps(Box *this, Box *other) {
     if (this->min.vx > other->max.vx || this->max.vx < other->min.vx || this->min.vy > other->max.vy ||

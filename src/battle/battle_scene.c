@@ -716,7 +716,88 @@ void func_800708C4(Fight *this) {
     func_8007A158(this->sides[0]->current, this->sides[1]->current);
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_800708F4);
+s32 Fighter_getBodyBoxCount(Fighter *this);
+s32 Fighter_getAttackBoxCount(Fighter *this);
+Box *Fighter_getBodyBoxes(Fighter *this);
+Box *Fighter_getAttackBoxes(Fighter *this);
+s32 Fighter_isInvulnerable(Fighter *this);
+Box *boxesFindOverlap(Box *boxes, s32 count, Box *others, s32 othersCount);
+CollisionSphere *Fighter_resetCollider(Fighter *this);
+void shapeListCollide(ListNode *list, CollisionSphere *other);
+void shapeListsCollide(ListNode *list, ListNode *others);
+
+/* The hits between the sides' fighters: each one's attack boxes against the other's body boxes (boxesFindOverlap,
+ * unless it is idle or the other invulnerable) through the hitOpponent slot, with a copy of the matrix of the box
+ * met; then each fighter's collider against the stage's shapes and the other side's (Fighter_takeHit of what it
+ * gathered), and the three shape lists against each other. */
+void func_800708F4(Fight *this) {
+    Fighter *fighter0;
+    Fighter *fighter1;
+    s32 bodyCount0;
+    s32 bodyCount1;
+    s32 attackCount0;
+    s32 attackCount1;
+    Box *body0;
+    Box *body1;
+    Box *attack0;
+    Box *attack1;
+    Box *hit0;
+    Box *hit1;
+    MATRIX hit;
+
+    /* The match depends on the two NULLs assigned first, hit1 before hit0. */
+    hit1 = NULL;
+    hit0 = NULL;
+    fighter0 = this->sides[0]->current;
+    fighter1 = this->sides[1]->current;
+    bodyCount0 = Fighter_getBodyBoxCount(fighter0);
+    bodyCount1 = Fighter_getBodyBoxCount(fighter1);
+    attackCount0 = Fighter_getAttackBoxCount(fighter0);
+    attackCount1 = Fighter_getAttackBoxCount(fighter1);
+    body0 = Fighter_getBodyBoxes(fighter0);
+    body1 = Fighter_getBodyBoxes(fighter1);
+    attack0 = Fighter_getAttackBoxes(fighter0);
+    attack1 = Fighter_getAttackBoxes(fighter1);
+
+
+    if (!Fighter_isAttackIdle(fighter0) && !Fighter_isInvulnerable(fighter1)) {
+        hit0 = boxesFindOverlap(attack0, attackCount0, body1, bodyCount1);
+    }
+    if (!Fighter_isAttackIdle(fighter1) && !Fighter_isInvulnerable(fighter0)) {
+        hit1 = boxesFindOverlap(attack1, attackCount1, body0, bodyCount0);
+    }
+    if (hit0 != NULL) {
+        hit = *hit0->matrix;
+        GET_FIGHTER_VTABLE(fighter0)->hitOpponent.func(
+            (u8 *)fighter0 + GET_FIGHTER_VTABLE(fighter0)->hitOpponent.delta, fighter1, &hit);
+    }
+    if (hit1 != NULL) {
+        hit = *hit1->matrix;
+        GET_FIGHTER_VTABLE(fighter1)->hitOpponent.func(
+            (u8 *)fighter1 + GET_FIGHTER_VTABLE(fighter1)->hitOpponent.delta, fighter0, &hit);
+    }
+    if (!Fighter_isInvulnerable(fighter0)) {
+        CollisionSphere *collider = Fighter_resetCollider(fighter0);
+
+        shapeListCollide(&this->stageShapes, collider);
+        shapeListCollide(&this->side1Shapes, collider);
+        if (collider->hitDamage != 0) {
+            Fighter_takeHit(fighter0, collider->hitDamage, &collider->hitKnockback, collider->hitKind);
+        }
+    }
+    if (!Fighter_isInvulnerable(fighter1)) {
+        CollisionSphere *collider = Fighter_resetCollider(fighter1);
+
+        shapeListCollide(&this->stageShapes, collider);
+        shapeListCollide(&this->side0Shapes, collider);
+        if (collider->hitDamage != 0) {
+            Fighter_takeHit(fighter1, collider->hitDamage, &collider->hitKnockback, collider->hitKind);
+        }
+    }
+    shapeListsCollide(&this->side1Shapes, &this->side0Shapes);
+    shapeListsCollide(&this->side1Shapes, &this->stageShapes);
+    shapeListsCollide(&this->side0Shapes, &this->stageShapes);
+}
 
 /* Counts the step, updates the camera (Fight_updateCamera), then applies its view. */
 void Fight_finishStep(Fight *this) {

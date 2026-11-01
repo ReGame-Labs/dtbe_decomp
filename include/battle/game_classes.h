@@ -178,6 +178,14 @@ typedef struct CollisionSphere {
     /* 0x44 */ s32 radius;
 } CollisionSphere;
 
+/* A box a fighter hits or is hit with (Fighter_updateBoxes keeps them): the least and greatest corner of the eight it
+ * was fitted to, and the matrix they were placed with. */
+typedef struct Box {
+    /* 0x00 */ VECTOR min;
+    /* 0x10 */ VECTOR max;
+    /* 0x20 */ MATRIX *matrix; /* what matrixMul returned (Fighter_updateBoxes) */
+} Box;
+
 /* A move's pay when it hits (Fighter.rewards, by MOVE_*): score points to the side and evolution gauge. */
 typedef struct MoveReward {
     /* 0x0 */ u16 score;
