@@ -518,7 +518,76 @@ s32 Fighter_tryUseAirMove(Fighter *this, s32 move) {
     return 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_tick);
+void Fighter_updateModel(Fighter *this);
+void Fighter_setInput(Fighter *this, struct InputHistory *input);
+void Fighter_move(Fighter *this);
+void Fighter_applyPose(Fighter *this);
+void Fighter_updatePhysics(Fighter *this);
+void Fighter_updateRotation(Fighter *this);
+void Fighter_updateTransform(Fighter *this, Vec3 *offset);
+
+/* The fighter's frame, unless its side's tick takes it (BattleSide_tick): drops a holder that is gone, and while held
+ * only updates the model. Else reads the input, moves unless frozen, applies the pose, counts down the invulnerable
+ * frames, unk48C and unk494 (whose end clears the combo), runs both states' tick slot, goes back to the clip when the
+ * action clip is done, runs the timed effects, the physics (or holds a frozen fighter on the ground), the rotation
+ * and the transform. The match depends on the void prototypes above (implicit int declarations give 7 diffs) and
+ * on unk494's end kept in a flag. */
+void Fighter_tick(Fighter *this, s32 arg) {
+    Vec3 position;
+    s32 done;
+
+    if (BattleSide_tick(this->battleSide)) {
+        return;
+    }
+    if (this->holderHandle != 0 && getEntityByHandle(this->holderHandle) == NULL) {
+        Fighter_detach(this);
+    }
+    if (this->holder != NULL) {
+        Fighter_updateModel(this);
+        return;
+    }
+    Fighter_setInput(this, Fight_getInput(this->fight, this->side));
+    this->flags.bits.unk80079AF8 = 0;
+    if (!this->flags.bits.frozen) {
+        Fighter_move(this);
+    }
+    Fighter_applyPose(this);
+    if (this->invulnerableFrames > 0) {
+        this->invulnerableFrames--;
+    }
+    if (this->unk48C > 0) {
+        this->unk48C--;
+    }
+    done = 0;
+    if (this->unk494 > 0) {
+        this->unk494--;
+        done = this->unk494 == 0;
+    }
+    if (done) {
+        this->comboHits = 0;
+    }
+    this->bodyState->vtable[1].func((u8 *)this->bodyState + this->bodyState->vtable[1].delta);
+    this->attackState->vtable[1].func((u8 *)this->attackState + this->attackState->vtable[1].delta);
+    if (this->actionClip >= 0 && Fighter_isActionClipDone(this)) {
+        this->actionClip = -1;
+        Fighter_setClip(this, this->clip, this->clipBlendFrames, 0);
+    }
+    ((void (*)(Fighter *, s32))Fighter_tickItemEffect)(this, arg);
+    ((void (*)(Fighter *, s32))func_80077538)(this, arg);
+    if (this->flags.bits.frozen) {
+        this->flags.bits.onGround = 1;
+        this->flags.bits.landed = 1;
+    } else {
+        Fighter_updatePhysics(this);
+    }
+    if (this->flags.bits.landed) {
+        this->airMovesUsed = 0;
+    }
+    Fighter_updateRotation(this);
+    Fighter_getPosition(this, &position);
+    Fighter_updateTransform(this, &position);
+    Fighter_updateModel(this);
+}
 
 /* Takes one off a tick count down to 0. The match depends on reading the count into a local: jump threading
  * would drop the reload of the count before the caller's own test. */
