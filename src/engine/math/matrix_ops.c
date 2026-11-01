@@ -1,6 +1,7 @@
 #include "common.h"
 #include "engine/math/matrix_ops.h"
 #include "engine/math/matrix.h"
+#include "engine/math/block_copy.h"
 #include "gte.h"
 
 /* Returns m unchanged. */
@@ -18,9 +19,12 @@ long *matrixGetTranslation(MATRIX *m) {
     return m->t;
 }
 
-/* Copies a MATRIX as a block move (four loads then four stores), which GCC
- * 2.95.2 does not emit for 32 bytes (see "Block moves" in TODO.md). */
-INCLUDE_ASM("main/nonmatchings/math/matrix_ops", matrixCopy);
+/* Copies src into dst and returns dst. The match depends on copy32Bytes (see
+ * engine/math/block_copy.h): GCC 2.95.2 emits no C copy of 32 bytes this way. */
+MATRIX *matrixCopy(MATRIX *dst, MATRIX *src) {
+    copy32Bytes(dst, src);
+    return dst;
+}
 
 /* Multiplies m by n (the rotation, and n's translation through m) and
  * returns m. */

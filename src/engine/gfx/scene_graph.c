@@ -6,6 +6,7 @@
 #include "engine/gfx/prim_buffer.h"
 #include "engine/gfx/tmd.h"
 #include "engine/lib/list.h"
+#include "engine/math/block_copy.h"
 #include "engine/system/memory.h"
 #include "psyq.h"
 #include "vtable.h"
@@ -32,8 +33,7 @@ Transform *transformInit(Transform *this) {
  * The functions of this file left in asm but meshSetTmd copy a MATRIX as a
  * block move (four loads then four stores), which GCC 2.95.2 does not emit
  * for 32 bytes (see "Block moves" in TODO.md): transformAttach,
- * transformDetach, meshDraw, meshCull, meshPartUpdate, transformGetWorld,
- * transformSetLocal and func_8002099C.
+ * transformDetach, meshDraw, meshCull, meshPartUpdate and transformGetWorld.
  */
 
 /* Makes parent the parent of the transform, keeping where it is in the
@@ -366,11 +366,17 @@ MATRIX *transformGetLocal(Transform *this) {
 }
 
 /* Sets the matrix relative to the parent, so the world matrix is worked
- * out again. */
-INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", transformSetLocal);
+ * out again. The match depends on copy32Bytes (see engine/math/block_copy.h). */
+void transformSetLocal(Transform *this, MATRIX *local) {
+    this->valid = 0;
+    copy32Bytes(&this->local, local);
+}
 
 /* The same code as transformSetLocal. */
-INCLUDE_ASM("main/nonmatchings/gfx/scene_graph", func_8002099C);
+void func_8002099C(Transform *this, MATRIX *local) {
+    this->valid = 0;
+    copy32Bytes(&this->local, local);
+}
 
 /* Sets the parent, keeping the matrix relative to it. */
 void transformSetParentKeepLocal(Transform *this, Transform *parent) {
