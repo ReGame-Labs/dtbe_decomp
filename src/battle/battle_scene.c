@@ -6,6 +6,7 @@
 #include "engine/game/game_state.h"
 #include "engine/cd/file_load.h"
 #include "engine/cd/read.h"
+#include "engine/cd/xa_player.h"
 #include "engine/debug/system_menu.h"
 #include "engine/gfx/box.h"
 #include "engine/gfx/camera.h"
@@ -1025,9 +1026,64 @@ s32 Fight_playRound(Fight *this) {
     return result;
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071894);
-
 s32 Fight_waitHandle(Fight *this, u32 handle, s32 port);
+
+/* Counts timer down while above 0; whether it has just reached 0 (as BattleSide_tick's). */
+static inline s32 countDown(s32 *timer) {
+    s32 done = 0;
+
+    if (*timer > 0) {
+        done = --*timer == 0;
+    }
+    return done;
+}
+
+/* A round won by knock-out: slow motion while KO shows (the winner's port can skip it, ending the slow motion);
+ * then, until the winner is idle, waits (the slow motion ends after 60 frames), waits 30 more, wipes out, puts the
+ * loser back, focuses the camera on the winner, wipes in and plays the winner's music; the winner takes its win
+ * pose, the fight waits up to 120 frames for the voice, then shows the win message and waits for it. The match
+ * depends on the countdown inline and on a second counter for the voice's wait, set right before its loop. */
+void func_80071894(Fight *this, s32 side) {
+    Fighter *winner;
+    Vec3 position;
+    s32 slow;
+    s32 wait;
+
+    this->flags |= FIGHT_FLAG_SLOW;
+    if (Fight_waitHandle(this,
+                         entityGetHandle(Fight_addEntity(
+                             this, BattleMessage_init(entityOperatorNew(0x59C), BATTLE_MESSAGE_KO, 0))),
+                         side)) {
+        this->flags &= ~FIGHT_FLAG_SLOW;
+        return;
+    }
+    winner = this->sides[side]->current;
+    Fighter_getPosition(winner, &position);
+    slow = 60;
+    while (Fighter_getBodyState(winner)->state != FIGHTER_STATE_IDLE) {
+        Fight_waitFrames(this, 0);
+        if (countDown(&slow)) {
+            this->flags &= ~FIGHT_FLAG_SLOW;
+        }
+    }
+    Fight_waitFrames(this, 30);
+    this->flags &= ~FIGHT_FLAG_SLOW;
+    Fight_wipeOut(this);
+    Fight_respawnFighter(this, side);
+    this->cameraFocus = side + 1;
+    Fight_waitFrames(this, 2);
+    Fight_wipeIn(this);
+    seekMusicTrack(gameStatePickWinnerTrack(&GAME_STATE), 1);
+    soundControlResumeMusicFull(&SOUND_CONTROL);
+    Fight_waitFrames(this, 5);
+    Fighter_requestWinPose(winner);
+    wait = 120;
+    while (isXaPlaying() && --wait >= 0) {
+        Fight_waitFrames(this, 0);
+    }
+    Fight_waitFrames(this, 5);
+    Fight_waitEntity(this, Fight_showWinner(this, side, (this->flags >> 7) & 1 /* FIGHT_FLAG_LAST_ROUND */), -1);
+}
 
 /* A round won on time: shows TIME UP, sets the winner's win pose (func_80079268 on the loser) and waits for the
  * message (the winner's port can skip it); unless skipped, shows the win message (Fight_showWinner), waits for it and
