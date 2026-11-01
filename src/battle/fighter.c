@@ -237,6 +237,10 @@ void Fighter_setUp(Fighter *this, s32 character, s32 side, Chara *chara, s32 com
     }
 }
 
+/* Readies the fighter for a round: the arena's friction and grip, its intro body state and idle attack state, its
+ * clips, hits and flags cleared, and the camera's lights copied to it for its model. It copies the 0x40 bytes of
+ * the lights as a block move (four loads then four stores, twice), which GCC 2.95.2 does not emit (see "Block
+ * moves" in TODO.md). */
 INCLUDE_ASM("game/nonmatchings/fighter", Fighter_prepare);
 
 /* Adds points to the fighter's side's score (Fight_addScore). */
