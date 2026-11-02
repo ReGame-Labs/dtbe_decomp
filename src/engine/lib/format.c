@@ -225,9 +225,52 @@ VaList formatterPrintArg(Formatter *this, s32 conversion, VaList args) {
  * sign ('-', or '+' or ' ' with FORMAT_PLUS or FORMAT_SPACE), pads it to the
  * width with '0's (FORMAT_ZERO, not FORMAT_LEFT) or spaces on the side
  * FORMAT_LEFT says, and reverses it in place.
- * The body matches, but the frame is 8 bytes larger (0x28 against 0x20): only an
- * unused 8-byte local array gives it, so the original had a dead local. */
-INCLUDE_ASM("main/nonmatchings/lib/format", formatterPadNumber);
+ * The match depends on an unused 8-byte local array: without it the frame is
+ * 0x20 bytes against the game's 0x28, so the original had a dead local. */
+void formatterPadNumber(Formatter *this, u8 *end, s32 sign) {
+    s32 unused[2]; /* unused, but it is in the original stack frame */
+    s32 pad = ' ';
+
+    if ((this->flags & (FORMAT_ZERO | FORMAT_LEFT)) == FORMAT_ZERO) {
+        pad = '0';
+    }
+    if (sign < 0) {
+        sign = '-';
+    } else if (this->flags & FORMAT_PLUS) {
+        sign = '+';
+    } else {
+        sign = (this->flags & FORMAT_SPACE) ? ' ' : 0;
+    }
+    if (this->flags & FORMAT_LEFT) {
+        if (sign) {
+            *end++ = sign;
+        }
+        formatterReverse(this, end);
+        while (end < this->out + this->width) {
+            *end++ = pad;
+        }
+    } else {
+        if (sign) {
+            if (this->flags & FORMAT_ZERO) {
+                while (end < this->out + this->width - 1) {
+                    *end++ = pad;
+                }
+                *end++ = sign;
+            } else {
+                *end++ = sign;
+                while (end < this->out + this->width) {
+                    *end++ = pad;
+                }
+            }
+        } else {
+            while (end < this->out + this->width) {
+                *end++ = pad;
+            }
+        }
+        formatterReverse(this, end);
+    }
+    this->out = end;
+}
 
 /* vsprintf: formats into buffer and returns the length of the output. */
 s32 vsprintf(u8 *buffer, u8 *format, VaList args) {
