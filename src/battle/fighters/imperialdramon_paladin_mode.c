@@ -19,6 +19,22 @@ typedef struct ImperialdramonPaladinModeIntroEffect {
     /* 0x34 */ SVECTOR quads[2][4]; /* the base, then the stretch: corners in the model's x = 0 plane */
 } ImperialdramonPaladinModeIntroEffect;
 
+/* The special move 3's hitbox (0xF0 bytes): a sphere at the fighter's node 1 and two quads whose length grows. */
+typedef struct ImperialdramonPaladinModeSpecial3Hitbox {
+    /* 0x00 */ UnkPartsEntity38 parts;
+    /* 0x80 */ Imperialdramon *fighter;
+    /* 0x84 */ Fight *fight;
+    /* 0x88 */ u16 frames;     /* counts the ticks; the sphere is enabled at 20, the hitbox deleted after 50 */
+    /* 0x8A */ s16 vramY;      /* Fighter_getVramY of the fighter */
+    /* 0x8C */ u16 unk8C;      /* while set, the length stays */
+    /* 0x8E */ s16 length;     /* 0x140 at first, + 0x18 a tick up to 0x2C0 */
+    /* 0x90 */ Vec3 position;  /* the fighter's node 1 (offset D_800694E4) */
+    /* 0x9C */ s32 positionPad;
+    /* 0xA0 */ Vec3 velocity;  /* the constructor's */
+    /* 0xAC */ s32 velocityPad;
+    /* 0xB0 */ SVECTOR quads[2][4];
+} ImperialdramonPaladinModeSpecial3Hitbox;
+
 ImperialdramonPaladinModeIntroEffect *ImperialdramonPaladinModeIntroEffect_init(
     ImperialdramonPaladinModeIntroEffect *this, Fighter *fighter, Vec3 *position);
 extern TrailPoint D_800694B4[];
@@ -26,8 +42,8 @@ extern EntityVtable IMPERIALDRAMON_PALADIN_MODE_INTRO_EFFECT_VTABLE;
 extern VtableEntry IMPERIALDRAMON_PALADIN_MODE_SPECIAL3_HITBOX_HIT_VTABLE[];
 extern EntityVtable IMPERIALDRAMON_PALADIN_MODE_SPECIAL3_HITBOX_VTABLE;
 extern EntityVtable IMPERIALDRAMON_PALADIN_MODE_VTABLE;
-Entity *ImperialdramonPaladinModeSpecial3Hitbox_init(void *this, Fighter *fighter, Vec3 *position, Vec3 *velocity,
-                                                     Fight *unk228);
+ImperialdramonPaladinModeSpecial3Hitbox *ImperialdramonPaladinModeSpecial3Hitbox_init(
+    ImperialdramonPaladinModeSpecial3Hitbox *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *fight);
 
 /* Builds Imperialdramon Paladin Mode: an Imperialdramon with its own vtable. */
 Imperialdramon *ImperialdramonPaladinMode_init(Imperialdramon *this) {
@@ -93,7 +109,60 @@ void ImperialdramonPaladinMode_spawnSpecial3Trail(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon_paladin_mode", ImperialdramonPaladinModeSpecial3Hitbox_init);
+/* Builds the special move 3's hitbox at position with velocity. */
+ImperialdramonPaladinModeSpecial3Hitbox *ImperialdramonPaladinModeSpecial3Hitbox_init(
+    ImperialdramonPaladinModeSpecial3Hitbox *this, Fighter *fighter, Vec3 *position, Vec3 *velocity,
+    Fight *fight) {
+    entityInit(&this->parts.entity, 0x30000);
+    Hit_init(&this->parts.base, fighter, 0x45B03D00, velocity, 1);
+    this->parts.base.vtable = IMPERIALDRAMON_PALADIN_MODE_SPECIAL3_HITBOX_HIT_VTABLE;
+    this->parts.entity.vtable = &IMPERIALDRAMON_PALADIN_MODE_SPECIAL3_HITBOX_VTABLE;
+    CollisionSphere_init(&this->parts.part, position, 0xFF, &this->parts.base);
+    {
+        s32 y, x, z;
+
+        x = velocity->vx;
+        y = velocity->vy;
+        z = velocity->vz;
+        this->velocity.vx = x;
+        this->velocity.vy = y;
+        this->velocity.vz = z;
+    }
+    this->vramY = Fighter_getVramY(fighter);
+    this->fighter = (Imperialdramon *)fighter;
+    this->quads[0][0].vy = this->quads[0][1].vy = 0x40;
+    this->quads[0][0].vx = this->quads[0][1].vx = this->quads[0][2].vx = this->quads[0][3].vx = 0;
+    this->quads[0][2].vy = this->quads[0][3].vy = 0x140;
+    this->quads[0][0].vz = this->quads[0][2].vz = -0x40;
+    this->quads[0][1].vz = this->quads[0][3].vz = 0x40;
+    this->quads[1][0].vx = this->quads[1][1].vx = this->quads[1][2].vx = this->quads[1][3].vx = 0;
+    this->quads[1][0].vy = this->quads[1][1].vy = 0x140;
+    this->quads[1][2].vy = this->quads[1][3].vy = 0x140;
+    this->quads[1][0].vz = this->quads[1][2].vz = -0x20;
+    this->quads[1][1].vz = this->quads[1][3].vz = 0x20;
+    {
+        s32 x, y, z;
+
+        x = position->vx;
+        y = position->vy;
+        z = position->vz;
+        this->length = 0x140;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+    }
+    this->unk8C = 0;
+    this->frames = 0;
+    this->parts.part.entity = &this->parts.entity;
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(fight, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->parts.part.link);
+    }
+    this->fight = fight;
+    this->parts.part.flags.bits.disabled = 1;
+    return this;
+}
 
 /* The special move 3 hitbox's destructor. */
 void ImperialdramonPaladinModeSpecial3Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
@@ -116,22 +185,6 @@ void ImperialdramonPaladinModeSpecial3Hitbox_destroy(UnkPartsEntity38 *this, s32
 }
 
 INCLUDE_RODATA("game/nonmatchings/fighters/imperialdramon_paladin_mode", D_800694E4);
-
-/* The special move 3's hitbox (0xF0 bytes): a sphere at the fighter's node 1 and two quads whose length grows. */
-typedef struct ImperialdramonPaladinModeSpecial3Hitbox {
-    /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Imperialdramon *fighter;
-    /* 0x84 */ u8 unk84[0x88 - 0x84];
-    /* 0x88 */ u16 frames;     /* counts the ticks; the sphere is enabled at 20, the hitbox deleted after 50 */
-    /* 0x8A */ s16 vramY;      /* Fighter_getVramY of the fighter */
-    /* 0x8C */ u16 unk8C;      /* while set, the length stays */
-    /* 0x8E */ s16 length;     /* 0x140 at first, + 0x18 a tick up to 0x2C0 */
-    /* 0x90 */ Vec3 position;  /* the fighter's node 1 (offset D_800694E4) */
-    /* 0x9C */ s32 positionPad;
-    /* 0xA0 */ Vec3 velocity;  /* the constructor's */
-    /* 0xAC */ s32 velocityPad;
-    /* 0xB0 */ SVECTOR quads[2][4];
-} ImperialdramonPaladinModeSpecial3Hitbox;
 
 /* the offset from node 1 where the special move 3's hitbox sits */
 extern VECTOR D_800694E4;
