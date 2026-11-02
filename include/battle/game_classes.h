@@ -82,6 +82,9 @@ typedef struct FighterParams {
 /* the params of the characters, by CHARACTER_* */
 extern FighterParams FIGHTER_PARAMS[];
 
+/* whether the fight loaded the evolved forms (Fight_load: not in the basketball and target bonus games) */
+extern s32 EVOLUTION_LOADED;
+
 /* One side of the fight (BattleSide_init, virtual table BATTLE_SIDE_VTABLE at 0x38; Fight.sides): its starting
  * fighter, that fighter's evolution (itself when it has none), the one fighting, and what both forms share: the
  * side's life, evolution gauge and stun (Fighter.battleSide). */
@@ -177,6 +180,14 @@ typedef struct CollisionSphere {
     /* 0x40 */ s32 unk40;
     /* 0x44 */ s32 radius;
 } CollisionSphere;
+
+/* A box a fighter hits or is hit with (Fighter_updateBoxes keeps them): the least and greatest corner of the eight it
+ * was fitted to, and the matrix they were placed with. */
+typedef struct Box {
+    /* 0x00 */ VECTOR min;
+    /* 0x10 */ VECTOR max;
+    /* 0x20 */ MATRIX *matrix; /* what matrixMul returned (Fighter_updateBoxes) */
+} Box;
 
 /* A move's pay when it hits (Fighter.rewards, by MOVE_*): score points to the side and evolution gauge. */
 typedef struct MoveReward {
@@ -1118,7 +1129,12 @@ s32 FighterState_getClip(FighterState *this);
 void *FighterStateHeld_init(FighterState *this, s32 arg);
 ListNode *listAppend(ListNode *head, ListNode *node);
 
+void *InputHistory_init(void *this);
 void InputHistory_record(InputHistory *this, u32 buttons);
+void BattleSide_swapCharacter(BattleSide *this);
+s32 Fighter_beginEvolutionScene(Fighter *this);
+void Fighter_endEvolutionScene(Fighter *this);
+s32 BattleSide_tick(BattleSide *this); /* nonzero when the side takes the frame (its fighter skips it) */
 void BattleSide_tickGauges(BattleSide *this);
 
 void func_8007A158(Fighter *fighter, Fighter *other);
@@ -1246,6 +1262,13 @@ void Fighter_airSpecial1(Fighter *this, s32 arg);
 void Fighter_airSpecial2(Fighter *this, s32 arg);
 
 void Fighter_takeHit(Fighter *this, u32 unk, Vec3 *velocity, s32 unk3);
+s32 Fighter_countComboHit(Fighter *this);
+void func_8007F124(BattleSide *this, s32 amount);
+s32 func_8007F674(BattleSide *this);
+void spawnItemProjectiles(Fighter *this, s32 index);
+MoveReward *MoveReward_scale(MoveReward *this, s32 scale);
+void MoveReward_give(MoveReward *this, Fighter *fighter);
+void MoveReward_giveGauge(MoveReward *this, Fighter *fighter);
 
 void Hit_set(Hit *this, s32 damage, s32 kind);
 

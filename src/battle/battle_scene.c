@@ -6,6 +6,7 @@
 #include "engine/game/game_state.h"
 #include "engine/cd/file_load.h"
 #include "engine/cd/read.h"
+#include "engine/cd/xa_player.h"
 #include "engine/debug/system_menu.h"
 #include "engine/gfx/box.h"
 #include "engine/gfx/camera.h"
@@ -17,10 +18,12 @@
 #include "engine/gfx/prim/build_line_f2.h"
 #include "engine/gfx/prim_buffer.h"
 #include "engine/lib/string.h"
+#include "engine/math/block_copy.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
 #include "engine/text/font.h"
 #include "engine/text/text_printer.h"
+#include "engine/system/main.h"
 #include "engine/system/memory.h"
 #include "stdio.h"
 
@@ -48,7 +51,83 @@ INCLUDE_RODATA("game/nonmatchings/battle_scene", LIGHT_COLOR_1);
 INCLUDE_RODATA("game/nonmatchings/battle_scene", LIGHT_COLOR_2);
 INCLUDE_RODATA("game/nonmatchings/battle_scene", BACK_COLOR);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_init);
+extern VECTOR LIGHT_DIRECTION_0;
+extern VECTOR LIGHT_DIRECTION_1;
+extern VECTOR LIGHT_DIRECTION_2;
+extern VECTOR LIGHT_COLOR_0;
+extern VECTOR LIGHT_COLOR_1;
+extern VECTOR LIGHT_COLOR_2;
+extern VECTOR BACK_COLOR;
+
+extern VtableEntry FIGHT_VTABLE[];
+
+void runFightThread(s32 unused, Fight *fight);
+void func_8006F1C4(Fight *this, s32 angle);
+
+/* Constructs the fight: its thread (runFightThread, 0x2000 of stack), the entity groups, the groups, the look-at
+ * and both cameras, the empty shape lists, the transform at 0x25C, the continue screen's lerps, the background and
+ * the random generator; it becomes CURRENT_FIGHT. The camera gets its view and the fight's lights; both input
+ * histories and the map's mesh scene are made, no side has a computer controller nor a chara yet, func_8006F1C4
+ * with 0, five rounds at most and two wins needed, no wins nor gauges. Seeds the random generator and applies the
+ * save's button maps. The match depends on GAME_STATE taken through a local pointer for the button maps. */
+Fight *Fight_init(Fight *this) {
+    this->vtable = FIGHT_VTABLE;
+    threadInit(&this->thread, runFightThread, 0x2000, this, 0);
+    entityGroupInit(&this->stageEntities);
+    entityGroupInit(&this->entities);
+    entityGroupInit(&this->unk5C);
+    groupInit(&this->fighterGroup);
+    groupInit(&this->unkCC);
+    lookAtInit(&this->lookAt);
+    cameraInit(&this->camera, 11);
+    cameraInitShared(&this->camera2, 11, &this->camera);
+    this->side1Shapes.next = &this->side1Shapes;
+    this->side1Shapes.prev = &this->side1Shapes;
+    this->side0Shapes.next = &this->side0Shapes;
+    this->side0Shapes.prev = &this->side0Shapes;
+    this->stageShapes.next = &this->stageShapes;
+    this->stageShapes.prev = &this->stageShapes;
+    transformInit((Transform *)this->unk25C);
+    *(s32 *)this->unk2B4 = 0;
+    lerpInit(&this->continueDistance, 0);
+    lerpInit(&this->continueTilt, 0);
+    spriteInit(&this->background);
+    mersenneTwisterInit(&this->random);
+    CURRENT_FIGHT = this;
+    cameraReset(&this->camera);
+    cameraSetFov(&this->camera, 0x238);
+    cameraSetFar(&this->camera, 0x3200);
+    cameraSetLightDirection0(&this->camera, &LIGHT_DIRECTION_0);
+    cameraSetLightDirection1(&this->camera, &LIGHT_DIRECTION_1);
+    cameraSetLightDirection2(&this->camera, &LIGHT_DIRECTION_2);
+    cameraSetLightColor0(&this->camera, &LIGHT_COLOR_0);
+    cameraSetLightColor1(&this->camera, &LIGHT_COLOR_1);
+    cameraSetLightColor2(&this->camera, &LIGHT_COLOR_2);
+    cameraSetBackColor(&this->camera, &BACK_COLOR);
+    this->inputs[0] = InputHistory_init(operatorNew(0x218));
+    this->inputs[1] = InputHistory_init(operatorNew(0x218));
+    this->controllers[0] = NULL;
+    this->controllers[1] = NULL;
+    this->meshScene = meshSceneInit(operatorNew(0x10C));
+    func_8006F1C4(this, 0);
+    this->charas[0] = NULL;
+    this->charas[1] = NULL;
+    this->charas[2] = NULL;
+    this->charas[3] = NULL;
+    this->roundsLeft = 5;
+    this->winsNeeded = 2;
+    this->wins[0] = 0;
+    this->wins[1] = 0;
+    this->gauges[0] = 0;
+    this->gauges[1] = 0;
+    seedRandom(&this->random);
+    {
+        GameState *state = &GAME_STATE;
+
+        saveDataApplyButtons(&state->save, &state->maps[0], &state->maps[1]);
+    }
+    return this;
+}
 
 /* Returns the fight's camera. */
 Camera *Fight_getCamera(Fight *this) {
@@ -158,15 +237,117 @@ MeshScene *Fight_getMeshScene(Fight *this) {
 
 INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006F1C4);
 
-extern VtableEntry FIGHT_VTABLE[];
 
 void Fight_destroySides(Fight *this);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_destroy);
+/* Destroys the fight: its sides, both input histories, the charas and the map, the background, the three shape
+ * lists, both cameras, the groups, the entity groups and the thread; frees it when flags has bit 0. The match
+ * depends on each list's removal written out in a block of its own with its own node pointer. */
+void Fight_destroy(Fight *this, s32 flags) {
+    this->vtable = FIGHT_VTABLE;
+    Fight_destroySides(this);
+    operatorDelete(this->inputs[0]);
+    operatorDelete(this->inputs[1]);
+    if (this->charas[0] != NULL) {
+        charaDestroy(this->charas[0], 3);
+    }
+    if (this->charas[1] != NULL) {
+        charaDestroy(this->charas[1], 3);
+    }
+    if (this->charas[2] != NULL) {
+        charaDestroy(this->charas[2], 3);
+    }
+    if (this->charas[3] != NULL) {
+        charaDestroy(this->charas[3], 3);
+    }
+    if (this->meshScene != NULL) {
+        meshSceneDestroy(this->meshScene, 3);
+    }
+    spriteDestroy(&this->background, 2);
+    /* listRemove of the three shape lists, in the access order the game's compiler used */
+    {
+        ListNode *node = &this->stageShapes;
+
+        this->stageShapes.next->prev = this->stageShapes.prev;
+        node->prev->next = this->stageShapes.next;
+        this->stageShapes.next = node;
+        this->stageShapes.prev = node;
+    }
+    {
+        ListNode *node = &this->side0Shapes;
+
+        this->side0Shapes.next->prev = this->side0Shapes.prev;
+        node->prev->next = this->side0Shapes.next;
+        this->side0Shapes.next = node;
+        this->side0Shapes.prev = node;
+    }
+    {
+        ListNode *node = &this->side1Shapes;
+
+        this->side1Shapes.next->prev = this->side1Shapes.prev;
+        node->prev->next = this->side1Shapes.next;
+        this->side1Shapes.next = node;
+        this->side1Shapes.prev = node;
+    }
+    cameraDestroy(&this->camera2, 2);
+    cameraDestroy(&this->camera, 2);
+    groupDestroy(&this->unkCC, 2);
+    groupDestroy(&this->fighterGroup, 2);
+    entityGroupDestroy(&this->unk5C, 2);
+    entityGroupDestroy(&this->entities, 2);
+    entityGroupDestroy(&this->stageEntities, 2);
+    threadDestroy(&this->thread, 2);
+    if (flags & 1) {
+        operatorDelete(this);
+    }
+}
+
+/* by character: the tint of its other colors (FighterSetup.altColor) */
+extern HsvColor D_80064F44[];
+/* the tint that leaves the colors as they are */
+extern HsvColor D_80064F40;
+
+static inline HsvColor *getTint(HsvColor *table, s32 character) {
+    return &table[character];
+}
 
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064D38);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006F414);
+/* the CLUT rectangle of the fighters' palettes in VRAM (side 0's row, then the alternatives) */
+extern RECT D_80064D38;
+void shiftColors(u16 *src, u16 *dst, u32 count, HsvColor *shift);
+
+/* The other colors of the character and of its evolution (CHARACTER_EVOLUTIONS): reads the palette row at
+ * D_80064D38 from VRAM and loads it, tinted by each one's D_80064F44, into the next two rows. With FIGHTER_PARAMS
+ * flag bit 0 the evolution's tint goes first (none when it has none), else the character's. */
+void func_8006F414(s32 character) {
+    u16 *clut = mainHeapAllocBest(0x200);
+    u16 *tinted = mainHeapAllocBest(0x200);
+    RECT rect = D_80064D38;
+    s32 other;
+
+    StoreImage2(&rect, (u_long *)clut);
+    if (FIGHTER_PARAMS[character].flags & 1) {
+        other = CHARACTER_EVOLUTIONS[character];
+        if (other == character) {
+            other = -1;
+        }
+    } else {
+        other = character;
+        character = CHARACTER_EVOLUTIONS[other];
+    }
+    rect.y++;
+    if (other >= 0) {
+        /* The match depends on the table passed through getTint. */
+        shiftColors(clut, tinted, 0x100, getTint(D_80064F44, other));
+        LoadImage2(&rect, (u_long *)tinted);
+    }
+    rect.y++;
+    shiftColors(clut, tinted, 0x100, getTint(D_80064F44, character));
+    LoadImage2(&rect, (u_long *)tinted);
+    mainHeapFree(tinted);
+    mainHeapFree(clut);
+}
 
 /* the tamer of each character (the name in its evolution TIMs' paths), NULL for none */
 extern char *CHARACTER_TAMERS[];
@@ -232,7 +413,93 @@ void Fight_loadCharacterEffectTim(s32 character, s32 side) {
     mainHeapFree(file);
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_load);
+/* the background's CLUT and image rectangles in VRAM */
+extern RECT D_80064DDC;
+extern RECT D_80064DE4;
+void func_8006F414(s32 character);
+void Fight_createSides(Fight *this);
+
+/* Loads the fight: each side's alternative colors (func_8006F414), the effect TIMs, the map (map/mapNN.dmm), and
+ * unless the arena is the basketball or target bonus game, the tamers' evolution TIMs; then the characters' effect TIMs
+ * and charas, the evolved forms' too, the background sprite, and the sides (Fight_createSides). */
+void Fight_load(Fight *this) {
+    GameState *state = &GAME_STATE;
+    s32 character0 = state->fighters[0].character;
+    s32 character1 = state->fighters[1].character;
+    s32 alt1 = state->fighters[1].altColor;
+    s32 evolved0 = CHARACTER_EVOLUTIONS[character0];
+    s32 evolved1 = CHARACTER_EVOLUTIONS[character1];
+    s32 alt0 = state->fighters[0].altColor;
+    HsvColor *tint0 = alt0 ? getTint(D_80064F44, character0) : &D_80064F40;
+    HsvColor *evolvedTint0 = alt0 ? getTint(D_80064F44, evolved0) : &D_80064F40;
+    HsvColor *tint1 = alt1 ? getTint(D_80064F44, character1) : &D_80064F40;
+    HsvColor *evolvedTint1 = alt1 ? getTint(D_80064F44, evolved1) : &D_80064F40;
+    u32 *file;
+    union {
+        char path[0x40];
+        TIM_IMAGE tim;
+    } buf;
+
+    if (alt0) {
+        func_8006F414(character0);
+    }
+    if (alt1) {
+        func_8006F414(character1);
+    }
+    file = loadFile("effect/effect.tim");
+    uploadTims(file);
+    mainHeapFree(file);
+    sprintf(buf.path, "map/map%02d.dmm", state->arena);
+    meshSceneLoad(this->meshScene, buf.path);
+    EVOLUTION_LOADED =
+        state->arena != ARENA_BONUS + BONUS_GAME_BASKETBALL && state->arena != ARENA_BONUS + BONUS_GAME_TARGET;
+    if (EVOLUTION_LOADED) {
+        Fight_loadTamerTim(character0, 0, state->fighters[0].tamer);
+        Fight_loadTamerTim(character1, 1, state->fighters[1].tamer);
+    }
+    /* The match depends on the do { } while (0) with the break before the evolutions' charas, the table in getTint
+     * and the side 1 tests written character1 != evolved1. */
+    do {
+        Fight_loadCharacterEffectTim(character0, 0);
+        Fight_loadCharacterEffectTim(character1, 1);
+        if (EVOLUTION_LOADED) {
+            if (evolved0 != character0) {
+                Fight_loadCharacterEffectTim(evolved0, 0);
+            }
+            if (character1 != evolved1) {
+                Fight_loadCharacterEffectTim(evolved1, 1);
+            }
+        }
+        this->charas[0] = charaInit(operatorNew(0x30), character0);
+        this->charas[1] = charaInit(operatorNew(0x30), character1);
+        charaSetPlayerTint(this->charas[0], 0, tint0);
+        charaSetPlayerTint(this->charas[1], 1, tint1);
+        charaLoad(this->charas[0]);
+        charaLoad(this->charas[1]);
+        if (!EVOLUTION_LOADED) {
+            break;
+        }
+        if (evolved0 != character0) {
+            this->charas[2] = charaInit(operatorNew(0x30), evolved0);
+            charaSetPlayerTint(this->charas[2], 0, evolvedTint0);
+            charaLoad(this->charas[2]);
+        }
+        if (character1 != evolved1) {
+            this->charas[3] = charaInit(operatorNew(0x30), evolved1);
+            charaSetPlayerTint(this->charas[3], 1, evolvedTint1);
+            charaLoad(this->charas[3]);
+        }
+    } while (0);
+    buf.tim.mode = 9;
+    buf.tim.crect = &D_80064DDC;
+    buf.tim.prect = &D_80064DE4;
+    spriteSetTim(&this->background, &buf.tim, 0);
+    this->hasBackground = 1;
+    this->background.flags |= SPRITE_DITHER;
+    Fight_createSides(this);
+    this->flags &= ~FIGHT_FLAG_OVER;
+    this->flags &= ~FIGHT_FLAG_STOP_ROUND;
+}
 
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064DDC);
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064DE4);
@@ -322,7 +589,71 @@ void Fight_setBounds(Fight *this, s32 left, s32 right, s32 top, s32 bottom, s32 
     this->unk35C = size >> 1;
 }
 
+#if VERSION_JP
 INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_startRound);
+#else
+/* Starts a round: clears the display, adds both sides' fighters to the fighters' group and the entities, puts them
+ * at the arena's start positions and runs func_8007F730 on both sides; the camera's eye goes to (0, 0, -0x6400)
+ * and its target to 0. Clears the frame count and sets the time left (3000 frames, or 1 with no time limit),
+ * clears the bonus mode and bit 0 of unk318 and bit 2 of the flags, freezes the fighters, stops the clock, starts
+ * the wipe at 0x20 and resets the camera focus and the pause menu, then clears FIGHT_FLAG_ROUND_OVER and
+ * FIGHT_FLAG_SLOW. The match depends on the position passed through a pointer of its own block, the time left set
+ * in an if/else and the two flags cleared one by one. (US only: JP's pause menu has no pausePage.) */
+void Fight_startRound(Fight *this) {
+    Fighter *fighter0;
+    Fighter *fighter1;
+    DVECTOR *start;
+    Vec3 position;
+
+    displayClear(CURRENT_DISPLAY);
+    fighter0 = this->sides[0]->current;
+    fighter1 = this->sides[1]->current;
+    Fighter_addModelTo(fighter0, &this->fighterGroup);
+    Fighter_addModelTo(fighter1, &this->fighterGroup);
+    entityGroupAppend(&this->entities, &fighter0->entity);
+    entityGroupAppend(&this->entities, &fighter1->entity);
+    start = ARENA_START_POSITIONS[this->arena];
+    {
+        Vec3 *p = &position;
+
+        position.vx = start[0].vx;
+        position.vy = start[0].vy;
+        position.vz = 0;
+        Fighter_setPosition(fighter0, p);
+        position.vx = start[1].vx;
+        position.vy = start[1].vy;
+        position.vz = 0;
+        Fighter_setPosition(fighter1, p);
+    }
+    func_8007F730(this->sides[0]);
+    func_8007F730(this->sides[1]);
+    this->eye.vx = 0;
+    this->eye.vy = 0;
+    this->eye.vz = -0x6400;
+    this->target.vx = 0;
+    this->target.vy = 0;
+    this->target.vz = 0;
+    this->steps = 0;
+    if (func_8001DECC(&GAME_STATE)) {
+        this->timeLeft = 1;
+    } else {
+        this->timeLeft = 3000;
+    }
+    this->modeFlags &= ~FIGHT_MODE_BONUS;
+    this->unk318 &= ~1;
+    func_8006F124(this, 0);
+    Fight_freezeFighters(this);
+    Fight_holdClock(this);
+    this->wipe = 0x20;
+    this->cameraFocus = 0;
+    this->pauseCursor = 0;
+    this->pausePage = 0;
+    this->pauseSide = 0;
+    this->pauseButtons = 0;
+    this->flags &= ~FIGHT_FLAG_ROUND_OVER;
+    this->flags &= ~FIGHT_FLAG_SLOW;
+}
+#endif
 
 /* Creates the computer player of a side without a pad, for its side object; the bonus stages make their own. */
 void *Fight_createController(void *this, s32 side, BattleSide *battleSide) {
@@ -379,7 +710,76 @@ void Fight_updateSides(Fight *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_readInputs);
+s32 Controller_getButtons(Controller *this);
+u32 func_800C9938(Fighter *fighter, u32 buttons);
+
+
+/* Reads both pads into the sides' input histories. The buttons still held from the pause are taken out of the
+ * pausing side's pad until released; with FIGHT_FLAG_FREEZE both record nothing. The buttons go through the
+ * players' button maps; the bonus mode keeps only some of them (arena 9 keeps others). A computer side's buttons
+ * come from its controller, and outside the bonus mode item effect 3 changes them (func_800C9938). The match
+ * depends on the bonus mask set in an if/else on arena != 9. */
+void Fight_readInputs(Fight *this) {
+    PadManager *pads = PAD_MANAGER_INSTANCE;
+    Fighter *fighter0 = this->sides[0]->current;
+    Fighter *fighter1 = this->sides[1]->current;
+    u32 buttons0 = padManagerGetHeld(pads, 0);
+    u32 buttons1 = padManagerGetHeld(pads, 1);
+    u32 held = this->pauseButtons;
+
+    if (held) {
+        switch (this->pauseSide) {
+        case 0:
+            held &= buttons0;
+            buttons0 ^= held;
+            break;
+        case 1:
+            held &= buttons1;
+            buttons1 ^= held;
+            break;
+        }
+        this->pauseButtons = held;
+    }
+    if ((this->flags >> 5) & 1) {
+        InputHistory_record(this->inputs[0], 0);
+        InputHistory_record(this->inputs[1], 0);
+        return;
+    }
+    buttons0 = buttonMapApply(&GAME_STATE.maps[0], buttons0);
+    buttons1 = buttonMapApply(&GAME_STATE.maps[1], buttons1);
+    if (this->modeFlags & FIGHT_MODE_BONUS) {
+        u32 mask;
+
+        if (GAME_STATE.arena != 9) {
+            mask = 0xFFFF0F83;
+        } else {
+            mask = -0x507D;
+        }
+        buttons0 &= mask;
+        buttons1 &= mask;
+        if (fighter0->flags.bits.computer) {
+            buttons0 = Controller_getButtons(this->controllers[0]);
+        }
+        if (fighter1->flags.bits.computer) {
+            buttons1 = Controller_getButtons(this->controllers[1]);
+        }
+    } else {
+        if (fighter0->flags.bits.computer) {
+            buttons0 = Controller_getButtons(this->controllers[0]);
+        }
+        if (fighter1->flags.bits.computer) {
+            buttons1 = Controller_getButtons(this->controllers[1]);
+        }
+        if (fighter0->itemEffect.kind == 3) {
+            buttons0 = func_800C9938(fighter0, buttons0);
+        }
+        if (fighter1->itemEffect.kind == 3) {
+            buttons1 = func_800C9938(fighter1, buttons1);
+        }
+    }
+    InputHistory_record(this->inputs[0], buttons0);
+    InputHistory_record(this->inputs[1], buttons1);
+}
 
 typedef s32 (*FightIsFallenFunc)(void *this, Vec3 *position);
 
@@ -445,7 +845,88 @@ void func_800708C4(Fight *this) {
     func_8007A158(this->sides[0]->current, this->sides[1]->current);
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_800708F4);
+s32 Fighter_getBodyBoxCount(Fighter *this);
+s32 Fighter_getAttackBoxCount(Fighter *this);
+Box *Fighter_getBodyBoxes(Fighter *this);
+Box *Fighter_getAttackBoxes(Fighter *this);
+s32 Fighter_isInvulnerable(Fighter *this);
+Box *boxesFindOverlap(Box *boxes, s32 count, Box *others, s32 othersCount);
+CollisionSphere *Fighter_resetCollider(Fighter *this);
+void shapeListCollide(ListNode *list, CollisionSphere *other);
+void shapeListsCollide(ListNode *list, ListNode *others);
+
+/* The hits between the sides' fighters: each one's attack boxes against the other's body boxes (boxesFindOverlap,
+ * unless it is idle or the other invulnerable) through the hitOpponent slot, with a copy of the matrix of the box
+ * met; then each fighter's collider against the stage's shapes and the other side's (Fighter_takeHit of what it
+ * gathered), and the three shape lists against each other. */
+void func_800708F4(Fight *this) {
+    Fighter *fighter0;
+    Fighter *fighter1;
+    s32 bodyCount0;
+    s32 bodyCount1;
+    s32 attackCount0;
+    s32 attackCount1;
+    Box *body0;
+    Box *body1;
+    Box *attack0;
+    Box *attack1;
+    Box *hit0;
+    Box *hit1;
+    MATRIX hit;
+
+    /* The match depends on the two NULLs assigned first, hit1 before hit0. */
+    hit1 = NULL;
+    hit0 = NULL;
+    fighter0 = this->sides[0]->current;
+    fighter1 = this->sides[1]->current;
+    bodyCount0 = Fighter_getBodyBoxCount(fighter0);
+    bodyCount1 = Fighter_getBodyBoxCount(fighter1);
+    attackCount0 = Fighter_getAttackBoxCount(fighter0);
+    attackCount1 = Fighter_getAttackBoxCount(fighter1);
+    body0 = Fighter_getBodyBoxes(fighter0);
+    body1 = Fighter_getBodyBoxes(fighter1);
+    attack0 = Fighter_getAttackBoxes(fighter0);
+    attack1 = Fighter_getAttackBoxes(fighter1);
+
+
+    if (!Fighter_isAttackIdle(fighter0) && !Fighter_isInvulnerable(fighter1)) {
+        hit0 = boxesFindOverlap(attack0, attackCount0, body1, bodyCount1);
+    }
+    if (!Fighter_isAttackIdle(fighter1) && !Fighter_isInvulnerable(fighter0)) {
+        hit1 = boxesFindOverlap(attack1, attackCount1, body0, bodyCount0);
+    }
+    if (hit0 != NULL) {
+        hit = *hit0->matrix;
+        GET_FIGHTER_VTABLE(fighter0)->hitOpponent.func(
+            (u8 *)fighter0 + GET_FIGHTER_VTABLE(fighter0)->hitOpponent.delta, fighter1, &hit);
+    }
+    if (hit1 != NULL) {
+        hit = *hit1->matrix;
+        GET_FIGHTER_VTABLE(fighter1)->hitOpponent.func(
+            (u8 *)fighter1 + GET_FIGHTER_VTABLE(fighter1)->hitOpponent.delta, fighter0, &hit);
+    }
+    if (!Fighter_isInvulnerable(fighter0)) {
+        CollisionSphere *collider = Fighter_resetCollider(fighter0);
+
+        shapeListCollide(&this->stageShapes, collider);
+        shapeListCollide(&this->side1Shapes, collider);
+        if (collider->hitDamage != 0) {
+            Fighter_takeHit(fighter0, collider->hitDamage, &collider->hitKnockback, collider->hitKind);
+        }
+    }
+    if (!Fighter_isInvulnerable(fighter1)) {
+        CollisionSphere *collider = Fighter_resetCollider(fighter1);
+
+        shapeListCollide(&this->stageShapes, collider);
+        shapeListCollide(&this->side0Shapes, collider);
+        if (collider->hitDamage != 0) {
+            Fighter_takeHit(fighter1, collider->hitDamage, &collider->hitKnockback, collider->hitKind);
+        }
+    }
+    shapeListsCollide(&this->side1Shapes, &this->side0Shapes);
+    shapeListsCollide(&this->side1Shapes, &this->stageShapes);
+    shapeListsCollide(&this->side0Shapes, &this->stageShapes);
+}
 
 /* Counts the step, updates the camera (Fight_updateCamera), then applies its view. */
 void Fight_finishStep(Fight *this) {
@@ -755,9 +1236,64 @@ s32 Fight_playRound(Fight *this) {
     return result;
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071894);
-
 s32 Fight_waitHandle(Fight *this, u32 handle, s32 port);
+
+/* Counts timer down while above 0; whether it has just reached 0 (as BattleSide_tick's). */
+static inline s32 countDown(s32 *timer) {
+    s32 done = 0;
+
+    if (*timer > 0) {
+        done = --*timer == 0;
+    }
+    return done;
+}
+
+/* A round won by knock-out: slow motion while KO shows (the winner's port can skip it, ending the slow motion);
+ * then, until the winner is idle, waits (the slow motion ends after 60 frames), waits 30 more, wipes out, puts the
+ * loser back, focuses the camera on the winner, wipes in and plays the winner's music; the winner takes its win
+ * pose, the fight waits up to 120 frames for the voice, then shows the win message and waits for it. The match
+ * depends on the countdown inline and on a second counter for the voice's wait, set right before its loop. */
+void func_80071894(Fight *this, s32 side) {
+    Fighter *winner;
+    Vec3 position;
+    s32 slow;
+    s32 wait;
+
+    this->flags |= FIGHT_FLAG_SLOW;
+    if (Fight_waitHandle(this,
+                         entityGetHandle(Fight_addEntity(
+                             this, BattleMessage_init(entityOperatorNew(0x59C), BATTLE_MESSAGE_KO, 0))),
+                         side)) {
+        this->flags &= ~FIGHT_FLAG_SLOW;
+        return;
+    }
+    winner = this->sides[side]->current;
+    Fighter_getPosition(winner, &position);
+    slow = 60;
+    while (Fighter_getBodyState(winner)->state != FIGHTER_STATE_IDLE) {
+        Fight_waitFrames(this, 0);
+        if (countDown(&slow)) {
+            this->flags &= ~FIGHT_FLAG_SLOW;
+        }
+    }
+    Fight_waitFrames(this, 30);
+    this->flags &= ~FIGHT_FLAG_SLOW;
+    Fight_wipeOut(this);
+    Fight_respawnFighter(this, side);
+    this->cameraFocus = side + 1;
+    Fight_waitFrames(this, 2);
+    Fight_wipeIn(this);
+    seekMusicTrack(gameStatePickWinnerTrack(&GAME_STATE), 1);
+    soundControlResumeMusicFull(&SOUND_CONTROL);
+    Fight_waitFrames(this, 5);
+    Fighter_requestWinPose(winner);
+    wait = 120;
+    while (isXaPlaying() && --wait >= 0) {
+        Fight_waitFrames(this, 0);
+    }
+    Fight_waitFrames(this, 5);
+    Fight_waitEntity(this, Fight_showWinner(this, side, (this->flags >> 7) & 1 /* FIGHT_FLAG_LAST_ROUND */), -1);
+}
 
 /* A round won on time: shows TIME UP, sets the winner's win pose (func_80079268 on the loser) and waits for the
  * message (the winner's port can skip it); unless skipped, shows the win message (Fight_showWinner), waits for it and
@@ -1428,7 +1964,18 @@ void Fight_releaseClock(Fight *this) {
     this->flags &= ~FIGHT_FLAG_HOLD_CLOCK;
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_lightFighter);
+/* Gives the fighter the camera's lights (its light and color matrices). The match depends on copy32Bytes (see
+ * engine/math/block_copy.h) and on the fighter parameter itself stepped to each matrix (a new pointer takes a
+ * register below the copy's words). */
+void Fight_lightFighter(Fight *this, Fighter *fighter) {
+    MatrixWords *src = (MatrixWords *)cameraGetLights(&this->camera);
+
+    fighter = (Fighter *)&fighter->lights;
+    copy32Bytes(fighter, src);
+    fighter = (Fighter *)((MatrixWords *)fighter + 1);
+    src++;
+    copy32Bytes(fighter, src);
+}
 
 /* Right after every round: nothing in the base class. */
 void Fight_endRound(void) {

@@ -7,6 +7,7 @@
 #include "engine/game/character.h"
 #include "engine/gfx/prim/alloc_dr_move.h"
 #include "engine/math/divide.h"
+#include "engine/math/random.h"
 #include "engine/math/vector.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
@@ -237,6 +238,10 @@ void Fighter_setUp(Fighter *this, s32 character, s32 side, Chara *chara, s32 com
     }
 }
 
+/* Readies the fighter for a round: the arena's friction and grip, its intro body state and idle attack state, its
+ * clips, hits and flags cleared, and the camera's lights copied to it for its model. It copies the 0x40 bytes of
+ * the lights as a block move (four loads then four stores, twice), which GCC 2.95.2 does not emit (see "Block
+ * moves" in TODO.md). */
 INCLUDE_ASM("game/nonmatchings/fighter", Fighter_prepare);
 
 /* Adds points to the fighter's side's score (Fight_addScore). */
@@ -513,7 +518,76 @@ s32 Fighter_tryUseAirMove(Fighter *this, s32 move) {
     return 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_tick);
+void Fighter_updateModel(Fighter *this);
+void Fighter_setInput(Fighter *this, struct InputHistory *input);
+void Fighter_move(Fighter *this);
+void Fighter_applyPose(Fighter *this);
+void Fighter_updatePhysics(Fighter *this);
+void Fighter_updateRotation(Fighter *this);
+void Fighter_updateTransform(Fighter *this, Vec3 *offset);
+
+/* The fighter's frame, unless its side's tick takes it (BattleSide_tick): drops a holder that is gone, and while held
+ * only updates the model. Else reads the input, moves unless frozen, applies the pose, counts down the invulnerable
+ * frames, unk48C and unk494 (whose end clears the combo), runs both states' tick slot, goes back to the clip when the
+ * action clip is done, runs the timed effects, the physics (or holds a frozen fighter on the ground), the rotation
+ * and the transform. The match depends on the void prototypes above (implicit int declarations give 7 diffs) and
+ * on unk494's end kept in a flag. */
+void Fighter_tick(Fighter *this, s32 arg) {
+    Vec3 position;
+    s32 done;
+
+    if (BattleSide_tick(this->battleSide)) {
+        return;
+    }
+    if (this->holderHandle != 0 && getEntityByHandle(this->holderHandle) == NULL) {
+        Fighter_detach(this);
+    }
+    if (this->holder != NULL) {
+        Fighter_updateModel(this);
+        return;
+    }
+    Fighter_setInput(this, Fight_getInput(this->fight, this->side));
+    this->flags.bits.unk80079AF8 = 0;
+    if (!this->flags.bits.frozen) {
+        Fighter_move(this);
+    }
+    Fighter_applyPose(this);
+    if (this->invulnerableFrames > 0) {
+        this->invulnerableFrames--;
+    }
+    if (this->unk48C > 0) {
+        this->unk48C--;
+    }
+    done = 0;
+    if (this->unk494 > 0) {
+        this->unk494--;
+        done = this->unk494 == 0;
+    }
+    if (done) {
+        this->comboHits = 0;
+    }
+    this->bodyState->vtable[1].func((u8 *)this->bodyState + this->bodyState->vtable[1].delta);
+    this->attackState->vtable[1].func((u8 *)this->attackState + this->attackState->vtable[1].delta);
+    if (this->actionClip >= 0 && Fighter_isActionClipDone(this)) {
+        this->actionClip = -1;
+        Fighter_setClip(this, this->clip, this->clipBlendFrames, 0);
+    }
+    ((void (*)(Fighter *, s32))Fighter_tickItemEffect)(this, arg);
+    ((void (*)(Fighter *, s32))func_80077538)(this, arg);
+    if (this->flags.bits.frozen) {
+        this->flags.bits.onGround = 1;
+        this->flags.bits.landed = 1;
+    } else {
+        Fighter_updatePhysics(this);
+    }
+    if (this->flags.bits.landed) {
+        this->airMovesUsed = 0;
+    }
+    Fighter_updateRotation(this);
+    Fighter_getPosition(this, &position);
+    Fighter_updateTransform(this, &position);
+    Fighter_updateModel(this);
+}
 
 /* Takes one off a tick count down to 0. The match depends on reading the count into a local: jump threading
  * would drop the reload of the count before the caller's own test. */
@@ -701,7 +775,116 @@ void Fighter_updatePhysics(Fighter *this) {
     this->flags.bits.dashing = 0;
 }
 
+#if VERSION_JP
 INCLUDE_ASM("game/nonmatchings/fighter", func_80077F80);
+#else
+/* Keeps the fighter out of the walls, each physics step: clears unk4; when the last move was 0x80 or longer and
+ * the floor probe finds a line between the last and the new position, moves back to the hit point pushed by the
+ * normal's x times 0x80 and takes the velocity's part along the normal off it (vx and vy). Then casts a probe
+ * 0x400 each way at the height 0x40 up (0x80 when landed) and, for each side that hits a wall within 0x80, moves
+ * by the overlap (the mean when both sides hit). The match depends on the difference worked out in a block of
+ * locals, the pushes added first in the sums, the second hit or-ed in as `(hit | 1) != 0` and right.vx - 0x80
+ * in its own local. */
+void func_80077F80(Fighter *this) {
+    VECTOR pos;
+    VECTOR cur;
+    VECTOR diff;
+    VECTOR mid;
+    VECTOR left;
+    VECTOR right;
+    TerrainProbe probe;
+    TerrainProbe *floor = &this->floorProbe;
+    VECTOR *p;
+    s32 hit;
+    s32 x;
+    s32 y;
+    s32 unused[2]; /* unused, but it is in the original stack frame */
+
+    this->flags.bits.unk4 = 0;
+    Fighter_getLastPosition(this, (Vec3 *)&pos);
+    Fighter_getPosition(this, (Vec3 *)&cur);
+    p = &pos;
+    {
+        s32 x0 = pos.vx, y0 = pos.vy, z0 = pos.vz;
+        x0 -= cur.vx;
+        y0 -= cur.vy;
+        z0 -= cur.vz;
+        diff.vx = x0;
+        diff.vy = y0;
+        diff.vz = z0;
+    }
+    if (vecGetLength(&diff) >= 0x80 && TerrainProbe_cast(floor, (Vec3 *)p, (Vec3 *)&cur)) {
+        VECTOR *normal = TerrainProbe_getNormal(floor);
+        s32 d;
+
+        TerrainProbe_getHitPoint(floor, (Vec3 *)p);
+        {
+            s32 push = ((s64)normal->vx * 0x80) >> 12;
+            pos.vx = push + pos.vx;
+        }
+        d = -vecDot12((VECTOR *)&this->velocity, normal);
+        {
+            s32 dv = ((s64)d * normal->vx) >> 12;
+            this->velocity.vx = dv + this->velocity.vx;
+        }
+        {
+            s32 dv = ((s64)d * normal->vy) >> 12;
+            this->velocity.vy = dv + this->velocity.vy;
+        }
+        Fighter_setPosition(this, (Vec3 *)p);
+    }
+    hit = 0;
+    Fighter_getPosition(this, (Vec3 *)&pos);
+    mid = pos;
+    y = pos.vy - 0x40;
+    if (this->flags.bits.landed) {
+        y = pos.vy - 0x80;
+    }
+    left.vx = pos.vx - 0x80;
+    mid.vy = y;
+    left.vy = y;
+    left.vz = pos.vz;
+    left.pad = pos.pad;
+    right.vy = y;
+    right.vz = pos.vz;
+    right.pad = pos.pad;
+    right.vx = pos.vx + 0x80;
+    TerrainProbe_init(&probe);
+    x = mid.vx;
+    mid.vx = x + 0x400;
+    if (TerrainProbe_cast(&probe, (Vec3 *)&mid, (Vec3 *)&left)) {
+        TerrainProbe_getHitPoint(&probe, (Vec3 *)&diff);
+        if (diff.vx <= x) {
+            hit = 1;
+            *(Vec3 *)&left = *(Vec3 *)&diff;
+        }
+    }
+    mid.vx = x - 0x400;
+    if (TerrainProbe_cast(&probe, (Vec3 *)&mid, (Vec3 *)&right)) {
+        TerrainProbe_getHitPoint(&probe, (Vec3 *)&diff);
+        if (diff.vx >= x) {
+            hit = (hit | 1) != 0;
+            *(Vec3 *)&right = *(Vec3 *)&diff;
+        }
+    }
+    if (hit) {
+        s32 l, r, m;
+
+        l = left.vx + 0x80;
+        l -= x;
+        {
+            s32 rx = right.vx - 0x80;
+            r = rx - x;
+        }
+        m = l + r;
+        if (l != 0 && r != 0) {
+            m /= 2;
+        }
+        pos.vx += m;
+        this->position.vx = pos.vx << 8;
+    }
+}
+#endif
 
 /* Whether the fighter stands on the ground (Fighter_isOnGround) and the map node its floor probe found last
  * moves with matrix (TerrainProbe_getMatrix): it stands on that moving part of the stage. */
@@ -774,7 +957,31 @@ s32 Fighter_landOnFloor(Fighter *this) {
     return 1;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_accelerateTo);
+extern s32 ARENA_GRIP;
+
+/* Accelerates the fighter towards speed along x: takes the arena's friction (Fighter_getFriction) off the force, then
+ * adds (speed - velocity.vx) scaled by the mass and by ARENA_GRIP (both 16.16) to force.vx. The match depends on the
+ * friction taken off through locals (all three read before any write), before the grip's scale. */
+void Fighter_accelerateTo(Fighter *this, s32 speed) {
+    Vec3 friction;
+    Vec3 *f = Fighter_getFriction(this, &friction);
+    s32 accel = ((s64)(speed - this->velocity.vx) * this->mass) >> 16;
+
+    {
+        s32 x = this->force.vx;
+        s32 y = this->force.vy;
+        s32 z = this->force.vz;
+
+        x -= f->vx;
+        y -= f->vy;
+        z -= f->vz;
+        this->force.vx = x;
+        this->force.vy = y;
+        this->force.vz = z;
+    }
+    accel = ((s64)accel * ARENA_GRIP) >> 16;
+    this->force.vx += accel;
+}
 
 extern s32 ARENA_FRICTION;
 
@@ -847,7 +1054,64 @@ void Fighter_updateRotation(Fighter *this) {
     stepAngle(&this->rotation.vz, dz);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_updateTransform);
+/* Rebuilds the model's local matrix: at unk3C8 + offset, turned by rotation.vz then vx about the point height above
+ * it (the params'), then by rotation.vy; shows the model and passes the fighter to the fight's virtual method at 0x28. While
+ * unk490 counts down its odd frames light the fighter white. The match depends on the position summed in locals,
+ * stored, then read back through a pointer before the identity's words are written. */
+void Fighter_updateTransform(Fighter *this, Vec3 *offset) {
+    s16 height = Fighter_getParams(this)->height;
+    Model *model = this->model;
+    MatrixWords *local;
+    Vec3 pos;
+    VECTOR white;
+    Fight *fight;
+    Lights *lights;
+
+    model->group.object.transform.valid = 0;
+    local = &model->group.object.transform.local;
+    this->model->group.object.hidden = 0;
+    {
+        s32 x = this->unk3C8.vx, y = this->unk3C8.vy, z = this->unk3C8.vz;
+        x += offset->vx;
+        y += offset->vy;
+        z += offset->vz;
+        pos.vx = x;
+        pos.vy = y;
+        pos.vz = z;
+    }
+    {
+        Vec3 *p = &pos;
+        s32 x = p->vx, y = p->vy, z = p->vz;
+        model->group.object.transform.local.words[0] = 0x1000;
+        model->group.object.transform.local.words[1] = 0;
+        model->group.object.transform.local.words[2] = 0x1000;
+        model->group.object.transform.local.words[3] = 0;
+        model->group.object.transform.local.words[4] = 0x1000;
+        model->group.object.transform.local.m.t[0] = x;
+        model->group.object.transform.local.m.t[1] = y;
+        model->group.object.transform.local.m.t[2] = z;
+    }
+    matrixTranslate(&local->m, 0, -height, 0);
+    matrixRotateZ(&local->m, this->rotation.vz);
+    matrixRotateX(&local->m, this->rotation.vx);
+    matrixTranslate(&local->m, 0, height, 0);
+    matrixRotateY(&local->m, this->rotation.vy);
+    fight = this->fight;
+    fight->vtable[5].func((u8 *)fight + fight->vtable[5].delta, this);
+    if (this->unk490 > 0) {
+        this->unk490--;
+    }
+    if (this->unk490 & 1) {
+        lights = &this->lights;
+        white.vx = 0x1000;
+        white.vy = 0x1000;
+        white.vz = 0x1000;
+        lightsSetBackColor(lights, &white);
+        lightsSetColor0(lights, &white);
+        lightsSetColor1(lights, &white);
+        lightsSetColor2(lights, &white);
+    }
+}
 
 /* Turns the fighter to face left (facing -1); at once when `now` is set. */
 void Fighter_faceLeft(Fighter *this, s32 now) {
@@ -897,7 +1161,81 @@ void Fighter_setMoveReward(Fighter *this, s32 move, s32 score) {
     MoveReward_set(&this->rewards[move], score, Fighter_getParams(this)->gaugeGains[move]);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_handleInput);
+/* The input step of every fighter (the handleInput slot): reads the held and pressed buttons (unmirrored), counts
+ * down the cooldowns at 0x334, 0x338 and 0x33C and, outside the bonus fight, takes the first button that acts: R1
+ * (cooldown 0x33C over) requests the evolution when the side can evolve, else action 3 when func_8007F674 allows it;
+ * circle spawns the item's projectiles for item effects 4 to 6, else action 1 (cooldown 0x334 over); triangle action
+ * 2 (cooldown 0x338 over); square action 0 (the actions go to both states' slot 4). Else, holding cross, it hands
+ * cross pressed with down held to slot 3, or whether cross was just pressed to slot 2. */
+void Fighter_handleInput(void *arg0, void *arg1) {
+    Fighter *this = arg0;
+    InputHistory *input = arg1;
+    u32 held;
+    u32 pressed;
+
+    InputHistory_setMirrored(input, 0);
+    held = InputHistory_getHeld(input);
+    pressed = InputHistory_getPressed(input);
+    if (this->unk334 > 0) {
+        this->unk334--;
+    }
+    if (this->unk338 > 0) {
+        this->unk338--;
+    }
+    if (this->unk33C > 0) {
+        this->unk33C--;
+    }
+    /* The match depends on the do/while (0) block the bonus fight's test breaks out of (a plain if around the
+     * buttons fills the branch's delay slot with the action's argument instead of the next test). */
+    do {
+        if (this->fight->modeFlags & FIGHT_MODE_BONUS) {
+            break;
+        }
+        if (this->unk33C <= 0 && (pressed & PADR1)) {
+            if (BattleSide_canEvolve(this->battleSide)) {
+                Fighter_requestEvolution(this);
+                return;
+            }
+            if (func_8007F674(this->battleSide)) {
+                this->bodyState->vtable[4].func((u8 *)this->bodyState + this->bodyState->vtable[4].delta, 3);
+                this->attackState->vtable[4].func((u8 *)this->attackState + this->attackState->vtable[4].delta, 3);
+                return;
+            }
+        }
+        if (pressed & PADRright) {
+            s32 index = this->itemEffect.kind - 4;
+
+            if ((u32)index < 3) {
+                spawnItemProjectiles(this, index);
+                return;
+            }
+            if (this->unk334 <= 0) {
+                this->bodyState->vtable[4].func((u8 *)this->bodyState + this->bodyState->vtable[4].delta, 1);
+                this->attackState->vtable[4].func((u8 *)this->attackState + this->attackState->vtable[4].delta, 1);
+                return;
+            }
+        }
+        if (this->unk338 <= 0 && (pressed & PADRup)) {
+            this->bodyState->vtable[4].func((u8 *)this->bodyState + this->bodyState->vtable[4].delta, 2);
+            this->attackState->vtable[4].func((u8 *)this->attackState + this->attackState->vtable[4].delta, 2);
+            return;
+        }
+        if (pressed & PADRleft) {
+            this->bodyState->vtable[4].func((u8 *)this->bodyState + this->bodyState->vtable[4].delta, 0);
+            this->attackState->vtable[4].func((u8 *)this->attackState + this->attackState->vtable[4].delta, 0);
+            return;
+        }
+    } while (0);
+    if (held & PADRdown) {
+        if ((pressed & PADRdown) && (held & PAD_DOWN)) {
+            this->bodyState->vtable[3].func((u8 *)this->bodyState + this->bodyState->vtable[3].delta);
+            this->attackState->vtable[3].func((u8 *)this->attackState + this->attackState->vtable[3].delta);
+        } else {
+            this->bodyState->vtable[2].func((u8 *)this->bodyState + this->bodyState->vtable[2].delta, (pressed >> 6) & 1);
+            this->attackState->vtable[2].func((u8 *)this->attackState + this->attackState->vtable[2].delta, (pressed >> 6) & 1);
+        }
+    }
+}
 
 /* Keeps the fighter's input and hands it to the handleInput slot (Fighter_tick calls it with what
  * Fight_getInput returns). */
@@ -1002,7 +1340,91 @@ s32 func_80078EB0(s32 row, s32 column, s32 value) {
     return value * (D_8006520C[row][column] + 100) / 100;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_takeHit);
+/* Applies a hit (its word, the knockback and the stun) to the fighter: detaches the opponent, vibrates the pad, stops
+ * the voice and scales the damage by the opponent's item effect and the percentage table (by the hit's kind, bits 24
+ * and 25, and the params' row); kinds 1 to 3 also start the second timed effect for 60 frames. Adds the knockback to
+ * the force and turns towards it, takes the params' unk16/256 off the damage and, when it blocks (Fighter_blocks),
+ * takes the knockback's vy back, gives the gauge of gaugeGains[14] and, for chip hits (0x4000000), the damage (a
+ * quarter of it from 5 up), and pays the opponent the gauge of the move's reward (bits 18 to 21). Else it gives the
+ * gauge of gaugeGains[13], sets unk490 to 10, pays a combo hit's (0x800000) whole reward scaled by the combo count,
+ * adds the stun and takes the damage, then hands the hit to the body and attack states (slot 5). The match depends
+ * on the hit copied to one damage variable at the top (worked on in place) and the force added through locals. */
+void Fighter_takeHit(Fighter *this, u32 hit, Vec3 *velocity, s32 stun) {
+    s32 damage = hit;
+    Fighter *opponent = Fighter_getOpponent(this);
+    u32 flags;
+    s32 kind;
+    FighterParams *params;
+    MoveReward *reward;
+
+    Fighter_detach(opponent);
+    Fighter_vibratePad(this, 0, 0xFF, 0xFF, 10, 0);
+    stopSound(this->voiceHandle);
+    this->voiceHandle = 0;
+    damage = Fighter_scaleDamage(opponent, damage);
+    flags = damage & ~HIT_DAMAGE_MASK;
+    damage &= HIT_DAMAGE_MASK;
+    kind = (flags >> 24) & 3;
+    damage = func_80078EB0(kind, (Fighter_getParams(this)->flags >> 8) & 3, damage);
+    switch (kind) {
+    case 0:
+        break;
+    case 1:
+        func_80077520(this, 1, 60, 0);
+        break;
+    case 2:
+        func_80077520(this, 2, 60, 0);
+        break;
+    case 3:
+        func_80077520(this, 3, 60, 0);
+        break;
+    }
+    {
+        s32 x = this->force.vx, y = this->force.vy, z = this->force.vz;
+        x += velocity->vx;
+        y += velocity->vy;
+        z += velocity->vz;
+        this->force.vx = x;
+        this->force.vy = y;
+        this->force.vz = z;
+    }
+    if (velocity->vx != 0) {
+        if (velocity->vx < 0) {
+            Fighter_faceRight(this, 1);
+        } else {
+            Fighter_faceLeft(this, 1);
+        }
+    }
+    params = Fighter_getParams(this);
+    reward = &opponent->rewards[(flags >> 18) & 0xF];
+    damage -= damage * params->unk16 / 256;
+    if (Fighter_blocks(this, flags)) {
+        this->force.vy -= velocity->vy;
+        if (damage > 0 && (Fighter_canEvolve(this) || func_800777BC(this))) {
+            BattleSide_addGauge(this->battleSide, params->gaugeGains[14]);
+        }
+        if (flags & 0x4000000) {
+            if (damage >= 5) {
+                damage /= 4;
+            }
+            BattleSide_takeDamage(this->battleSide, damage);
+        }
+        MoveReward_giveGauge(reward, opponent);
+        return;
+    }
+    if (damage > 0 && (Fighter_canEvolve(this) || func_800777BC(this))) {
+        BattleSide_addGauge(this->battleSide, params->gaugeGains[13]);
+    }
+    this->unk490 = 10;
+    if (flags & 0x800000) {
+        MoveReward_scale(reward, Fighter_countComboHit(this));
+        MoveReward_give(reward, opponent);
+    }
+    func_8007F124(this->battleSide, stun);
+    BattleSide_takeDamage(this->battleSide, damage);
+    this->bodyState->vtable[5].func((u8 *)this->bodyState + this->bodyState->vtable[5].delta, flags);
+    this->attackState->vtable[5].func((u8 *)this->attackState + this->attackState->vtable[5].delta, flags);
+}
 
 /* Asks for the win pose once the round ends. */
 void Fighter_requestWinPose(Fighter *this) {
@@ -1502,9 +1924,9 @@ s32 Fighter_getComboHits(Fighter *this) {
     return this->comboHits;
 }
 
-/* Counts a hit of the fighter's combo. */
-void Fighter_countComboHit(Fighter *this) {
-    this->comboHits++;
+/* Counts a hit of the fighter's combo; returns the new count. */
+s32 Fighter_countComboHit(Fighter *this) {
+    return ++this->comboHits;
 }
 
 /* With on, sets 0x494 to 5 unless it is above 0 already; else clears it. */
@@ -1518,7 +1940,91 @@ void func_8007A12C(Fighter *this, s32 on) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighter", func_8007A158);
+s32 func_8007A3EC(Vec3 *point, s32 dy, s32 width);
+
+/* Pushes two overlapping fighters apart (unless either is invulnerable): when their distance on x/y is under the sum
+ * of their func_80079DD8 radii, each moves half the overlap along the normalized direction between them (x only, at
+ * least sum if it is too steep; away from a's velocity when they are at the same point), except a side whose wall
+ * (func_8007A3EC) blocks it; then func_80077F80 for both. The match depends on the direction subtracted in locals,
+ * the side results reused for the pushes and the moves applied on all three axes, each in its own block. */
+void func_8007A158(Fighter *a, Fighter *b) {
+    Vec3 posA;
+    Vec3 posB;
+    VECTOR diff;
+    Vec3 moveA;
+    Vec3 moveB;
+    s32 sum;
+    s32 len;
+    s32 sideA;
+    s32 sideB;
+
+    if (Fighter_isInvulnerable(a) || Fighter_isInvulnerable(b)) {
+        return;
+    }
+    Fighter_getPosition(a, &posA);
+    Fighter_getPosition(b, &posB);
+    {
+        s32 bx = posB.vx, by = posB.vy, ax = posA.vx, ay = posA.vy;
+        diff.vz = 0;
+        bx -= ax;
+        by -= ay;
+        diff.vx = bx;
+        diff.vy = by;
+    }
+    sum = func_80079DD8(a) + func_80079DD8(b);
+    len = vecGetLength(&diff);
+    if (len >= sum) {
+        return;
+    }
+    if (len == 0) {
+        VectorNormal(&diff, (VECTOR *)&a->velocity);
+        diff.vx = -diff.vx;
+        diff.vy = -diff.vy;
+    } else {
+        VectorNormal(&diff, &diff);
+        if (abs(diff.vx) < sum / 3) {
+            diff.vx = sum;
+        }
+    }
+    sideA = func_8007A3EC(&posA, -0x33, Fighter_getParams(a)->height);
+    sideB = func_8007A3EC(&posB, -0x33, Fighter_getParams(b)->height);
+    len = (sum - len) / 2;
+    if (diff.vx > 0) {
+        sideA = sideA < 0 ? 0 : len;
+        sideB = sideB > 0 ? 0 : len;
+    } else {
+        sideA = sideA > 0 ? 0 : len;
+        sideB = sideB < 0 ? 0 : len;
+    }
+    moveA = *(Vec3 *)&diff;
+    moveB = *(Vec3 *)&diff;
+    moveA.vx = moveA.vx * sideA / 4096;
+    moveA.vy = 0;
+    moveB.vx = moveB.vx * sideB / 4096;
+    moveB.vy = 0;
+    {
+        s32 bx = posB.vx, by = posB.vy, bz = posB.vz;
+        bx += moveB.vx;
+        by += moveB.vy;
+        bz += moveB.vz;
+        posB.vx = bx;
+        posB.vy = by;
+        posB.vz = bz;
+    }
+    {
+        s32 ax = posA.vx, ay = posA.vy, az = posA.vz;
+        ax -= moveA.vx;
+        ay -= moveA.vy;
+        az -= moveA.vz;
+        posA.vx = ax;
+        posA.vy = ay;
+        posA.vz = az;
+    }
+    Fighter_setPosition(a, &posA);
+    Fighter_setPosition(b, &posB);
+    func_80077F80(a);
+    func_80077F80(b);
+}
 
 /* Tests castMapRay toward point (raised by dy) from both sides, a third more than width away: -1 for the left
  * one only, 1 for the right one only, else 0. */
@@ -1971,9 +2477,58 @@ void Fighter_airFlinch(Fighter *this) {
     Fighter_setClip(this, FIGHTER_CLIP_AIR_FLINCH, 1, 0);
 }
 
+extern s16 FIGHTER_ATTACK_VOICES[]; /* the first of the two voices of a character's attacks, by CHARACTER_* */
+
 INCLUDE_RODATA("game/nonmatchings/fighter", FIGHTER_ATTACK_VOICES);
 
-INCLUDE_ASM("game/nonmatchings/fighter", Fighter_runAttack);
+/* Runs attack's frame: at frame 0 one of the character's two attack voices, the hit the attack lands, the lunge
+ * (scaled by the mass, x by the facing) added to the force, the knockback (x by the facing) and, on the ground, dust
+ * for a strong lunge; after it, the drag (velocity.vx * drag >> 12) added to the force. The parts hit in the active
+ * frames, and after the cancel frame the next attack may chain (func_80079AF8). The match depends on the voice summed
+ * in a local, the lunge's x product kept in an s64, the knockback's x stored last and the drag taken into a local. */
+void Fighter_runAttack(Fighter *this, s32 frame, Attack *attack, s32 kind) {
+    s32 damage = attack->hitDamage;
+    s32 *lunge = &attack->lungeX;
+    Vec3 *force;
+    s64 lungeX;
+    s32 voice;
+    s32 knockbackX;
+    s32 drag;
+
+    if (frame == 0) {
+        voice = mersenneTwisterGenerate(&RANDOM) & 1;
+        voice += FIGHTER_ATTACK_VOICES[this->character];
+        Fighter_playVoice(this, voice);
+        this->hitDamage = damage;
+        this->hitKind = kind;
+        lungeX = (s64)attack->lungeX * this->mass >> 16;
+        this->force.vx += (s32)lungeX * Fighter_getFacing(this);
+        force = &this->force;
+        this->force.vy -= (s64)lunge[1] * this->mass >> 16;
+        knockbackX = attack->knockbackX * Fighter_getFacing(this);
+        this->hitKnockback.vy = -attack->knockbackY;
+        this->hitKnockback.vz = 0;
+        this->hitKnockback.vx = knockbackX;
+        if (Fighter_isOnGround(this)) {
+            s32 length = vecGetLength((VECTOR *)force);
+
+            if (length >= 0x100) {
+                Fighter_spawnDust(this, -1, 0x60, length / 5460);
+            }
+        }
+    } else {
+        drag = (s64)this->velocity.vx * lunge[2] >> 12;
+        this->force.vx += drag;
+    }
+    if (frame >= attack->firstActiveFrame && frame <= attack->lastActiveFrame) {
+        Fighter_setAttackParts(this, attack->parts);
+    } else {
+        this->attackParts = 0;
+    }
+    if (frame > lunge[3]) {
+        func_80079AF8(this);
+    }
+}
 
 /* The attack1 slot: plays the attack 1 clip on its first frame, then runs the params' attack 1. */
 void Fighter_attack1(Fighter *this, s32 frame) {
@@ -2292,8 +2847,6 @@ MoveReward *MoveReward_scale(MoveReward *this, s32 scale) {
     this->gauge += this->gauge * (scale - 1) / 100;
     return this;
 }
-
-void MoveReward_giveGauge(MoveReward *this, Fighter *fighter);
 
 /* Pays the score to fighter (Fighter_addScore) and the gauge with MoveReward_giveGauge, then clears the score. */
 void MoveReward_give(MoveReward *this, Fighter *fighter) {
