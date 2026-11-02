@@ -316,7 +316,29 @@ Vec3 *TerrainProbe_getHitPoint(TerrainProbe *this, Vec3 *out) {
     return out;
 }
 
-INCLUDE_ASM("game/nonmatchings/game_0c", getCrossingPoint);
+/* Sets out to the point where a segment crosses a line, from its two ends and their signed distances to the line:
+ * end + (start - end) * -endDistance / (startDistance - endDistance), in 4.12 fixed point; returns out. The match
+ * depends on the second end taken through a pointer of its own and on one local d holding the difference, the
+ * quotient and the sum in turn (a single expression gives the difference another register). */
+Vec3 *getCrossingPoint(Vec3 *out, VECTOR *ends, s32 startDistance, s32 endDistance) {
+    VECTOR *end = &ends[1];
+    s32 *o, *a, *b;
+    s32 i;
+
+    startDistance -= endDistance;
+    endDistance = -endDistance;
+    o = &out->vx;
+    a = (s32 *)&ends->vx;
+    b = (s32 *)&end->vx;
+    for (i = 2; i >= 0; i--) {
+        s32 d = *a++ - *b;
+
+        d = divide12(((s64)d * endDistance) >> 12, startDistance);
+        d += *b++;
+        *o++ = d;
+    }
+    return out;
+}
 
 INCLUDE_ASM("game/nonmatchings/game_0c", castTerrainLink);
 
