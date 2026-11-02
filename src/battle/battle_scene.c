@@ -302,9 +302,52 @@ void Fight_destroy(Fight *this, s32 flags) {
     }
 }
 
+/* by character: the tint of its other colors (FighterSetup.altColor) */
+extern HsvColor D_80064F44[];
+/* the tint that leaves the colors as they are */
+extern HsvColor D_80064F40;
+
+static inline HsvColor *getTint(HsvColor *table, s32 character) {
+    return &table[character];
+}
+
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064D38);
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", func_8006F414);
+/* the CLUT rectangle of the fighters' palettes in VRAM (side 0's row, then the alternatives) */
+extern RECT D_80064D38;
+void shiftColors(u16 *src, u16 *dst, u32 count, HsvColor *shift);
+
+/* The other colors of the character and of its evolution (CHARACTER_EVOLUTIONS): reads the palette row at
+ * D_80064D38 from VRAM and loads it, tinted by each one's D_80064F44, into the next two rows. With FIGHTER_PARAMS
+ * flag bit 0 the evolution's tint goes first (none when it has none), else the character's. */
+void func_8006F414(s32 character) {
+    u16 *clut = mainHeapAllocBest(0x200);
+    u16 *tinted = mainHeapAllocBest(0x200);
+    RECT rect = D_80064D38;
+    s32 other;
+
+    StoreImage2(&rect, (u_long *)clut);
+    if (FIGHTER_PARAMS[character].flags & 1) {
+        other = CHARACTER_EVOLUTIONS[character];
+        if (other == character) {
+            other = -1;
+        }
+    } else {
+        other = character;
+        character = CHARACTER_EVOLUTIONS[other];
+    }
+    rect.y++;
+    if (other >= 0) {
+        /* The match depends on the table passed through getTint. */
+        shiftColors(clut, tinted, 0x100, getTint(D_80064F44, other));
+        LoadImage2(&rect, (u_long *)tinted);
+    }
+    rect.y++;
+    shiftColors(clut, tinted, 0x100, getTint(D_80064F44, character));
+    LoadImage2(&rect, (u_long *)tinted);
+    mainHeapFree(tinted);
+    mainHeapFree(clut);
+}
 
 /* the tamer of each character (the name in its evolution TIMs' paths), NULL for none */
 extern char *CHARACTER_TAMERS[];
@@ -370,19 +413,11 @@ void Fight_loadCharacterEffectTim(s32 character, s32 side) {
     mainHeapFree(file);
 }
 
-/* by character: the tint of its other colors (FighterSetup.altColor) */
-extern HsvColor D_80064F44[];
-/* the tint that leaves the colors as they are */
-extern HsvColor D_80064F40;
 /* the background's CLUT and image rectangles in VRAM */
 extern RECT D_80064DDC;
 extern RECT D_80064DE4;
 void func_8006F414(s32 character);
 void Fight_createSides(Fight *this);
-
-static inline HsvColor *getTint(HsvColor *table, s32 character) {
-    return &table[character];
-}
 
 /* Loads the fight: each side's alternative colors (func_8006F414), the effect TIMs, the map (map/mapNN.dmm), and
  * unless the arena is the basketball or target bonus game, the tamers' evolution TIMs; then the characters' effect TIMs
