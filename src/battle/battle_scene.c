@@ -370,7 +370,101 @@ void Fight_loadCharacterEffectTim(s32 character, s32 side) {
     mainHeapFree(file);
 }
 
-INCLUDE_ASM("game/nonmatchings/battle_scene", Fight_load);
+/* by character: the tint of its other colors (FighterSetup.altColor) */
+extern HsvColor D_80064F44[];
+/* the tint that leaves the colors as they are */
+extern HsvColor D_80064F40;
+/* the background's CLUT and image rectangles in VRAM */
+extern RECT D_80064DDC;
+extern RECT D_80064DE4;
+void func_8006F414(s32 character);
+void Fight_createSides(Fight *this);
+
+static inline HsvColor *getTint(HsvColor *table, s32 character) {
+    return &table[character];
+}
+
+/* Loads the fight: each side's alternative colors (func_8006F414), the effect TIMs, the map (map/mapNN.dmm), and
+ * unless the arena is the basketball or target bonus game, the tamers' evolution TIMs; then the characters' effect TIMs
+ * and charas, the evolved forms' too, the background sprite, and the sides (Fight_createSides). */
+void Fight_load(Fight *this) {
+    GameState *state = &GAME_STATE;
+    s32 character0 = state->fighters[0].character;
+    s32 character1 = state->fighters[1].character;
+    s32 alt1 = state->fighters[1].altColor;
+    s32 evolved0 = CHARACTER_EVOLUTIONS[character0];
+    s32 evolved1 = CHARACTER_EVOLUTIONS[character1];
+    s32 alt0 = state->fighters[0].altColor;
+    HsvColor *tint0 = alt0 ? getTint(D_80064F44, character0) : &D_80064F40;
+    HsvColor *evolvedTint0 = alt0 ? getTint(D_80064F44, evolved0) : &D_80064F40;
+    HsvColor *tint1 = alt1 ? getTint(D_80064F44, character1) : &D_80064F40;
+    HsvColor *evolvedTint1 = alt1 ? getTint(D_80064F44, evolved1) : &D_80064F40;
+    u32 *file;
+    union {
+        char path[0x40];
+        TIM_IMAGE tim;
+    } buf;
+
+    if (alt0) {
+        func_8006F414(character0);
+    }
+    if (alt1) {
+        func_8006F414(character1);
+    }
+    file = loadFile("effect/effect.tim");
+    uploadTims(file);
+    mainHeapFree(file);
+    sprintf(buf.path, "map/map%02d.dmm", state->arena);
+    meshSceneLoad(this->meshScene, buf.path);
+    EVOLUTION_LOADED =
+        state->arena != ARENA_BONUS + BONUS_GAME_BASKETBALL && state->arena != ARENA_BONUS + BONUS_GAME_TARGET;
+    if (EVOLUTION_LOADED) {
+        Fight_loadTamerTim(character0, 0, state->fighters[0].tamer);
+        Fight_loadTamerTim(character1, 1, state->fighters[1].tamer);
+    }
+    /* The match depends on the do { } while (0) with the break before the evolutions' charas, the table in getTint
+     * and the side 1 tests written character1 != evolved1. */
+    do {
+        Fight_loadCharacterEffectTim(character0, 0);
+        Fight_loadCharacterEffectTim(character1, 1);
+        if (EVOLUTION_LOADED) {
+            if (evolved0 != character0) {
+                Fight_loadCharacterEffectTim(evolved0, 0);
+            }
+            if (character1 != evolved1) {
+                Fight_loadCharacterEffectTim(evolved1, 1);
+            }
+        }
+        this->charas[0] = charaInit(operatorNew(0x30), character0);
+        this->charas[1] = charaInit(operatorNew(0x30), character1);
+        charaSetPlayerTint(this->charas[0], 0, tint0);
+        charaSetPlayerTint(this->charas[1], 1, tint1);
+        charaLoad(this->charas[0]);
+        charaLoad(this->charas[1]);
+        if (!EVOLUTION_LOADED) {
+            break;
+        }
+        if (evolved0 != character0) {
+            this->charas[2] = charaInit(operatorNew(0x30), evolved0);
+            charaSetPlayerTint(this->charas[2], 0, evolvedTint0);
+            charaLoad(this->charas[2]);
+        }
+        if (character1 != evolved1) {
+            this->charas[3] = charaInit(operatorNew(0x30), evolved1);
+            charaSetPlayerTint(this->charas[3], 1, evolvedTint1);
+            charaLoad(this->charas[3]);
+        }
+    } while (0);
+    buf.tim.mode = 9;
+    buf.tim.crect = &D_80064DDC;
+    buf.tim.prect = &D_80064DE4;
+    spriteSetTim(&this->background, &buf.tim, 0);
+    this->hasBackground = 1;
+    this->background.flags |= SPRITE_DITHER;
+    Fight_createSides(this);
+    this->flags &= ~FIGHT_FLAG_OVER;
+    this->flags &= ~FIGHT_FLAG_STOP_ROUND;
+}
 
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064DDC);
 INCLUDE_RODATA("game/nonmatchings/battle_scene", D_80064DE4);

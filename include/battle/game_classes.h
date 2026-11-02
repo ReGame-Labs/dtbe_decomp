@@ -82,6 +82,9 @@ typedef struct FighterParams {
 /* the params of the characters, by CHARACTER_* */
 extern FighterParams FIGHTER_PARAMS[];
 
+/* whether the fight loaded the evolved forms (Fight_load: not in the basketball and target bonus games) */
+extern s32 EVOLUTION_LOADED;
+
 /* One side of the fight (BattleSide_init, virtual table BATTLE_SIDE_VTABLE at 0x38; Fight.sides): its starting
  * fighter, that fighter's evolution (itself when it has none), the one fighting, and what both forms share: the
  * side's life, evolution gauge and stun (Fighter.battleSide). */
