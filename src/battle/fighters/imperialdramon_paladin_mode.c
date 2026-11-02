@@ -42,6 +42,8 @@ extern EntityVtable IMPERIALDRAMON_PALADIN_MODE_INTRO_EFFECT_VTABLE;
 extern VtableEntry IMPERIALDRAMON_PALADIN_MODE_SPECIAL3_HITBOX_HIT_VTABLE[];
 extern EntityVtable IMPERIALDRAMON_PALADIN_MODE_SPECIAL3_HITBOX_VTABLE;
 extern EntityVtable IMPERIALDRAMON_PALADIN_MODE_VTABLE;
+void ImperialdramonPaladinMode_spawnSpecial3Hitbox(Fighter *this);
+void ImperialdramonPaladinMode_spawnSpecial3Trail(Fighter *this);
 ImperialdramonPaladinModeSpecial3Hitbox *ImperialdramonPaladinModeSpecial3Hitbox_init(
     ImperialdramonPaladinModeSpecial3Hitbox *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *fight);
 
@@ -76,7 +78,56 @@ void ImperialdramonPaladinMode_intro(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon_paladin_mode", ImperialdramonPaladinMode_special3);
+void Imperialdramon_special3Hold(Imperialdramon *this, s32 frame);
+
+void ImperialdramonPaladinMode_special3(Imperialdramon *this, s32 frame) {
+    Fighter *opponent = Fighter_getOpponent(&this->base);
+    Vec3 vec;
+    s64 push;
+
+    func_80079AE4(&this->base);
+    Imperialdramon_special3Hold(this, frame);
+    switch (frame) {
+    case 0x3A:
+        if (this->holding != 0) {
+            vec.vx = 0;
+            vec.vy = -0xC710;
+            vec.vz = 0;
+            Fighter_takeHit(opponent, 0x45B01500, (Vec3 *)&ZERO_VECTOR, 0);
+            this->carryVelocity.vy = 0;
+            this->hitPending = 1;
+            this->carryForce = vec;
+        }
+        break;
+
+    case 0x3F:
+        push = ((s64)this->base.mass * 0xE38) >> 16;
+        this->base.force.vx += (s32)-push * Fighter_getFacing(&this->base);
+        this->base.force.vy -= ((s64)this->base.mass * 0x8E30) >> 16;
+        break;
+
+    case 0x54:
+        ImperialdramonPaladinMode_spawnSpecial3Hitbox(&this->base);
+        Fighter_playVoice(&this->base, 0xA5);
+        break;
+
+    case 0x69:
+        ImperialdramonPaladinMode_spawnSpecial3Trail(&this->base);
+        Fighter_playSound(&this->base, 0xA0);
+        break;
+    }
+
+    if ((u32)(frame - 0x40) < 0x42) {
+        if (this->base.velocity.vy > 0) {
+            this->base.force.vy -= this->base.velocity.vy;
+        }
+    }
+    if ((u32)(frame - 0x40) < 0x1F) {
+        if (this->carryVelocity.vy > 0) {
+            this->carryForce.vy -= this->carryVelocity.vy;
+        }
+    }
+}
 
 /* Spawns the special move 3's hitbox at the fighter, 64 a frame forward. */
 void ImperialdramonPaladinMode_spawnSpecial3Hitbox(Fighter *this) {
