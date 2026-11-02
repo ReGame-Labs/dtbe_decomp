@@ -214,7 +214,48 @@ void GameMainTask_pickSounds(GameMainTask *this) {
 
 INCLUDE_ASM("game/nonmatchings/game_main", GameMainTask_stepFight);
 
-INCLUDE_ASM("game/nonmatchings/game_main", drawLoadingIcon);
+/* the 16 colors of the loading icon */
+extern u16 LOADING_ICON_PALETTE[16];
+/* the 16 frames of the loading icon, 16x16 pixels of 4 bits each */
+extern u16 LOADING_ICON_FRAMES[16][64];
+
+/* Draws frame of the loading icon: expands its 4-bit pixels through LOADING_ICON_PALETTE and loads them at (24,
+ * height - 40) in both display buffers, then waits for the transfer. The pixels end where size starts, and the loop
+ * runs until then. The match depends on end being set again to size in the loop (a dead store: without it GCC keeps
+ * a copy of end in t1 and src and end trade s0 and s1), and on src being set in two steps. */
+void drawLoadingIcon(s32 frame) {
+    u16 pixels[256];
+    s16 size[2];
+    RECT rect;
+    u16 *src;
+    u16 *palette;
+    u16 *p;
+    u16 *end;
+    s32 i;
+
+    src = LOADING_ICON_FRAMES[0];
+    src += frame * 64;
+    displayGetSize(CURRENT_DISPLAY, size);
+    end = (u16 *)size;
+    rect.x = 0x18;
+    rect.w = 0x10;
+    rect.h = 0x10;
+    palette = LOADING_ICON_PALETTE;
+    rect.y = size[1] - 0x28;
+    for (p = pixels; p != end; p += 4) {
+        u32 bits = *src++;
+
+        end = (u16 *)size;
+        for (i = 0; i < 4; i++) {
+            p[i] = palette[bits & 0xF];
+            bits >>= 4;
+        }
+    }
+    LoadImage2(&rect, (u_long *)pixels);
+    rect.y += size[1];
+    LoadImage2(&rect, (u_long *)pixels);
+    DrawSync(0);
+}
 
 /* a frame counter, modulo 16, of the CD's idle callback */
 extern s32 LOADING_ICON_FRAME;
