@@ -1384,7 +1384,32 @@ void BeelzebumonSpecial3Effect_tick(BeelzebumonSpecial3Effect *this) {
     this->ticks++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", BeelzebumonSpecial3Effect_draw);
+/* Draws the special move 3 effect: a semi-transparent line from the position (gray of brightness) to unk30
+ * (black), in the view matrix.
+ * The match depends on copying each end through a whole Vec3 local (stored to the stack, read back with lhu). */
+void BeelzebumonSpecial3Effect_draw(BeelzebumonSpecial3Effect *this, Camera *camera) {
+    Vec3 v;
+    SVECTOR ends[2];
+    LineG2Shape shape;
+    s32 c;
+
+    gte_loadRotTransKeepArgs(SCRATCH_VIEW_MATRIX);
+    shape.ends[0] = &ends[0];
+    v = this->position;
+    ends[0].vx = v.vx;
+    ends[0].vy = v.vy;
+    ends[0].vz = v.vz;
+    shape.ends[1] = &ends[1];
+    shape.flags = 9;
+    v = this->unk30;
+    ends[1].vx = v.vx;
+    ends[1].vy = v.vy;
+    ends[1].vz = v.vz;
+    c = this->brightness;
+    shape.colors[0] = c | (c << 8) | (c << 16);
+    shape.colors[1] = 0;
+    PRIM_BUFFER_FREE = buildLineG2(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+}
 
 /* The projectile's destructor, a copy of Projectile's (game has 11 identical ones). */
 void BeelzebumonSpecial1Projectile_destroy(UnkPartsEntity38 *this, s32 flags) {
