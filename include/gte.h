@@ -47,6 +47,14 @@
     "ctc2 $7, $4; ctc2 $6, $5; ctc2 $3, $6; ctc2 $2, $7"                    \
     : : "r"(m) : "$2", "$3", "$6", "$7")
 
+/* The same through $6, $4, $3 and $2, which leaves $a1 and $a3 (SeraphimonSpecial2Effect_draw). */
+#define gte_loadRotTransKeepA1A3(m) __asm__ volatile(                       \
+    "lw $6, 0(%0); lw $4, 4(%0); lw $3, 8(%0); lw $2, 12(%0);"              \
+    "ctc2 $6, $0; ctc2 $4, $1; ctc2 $3, $2; ctc2 $2, $3;"                   \
+    "lw $6, 16(%0); lw $4, 20(%0); lw $3, 24(%0); lw $2, 28(%0);"           \
+    "ctc2 $6, $4; ctc2 $4, $5; ctc2 $3, $6; ctc2 $2, $7"                    \
+    : : "r"(m) : "$2", "$3", "$4", "$6")
+
 /* Loads x, y and z into the GTE's IR1-IR3 (vecNormalize). */
 #define gte_loadIR(x, y, z) \
     __asm__ volatile("mtc2 %0, $9; mtc2 %1, $10; mtc2 %2, $11" : : "r"(x), "r"(y), "r"(z))
