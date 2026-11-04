@@ -492,7 +492,37 @@ void func_8009F064(Particle *this, s32 arg) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_8009F120);
+/* Entry 0x14 of a Particle vtable: draws the sprite in the camera as a square of side 2 * size around its position,
+ * with buildPolyFT4.
+ * The match depends on the view matrix in a local and on the whole body in a do { } while (0) block opened before
+ * the GTE load (without either, this and the scratchpad base swap $a2/$a3, or ot is read before the load). */
+void func_8009F120(Particle *this, s32 arg) {
+    Camera *camera = (Camera *)arg;
+    MATRIX *view = SCRATCH_VIEW_MATRIX;
+    VECTOR p;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 size;
+
+    do {
+        gte_loadRotTrans(view);
+        ot = camera->ot.slots;
+        p.vx = this->sprite.position.vx;
+        size = this->sprite.size;
+        p.vy = this->sprite.position.vy;
+        p.vz = this->sprite.position.vz;
+        p.pad = this->sprite.position.pad;
+        shape.flags = 0;
+        corners[0].vx = corners[2].vx = (s16)p.vx - size;
+        corners[1].vx = corners[3].vx = (s16)p.vx + size;
+        corners[0].vy = corners[1].vy = (s16)p.vy - size;
+        corners[2].vy = corners[3].vy = (s16)p.vy + size;
+        corners[0].vz = corners[2].vz = corners[1].vz = corners[3].vz = p.vz;
+        Particle_buildShape(this, &shape, corners);
+        PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift);
+    } while (0);
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/omegamon", D_8006A44C);
 

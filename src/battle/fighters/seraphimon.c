@@ -4,6 +4,10 @@
 #include "common.h"
 #include "battle/game_classes.h"
 #include "engine/math/sin_cos.h"
+#include "gte.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/gfx/prim/build_line_g2.h"
 
 SeraphimonSpecial2Effect *SeraphimonSpecial2Effect_init(SeraphimonSpecial2Effect *this, Fighter *fighter);
 Unk800AFD78 *func_800AFD78(Unk800AFD78 *this, Fighter *fighter, Fight *fight);
@@ -414,7 +418,56 @@ void SeraphimonSpecial2Effect_tick(SeraphimonSpecial2Effect *this, s32 arg) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", SeraphimonSpecial2Effect_draw);
+/* Draws the special move 2 effect: four buildPolyFT4 squares of side ticks * 32 around the position (moved by facing
+ * * 0x80 and unk2C), fading with 16 - ticks.
+ * The match depends on ticks being read twice (for the color and for the size) and on ot, the prim buffer and
+ * zShift being read in that order. */
+void SeraphimonSpecial2Effect_draw(SeraphimonSpecial2Effect *this, Camera *camera) {
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 zShift;
+    void *packet;
+    s16 cx;
+    s32 t;
+    s32 c;
+    u16 vramY;
+    s16 top;
+
+    gte_loadRotTransKeepA1A3(SCRATCH_VIEW_MATRIX);
+    ot = camera->ot.slots;
+    packet = PRIM_BUFFER_FREE;
+    zShift = camera->zShift + 1;
+    cx = Fighter_getFacing(this->fighter) * 0x80;
+    ((u8 *)&shape.uv0)[0] = (((u8 *)&shape.uv2)[0] = 0);
+    ((u8 *)&shape.uv1)[0] = (((u8 *)&shape.uv3)[0] = 0x3F);
+    ((u8 *)&shape.uv0)[1] = (((u8 *)&shape.uv1)[1] = 0x40);
+    ((u8 *)&shape.uv2)[1] = (((u8 *)&shape.uv3)[1] = 0x7F);
+    shape.flags = 9;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    c = 16 - this->ticks;
+    shape.color = (c << 4) | (c << 12) | (c << 20);
+    vramY = this->vramY;
+    shape.clut = ((vramY + 0xFC) << 6) | 0x1C;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+    t = this->ticks << 5;
+    corners[0].vx = corners[2].vx = cx + (this->position.vx - t);
+    corners[1].vx = corners[3].vx = cx + this->position.vx;
+    top = this->unk2C;
+    corners[0].vy = corners[1].vy = top + (this->position.vy - t);
+    corners[2].vy = corners[3].vy = top + this->position.vy;
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = this->position.vz;
+    shape.corners[3] = &corners[3];
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vx = corners[2].vx = cx + (this->position.vx + t);
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vy = corners[1].vy = top + (this->position.vy + t);
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vx = corners[2].vx = cx + (this->position.vx - t);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* The sparks of a special move 2 hitbox (virtual table D_8006B6BC, spawned by SeraphimonSpecial2Hitbox_tick). */
 typedef struct Unk800AF0A0 {

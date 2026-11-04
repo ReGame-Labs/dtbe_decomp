@@ -5,6 +5,10 @@
 #include <abs.h>
 #include "battle/game_classes.h"
 #include "engine/math/sin_cos.h"
+#include "engine/math/matrix.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/gfx/prim/build_line_g2.h"
 
 void Terriermon_spawnSpecial2Effect(Fighter *this);
 struct TerriermonSpecial2Hitbox *TerriermonSpecial2Hitbox_init(struct TerriermonSpecial2Hitbox *this,
@@ -472,7 +476,84 @@ Projectile *TerriermonSpecial1Projectile_init(Projectile *this, Fighter *fighter
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/terriermon", TerriermonSpecial1Projectile_draw);
+/* Draws the special move 1 projectile. */
+void TerriermonSpecial1Projectile_draw(Projectile *this, Camera *arg) {
+    Camera *camera = arg; /* The match depends on copying the camera to a local (it goes to $s1, ot to $s2). */
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyGT4Shape shape;
+    Vec3 *pos = &this->position;
+    s32 x = pos->vx;
+    s32 y = pos->vy;
+    s32 z = pos->vz;
+    s32 dir;
+    s16 vx;
+    u32 u;
+    u16 vramY;
+    u_long *ot;
+
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    ot = camera->ot.slots;
+    setModelMatrix(&m.m);
+
+    dir = 1;
+    corners[0].vy = -0x68;
+    corners[0].vz = 0;
+    corners[1].vy = -0x68;
+    corners[1].vz = 0;
+    corners[2].vy = 0x68;
+    corners[2].vz = 0;
+    corners[3].vy = 0x68;
+    corners[3].vz = 0;
+    /* The match depends on the negated half-width in its own s16 local. */
+    {
+        s16 n;
+        vx = (this->age << 3) + 0x68;
+        n = -vx;
+        corners[0].vx = n;
+        corners[1].vx = vx;
+        corners[2].vx = n;
+        corners[3].vx = vx;
+    }
+    if (this->velocity.vx < 0) {
+        dir = -1;
+    }
+    u = 0x20;
+    shape.flags = 0;
+    vramY = this->unkBC;
+    if (dir > 0) {
+        shape.corners[0] = &corners[0];
+        shape.corners[1] = &corners[1];
+        shape.corners[2] = &corners[2];
+        shape.corners[3] = &corners[3];
+        shape.colors[0] = (shape.colors[2] = 0x8000);
+        shape.colors[1] = (shape.colors[3] = 0xA0C0A0);
+    } else {
+        shape.corners[0] = &corners[2];
+        shape.corners[1] = &corners[3];
+        shape.corners[2] = &corners[0];
+        shape.corners[3] = &corners[1];
+        shape.colors[1] = (shape.colors[3] = 0x8000);
+        shape.colors[0] = (shape.colors[2] = 0xA0C0A0);
+    }
+
+    shape.u1 = (shape.u3 = 0x3F);
+    shape.v2 = (shape.v3 = 0x1F);
+    shape.clut = ((vramY + 0xFD) << 6) | 0x1C;
+    shape.tpage = ((((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2));
+    shape.u0 = (shape.u2 = u);
+    shape.v0 = (shape.v1 = 0);
+    shape.flags = (shape.flags & ~3) | 9;
+
+    PRIM_BUFFER_FREE = buildPolyGT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift);
+}
 
 /* Builds the special move 1's effect for fighter at its position (Fighter_getPosition). */
 TerriermonSpecial1Effect *TerriermonSpecial1Effect_init(TerriermonSpecial1Effect *this, Fighter *fighter) {
@@ -509,7 +590,99 @@ void TerriermonSpecial1Effect_tick(TerriermonSpecial1Effect *this, s32 arg) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/terriermon", TerriermonSpecial1Effect_draw);
+/* Draws the effect around the character: a fading glow growing with ticks, then a smaller core of 0xA0C080. */
+void TerriermonSpecial1Effect_draw(TerriermonSpecial1Effect *this, Camera *camera) {
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyGT4Shape shape;
+    Vec3 *pos = &this->position;
+    s32 x = pos->vx;
+    s32 y = pos->vy;
+    s32 z = pos->vz;
+    u_long *ot;
+    s32 zShift;
+    void *packet;
+    s16 cx;
+    s32 facing;
+    s16 w;
+    s16 h;
+    s32 fade;
+    u16 vramY;
+    s32 tpage;
+
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    ot = camera->ot.slots;
+    packet = PRIM_BUFFER_FREE;
+    zShift = camera->zShift + 1;
+    setModelMatrix(&m.m);
+
+    facing = Fighter_getFacing(this->fighter);
+    corners[3].vz = 0;
+    corners[2].vz = 0;
+    corners[1].vz = 0;
+    corners[0].vz = 0;
+    shape.flags = 0;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.u0 = (shape.u2 = 0x20);
+    shape.u1 = (shape.u3 = 0x3F);
+    shape.v0 = (shape.v1 = 0x20);
+    shape.v2 = (shape.v3 = 0x3F);
+    h = this->ticks << 5;
+    fade = 13 - this->ticks;
+    cx = facing * 0x60;
+    w = this->ticks << 4;
+    corners[0].vx = corners[2].vx = cx - w;
+    corners[1].vx = corners[3].vx = w + cx;
+    {
+        s32 top = -(u16)this->unk2C; /* The match depends on this own block (and the lhu). */
+        corners[0].vy = corners[1].vy = top - h;
+        corners[2].vy = corners[3].vy = top + h;
+    }
+    vramY = this->vramY;
+    if (fade < 0) {
+        fade = 0;
+    }
+    fade <<= 4;
+    shape.colors[0] = shape.colors[1] = shape.colors[2] = shape.colors[3] = (fade << 8) | (fade << 16);
+    shape.clut = ((vramY + 0xFE) << 6) | 0x1C;
+    tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+    shape.tpage = tpage;
+    shape.flags = (shape.flags & ~3) | 9;
+    packet = buildPolyGT4(&shape, packet, ot, zShift);
+
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.u0 = (shape.u2 = 0x20);
+    shape.u1 = (shape.u3 = 0x3F);
+    shape.v0 = (shape.v1 = 0);
+    shape.v2 = (shape.v3 = 0x1F);
+    /* The match depends on the colors being set after the v coordinates. */
+    shape.colors[0] = shape.colors[1] = shape.colors[2] = shape.colors[3] = 0xA0C080;
+    shape.clut = ((vramY + 0xFD) << 6) | 0x1C;
+    shape.tpage = tpage;
+    h = this->ticks << 3;
+    corners[0].vx = corners[2].vx = cx - h;
+    corners[1].vx = corners[3].vx = h + cx;
+    {
+        s32 top = -(u16)this->unk2C;
+        corners[0].vy = corners[1].vy = top - h;
+        corners[2].vy = corners[3].vy = top + h;
+    }
+    shape.flags = (shape.flags & ~3) | 9;
+    PRIM_BUFFER_FREE = buildPolyGT4(&shape, packet, ot, zShift);
+}
 
 /* The special move 2's effect (TerriermonSpecial2Effect_init): a band of 8 quads between the newest and the oldest
  * of four rings left by a growing, rising position, turned by angle. */
