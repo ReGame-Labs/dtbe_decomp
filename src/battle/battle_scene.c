@@ -1248,6 +1248,10 @@ static inline s32 countDown(s32 *timer) {
     return done;
 }
 
+#if VERSION_JP
+/* The Japanese version has other code here and stays in asm for now. */
+INCLUDE_ASM("game/nonmatchings/battle_scene", func_80071894);
+#else
 /* A round won by knock-out: slow motion while KO shows (the winner's port can skip it, ending the slow motion);
  * then, until the winner is idle, waits (the slow motion ends after 60 frames), waits 30 more, wipes out, puts the
  * loser back, focuses the camera on the winner, wipes in and plays the winner's music; the winner takes its win
@@ -1294,6 +1298,7 @@ void func_80071894(Fight *this, s32 side) {
     Fight_waitFrames(this, 5);
     Fight_waitEntity(this, Fight_showWinner(this, side, (this->flags >> 7) & 1 /* FIGHT_FLAG_LAST_ROUND */), -1);
 }
+#endif
 
 /* A round won on time: shows TIME UP, sets the winner's win pose (func_80079268 on the loser) and waits for the
  * message (the winner's port can skip it); unless skipped, shows the win message (Fight_showWinner), waits for it and

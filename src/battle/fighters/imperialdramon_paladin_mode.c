@@ -80,6 +80,10 @@ void ImperialdramonPaladinMode_intro(Fighter *this, s32 frame) {
 
 void Imperialdramon_special3Hold(Imperialdramon *this, s32 frame);
 
+#if VERSION_JP
+/* The Japanese version has other code here and stays in asm for now. */
+INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon_paladin_mode", ImperialdramonPaladinMode_special3);
+#else
 void ImperialdramonPaladinMode_special3(Imperialdramon *this, s32 frame) {
     Fighter *opponent = Fighter_getOpponent(&this->base);
     Vec3 vec;
@@ -128,6 +132,7 @@ void ImperialdramonPaladinMode_special3(Imperialdramon *this, s32 frame) {
         }
     }
 }
+#endif
 
 /* Spawns the special move 3's hitbox at the fighter, 64 a frame forward. */
 void ImperialdramonPaladinMode_spawnSpecial3Hitbox(Fighter *this) {
