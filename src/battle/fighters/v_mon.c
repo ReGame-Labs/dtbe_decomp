@@ -8,6 +8,8 @@ struct VMonSpecial2Effect *VMonSpecial2Effect_init(struct VMonSpecial2Effect *th
                                                    Fight *fight);
 struct VMonSpecial1Effect *VMonSpecial1Effect_init(struct VMonSpecial1Effect *this, Fighter *fighter, VECTOR *pos,
                                                    Fight *fight);
+void VMon_spawnSpecial1Effect(Fighter *this, s32 arg);
+void VMon_spawnSpecial2Effect(Fighter *this);
 extern FaceEntry V_MON_FACES[];
 extern EntityVtable V_MON_SPECIAL2_EFFECT_VTABLE;
 extern EntityVtable V_MON_SPECIAL1_EFFECT_VTABLE;
@@ -67,13 +69,153 @@ void VMon_attack2(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMon_attack3);
+/* Attack 3: at frame 0 its clip, knocked back forward (0x1554) and up (0x5550) by the opponent's mass, damage
+ * 0x81881300; at frame 5 lunges forward and down by the attack's lunge times the mass; active frames set its parts. */
+void VMon_attack3(Fighter *this, s32 frame) {
+    Fighter *opponent = Fighter_getOpponent(this);
+    FighterParams *params;
+    Attack *attack;
+    s32 *lunge;
 
-INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMon_throw);
+    func_80079AE4(this);
+    params = Fighter_getParams(this);
+    attack = &params->attacks[2];
+    lunge = &params->attacks[2].lungeX;
+    switch (frame) {
+    case 0: {
+        s32 push;
+        s32 drop;
 
-INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMon_special1);
+        Fighter_playActionClip(this, FIGHTER_CLIP_ATTACK3, 0, 0, -1);
+        push = ((s64)opponent->mass * 0x1554) >> 16;
+        push *= Fighter_getFacing(this);
+        drop = ((s64)opponent->mass * 0x5550) >> 16;
+        this->hitKnockback.vz = 0;
+        this->hitDamage = 0x81881300;
+        this->hitKnockback.vx = push;
+        this->hitKnockback.vy = -drop;
+        break;
+    }
+    case 5: {
+        s32 push;
 
-void VMon_spawnSpecial1Effect(Fighter *this, s32 arg);
+        push = ((s64)params->attacks[2].lungeX * this->mass) >> 16;
+        this->force.vx += push * Fighter_getFacing(this);
+        this->force.vy -= ((s64)lunge[1] * this->mass) >> 16;
+        break;
+    }
+    }
+    if (frame >= attack->firstActiveFrame && frame <= attack->lastActiveFrame) {
+        Fighter_setAttackParts(this, attack->parts);
+    } else {
+        this->attackParts = 0;
+    }
+}
+
+/* Throw: Fighter's; at frame 0 the opponent is held (26) flinching and both fighters stop; at frame 26, if on the
+ * ground and func_80079E50 finds a target, hits the opponent forward and down and spawns a hit spark, else stops. */
+void VMon_throw(Fighter *this, s32 frame) {
+    Fighter *opponent;
+
+    Fighter_throw(this, frame);
+    opponent = Fighter_getOpponent(this);
+    switch (frame) {
+    case 0:
+        this->velocity.vx = 0;
+        opponent->velocity.vx = 0;
+        opponent->velocity.vy = 0;
+        opponent->velocity.vz = 0;
+        opponent->velocityPad = 0;
+        Fighter_takeHit(opponent, 1, (Vec3 *)&ZERO_VECTOR, 0);
+        Fighter_hold(opponent, 26);
+        Fighter_setClip(opponent, 13, 0, 0);
+        this->velocity.vx = 0;
+        this->velocity.vy = 0;
+        this->velocity.vz = 0;
+        this->velocityPad = 0;
+        break;
+    case 26: {
+        Fighter *target;
+        Vec3 push;
+        Vec3 pos;
+        VECTOR zero;
+        HitSpark *spark;
+
+        target = func_80079E50(this, &AXIS_Z, 0x40000, 0x2AA);
+        if (Fighter_isOnGround(this) && target != NULL) {
+            push.vx = Fighter_getFacing(this) * 10920;
+            push.vy = -0x38E0;
+            push.vz = 0;
+            Fighter_takeHit(opponent, 0x598C1C80, &push, 2);
+            zero.vx = 0;
+            zero.vy = 0;
+            zero.vz = 0;
+            zero.pad = 0;
+            Fighter_getPosition(opponent, &pos);
+            pos.vy -= 0xC8;
+            pos.vz -= 0x100;
+            spark = allocEntityMemory(sizeof(HitSpark));
+            if (spark != NULL) {
+                HitSpark_init(entityOperatorNewAt(sizeof(HitSpark), spark), &pos, &zero, 0x60, 0x808080);
+            }
+            Fighter_addEntity(this, (Entity *)spark);
+        } else {
+            Fighter_stopActionClip(this);
+        }
+        break;
+    }
+    }
+}
+
+/* Special move 1: at frame 0 its clip, a forward push (0x5550) and jump (0x31C4), and the voice; part 2 hits from
+ * frame 2 (0x5A81A00, knocking back 0x1C70), the effect at 4, no part from 14; after frame 0, downward velocity is
+ * arrested and the horizontal force brakes 1/64 of the velocity. */
+void VMon_special1(Fighter *this, s32 frame) {
+    Fighter *opponent;
+
+    func_80079AE4(this);
+    opponent = Fighter_getOpponent(this);
+    switch (frame) {
+    case 0: {
+        s32 push;
+        s32 drop;
+
+        Fighter_playActionClip(this, FIGHTER_CLIP_SPECIAL1, 0, 0, -1);
+        this->velocity.vx = 0;
+        push = ((s64)this->mass * 0x5550) >> 16;
+        this->force.vx += push * Fighter_getFacing(this);
+        drop = ((s64)this->mass * 0x31C4) >> 16;
+        this->force.vy -= drop;
+        func_80079B0C(this, 28);
+        Fighter_playVoice(this, 0xFF);
+        break;
+    }
+    case 2: {
+        s32 push;
+
+        Fighter_setAttackParts(this, 2);
+        this->hitDamage = 0x5A81A00;
+        this->hitKind = 3;
+        push = ((s64)opponent->mass * 0x1C70) >> 16;
+        this->hitKnockback.vx = push * Fighter_getFacing(this);
+        this->hitKnockback.vy = 0;
+        this->hitKnockback.vz = 0;
+        break;
+    }
+    case 4:
+        VMon_spawnSpecial1Effect(this, 0);
+        break;
+    case 14:
+        this->attackParts = 0;
+        break;
+    }
+    if (frame > 0) {
+        if (this->velocity.vy > 0) {
+            this->force.vy -= this->velocity.vy;
+        }
+        this->force.vx -= this->velocity.vx >> 6;
+    }
+}
 
 /* Special move 1 in the air: at frame 0 tilted 0x180 toward the facing, its clip, a push forward and down, hits of kind
  * 3 and the voice; part 2 hits from frame 2 (0x85A81A00), the effect at 4, no part from 17; the force brakes 1/64 of the
@@ -117,7 +259,76 @@ void VMon_airSpecial1(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMon_special2);
+/* Special move 2: at frame 0 its clip, the effect, a forward push (0xE38), sound 7 and the voice; hits of kind 1 at
+ * frame 11 (0x5AC0A66, knocking back 0x71C) and kind 2 at 22 (0x85AC0A66, knocking back 0x4718 and dropping 0xE38);
+ * stops at 35; while under 35 accelerates forward by 7280; sets attack parts to 12 until the clip is done. */
+void VMon_special2(Fighter *this, s32 frame) {
+    Fighter *opponent;
+
+    func_80079AE4(this);
+    opponent = Fighter_getOpponent(this);
+    switch (frame) {
+    case 0: {
+        s32 push;
+
+        this->velocity.vx = 0;
+        Fighter_playActionClip(this, FIGHTER_CLIP_SPECIAL2, 0, 0, -1);
+        VMon_spawnSpecial2Effect(this);
+        this->hitDamage = 0x5AC0A66;
+        push = ((s64)opponent->mass * 0xE38) >> 16;
+        push *= Fighter_getFacing(this);
+        this->hitKnockback.vy = 0;
+        this->hitKnockback.vz = 0;
+        this->hitKind = 1;
+        this->hitKnockback.vx = push;
+        Fighter_playVoice(this, 0x100);
+        Fighter_playSound(this, 7);
+        break;
+    }
+    case 11: {
+        s32 push;
+
+        this->hitDamage = 0x5AC0A66;
+        push = ((s64)opponent->mass * 0x71C) >> 16;
+        push *= Fighter_getFacing(this);
+        this->hitKnockback.vy = 0;
+        this->hitKnockback.vz = 0;
+        this->velocity.vx = 0;
+        this->hitKind = 1;
+        this->hitKnockback.vx = push;
+        Fighter_playSound(this, 0);
+        break;
+    }
+    case 22: {
+        s32 push;
+        s32 drop;
+
+        this->hitDamage = 0x85AC0A66;
+        push = ((s64)opponent->mass * 0x4718) >> 16;
+        push *= Fighter_getFacing(this);
+        drop = ((s64)opponent->mass * 0xE38) >> 16;
+        this->hitKnockback.vz = 0;
+        this->velocity.vx = 0;
+        this->hitKind = 2;
+        this->hitKnockback.vx = push;
+        this->hitKnockback.vy = -drop;
+        Fighter_playSound(this, 0);
+        break;
+    }
+    case 35:
+        this->velocity.vx = 0;
+        Fighter_stopActionClip(this);
+        return;
+    }
+    if (frame < 35) {
+        Fighter_accelerateTo(this, Fighter_getFacing(this) * 7280);
+    }
+    Fighter_setAttackParts(this, 12);
+    if (Fighter_isActionClipDone(this)) {
+        this->attackParts = 0;
+        func_80079B14(this, 5);
+    }
+}
 
 /* Spawns the special move 1's effect at the fighter's point 2 moved by D_800D348C, with arg in the position's pad. */
 void VMon_spawnSpecial1Effect(Fighter *this, s32 arg) {
