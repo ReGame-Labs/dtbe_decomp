@@ -169,7 +169,55 @@ void Renamon_airAttack(Renamon *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/renamon", Renamon_throw);
+/* Throw: Fighter's; for frames < 15 both fighters' velocities are averaged; frame 0 holds the opponent and sets
+ * clip 0; frame 15 hits the opponent away if a target is found via func_80079E50, else stops. */
+void Renamon_throw(Fighter *this, s32 frame) {
+    Fighter *opponent;
+
+    Fighter_throw(this, frame);
+    opponent = Fighter_getOpponent(this);
+    if (frame < 15) {
+        s32 vx = (this->velocity.vx + opponent->velocity.vx) / 2;
+        s32 vy = (this->velocity.vy + opponent->velocity.vy) / 2;
+
+        this->velocity.vx = opponent->velocity.vx = vx;
+        this->velocity.vy = opponent->velocity.vy = vy;
+    }
+    switch (frame) {
+    case 0:
+        Fighter_hold(opponent, 16);
+        Fighter_setClip(opponent, 0, 0, 0);
+        break;
+    case 15: {
+        FighterParams *params = Fighter_getParams(this);
+        FighterParams *oppParams = Fighter_getParams(opponent);
+        s32 dist = params->height + oppParams->height + 0x80;
+
+        if (func_80079E50(this, &AXIS_Z, dist * dist, 0x1C7) != NULL) {
+            Vec3 velocity;
+
+            velocity.vx = Fighter_getFacing(this) * 29120;
+            velocity.vy = -0x1C70;
+            velocity.vz = 0;
+            opponent->velocity.vx = 0;
+            opponent->velocity.vy = 0;
+            opponent->velocity.vz = 0;
+            opponent->velocityPad = 0;
+            opponent->force.vx = 0;
+            opponent->force.vy = 0;
+            opponent->force.vz = 0;
+            opponent->forcePad = 0;
+            Fighter_takeHit(opponent, 0x808C2000, &velocity, 0);
+            this->force.vx = -velocity.vx;
+            this->force.vy = velocity.vy >> 1;
+            Fighter_spawnHitSpark(this, 0x100);
+        } else {
+            Fighter_stopActionClip(this);
+        }
+        break;
+    }
+    }
+}
 
 s32 func_800A3710(Fighter *this);
 void Renamon_spawnSpecial1Effect(Fighter *this);
