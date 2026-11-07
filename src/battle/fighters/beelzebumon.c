@@ -94,7 +94,58 @@ void Beelzebumon_upAttack(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", Beelzebumon_throw);
+static inline s32 mul16(s32 a, s32 b) {
+    return ((s64)a * b) >> 16;
+}
+
+void func_80079AE4(Fighter *this);
+void Beelzebumon_spawnThrowEffect(Fighter *this, s32 arg);
+
+/* Throw: Fighter's; until frame 2 stops if unk4A4 is set; frame 0 holds the opponent (40), gives vertical lift
+ * and horizontal push; later frames add gravity and brake horizontal velocity; until frame 15 spawns the throw
+ * effect every tick; frame 20 sets unk4A4 to 30. */
+void Beelzebumon_throw(Beelzebumon *this, s32 frame) {
+    Fighter *opponent;
+    s32 facing;
+
+    func_80079AE4(&this->base);
+    Fighter_throw(&this->base, frame);
+    if (frame < 2 && this->unk4A4 != 0) {
+        Fighter_stopActionClip(&this->base);
+        return;
+    }
+    opponent = Fighter_getOpponent(&this->base);
+    facing = Fighter_getFacing(&this->base);
+    if (frame == 0) {
+        this->base.invulnerableFrames = 15;
+        Fighter_takeHit(opponent, 0x8C0000, (Vec3 *)&ZERO_VECTOR, 0);
+        Fighter_hold(opponent, 40);
+        this->unk4A8 = 0;
+        if (Fighter_getParams(opponent)->height < 0x80) {
+            this->base.force.vx += mul16(this->base.mass, 0x2AA8) * facing;
+        } else {
+            this->base.force.vx += mul16(this->base.mass, 0x38E0) * facing;
+        }
+        this->base.force.vy -= ((s64)this->base.mass * 0x7FF8) >> 16;
+    } else {
+        this->base.force.vy += 0x1000;
+        this->base.force.vx = ((s64)this->base.velocity.vx * -0x266) >> 12;
+    }
+    if (this->unk4A8 == 0 && this->base.velocity.vy >= 0) {
+        this->unk4A8 = 1;
+        if (facing > 0) {
+            Fighter_faceLeft(&this->base, 0);
+        } else {
+            Fighter_faceRight(&this->base, 0);
+        }
+    }
+    if (frame < 15) {
+        Beelzebumon_spawnThrowEffect(&this->base, frame << 10);
+    }
+    if (frame == 20) {
+        this->unk4A4 = 30;
+    }
+}
 
 struct BeelzebumonThrowEffect *BeelzebumonThrowEffect_init(struct BeelzebumonThrowEffect *this, Fighter *fighter,
                                                            Vec3 *position, s32 facing, s32 arg4);
