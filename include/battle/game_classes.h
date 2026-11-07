@@ -1218,7 +1218,7 @@ s32 Fighter_isAttackIdle(Fighter *this);
 
 s32 Fighter_isGuarding(Fighter *this);
 
-void *Fighter_hold(Fighter *this, s32 arg);
+void Fighter_hold(Fighter *this, s32 arg);
 
 s32 Fighter_getBodyStateId(Fighter *this);
 

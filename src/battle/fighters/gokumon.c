@@ -27,6 +27,9 @@ extern s32 GOKUMON_SPECIAL_TRAIL_COLORS[];
 void Gokumon_spawnSpecial3Hitbox(Fighter *this);
 void func_800C00EC(Fighter *this);
 void Gokumon_spawnSpecial3Burst(Fighter *this);
+struct Unk800C0298;
+struct Unk800C0298 *func_800C0298(struct Unk800C0298 *this, Fighter *owner);
+extern VECTOR D_8006CD0C;
 
 /* Builds Gokumon: a plain Fighter with its own vtable. */
 Fighter *Gokumon_init(Fighter *this) {
@@ -164,7 +167,90 @@ void Gokumon_airAttack(Fighter *this, s32 frame) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/gokumon", D_8006CD0C);
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", Gokumon_throw);
+/* Throw: Fighter's; until frame 16 the fighter stops (Fighter_accelerateTo(0)) and the opponent takes its velocity and
+ * force; frame 0 holds the opponent; frame 16 spawns an effect (func_800C0298); frame 24 throws it (Fighter_takeHit);
+ * from frame 16 to 23 sprays particles and dust; frames 6 to 24 the attack parts. */
+void Gokumon_throw(Fighter *this, s32 frame) {
+    Vec3 push;
+    Fighter *opponent;
+    Entity *child;
+
+    Fighter_throw(this, frame);
+    opponent = Fighter_getOpponent(this);
+    if (frame < 16) {
+        s32 x, y, z;
+
+        Fighter_accelerateTo(this, 0);
+        x = this->velocity.vx;
+        y = this->velocity.vy;
+        z = this->velocity.vz;
+        opponent->velocity.vx = x;
+        opponent->velocity.vy = y;
+        opponent->velocity.vz = z;
+        x = this->force.vx;
+        y = this->force.vy;
+        z = this->force.vz;
+        opponent->force.vx = x;
+        opponent->force.vy = y;
+        opponent->force.vz = z;
+    }
+    switch (frame) {
+    case 0:
+        Fighter_hold(opponent, 16);
+        this->hitDamage = 0x8C1000;
+        break;
+    case 16:
+        Fighter_playSound(this, 0x113);
+        child = allocEntityMemory(0xB4);
+        if (child != NULL) {
+            func_800C0298((void *)entityOperatorNewAt(0xB4, child), this);
+        }
+        Fighter_addEntity(this, child);
+        break;
+    case 24:
+        push.vx = -(Fighter_getFacing(this) * 7280);
+        push.vy = -0x2AA8;
+        push.vz = 0;
+        opponent->velocity.vx = 0;
+        opponent->velocity.vy = 0;
+        opponent->velocity.vz = 0;
+        opponent->velocityPad = 0;
+        Fighter_takeHit(opponent, 0xC08C2000, &push, 0);
+        break;
+    }
+    if ((u32)(frame - 16) < 8) {
+        Vec3 pos;
+        VECTOR offset = D_8006CD0C;
+        Entity *spray;
+
+        func_8007A6CC(this, &pos);
+        spray = allocEntityMemory(0x48);
+        if (spray != NULL) {
+            ParticleSpray_init(entityOperatorNewAt(0x48, spray),
+                               9,
+                               &pos,
+                               (Vec3 *)&offset,
+                               0x40,
+                               4,
+                               Gokumon_getAttackTrailColor(this));
+        }
+        Fighter_addEntity(this, spray);
+        Fighter_accelerateTo(this, Fighter_getFacing(this) * 21840);
+        this->hitDamage = 0x8C0800;
+        this->hitKnockback.vy = 0;
+        this->hitKnockback.vz = 0;
+        this->hitKnockback.vx = this->force.vx * 2;
+        Fighter_spawnDust(this, -1, 0x60, 2);
+        if (frame & 1) {
+            this->hitKind = 1;
+        }
+    }
+    if ((u32)(frame - 6) < 19) {
+        this->attackParts = 0x400;
+    } else {
+        this->attackParts = 0;
+    }
+}
 
 void Gokumon_spawnSpecial1Hitbox(Fighter *this);
 

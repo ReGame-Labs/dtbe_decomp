@@ -1437,8 +1437,8 @@ void func_80079268(Fighter *this) {
 }
 
 /* Puts the body in the held state (FighterStateHeld_init), with arg. */
-void *Fighter_hold(Fighter *this, s32 arg) {
-    return FighterStateHeld_init(this->bodyState, arg);
+void Fighter_hold(Fighter *this, s32 arg) {
+    FighterStateHeld_init(this->bodyState, arg);
 }
 
 void func_80079298(void) {
