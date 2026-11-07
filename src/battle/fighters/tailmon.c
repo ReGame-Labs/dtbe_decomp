@@ -65,7 +65,60 @@ void Tailmon_dashAttack(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", Tailmon_throw);
+/* Throw: Fighter's; at frame 0 the opponent is held (14) flinching, both fighters stop and the opponent takes a hit;
+ * parts are set to 12; at frame 14, if on the ground and func_80079E50 finds a target, hits the opponent forward and
+ * down, else stops; every 4 frames spawns a hit spark and sound 0; when the clip is done, clears the attack parts. */
+void Tailmon_throw(Fighter *this, s32 frame) {
+    Fighter *opponent;
+
+    Fighter_throw(this, frame);
+    opponent = Fighter_getOpponent(this);
+    if (frame == 0) {
+        Fighter_hold(opponent, 14);
+        Fighter_setClip(opponent, 13, 0, 0);
+        Fighter_takeHit(opponent, 1, (Vec3 *)&ZERO_VECTOR, 0);
+        opponent->velocity.vx = 0;
+        opponent->velocity.vy = 0;
+        opponent->velocity.vz = 0;
+        opponent->velocityPad = 0;
+        this->velocity.vx = 0;
+        this->velocity.vy = 0;
+        this->velocity.vz = 0;
+        this->velocityPad = 0;
+    }
+    Fighter_setAttackParts(this, 12);
+    if (frame == 14) {
+        Fighter *target;
+        Vec3 velocity;
+
+        target = func_80079E50(this, &AXIS_Z, 0x40000, 0x2AA);
+        if (Fighter_isOnGround(this) && target != NULL) {
+            velocity.vx = (s16)Fighter_getFacing(this) * 10920;
+            velocity.vy = -0x38E0;
+            velocity.vz = 0;
+            Fighter_takeHit(opponent, 0x5A8C1F40, &velocity, 2);
+        } else {
+            Fighter_stopActionClip(this);
+            return;
+        }
+    }
+    if ((frame & 3) == 0) {
+        HitSpark *spark;
+        Vec3 pos;
+
+        func_8007A650(opponent, &pos);
+        pos.vz -= 0x80;
+        spark = allocEntityMemory(sizeof(HitSpark));
+        if (spark != NULL) {
+            HitSpark_init(entityOperatorNewAt(sizeof(HitSpark), spark), &pos, (VECTOR *)&ZERO_VECTOR, 0x60, 0x808080);
+        }
+        Fighter_addEntity(this, (Entity *)spark);
+        Fighter_playSound(this, 0);
+    }
+    if (Fighter_isActionClipDone(this)) {
+        this->attackParts = 0;
+    }
+}
 
 void Tailmon_spawnSpecial1Hitbox(Fighter *this);
 void Tailmon_spawnSpecial1Effect(Fighter *this);
