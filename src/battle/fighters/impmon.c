@@ -620,7 +620,63 @@ void ImpmonIntroEffect_tick(ImpmonIntroEffect *this) {
     this->ticks++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/impmon", ImpmonIntroEffect_draw);
+/*
+ * The intro effect's draw: one FT4 of 2 * unk4C at position, mirrored with the velocity's sign.
+ * The match depends on shape.color stored after the v + 0x1F bytes, and on the do { } while (0)
+ * opened before uv0's u byte (without it &shape's addiu moves after the first v store).
+ */
+void ImpmonIntroEffect_draw(ImpmonIntroEffect *this, Camera *camera) {
+    VECTOR p;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    s32 side;
+    u_long *ot;
+    s32 unk4C;
+    u16 vramY;
+    u8 u;
+    s32 v;
+    s32 tpage;
+    void *packet;
+
+    gte_loadRotTrans(SCRATCH_VIEW_MATRIX);
+    ot = camera->ot.slots;
+    side = this->velocity.vx < 0 ? -1 : 1;
+    shape.flags = 0;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    unk4C = this->unk4C;
+    p = *(VECTOR *)&this->position;
+    corners[0].vy = corners[1].vy = (s16)p.vy - unk4C;
+    corners[2].vy = corners[3].vy = (s16)p.vy + unk4C;
+    corners[0].vx = corners[2].vx = (s16)p.vx - unk4C * side;
+    corners[1].vx = corners[3].vx = (s16)p.vx + unk4C * side;
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = (s16)p.vz;
+    vramY = this->vramY;
+    if (this->cell < 6) {
+        v = 0x60;
+        u = ((u8)this->cell << 5) + 0x40;
+        shape.clut = ((vramY + (this->cell < 3 ? 0xEC : 0xEB)) << 6) | 0x1C;
+    } else {
+        v = 0;
+        shape.clut = ((vramY + 0x7E) << 6) | 0x1C;
+        u = ((u8)this->cell << 5) - 0x80;
+    }
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = u + 0x1F;
+    UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = v + 0x1F;
+    shape.color = 0x808080;
+    tpage = ((vramY & 0x100) >> 4) | 0x27 | ((vramY & 0x200) << 2);
+    packet = PRIM_BUFFER_FREE;
+    do {
+        UV_BYTES(shape.uv0)[0] = u;
+        UV_BYTES(shape.uv1)[1] = v;
+        UV_BYTES(shape.uv0)[1] = v;
+        shape.tpage = tpage;
+        PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, camera->zShift);
+    } while (0);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/impmon", ImpmonSpecial2Effect_init);
 
