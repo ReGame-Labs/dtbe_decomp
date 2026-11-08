@@ -597,9 +597,10 @@ typedef struct Gabumon {
 typedef struct Patamon {
     /* 0x000 */ Fighter base;
     /* 0x4A4 */ s32 special1Active; /* set while the special move 1's hitbox lives (its constructor, destructor) */
-    /* 0x4A8 */ u8 unk4A8[0x4B8 - 0x4A8];
+    /* 0x4A8 */ u8 unk4A8[0x4B4 - 0x4A8];
+    /* 0x4B4 */ s32 unk4B4;
     /* 0x4B8 */ s32 unk4B8; /* 0 to 0x1000: how far base.unk3C8 is from unk4CC to unk4DC */
-    /* 0x4BC */ u8 unk4BC[0x4CC - 0x4BC];
+    /* 0x4BC */ VECTOR unk4BC;
     /* 0x4CC */ VECTOR unk4CC;
     /* 0x4DC */ VECTOR unk4DC;
 } Patamon;
