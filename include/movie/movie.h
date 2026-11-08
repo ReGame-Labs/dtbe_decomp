@@ -61,7 +61,7 @@ public:
     /* 0x00050 */ RECT slice;     /* the slice of the frame the MDEC decodes */
     /* 0x00058 */ s32 frameWidth; /* the size of the stream's frames */
     /* 0x0005C */ s32 frameHeight;
-    /* 0x00060 */ bool decoded; /* the frame is decoded */
+    /* 0x00060 */ volatile bool decoded; /* the frame is decoded (set by the MDEC's callback) */
     /* 0x00064 */ s32 unk64;       /* serve the CD's interrupts in the decoding callback */
     /* 0x00068 */ bool firstSlice; /* the next slice is the first of its frame */
     /* 0x0006C */ bool finished;   /* the end frame was read */

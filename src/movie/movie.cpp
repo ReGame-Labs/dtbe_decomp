@@ -348,10 +348,20 @@ u_long *MoviePlayer::getNextFrame() {
     return frame;
 }
 
-/* Waits for the frame to be decoded; gives it up after a while. Its C
- * matches only with `decoded` volatile: the game keeps the last store out of
- * the return's delay slot. */
-INCLUDE_ASM("movie/nonmatchings/movie", moviePlayerSync);
+/* Waits for the frame to be decoded; gives it up after a while. */
+void MoviePlayer::sync() {
+    s32 tries = MOVIE_SYNC_TRIES;
+
+    while (!decoded) {
+        if (--tries == 0) {
+            decoded = true;
+            rectId ^= 1;
+            slice.x = rects[rectId].x;
+            slice.y = rects[rectId].y;
+        }
+    }
+    decoded = false;
+}
 
 /* Does nothing: a player that does something after a frame is decoded
  * overrides it. */
