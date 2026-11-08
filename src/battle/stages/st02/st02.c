@@ -703,7 +703,24 @@ void St02Terminal_clearQueue(St02Terminal *this) {
     this->writeIndex = 0;
 }
 
-INCLUDE_ASM("st02/nonmatchings/st02", St02Terminal_clearGrid);
+/* Empties the grid and puts the cursor and the first shown row back at the top. */
+void St02Terminal_clearGrid(St02Terminal *this) {
+    s32 row;
+    s32 next;
+    s32 i;
+
+    /* The match depends on working the next row out before the row's loop: the game keeps it in $a2 and moves it
+     * into row ($a1) after. */
+    for (row = 0; row < 12; row = next) {
+        next = row + 1;
+        for (i = 15; i >= 0; i--) {
+            this->grid[row][i] = 0;
+        }
+    }
+    this->column = 0;
+    this->row = 0;
+    this->topRow = 0;
+}
 
 /* Clears a row of the grid. */
 void St02Terminal_clearRow(St02Terminal *this, s32 row) {
