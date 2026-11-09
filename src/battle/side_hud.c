@@ -279,7 +279,30 @@ INCLUDE_ASM("game/nonmatchings/side_hud", func_80073C80);
 
 INCLUDE_ASM("game/nonmatchings/side_hud", func_80073D78);
 
-INCLUDE_ASM("game/nonmatchings/side_hud", SideHud_drawRoundWins);
+/* Draws the round wins' mark at (x, y): a 12 x 12 sprite of the HUD texture at u 0x78, v 0x58. While the side has
+ * wins its color pulses with the sine of the frame; otherwise it is dark and semi-transparent. */
+void SideHud_drawRoundWins(SideHud *this, u_long *ot, s32 x, s32 y) {
+    SPRT *sprt = allocSprt();
+
+    if (this->roundWins != 0) {
+        sprt->r0 = (COS_SIN_TABLE[(this->frame << 7) & 0xF80].sin >> 7) - 0x80;
+        sprt->g0 = 0x80;
+        sprt->b0 = 0x80;
+    } else {
+        sprt->r0 = 0x30;
+        sprt->g0 = 0;
+        sprt->b0 = 0;
+        setSemiTrans(sprt, 1);
+    }
+    sprt->x0 = x;
+    sprt->y0 = y;
+    sprt->u0 = 0x78;
+    sprt->v0 = 0x58;
+    sprt->clut = getClut(0x3C0, 0x7B);
+    sprt->w = 12;
+    sprt->h = 12;
+    AddPrim(ot, sprt);
+}
 
 /* Draws the round's seconds left (timeLeft / 30, at most 99) at (x, y): two 12x16 digits of the HUD texture's row at
  * v 0x58. The match depends on the digits' x copied from x after the clamp (the game copies the parameter there),
