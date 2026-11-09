@@ -552,15 +552,75 @@ void BattleMessage_drawTimeUp(BattleMessage *this, u_long *ot) {
     AddPrim(ot, rightShadow);
 }
 
-/* Not matched yet. The DRAW GAME tick: state 0 copies the text, moves its first four characters 8 right and the four
- * from the 6th 8 left, both 0x60 up, and has func_800CD534 give every character a drop speed; state 1 drops each
- * character (dy += unk10, bouncing at 0 with unk10 = -unk10 >> 2, unk10 + 1 a frame) for 41 frames, then
- * func_800CD534 (0, 0); state 2 lets the first frame characters (at most all) fall on for 33 frames and deletes the
- * message. A draft is 15 differences off, all in registers of state 1's loop: the game has the character pointer
- * in $a0 and the counter in $a1, and takes this + 0x580 (the length) for the loop test in $a2 in the first block. It
- * needs this copied from the parameter, the length read through this->hudText, a pointer to it declared up front,
- * and three variables (state 2's limit and its own counter). */
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_tickDrawGame);
+void func_800CD534(HudText *this, s32 unk10, s32 step);
+
+/* The DRAW GAME tick: state 0 copies the text, moves its first four characters 8 right and the four from the 6th 8
+ * left, both 0x60 up, and has func_800CD534 give every character a drop speed; state 1 drops each character
+ * (dy += unk10, bouncing at 0 with unk10 = -unk10 >> 2, unk10 + 1 a frame) for 41 frames, then func_800CD534
+ * (0, 0); state 2 lets the first frame characters (at most all) fall on for 33 frames and deletes the message. The
+ * USA one moves only the first four characters (no x change) up. */
+void BattleMessage_tickDrawGame(BattleMessage *arg) {
+    BattleMessage *this = arg;
+    HudText *text = &this->hudText;
+    s32 *length = &this->hudText.length;
+    HudTextChar *c;
+    HudTextChar *d;
+    s32 i;
+    s32 n;
+    s32 k;
+
+    switch (this->state) {
+    case 0:
+        hudTextSetText(text, this->text);
+#if VERSION_JP
+        hudTextSetOffsetRange(text, 8, -0x60, 0, 4);
+        hudTextSetOffsetRange(text, -8, -0x60, 5, 4);
+#else
+        hudTextSetOffsetRange(text, 0, -0x60, 0, 4);
+#endif
+        func_800CD534(text, this->hudText.length, -1);
+        this->state++;
+        break;
+    case 1:
+        /* The match depends on the character pointer taken from the index in the loop, and on state 2 having its own. */
+        for (i = 0; i < *length; i++) {
+            c = &text->chars[i];
+            c->dy += c->unk10;
+            if (c->dy > 0) {
+                c->dy = 0;
+                c->unk10 = -c->unk10 >> 2;
+            }
+            c->unk10++;
+        }
+        if (this->frame >= 0x29) {
+            this->frame = 0;
+            func_800CD534(text, 0, 0);
+            this->state++;
+        }
+        break;
+    case 2:
+        n = this->frame;
+        if (this->hudText.length < n) {
+            n = this->hudText.length;
+        }
+        if (n > 0) {
+            d = text->chars;
+            k = n;
+            do {
+                d->dy += d->unk10;
+                d->unk10++;
+                d++;
+            } while (--k != 0);
+        }
+        if (this->frame >= 0x21) {
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->frame++;
+}
+
 
 s32 spawnGlyphShards(EntityGroup *group, s32 x, s32 y, u8 c);
 
