@@ -3,6 +3,10 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/math/matrix.h"
 #include "engine/sound/sound_control.h"
 
 struct TailmonSpecial1Effect *TailmonSpecial1Effect_init(struct TailmonSpecial1Effect *this, Fighter *fighter,
@@ -433,7 +437,74 @@ void TailmonSpecial2Effect_tick(TailmonSpecial2Effect *this) {
     this->age += 2;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial2Effect_draw);
+extern SVECTOR D_8006BE2C[4];
+
+/* Draws the special move 2's effect: the square D_8006BE2C at position, with the texture at vramY + 0x80, mirrored
+ * when facing right, in two layers (tpage 0x25 clut 0x14 flags 9, tpage 0x45 clut 0x14 flags 10). */
+void TailmonSpecial2Effect_draw(TailmonSpecial2Effect *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    Vec3 *pos;
+    s32 x, y, z;
+    u16 v;
+    u16 vramY;
+    void *packet;
+
+    shape.flags = 0;
+    pos = &this->position;
+    x = pos->vx;
+    y = pos->vy;
+    z = pos->vz;
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    setModelMatrix(&m.m);
+
+    shape.corners[0] = &D_8006BE2C[0];
+    shape.corners[1] = &D_8006BE2C[1];
+    shape.corners[2] = &D_8006BE2C[2];
+    shape.corners[3] = &D_8006BE2C[3];
+    shape.color = this->r | (this->g << 8) | (this->b << 16);
+
+    v = (u16)(this->vramY + 0x80);
+    if (this->facing > 0) {
+        UV_BYTES(shape.uv0)[0] = 0;
+        UV_BYTES(shape.uv0)[1] = v;
+        UV_BYTES(shape.uv1)[0] = 0x5F;
+        UV_BYTES(shape.uv1)[1] = v;
+        UV_BYTES(shape.uv2)[0] = 0;
+        UV_BYTES(shape.uv2)[1] = v + 0x3F;
+        UV_BYTES(shape.uv3)[0] = 0x5F;
+        UV_BYTES(shape.uv3)[1] = v + 0x3F;
+    } else {
+        UV_BYTES(shape.uv0)[0] = 0x5F;
+        UV_BYTES(shape.uv0)[1] = v;
+        UV_BYTES(shape.uv1)[0] = 0;
+        UV_BYTES(shape.uv1)[1] = v;
+        UV_BYTES(shape.uv2)[0] = 0x5F;
+        UV_BYTES(shape.uv2)[1] = v + 0x3F;
+        UV_BYTES(shape.uv3)[0] = 0;
+        UV_BYTES(shape.uv3)[1] = v + 0x3F;
+    }
+
+    vramY = this->vramY;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x25) | ((vramY & 0x200) << 2);
+    shape.clut = ((vramY + 0xF6) << 6) | 0x14;
+    shape.flags = (shape.flags & ~3) | 9;
+    packet = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+
+    vramY = this->vramY;
+    PRIM_BUFFER_FREE = packet;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x45) | ((vramY & 0x200) << 2);
+    shape.clut = ((vramY + 0xF7) << 6) | 0x14;
+    shape.flags = (shape.flags & ~3) | 10;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, camera->ot.slots, camera->zShift);
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/tailmon", D_8006BDCC);
 INCLUDE_RODATA("game/nonmatchings/fighters/tailmon", D_8006BDD4);
