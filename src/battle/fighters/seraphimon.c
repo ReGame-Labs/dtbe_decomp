@@ -54,7 +54,61 @@ void Seraphimon_endMove(Fighter *this) {
     Fighter_detach(Fighter_getOpponent(this));
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", Seraphimon_throw);
+extern s32 D_8006C844[];
+
+/* Throw: Fighter's; frame 0 attaches the opponent to part 19, holds it (25) and sets its clip; frame 4 accelerates
+ * upward and backward; frame 25 detaches and launches the opponent with 0xC38C3400. */
+void Seraphimon_throw(Seraphimon *this, s32 frame) {
+    Fighter *opponent;
+
+    Fighter_throw(&this->base, frame);
+    opponent = Fighter_getOpponent(&this->base);
+    switch (frame) {
+    case 0: {
+        Model *model;
+
+        this->unk4A8 = (s32)opponent;
+        Fighter_attachTo(opponent, &this->base, 19);
+        model = opponent->model;
+        model->group.object.transform.valid = 0;
+        model->group.object.transform.local.m.t[1] = Fighter_getParams(opponent)->height;
+        model->group.object.transform.local.m.t[0] = 0;
+        model->group.object.transform.local.m.t[2] = 0;
+        Fighter_hold(opponent, 25);
+        Fighter_setClip(opponent, D_8006C844[Fighter_getCharacter(opponent)], 0, 0);
+        break;
+    }
+    case 4: {
+        s32 push;
+
+        Fighter_accelerateTo(&this->base, 0);
+        push = ((s64)this->base.mass * 0x2AA8) >> 16;
+        this->base.force.vx = -push * Fighter_getFacing(&this->base);
+        this->base.force.vz = 0;
+        this->base.velocity.vy = 0;
+        this->base.force.vy = -(((s64)this->base.mass * 0x6AA4) >> 16);
+        break;
+    }
+    case 25: {
+        Fighter *held = (Fighter *)this->unk4A8;
+        s32 alone = held->entity.link.next == &held->entity.link
+                    && &held->entity.link == held->entity.link.prev;
+
+        if (!alone) {
+            Vec3 vel;
+            s16 side;
+
+            Fighter_detach(opponent);
+            side = Fighter_getFacing(&this->base);
+            vel.vx = side * 14560;
+            vel.vy = 0x6AA4;
+            vel.vz = 0;
+            Fighter_takeHit(opponent, 0xC38C3400, &vel, 0);
+        }
+        break;
+    }
+    }
+}
 
 void Seraphimon_spawnSpecial2Effect(Fighter *this);
 void Seraphimon_spawnSpecial2Hitbox(Fighter *this, s32 angle, s32 index);

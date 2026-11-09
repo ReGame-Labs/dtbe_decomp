@@ -101,7 +101,77 @@ void Imperialdramon_dashAttack(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", Imperialdramon_throw);
+void Imperialdramon_spawnThrowSpark(Fighter *this);
+
+/* Throw (both classes): Fighter's; frame 0 holds the opponent (7), sets clip 13 and stops both fighters; frame 7
+ * if on the ground holds the opponent (46), hits and throws upward, spawning a spark; frame 20 lifts this fighter;
+ * frame 34 hits downward, spawning a spark and stopping; from frame 8 to 33 brakes falling opponent. */
+void Imperialdramon_throw(Fighter *this, s32 frame) {
+    Fighter *opponent;
+    Vec3 force;
+    s32 x, y, z;
+
+    Fighter_throw(this, frame);
+    opponent = Fighter_getOpponent(this);
+    switch (frame) {
+    case 0:
+        Fighter_hold(opponent, 7);
+        Fighter_setClip(opponent, 13, 0, 0);
+        this->velocity.vx = 0;
+        this->velocity.vy = 0;
+        this->velocity.vz = 0;
+        this->velocityPad = 0;
+        opponent->velocity.vx = 0;
+        opponent->velocity.vy = 0;
+        opponent->velocity.vz = 0;
+        opponent->velocityPad = 0;
+        break;
+    case 7:
+        if (Fighter_isOnGround(this)) {
+            Fighter_takeHit(opponent, 0x80000000, (Vec3 *)&ZERO_VECTOR, 0);
+            force.vx = 0;
+            force.vy = -0x6AA4;
+            force.vz = 0;
+            Fighter_hold(opponent, 46);
+            Fighter_takeHit(opponent, 0x598C1A00, (Vec3 *)&ZERO_VECTOR, 1);
+            x = force.vx;
+            y = force.vy;
+            z = force.vz;
+            opponent->velocity.vy = 0;
+            opponent->velocity.vx = 0;
+            opponent->force.vx = x;
+            opponent->force.vy = y;
+            opponent->force.vz = z;
+            Imperialdramon_spawnThrowSpark(this);
+        } else {
+            Fighter_stopActionClip(this);
+            return;
+        }
+        break;
+    case 20:
+        this->force.vy -= ((s64)this->mass * 0x6388) >> 16;
+        break;
+    case 34:
+        force.vx = 0;
+        force.vy = 0x71C0;
+        force.vz = 0;
+        Fighter_takeHit(opponent, 0x598C1A00, (Vec3 *)&ZERO_VECTOR, 1);
+        x = force.vx;
+        y = force.vy;
+        z = force.vz;
+        opponent->force.vx = x;
+        opponent->force.vy = y;
+        opponent->force.vz = z;
+        this->velocity.vx = 0;
+        Imperialdramon_spawnThrowSpark(this);
+        break;
+    }
+    if ((u32)(frame - 8) < 26) {
+        if (opponent->velocity.vy > 0) {
+            opponent->force.vy -= opponent->velocity.vy;
+        }
+    }
+}
 
 /* Attack 1 (both classes): Fighter's; at frame 4 stops and pushes forward by mass * 0x71C0 (16.16), at frame 7 a burst;
  * from frame 5 on the force brakes a sixteenth of the horizontal velocity. The match depends on the impulse being an

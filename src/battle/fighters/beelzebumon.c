@@ -94,7 +94,58 @@ void Beelzebumon_upAttack(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", Beelzebumon_throw);
+static inline s32 mul16(s32 a, s32 b) {
+    return ((s64)a * b) >> 16;
+}
+
+void func_80079AE4(Fighter *this);
+void Beelzebumon_spawnThrowEffect(Fighter *this, s32 arg);
+
+/* Throw: Fighter's; until frame 2 stops if unk4A4 is set; frame 0 holds the opponent (40), gives vertical lift
+ * and horizontal push; later frames add gravity and brake horizontal velocity; until frame 15 spawns the throw
+ * effect every tick; frame 20 sets unk4A4 to 30. */
+void Beelzebumon_throw(Beelzebumon *this, s32 frame) {
+    Fighter *opponent;
+    s32 facing;
+
+    func_80079AE4(&this->base);
+    Fighter_throw(&this->base, frame);
+    if (frame < 2 && this->unk4A4 != 0) {
+        Fighter_stopActionClip(&this->base);
+        return;
+    }
+    opponent = Fighter_getOpponent(&this->base);
+    facing = Fighter_getFacing(&this->base);
+    if (frame == 0) {
+        this->base.invulnerableFrames = 15;
+        Fighter_takeHit(opponent, 0x8C0000, (Vec3 *)&ZERO_VECTOR, 0);
+        Fighter_hold(opponent, 40);
+        this->unk4A8 = 0;
+        if (Fighter_getParams(opponent)->height < 0x80) {
+            this->base.force.vx += mul16(this->base.mass, 0x2AA8) * facing;
+        } else {
+            this->base.force.vx += mul16(this->base.mass, 0x38E0) * facing;
+        }
+        this->base.force.vy -= ((s64)this->base.mass * 0x7FF8) >> 16;
+    } else {
+        this->base.force.vy += 0x1000;
+        this->base.force.vx = ((s64)this->base.velocity.vx * -0x266) >> 12;
+    }
+    if (this->unk4A8 == 0 && this->base.velocity.vy >= 0) {
+        this->unk4A8 = 1;
+        if (facing > 0) {
+            Fighter_faceLeft(&this->base, 0);
+        } else {
+            Fighter_faceRight(&this->base, 0);
+        }
+    }
+    if (frame < 15) {
+        Beelzebumon_spawnThrowEffect(&this->base, frame << 10);
+    }
+    if (frame == 20) {
+        this->unk4A4 = 30;
+    }
+}
 
 struct BeelzebumonThrowEffect *BeelzebumonThrowEffect_init(struct BeelzebumonThrowEffect *this, Fighter *fighter,
                                                            Vec3 *position, s32 facing, s32 arg4);
@@ -1282,7 +1333,67 @@ void func_80099348(Unk8009921C *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80099410);
+/* Draws func_8009921C's entity: a square sprite (half size unk48, mirrored by direction) at the position, gray of
+ * brightness unk4C, with frame unk46 of the character's effect texture (u 0xE0-0xFF, v 0xC0 + 32 * unk46).
+ * The match depends on taking the camera as the s32 the vtable passes, on writing each uv byte on its own (uv2
+ * before uv0, uv3 before uv1), and on a do { } while (0) opened before the last uv bytes with the clut stored in it:
+ * the loop note keeps the clut store in the call's delay slot and the &shape argument before the last uv bytes. */
+void func_80099410(Unk8009921C *this, s32 arg) {
+    Camera *camera = (Camera *)arg;
+    VECTOR p;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 zShift;
+    s32 h;
+    s32 c;
+    u16 vramY;
+    s32 w;
+    s32 v;
+    s32 y;
+    s32 v0, v1;
+    s32 clut;
+    void *packet;
+
+    gte_loadRotTransKeepArgs(SCRATCH_VIEW_MATRIX);
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.flags = 8;
+    p = *(VECTOR *)&this->position;
+    c = this->unk4C;
+    shape.color = c | (c << 8) | (c << 16);
+    vramY = this->vramY;
+    h = this->direction * this->unk48;
+    w = this->unk48;
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = p.vz;
+    packet = PRIM_BUFFER_FREE;
+    y = (s16)vramY + 0xF0;
+    shape.tpage = ((vramY & 0x100) >> 4) | 0x27 | ((vramY & 0x200) << 2);
+    corners[0].vx = corners[2].vx = p.vx - h;
+    corners[1].vx = corners[3].vx = p.vx + h;
+    v = (s16)this->unk46;
+    v0 = (v << 5) + 0xC0;
+    v1 = (v << 5) + 0xDF;
+    corners[0].vy = corners[1].vy = p.vy - w;
+    corners[2].vy = corners[3].vy = p.vy + w;
+    UV_BYTES(shape.uv2)[0] = 0xE0;
+    UV_BYTES(shape.uv0)[0] = 0xE0;
+    UV_BYTES(shape.uv3)[0] = 0xFF;
+    clut = ((v + y) << 6) | 0x1C;
+    do {
+        UV_BYTES(shape.uv1)[0] = 0xFF;
+        UV_BYTES(shape.uv1)[1] = v0;
+        UV_BYTES(shape.uv0)[1] = v0;
+        UV_BYTES(shape.uv3)[1] = v1;
+        UV_BYTES(shape.uv2)[1] = v1;
+        shape.clut = clut;
+        PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+    } while (0);
+}
 
 /* The entity class of virtual table BEELZEBUMON_SPECIAL3_EFFECT_VTABLE (constructor BeelzebumonSpecial3Effect_init,
  * size 0x58): a line (buildLineG2) whose two ends start at one position and move by the velocity and by half of it.

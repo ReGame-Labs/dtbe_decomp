@@ -11,6 +11,9 @@ extern FaceEntry PATAMON_FACES[];
 extern EntityVtable D_8006A784;
 extern EntityVtable PATAMON_SPECIAL1_EFFECT_VTABLE;
 extern EntityVtable PATAMON_VTABLE;
+extern s16 D_800D338C[][4];
+extern const VECTOR D_8006A774;
+void func_800A1760(Patamon *this, Fighter *fighter);
 struct PatamonSpecial1Hitbox *PatamonSpecial1Hitbox_init(struct PatamonSpecial1Hitbox *this, Fighter *fighter,
                                                           Vec3 *position, VECTOR *velocity, Fight *fight);
 
@@ -88,7 +91,186 @@ void func_800A11B0(Patamon *this) {
     func_800A1160(this, &this->unk4CC, &this->unk4DC, this->unk4B8, &this->base.unk3C8);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/patamon", Patamon_throw);
+/* Patamon's throw (move 11): grabs the opponent and moves them along a line from 0x4CC to 0x4DC,
+ * swinging them around. */
+void Patamon_throw(Patamon *this, s32 frame) {
+    VECTOR position;
+    s16 (*offsetsTable)[4];
+    s32 facing;
+    s32 diff;
+    s16 *offsets;
+    s32 offsetX;
+    s32 offsetY;
+    Fighter *opponent;
+    s32 clip;
+    int var1;
+    int var2;
+
+    func_80079AE4(&this->base);
+    var2 = 1;
+    Fighter_throw(&this->base, frame);
+    opponent = Fighter_getOpponent(&this->base);
+    if (frame == 0) {
+        this->unk4B4 = Fighter_getFacing(&this->base);
+    }
+    facing = Fighter_getFacing(opponent);
+    offsetY = Fighter_getCharacter(opponent);
+    offsetsTable = D_800D338C;
+    offsets = offsetsTable[offsetY];
+    diff = this->unk4B4 + facing;
+    diff = (diff >= 0) ? diff : -diff;
+    offsets += diff;
+    offsetX = offsets[0];
+    offsetY = offsets[1];
+
+    if (frame == 0) {
+        Fighter_hold(opponent, 90);
+        Fighter_playSound(&this->base, 8);
+        Fighter_playActionClip(&this->base, 3, 0, 0, -1);
+        this->unk4B8 = 0;
+        Fighter_getPosition(&this->base, (Vec3 *)&this->unk4CC);
+        *(Vec3 *)&this->unk4BC = *(Vec3 *)&this->unk4CC;
+    }
+
+    if (frame < 70 && (frame & 0xF) == 0) {
+        Fighter_playSound(&this->base, 14);
+    }
+    var1 = 1;
+
+    if (frame < 10) {
+        Fighter_getPosition(opponent, (Vec3 *)&this->unk4DC);
+        this->unk4DC.vy -= 0x80 + offsetY;
+        this->unk4B8 += 0x1A0;
+        this->unk4DC.vx -= offsetX * this->unk4B4;
+        func_800A1760(this, &this->base);
+        return;
+    }
+
+    if (frame == 10) {
+        s32 vx;
+        s32 vy;
+        s32 vz;
+
+        Fighter_playActionClip(&this->base, 11, 0, 0, -1);
+        this->unk4B8 = 0;
+        Fighter_getPosition(opponent, (Vec3 *)&this->unk4CC);
+        vx = this->unk4CC.vx;
+        vy = this->unk4CC.vy - 0x280;
+        vz = this->unk4CC.vz;
+        this->unk4DC.vx = vx;
+        this->unk4DC.vz = vz;
+        this->unk4DC.vy = vy;
+        switch (Fighter_getCharacter(opponent)) {
+        case CHARACTER_STINGMON:
+            clip = 13;
+            break;
+        case CHARACTER_METALGARURUMON:
+        case CHARACTER_TERRIERMON:
+            clip = 3;
+            break;
+        default:
+            clip = 4;
+            break;
+        }
+        Fighter_setClip(opponent, clip, 2, 0);
+    }
+
+    if (frame < 65) {
+        Fighter_getPosition(opponent, (Vec3 *)&position);
+        position.vy -= offsetY;
+        position.vx -= offsetX * this->unk4B4;
+        Fighter_setPosition(&this->base, (Vec3 *)&position);
+        this->base.velocity.vx = 0;
+        this->base.velocity.vy = 0;
+        this->base.velocity.vz = 0;
+        this->base.velocityPad = 0;
+        this->unk4B8 += 0x4A;
+        func_800A1760(this, opponent);
+        return;
+    }
+
+    if (frame == 65) {
+        s32 vx;
+        s32 vy;
+        s32 vz;
+
+        Fighter_playActionClip(&this->base, 3, 0, 0, -1);
+        this->unk4B8 = 0;
+        Fighter_getPosition(&this->base, (Vec3 *)&this->unk4CC);
+        vx = this->unk4CC.vx;
+        vy = this->unk4CC.vy - 0x133;
+        vz = this->unk4CC.vz;
+        this->unk4DC.vx = vx;
+        this->unk4DC.vz = vz;
+        this->unk4DC.vy = vy;
+    }
+
+    if (frame < 74) {
+        this->base.unk48C = var1;
+        this->unk4B8 += 0x200;
+        func_800A1760(this, &this->base);
+        opponent->velocity.vx = 0;
+        opponent->velocity.vy = 0;
+        opponent->velocity.vz = 0;
+        opponent->velocityPad = 0;
+        return;
+    }
+
+    if (frame == 75) {
+        this->base.unk48C = 1;
+        Fighter_playActionClip(&this->base, 4, 0, 0, -1);
+        if (this->unk4B4 > 0) {
+            Fighter_faceLeft(&this->base, 0);
+        } else {
+            Fighter_faceRight(&this->base, 0);
+        }
+        this->unk4B8 = 0;
+        Fighter_getPosition(&this->base, (Vec3 *)&this->unk4CC);
+    }
+
+    if (frame < 79) {
+        this->base.unk48C = var2;
+        this->unk4B8 += 0x400;
+        Fighter_getPosition(opponent, (Vec3 *)&this->unk4DC);
+        this->unk4DC.vy -= offsetY;
+        this->unk4DC.vx -= offsetX * this->unk4B4;
+        func_800A1760(this, &this->base);
+        opponent->velocity.vx = 0;
+        opponent->velocity.vy = 0;
+        opponent->velocity.vz = 0;
+        opponent->velocityPad = 0;
+        return;
+    }
+
+    if (frame == 79) {
+        s32 dx;
+        s32 dy;
+
+        Fighter_getPosition(&this->base, (Vec3 *)&this->unk4CC);
+        Fighter_getPosition(opponent, (Vec3 *)&this->unk4DC);
+        dx = this->unk4DC.vx - (this->unk4CC.vx + offsetX * this->unk4B4);
+        dy = this->unk4DC.vy - (this->unk4CC.vy + offsetY);
+        if (SquareRoot0(dx * dx + dy * dy) < 102) {
+            do { position = D_8006A774; Fighter_takeHit(opponent, 0xC08C1C00, (Vec3 *)&position, 0); } while (0);
+            Fighter_spawnHitSpark(&this->base, 0x100);
+        }
+        this->unk4B8 = 0;
+        *(Vec3 *)&this->unk4DC = *(Vec3 *)&this->unk4BC;
+    }
+
+    if (frame < 96) {
+        if (Fighter_isOnGround(&this->base)) {
+            Fighter_stopActionClip(&this->base);
+            return;
+        }
+        this->unk4B8 += 0x100;
+        func_800A1760(this, &this->base);
+    }
+
+    if (frame == 95) {
+        Fighter_stopActionClip(&this->base);
+    }
+}
 
 /* Clamps 0x4B8 to 0..0x1000 and sets fighter moving (0x3B4, in 1/256ths) from its position to the point
  * that far from 0x4CC to 0x4DC (func_800A1160), clearing 0x3A4..0x3B0 and 0x3BC. */

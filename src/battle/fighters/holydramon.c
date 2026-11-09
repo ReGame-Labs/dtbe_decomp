@@ -47,7 +47,65 @@ void Holydramon_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/holydramon", Holydramon_throw);
+/* Throw: Fighter's; at frame 0 holds the opponent and hits with high launch; at frame 18 if the opponent is
+ * within 0x180 horizontal and 0x140 vertical distance, hits with strong launch; spawns a hit spark when a hit lands. */
+void Holydramon_throw(Fighter *this, s32 frame) {
+    s16 facing;
+    s32 hit;
+    Fighter *opponent;
+    Vec3 velocity;
+
+    Fighter_throw(this, frame);
+    opponent = Fighter_getOpponent(this);
+    facing = Fighter_getFacing(this);
+    hit = 0;
+    switch (frame) {
+    case 0:
+        Fighter_hold(opponent, 30);
+        velocity.vx = facing * 1820;
+        velocity.vy = -0x4718;
+        velocity.vz = 0;
+        Fighter_takeHit(opponent, 0x428C1400, &velocity, 0);
+        hit = 1;
+        break;
+    case 18: {
+        Vec3 myPos;
+        Vec3 oppPos;
+        s32 dx;
+        s32 dy;
+
+        Fighter_getPosition(this, &myPos);
+        Fighter_getOpponentPosition(this, &oppPos);
+        dx = myPos.vx - oppPos.vx;
+        if (dx < 0) {
+            dx = oppPos.vx - myPos.vx;
+        }
+        dy = myPos.vy - oppPos.vy;
+        if (dy < 0) {
+            dy = oppPos.vy - myPos.vy;
+        }
+        if (dx < 0x180 && dy < 0x140) {
+            velocity.vx = facing * 18200;
+            velocity.vy = -0x38E0;
+            velocity.vz = 0;
+            Fighter_takeHit(opponent, 0xC28C2000, &velocity, 0);
+            hit = 1;
+        }
+        break;
+    }
+    }
+    if (hit) {
+        HitSpark *spark;
+        VECTOR pos;
+
+        Fighter_getNodePosition(this, &pos, 12, &D_80010824);
+        spark = allocEntityMemory(sizeof(HitSpark));
+        if (spark != NULL) {
+            HitSpark_init(entityOperatorNewAt(sizeof(HitSpark), spark), (Vec3 *)&pos, (VECTOR *)&ZERO_VECTOR, 0xC0, 0x808080);
+        }
+        Fighter_addEntity(this, (Entity *)spark);
+    }
+}
 
 /* Special move 1: the voice and its effect at frame 1, the hitbox and the shot sound at frame 6; until frame 7 the
  * force brakes a sixteenth of the horizontal velocity. */
