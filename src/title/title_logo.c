@@ -767,6 +767,10 @@ void TitleLogoTask_drawPanels(TitleLogoTask *this) {
 }
 
 #if VERSION_JP
+/* Not matched yet. Two loops (u to 200, v to 88, by 8) that NEW_ENTITY a TitleLogoPiece and append it are 1
+ * instruction off: GCC threads the first NULL test of the memory to the end of the body, where the game branches
+ * to the second test. A variable outside the loops, an assignment in the if, a helper and the two-if form did not
+ * change it. */
 INCLUDE_ASM("title/nonmatchings/title_logo", TitleLogoTask_spawnLogoPieces);
 
 /* Does nothing, in a stack frame of 0x18 bytes. */
