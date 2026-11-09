@@ -1367,6 +1367,15 @@ static inline void func_8006D4D4_initSized(Entity *this, VECTOR *pos, s32 size, 
     this->vtable = &D_8006D4D4;
 }
 
+extern EntityVtable D_8006D54C;
+
+/* The constructor of the particle class of vtable D_8006D54C, which the game inlines (createParticle, Impmon's special
+ * move 2 hitbox; out-of-line copy func_800C69C4): Particle_initById on frame + 3, color 0x808080 and no flags. */
+static inline void func_8006D54C_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
+    Particle_initById((Particle *)this, frame + 3, pos, vel, size, 0x808080, 0);
+    this->vtable = &D_8006D54C;
+}
+
 /* Imperialdramon's class (CHARACTER_IMPERIALDRAMON); ImperialdramonPaladinMode's is the same class with its own
  * vtable. The fields from 0x4A6 are the special move 3's hold (Imperialdramon_special3Hold). */
 typedef struct Imperialdramon {
