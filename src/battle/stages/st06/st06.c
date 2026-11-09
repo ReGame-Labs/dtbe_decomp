@@ -464,6 +464,11 @@ void func_800D45BC(Unk800D4468 *this, s32 arg) {
 
 INCLUDE_ASM("st06/nonmatchings/st06", func_800D46C4);
 
+/* Not matched yet. A draft is 3 differences off (the order of two temporaries and of the operands of one addu):
+ * i = 0 and x = -0x2000 have to be set after entityInit, so that they live in caller-saved registers; the base
+ * of the rings (this->points[0]) is kept in a pointer and the next i and x are worked out before the row's loop
+ * (as in St02Terminal_clearGrid), but no order of those temporaries, of the row pointer's expression or of its
+ * declaration gave the game's $a1/$a2 and addu order. */
 INCLUDE_ASM("st06/nonmatchings/st06", func_800D4958);
 
 INCLUDE_ASM("st06/nonmatchings/st06", func_800D4A00);
@@ -607,6 +612,10 @@ Unk800D5164 *func_800D5164(Unk800D5164 *this, s32 arg) {
     return this;
 }
 
+/* Not matched yet. Moves unk18 up by 0x30 to at most 0x280 and unk1C down by half of unk24, then deletes itself
+ * from 0x118 on, else adds 1 to unk24. A draft is 4 differences off: the game reloads unk24 in the else branch,
+ * as if the store to unk1C could alias it, which a pointer p = &unk18 used for the stores (p[0], p[1]) gives, but
+ * with an addiu for p that the game does not have. */
 INCLUDE_ASM("st06/nonmatchings/st06", func_800D51BC);
 
 INCLUDE_ASM("st06/nonmatchings/st06", func_800D5254);

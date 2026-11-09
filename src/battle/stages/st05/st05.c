@@ -886,6 +886,10 @@ Unk800D6740 *func_800D6740(Unk800D6740 *this, Vec3 *position, Vec3 *unk28) {
     return this;
 }
 
+/* Not matched yet. The tick of the entity of func_800D6740: unk28.vy + 2 (gravity), the position plus unk28,
+ * unk40 + 4 * unk28.vx, and a delete once y is past 0x100. A draft is 24 differences off: the game reads the
+ * position's three words and then unk28's, and keeps this in $t0, not in $a3. Reading everything into locals
+ * first, a vecAddInPlace inline and the parameter copy did not change it. */
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D6814);
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D68A4);
