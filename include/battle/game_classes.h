@@ -1122,6 +1122,7 @@ Fighter *Fighter_getOpponentInReach(Fighter *this, s32 index);
 void func_800C99B0(Fighter *this);
 /* the body state (the attack state: Fighter_getAttackState, in fighter.c) */
 FighterState *Fighter_getBodyState(Fighter *this);
+FighterState *Fighter_getAttackState(Fighter *this);
 InputHistory *Fighter_getInput(Fighter *this);
 void Fighter_guard(Fighter *this, s32 frame);
 void Fighter_crouchGuard(Fighter *this, s32 frame);
