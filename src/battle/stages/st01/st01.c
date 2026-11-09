@@ -1060,6 +1060,11 @@ St01Debris *St01Debris_init(St01Debris *this, Fight *stage) {
     return this;
 }
 
+/* Not matched yet. St01Debris_init with the place given: x and z around it (x - 0xFF + 0..0x1FF, z - 0x80 + 0..0xFF)
+ * and y as it is. The position is a Vec3 passed by value (this, stage, then x and y in $a2 and $a3 and z on the
+ * stack): that is why the game reloads them from the stack after each Fight_random call, and a draft written so is
+ * 5 differences off. The game adds the random to x - 0xFF, with the addiu on x; the draft puts it on the random
+ * (no order of the sum, nor the random kept in a local, changed it). */
 INCLUDE_ASM("st01/nonmatchings/st01", St01Debris_initAt);
 
 /* St01Debris's destructor. */

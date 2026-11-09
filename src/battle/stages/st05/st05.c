@@ -320,6 +320,10 @@ void StageVolcano_updateCamera(StageVolcano *this) {
     }
 }
 
+/* Not matched yet. Shakes the camera: with riseBoost not 0, adds Fight_random % riseBoost to the target's x and
+ * another to its y (the pair also stored to a Vec3 on the stack, with z 0, which nothing reads). A draft (the two
+ * remainders in locals, then the Vec3, then the sums) is 16 differences off: the game keeps riseBoost in $s0 and
+ * the first remainder in $s1, and loads the target after the second remainder, before the Vec3's stores. */
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D4A74);
 
 /* Not matched yet. Puts each of unkE80's three sprites at its unk28 plus its unk38 scaled by the sine of
