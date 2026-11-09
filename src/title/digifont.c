@@ -102,7 +102,69 @@ void DigifontCache_selectGlyph(DigifontCache *this, u16 code) {
     this->glyph = this->glyphs + findCodeIndex(this->codes, this->codeCount, code) * 192;
 }
 
-INCLUDE_ASM("title/nonmatchings/digifont", DigifontCache_load);
+/* Unpacks the picked glyph's bit planes into 4-bit nibbles in a 6x24 halfword buffer, and loads it into VRAM at (x, y). */
+void DigifontCache_load(DigifontCache *this, s16 x, s16 y, u32 key) {
+    u32 buffer[72];
+    RECT rect;
+    u32 *glyph;
+    u32 *p;
+    s32 row;
+    s32 col;
+    s32 bit;
+    u32 plane0;
+    u32 plane1;
+    u32 word;
+    u32 mask0;
+    u32 mask1;
+    u32 *rowEnd;
+    u32 *nextP;
+
+    memset(buffer, 0, sizeof(buffer));
+    p = buffer;
+    glyph = (u32 *)this->glyph;
+
+    for (row = 0; row < 24; row++) {
+        plane0 = *glyph++ << 8;
+        plane1 = *glyph++ << 8;
+        rowEnd = p + 3;
+
+        if (plane0 == 0 && plane1 == 0) {
+            p = rowEnd;
+            continue;
+        }
+
+        for (col = 0; col < 24; col += 8) {
+            word = 0;
+            mask0 = 1;
+            mask1 = 2;
+            nextP = p + 1;
+            for (bit = 7; bit >= 0; bit--) {
+                if ((s32)plane0 < 0) {
+                    word |= mask0;
+                }
+                if ((s32)plane1 < 0) {
+                    word |= mask1;
+                }
+                plane0 <<= 1;
+                plane1 <<= 1;
+                mask0 <<= 4;
+                mask1 <<= 4;
+            }
+            *p = word;
+            p = nextP;
+            if (plane0 == 0 && plane1 == 0) {
+                break;
+            }
+        }
+        p = rowEnd;
+    }
+
+    rect.x = x;
+    rect.y = y;
+    rect.w = 6;
+    rect.h = 24;
+    LoadImage2(&rect, (u_long *)buffer);
+}
 
 /* Finds code's cell in the cache, loading its glyph if needed, and puts its VRAM place (x in pixels, 23 by 23)
  * in rect; alternate 1 takes the glyph 0x300 codes higher. Returns 0, or -1 with no glyph (no font loaded). */
