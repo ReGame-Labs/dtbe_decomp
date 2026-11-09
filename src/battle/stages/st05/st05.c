@@ -681,6 +681,10 @@ Unk800D5D54 *func_800D5D54(Unk800D5D54 *this, Fight *stage, Vec3 *position) {
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D5E3C);
 
+/* Not matched yet. A draft that keeps the push in a Vec3 on the stack (z 0), reads the sphere's knockback first
+ * and adds the push into it is 24 instructions off: the game stores the push after using it, sets its frame late,
+ * and takes the knockback's x and y in other registers. Variants of the order of the loads, a struct copy of the
+ * knockback and the damage added first did not change it. */
 INCLUDE_ASM("st05/nonmatchings/st05", St05Hit_apply);
 
 extern EntityVtable ST05_FADE_VTABLE;

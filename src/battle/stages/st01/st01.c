@@ -282,6 +282,10 @@ void func_800D4B14(StageNature *this) {
     }
 }
 
+/* Not matched yet. It copies D_800D3A30 (3 words) into a Vec3 on the stack and the Vec3 into the stage at 0xF70
+ * with a loop of three word moves, then clears the halfword at 0xF60. A struct copy through a local gives the same
+ * thing unrolled, without the stack copy: the block move that GCC 2.95.2 does not emit as the game's does (as in
+ * engine/gfx/camera.c). */
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D4BFC);
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D4C54);
@@ -692,6 +696,9 @@ MATRIX *func_800D6C94(St01FallingObject *this) {
     return &this->mesh->object.transform.local.m;
 }
 
+/* Not matched yet. Clears a word of the mesh's node (when it has one) and copies a MATRIX (32 bytes) into the one
+ * 0x24 further on as two block moves of four loads then four stores, which GCC 2.95.2 does not emit (see
+ * engine/gfx/camera.c). func_800D636C of st09 has the same body. */
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D6CA0);
 
 /* Where StageNature_startRound puts one Unk800D6D08 (a 16-byte entry of its table, passed by value). */
