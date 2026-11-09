@@ -419,7 +419,95 @@ void TailmonSpecial1Effect_tick(TailmonSpecial1Effect *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Effect_draw);
+static inline void setTranslation(long *t, VECTOR *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws the special move 1's effect: two two-layer quads (at position and start) rotated in opposite Z directions. */
+void TailmonSpecial1Effect_draw(TailmonSpecial1Effect *this, Camera *camera) {
+    MatrixWords m;
+    MATRIX *mat = &m.m;
+    PolyFT4Shape shape;
+    PolyFT4Shape *shp;
+    VECTOR *pos;
+    s32 i;
+    u8 c;
+    s32 angle;
+    u16 vramY;
+
+    shape.color = 0x202080;
+    shape.flags = 9;
+    shape.corners[0] = &this->corners[0];
+    shape.corners[1] = &this->corners[1];
+    shape.corners[2] = &this->corners[2];
+    shape.corners[3] = &this->corners[3];
+    for (i = 0; i < 2; i++) {
+        angle = this->unk2C;
+        m.words[5] = 0;
+        m.words[6] = 0;
+        m.words[7] = 0;
+        m.words[1] = 0;
+        m.words[3] = 0;
+        m.words[0] = (u16)angle;
+        m.words[2] = (u16)angle;
+        m.words[4] = (u16)angle;
+        if (i == 0) {
+            matrixRotateZ(mat, angle);
+        } else {
+            matrixRotateZ(mat, -angle);
+        }
+        pos = &(&this->position)[i];
+        setTranslation(m.m.t, pos);
+        setModelMatrix(&m.m);
+        vramY = this->vramY;
+        UV_BYTES(shape.uv0)[0] = 0xE0;
+        UV_BYTES(shape.uv0)[1] = 0;
+        UV_BYTES(shape.uv1)[0] = 0xFF;
+        UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[0] = 0xE0;
+        UV_BYTES(shape.uv2)[1] = 0x1F;
+        UV_BYTES(shape.uv3)[0] = 0xFF;
+        UV_BYTES(shape.uv3)[1] = 0x1F;
+        shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+        shape.clut = ((vramY + 0x7D) << 6) | 0x1C;
+        c = this->unk20;
+        shape.color = (c | ((c >> 1) << 8)) | (c << 16);
+        shp = &shape;
+        PRIM_BUFFER_FREE = buildPolyFT4(shp, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+        {
+            s32 scale = (u16)this->unk30;
+            MATRIX *m2 = &m.m;
+
+            m.words[1] = 0;
+            m.words[3] = 0;
+            m.words[0] = scale;
+            m.words[2] = scale;
+            m.words[4] = scale;
+            setTranslation(m.m.t, pos);
+            setModelMatrix(m2);
+        }
+        vramY = this->vramY;
+        UV_BYTES(shape.uv0)[0] = 0xC0;
+        UV_BYTES(shape.uv0)[1] = 0;
+        UV_BYTES(shape.uv1)[0] = 0xDF;
+        UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[0] = 0xC0;
+        UV_BYTES(shape.uv2)[1] = 0x1F;
+        UV_BYTES(shape.uv3)[0] = 0xDF;
+        UV_BYTES(shape.uv3)[1] = 0x1F;
+        shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+        shape.clut = ((vramY + 0x7E) << 6) | 0x1C;
+        c = this->unk21;
+        shape.color = (c | ((c >> 1) << 8)) | (c << 16);
+        PRIM_BUFFER_FREE = buildPolyFT4(shp, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+    }
+}
 
 /* The special move 2's effect, made for a character at a position. */
 typedef struct TailmonSpecial2Effect {
