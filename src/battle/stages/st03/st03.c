@@ -1211,6 +1211,11 @@ INCLUDE_ASM("st03/nonmatchings/st03", func_800D7534);
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D7764);
 
+/* Not matched yet. Loads the scratchpad's view matrix (SCRATCH_VIEW_MATRIX) into the GTE (gte_setMatrix) and draws
+ * the four St03JitterLines of the entity from 0x18, 0x14C apart. A draft is 11 differences off, all in the
+ * registers of the eight loads: the game has the matrix address in $a3 and the temporaries in $a2, $a1, $v1 and
+ * $v0, GCC puts it in $v0. It matches with the address in a register variable pinned to $a3, which the project
+ * does not allow (tools/hacks.py); the temporaries' declaration order does not give it. */
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D7AC4);
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D7B58);

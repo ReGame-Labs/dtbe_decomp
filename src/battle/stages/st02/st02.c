@@ -101,6 +101,11 @@ INCLUDE_ASM("st02/nonmatchings/st02", StageTurn_createNodeEntity);
 
 INCLUDE_ASM("st02/nonmatchings/st02", StageTurn_tickScenery);
 
+/* Not matched yet. Fight_tick, then the arena turned by its angle (matrixInitRotationZ, st02_turnPoints) and, unless
+ * unkD38 is 4, each fighter raised to at least twice the halfword at 0x2 of its Fighter_getParams table minus 0x900
+ * (Fighter_getPosition, Fighter_setPosition when y is lower). A draft written so is 11 differences off: the game
+ * keeps 0x900 in a register ($s4) set before the loop, where GCC subtracts it as an addiu. A constant in a local
+ * (before the loop or in it) and the expression twice with one Fighter_getParams call did not change that. */
 INCLUDE_ASM("st02/nonmatchings/st02", StageTurn_tick);
 
 /* The stage's override of Fight_isFallen: whether a

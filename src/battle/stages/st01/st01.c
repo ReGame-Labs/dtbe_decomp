@@ -1283,6 +1283,12 @@ void func_800D8F08(Unk800D8E1C *this) {
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D8FD4);
 
+/* Not matched yet. Constructs an entity of the class of virtual table D_800D3B6C: a quad of four corners (0x30,
+ * 0x38, 0x40, 0x48: x -0x80, 0x80, -0x80, 0x80; y and z 0) at a position (x at 0x18) shifted by size, which scales
+ * it (0x1000 - (size << 8), size at 0x20), a delay of 0x3F to 0x42 at 0x2A and 0x80 at 0x28. The position is a
+ * VECTOR passed by value (this, stage, then x and y in $a2 and $a3, z and the pad on the stack, size after them
+ * as a u16), as in St01Debris_initAt. A draft is 25 differences off: the game masks the shift count with
+ * andi 0xFFFF and truncates the shifted value to a halfword once, and stores x after size. */
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D9158);
 
 /* The destructor of the entity class of vtable D_800D3B6C, which func_800D9158 installs. */

@@ -921,6 +921,11 @@ typedef struct St04Glow {
     /* 0x20 */ SVECTOR vertices[3][3][13]; /* three grids of 3 rows of 13 points (St04Glow_init) */
 } St04Glow; /* size 0x3C8 */
 
+/* Not matched yet. Constructs the glow: virtual table, phase and unk1C 0, level 0x80, and the points of its three
+ * grids of 3 rows of 13 (g, r, c): x = c * (r * 2 + 0x20 - c) - r * 0x10 + g * 0x32, z 0,
+ * y = r * 0x28 + (COS_SIN_TABLE[(g * 0x800 + c * 0x200) & 0xFFF].sin >> 9) + c * (6 - r * 2) - g * 0x14. A draft
+ * is 40 differences off (one instruction more): the game computes the row's base without the 0x20 of the vertices
+ * (it stores at 0x20($a0)); GCC folds it into the induction pointer, however the subscripts are written. */
 INCLUDE_ASM("st04/nonmatchings/st04", St04Glow_init);
 
 /* St04Glow's destructor. */
