@@ -275,7 +275,26 @@ void SideHud_drawRight(SideHud *this, u_long *ot) {
     func_80073C80(this, ot, 0x102, 0xBD);
 }
 
-INCLUDE_ASM("game/nonmatchings/side_hud", func_80073C80);
+POLY_FT4 *func_80073D78(SideHud *this, s32 character, s32 x, s32 y, s32 brightness);
+
+/* Draws the side's portrait at (x, y): the current character's, or while the character changes (changeFlash above
+ * 0) the new one fading in and the previous one fading out over it; then a DR_TPAGE. */
+void func_80073C80(SideHud *this, u_long *ot, s32 x, s32 y) {
+    POLY_FT4 *poly;
+
+    /* The match depends on one poly for all three: the game keeps it in $v1 across the second call. */
+    if (this->changeFlash <= 0) {
+        poly = func_80073D78(this, this->character, x, y, 0x80);
+        AddPrim(ot, poly);
+    } else {
+        poly = func_80073D78(this, this->character, x, y, 0x80 - this->changeFlash);
+        setSemiTrans(poly, 1);
+        AddPrim(ot, poly);
+        poly = func_80073D78(this, this->previousCharacter, x, y, this->changeFlash);
+        AddPrim(ot, poly);
+    }
+    AddPrim(ot, allocDrTpageMode(0, 0, 0xF));
+}
 
 INCLUDE_ASM("game/nonmatchings/side_hud", func_80073D78);
 
