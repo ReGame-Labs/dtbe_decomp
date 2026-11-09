@@ -836,7 +836,20 @@ void St01HoverQuad_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st01/nonmatchings/st01", St01HoverQuad_tick);
+/* getSin (engine/math/sin_cos.c), inline. */
+static inline s16 getSinInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].sin;
+}
+
+/* St01HoverQuad's tick: sets the quad's color from the sine of the phase, a level of 0 to 0xFF around 0x80 in
+ * green and blue and a quarter of it in red, then steps the phase. The match depends on the phase stepped after the
+ * color is stored: the game reads it again for the step. */
+void St01HoverQuad_tick(St01HoverQuad *this) {
+    u32 level = ((getSinInline(this->phase) >> 6) - 0x80) & 0xFF;
+
+    this->color = (level >> 2) | (level << 8) | (level << 16);
+    this->phase++;
+}
 
 INCLUDE_ASM("st01/nonmatchings/st01", St01HoverQuad_draw);
 
@@ -1219,11 +1232,6 @@ void func_800D8EB4(Entity *this, s32 flags) {
     if (flags & DESTROY_FREE) {
         entityOperatorDelete(this);
     }
-}
-
-/* getSin (engine/math/sin_cos.c), inline. */
-static inline s16 getSinInline(s32 angle) {
-    return COS_SIN_TABLE[angle & 0xFFF].sin;
 }
 
 /* Unk800D8E1C's tick: position sways around center by sines of the phase (x and z by direction, cut to 16 bits),
