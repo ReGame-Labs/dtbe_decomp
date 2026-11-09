@@ -28,14 +28,14 @@ typedef struct RenamonSpecial1Hitbox {
     /* 0xA0 */ s32 hitOffsetPad;
     /* 0xA4 */ Vec3 velocity;
     /* 0xB0 */ s32 velocityPad;
-    /* 0xB4 */ Vec3 unkB4;
-    /* 0xC0 */ s32 unkB4Pad;
-    /* 0xC4 */ s32 unkC4;        /* 0 to 7 at random */
-    /* 0xC8 */ s32 unkC8;        /* the sphere's radius at first: 0x20 to 0x3F at random */
-    /* 0xCC */ s32 unkCC;
+    /* 0xB4 */ Vec3 heading;       /* the offset at first; the direction it leaves in once it hits (y from the aim) */
+    /* 0xC0 */ s32 headingPad;
+    /* 0xC4 */ s32 variant;      /* 0 to 7 at random: the piece of the picture the streak draws */
+    /* 0xC8 */ s32 radius;       /* the streak's half width, the sphere's radius at first: 0x20 to 0x3F at random */
+    /* 0xCC */ s32 angle;        /* the streak's: the direction it moves in */
     /* 0xD0 */ s32 state;        /* 0 at first; 2 once it hits a fighter, 3 when the fighter guards */
-    /* 0xD4 */ s32 unkD4;        /* 15 to 30 at random */
-    /* 0xD8 */ s32 unkD8;
+    /* 0xD4 */ s32 timer;        /* 15 to 30 at random; frames to the sphere, then frames it has been one */
+    /* 0xD8 */ s32 age;          /* frames since it was made */
     /* 0xDC */ s32 vramY;        /* Fighter_getVramY of the fighter */
 } RenamonSpecial1Hitbox;
 
@@ -501,15 +501,15 @@ RenamonSpecial1Hitbox *RenamonSpecial1Hitbox_init(RenamonSpecial1Hitbox *this, F
     ox = offset->vx;
     oy = offset->vy;
     oz = offset->vz;
-    this->unkB4.vx = ox;
-    this->unkB4.vy = oy;
-    this->unkB4.vz = oz;
-    this->unkC4 = mersenneTwisterGenerate(&RANDOM) & 7;
-    this->unkC8 = radius;
-    this->unkCC = 0;
+    this->heading.vx = ox;
+    this->heading.vy = oy;
+    this->heading.vz = oz;
+    this->variant = mersenneTwisterGenerate(&RANDOM) & 7;
+    this->radius = radius;
+    this->angle = 0;
     this->state = 0;
-    this->unkD4 = (mersenneTwisterGenerate(&RANDOM) & 0xF) + 0xF;
-    this->unkD8 = 0;
+    this->timer = (mersenneTwisterGenerate(&RANDOM) & 0xF) + 0xF;
+    this->age = 0;
     this->vramY = Fighter_getVramY(fighter);
     return this;
 }
@@ -575,7 +575,62 @@ void func_800A45C8(RenamonSpecial1Hitbox *this) {
     entityAddSibling(&this->parts.entity, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/renamon", RenamonSpecial1Hitbox_draw);
+/* Draws the special move 1 hitbox as a streak: a quad turned to its direction (angle), as wide as its radius and as
+ * long behind it as its speed, with a 16 by 8 piece of the picture at (0xC0, 0x40) picked by variant, semi-transparent. */
+void RenamonSpecial1Hitbox_draw(RenamonSpecial1Hitbox *this, Camera *camera) {
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 shift;
+    s32 radius;
+    s32 length;
+    s32 u;
+    u8 v;
+    u8 variant;
+    s32 vramY;
+    Vec3 *position;
+    MATRIX *matrix;
+
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    position = &this->position;
+    m.m.t[0] = position->vx;
+    m.m.t[1] = position->vy;
+    m.m.t[2] = position->vz;
+    ot = camera->ot.slots;
+    shift = camera->zShift;
+    matrix = &m.m;
+    matrixRotateZ(matrix, this->angle);
+    setModelMatrix(matrix);
+    radius = this->radius;
+    length = vecGetLength((VECTOR *)&this->velocity);
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = 0;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.color = 0x408080;
+    shape.flags = 9;
+    corners[0].vx = corners[2].vx = -radius - length;
+    corners[1].vx = corners[3].vx = radius;
+    corners[0].vy = corners[1].vy = -radius >> 1;
+    corners[2].vy = corners[3].vy = radius >> 1;
+    variant = this->variant;
+    u = ((variant & 3) << 4) | 0xC0;
+    v = ((variant & 4) << 1) + 0x40;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = u + 0xF;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = v;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = v + 7;
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xFF);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, shift);
+}
 
 extern EntityVtable RENAMON_SPECIAL1_EFFECT_VTABLE;
 
