@@ -805,6 +805,11 @@ void St04SideSquare_destroy(Entity *this, s32 flags) {
     }
 }
 
+/* Not matched yet. Copies the side's fighter position (stage->fighterPositions[side]) into a Vec3 on the stack,
+ * puts the fighter's point (func_8007A650) in position, then deletes itself when that copy's y is negative, setting
+ * the side's unk1DEC to 0 first if it is 2 or more. A draft (a pointer to the position, the three words read before
+ * they are stored) is 10 differences off: the game loads side into $a1 and stage into $a0 at once, the arguments
+ * of Fight_getFighter, and reloads both after the call; the draft moves side through $v0. */
 INCLUDE_ASM("st04/nonmatchings/st04", St04SideSquare_tick);
 
 /* St04SideSquare's draw: unless the continue prompt is shown, the square at the fighter's position, with the 64 by
