@@ -903,6 +903,10 @@ void ImperialdramonSpecial2Hitbox_tick(ImperialdramonSpecial2Hitbox *this) {
     this->parts.part.radius = this->size >> 4;
 }
 
+/* Not matched yet. Hit_apply, then when it struck a fighter (getHitFighter) it disables its sphere and adds a hit
+ * spark (HitSpark_init, size 0x60, color 0x808080) at the fighter's position (Fighter_getPosition) with a zero
+ * VECTOR as the direction. A draft is 30 instructions off: the game keeps the addresses of its two locals in $s3 and
+ * $s1 across the calls, and the spark as an inline taking them did not give that. */
 INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial2Hitbox_hit);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/imperialdramon", D_80069158);
