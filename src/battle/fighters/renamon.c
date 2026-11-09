@@ -39,6 +39,9 @@ typedef struct RenamonSpecial1Hitbox {
     /* 0xDC */ s32 vramY;        /* Fighter_getVramY of the fighter */
 } RenamonSpecial1Hitbox;
 
+void func_800A4550(RenamonSpecial1Hitbox *this);
+void func_800A45C8(RenamonSpecial1Hitbox *this);
+
 /* Renamon's class (CHARACTER_RENAMON). */
 typedef struct Renamon {
     /* 0x000 */ Fighter base;
@@ -514,7 +517,146 @@ RenamonSpecial1Hitbox *RenamonSpecial1Hitbox_init(RenamonSpecial1Hitbox *this, F
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/renamon", RenamonSpecial1Hitbox_tick);
+void RenamonSpecial1Hitbox_tick(RenamonSpecial1Hitbox *this) {
+    Fighter *owner;
+    Fighter *opponent;
+    VECTOR knockback;
+
+    owner = (Fighter *)getEntityByHandle(this->ownerHandle);
+    if (owner == NULL) {
+        func_800A4550(this);
+        entityDelete(&this->parts.entity);
+        return;
+    }
+
+    opponent = Fighter_getOpponent(owner);
+    switch (this->state) {
+    case 0: {
+        s32 dx, dy, dz;
+        s32 x, y, z;
+        if (this->age < 16) {
+            s32 aim = func_800A3710(owner);
+            if (aim != -1) {
+                this->heading.vy = aim;
+            }
+        }
+        if (this->timer >= 16 && Fighter_isAttackIdle(owner)) {
+            func_800A4550(this);
+            goto delete;
+        }
+        dx = this->hitOffset.vx;
+        dy = this->hitOffset.vy;
+        dz = this->hitOffset.vz;
+        dx -= this->position.vx;
+        dy -= this->position.vy;
+        dz -= this->position.vz;
+        this->velocity.vx = dx >> 3;
+        this->velocity.vy = dy >> 3;
+        this->velocity.vz = dz >> 3;
+        this->angle = ratan2(this->velocity.vy, this->velocity.vx);
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        x += this->velocity.vx;
+        y += this->velocity.vy;
+        z += this->velocity.vz;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+        if (--this->timer < 0) {
+            Fight *fight = CURRENT_FIGHT;
+            MersenneTwister *random;
+            if (Fighter_getSide(owner) == 0) {
+                Fight_addSide0Shape(fight, &this->parts.part.link);
+            } else {
+                Fight_addSide1Shape(fight, &this->parts.part.link);
+            }
+            this->parts.part.position = this->position;
+            random = &RANDOM;
+            vecNormalize((VECTOR *)&this->heading, (VECTOR *)&this->heading);
+            this->heading.vx = (this->heading.vx >> 3) + ((s32)mersenneTwisterGenerate(random) % 96);
+            this->heading.vy = (this->heading.vy >> 3) + ((s32)mersenneTwisterGenerate(random) % 96);
+            this->heading.vz = (this->heading.vz >> 3) + ((s32)mersenneTwisterGenerate(random) % 96);
+            knockback.vx = this->heading.vx;
+            knockback.vy = this->heading.vy;
+            knockback.vz = 0;
+            Hit_setKnockback(&this->parts.base, &knockback);
+            this->state++;
+        }
+        break;
+    }
+
+    case 1: {
+        s32 x, y, z;
+        this->velocity.vx += (this->heading.vx - this->velocity.vx) >> 5;
+        this->velocity.vy += (this->heading.vy - this->velocity.vy) >> 5;
+        this->velocity.vz += (this->heading.vz - this->velocity.vz) >> 5;
+        this->angle = ratan2(this->velocity.vy, this->velocity.vx);
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        x += this->velocity.vx;
+        y += this->velocity.vy;
+        z += this->velocity.vz;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+        this->parts.part.position = this->position;
+        if (++this->timer >= 31) {
+            goto delete;
+        }
+        break;
+    }
+
+    case 2: {
+        s32 x, y, z;
+        Fighter_getPosition(opponent, &this->position);
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        x -= this->hitOffset.vx;
+        y -= this->hitOffset.vy;
+        z -= this->hitOffset.vz;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+        if (this->age >= 61) {
+            func_800A45C8(this);
+            goto delete;
+        }
+        break;
+    }
+
+    case 3: {
+        s32 x, y, z;
+        s32 vx, vy, vz;
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        vx = this->velocity.vx;
+        vy = this->velocity.vy;
+        vz = this->velocity.vz;
+        x += vx;
+        y += vy;
+        this->velocity.vy = vy + 7;
+        z += vz;
+        this->position.vz = z;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->angle += vx << 3;
+        if (this->age >= 81) {
+            goto delete;
+        }
+        break;
+    }
+    }
+
+    this->age++;
+    return;
+
+delete:
+    entityDelete(&this->parts.entity);
+}
 
 /* On a hit: Hit_apply; a guarding fighter bounces it back at a quarter of its speed (state 3, sound 0xB), any other
  * keeps its offset from it (state 2); either way the sphere leaves its list. The match depends on reading the offset
@@ -573,6 +715,17 @@ void func_800A45C8(RenamonSpecial1Hitbox *this) {
         ParticleBurst_init(entityOperatorNewAt(0x3C, child), 9, &this->position, 0x20, 0x10, 8, 0x408080);
     }
     entityAddSibling(&this->parts.entity, child);
+}
+
+/* Copies v into a matrix's translation, the three words read before any is stored. */
+static inline void setTranslation(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
 }
 
 /* Draws the special move 1 hitbox as a streak: a quad turned to its direction (angle), as wide as its radius and as
