@@ -334,6 +334,11 @@ void BattleMessage_tickKo(BattleMessage *arg) {
     this->frame++;
 }
 
+/* Not matched yet. Draws the KO message's two letters as slanted POLY_FT4s (the top 8 to the right and the bottom 8
+ * to the left of the box), each at its HudText character's offset around (0x7C + 0x48 * i, 0x50), in the
+ * character's color and its glyph (getFontGlyphUv) 0x20 square, clut 0x7ABB, tpage 0x3E, then func_800D008C. A draft
+ * is 42 differences off (one instruction too few): the game keeps the glyph word in the register of u and takes v
+ * from it first, which no order of the u and v locals (s32 or u8) gives, and decomp-permuter got to 970 from 1320. */
 INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_drawKo);
 
 /* The YOU WIN! tick (BATTLE_MESSAGE_TICKS): over 12 frames "YOU" closes in from the left (its 2nd and 3rd letters
@@ -547,6 +552,14 @@ void BattleMessage_drawTimeUp(BattleMessage *this, u_long *ot) {
     AddPrim(ot, rightShadow);
 }
 
+/* Not matched yet. The DRAW GAME tick: state 0 copies the text, moves its first four characters 8 right and the four
+ * from the 6th 8 left, both 0x60 up, and has func_800CD534 give every character a drop speed; state 1 drops each
+ * character (dy += unk10, bouncing at 0 with unk10 = -unk10 >> 2, unk10 + 1 a frame) for 41 frames, then
+ * func_800CD534 (0, 0); state 2 lets the first frame characters (at most all) fall on for 33 frames and deletes the
+ * message. A draft is 15 differences off, all in registers of state 1's loop: the game has the character pointer
+ * in $a0 and the counter in $a1, and takes this + 0x580 (the length) for the loop test in $a2 in the first block. It
+ * needs this copied from the parameter, the length read through this->hudText, a pointer to it declared up front,
+ * and three variables (state 2's limit and its own counter). */
 INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_tickDrawGame);
 
 s32 spawnGlyphShards(EntityGroup *group, s32 x, s32 y, u8 c);
