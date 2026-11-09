@@ -712,7 +712,78 @@ void RenamonSpecial1Effect_tick(RenamonSpecial1Effect *this) {
     this->frames++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/renamon", RenamonSpecial1Effect_draw);
+/* Copies v into a matrix's translation, the three words read before any is stored. */
+static inline void setTranslation(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+#define UV_BYTES(uv) ((u8 *)&(uv))
+
+/* Draws the special move 1's effect: four copies of the 56 by 56 picture at (0xC0, 0x50) of the texture page at
+ * (0x1C0, vramY), forming a box centered at the position and rotated around y by facing, scaled by size and shaded by
+ * brightness, with buildPolyFT4.
+ * The match depends on setTranslation copied first, and on the four corners and uv assignments chained. */
+void RenamonSpecial1Effect_draw(RenamonSpecial1Effect *this, Camera *camera) {
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    MATRIX *mat;
+    u8 *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 facing;
+    s32 size;
+    s32 c;
+    s32 vramY;
+
+    mat = &m.m;
+    setTranslation(m.m.t, &this->position);
+    m.words[0] = ONE;
+    m.words[1] = 0;
+    m.words[2] = ONE;
+    m.words[3] = 0;
+    m.words[4] = ONE;
+    facing = this->facing;
+    packet = PRIM_BUFFER_FREE;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    matrixRotateY(mat, facing << 8);
+    setModelMatrix(mat);
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0xC0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xF7;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0x50;
+    corners[0].vx = corners[1].vx = corners[2].vx = corners[3].vx = 0;
+    corners[2].vy = corners[3].vy = 0;
+    corners[1].vz = corners[3].vz = 0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0x87;
+    shape.flags = 9;
+    size = this->size;
+    corners[0].vy = corners[1].vy = -size;
+    corners[0].vz = corners[2].vz = -size;
+    c = this->brightness;
+    shape.color = (c << 8) | ((c >> 2) << 16);
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xFF);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vz = corners[2].vz = size;
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vy = corners[1].vy = size;
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vz = corners[2].vz = -size;
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    PRIM_BUFFER_FREE = packet;
+}
 
 /* The special move 2's effect (Renamon_special2 spawns it, 0x44 bytes): a sprite rising and drifting in x and z. */
 typedef struct RenamonSpecial2Effect {
@@ -775,10 +846,6 @@ void RenamonSpecial2Effect_tick(RenamonSpecial2Effect *this) {
         entityDelete(&this->entity);
     }
 }
-
-/* PolyFT4Shape's uv words as their u and v bytes (as in saintgargomon.c): game_classes.h types them u16, and the game
- * stores the bytes. */
-#define UV_BYTES(uv) ((u8 *)&(uv))
 
 /* The corners of a 64 by 64 square around the origin. */
 extern SVECTOR RENAMON_SPECIAL2_EFFECT_CORNERS[4];
