@@ -769,7 +769,10 @@ void TitleLogoTask_drawPanels(TitleLogoTask *this) {
 #if VERSION_JP
 INCLUDE_ASM("title/nonmatchings/title_logo", TitleLogoTask_spawnLogoPieces);
 
-INCLUDE_ASM("title/nonmatchings/title_logo", func_800683D0);
+/* Does nothing, in a stack frame of 0x18 bytes. */
+void func_800683D0(void) {
+    s32 unused[6]; /* unused, but it is in the original stack frame */
+}
 
 INCLUDE_ASM("title/nonmatchings/title_logo", TitleLogoTask_drawLogo);
 #else
