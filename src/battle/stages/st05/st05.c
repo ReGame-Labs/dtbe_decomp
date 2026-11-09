@@ -322,6 +322,13 @@ void StageVolcano_updateCamera(StageVolcano *this) {
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D4A74);
 
+/* Not matched yet. Puts each of unkE80's three sprites at its unk28 plus its unk38 scaled by the sine of
+ * (i << 10) + (frames << 5) + 0x10 (COS_SIN_TABLE), z 0, and also writes that point to a local Vec3 that nothing
+ * reads (the game's stores to 0(sp), 4(sp) and 8(sp)). The best C, with the sprite's VECTORs as offset[0..2] and
+ * the Vec3 assigned in the same statements, has the game's instructions (0xA4 bytes) but 22 differences of
+ * order and registers: the game loads unk38.x before the table entry and keeps the sine in ; the sine in a local
+ * (s16 or s32), written inline twice, and the order of the Vec3's stores did not move it (decomp-permuter: 305
+ * from 605 in 4 minutes). */
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D4B10);
 
 void func_800D4D3C(StageVolcano *this, u_long *ot, s32 y);

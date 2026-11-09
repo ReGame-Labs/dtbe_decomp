@@ -400,6 +400,10 @@ void func_800D5AF8(Unk800D554C *this) {
     }
 }
 
+/* Not matched yet. Puts the mesh's matrix at no rotation at unk84 (the shape of st03's meshSetPosition), then
+ * invalidates it again and copies its local MatrixWords (32 bytes) onto itself as two block moves of four loads then
+ * four stores, which GCC 2.95.2 does not emit (see scene_graph.c): assigning the MatrixWords or its MATRIX gives
+ * word-by-word copies, 58 differences. */
 INCLUDE_ASM("st02/nonmatchings/st02", func_800D5B30);
 
 /* Attaches its mesh's transform to the scene's mesh 15 (the one StageTurn_startRound gives the St02Terminal). */
