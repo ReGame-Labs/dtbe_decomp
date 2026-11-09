@@ -2,6 +2,8 @@
  * builds. The boundary is unproven: the unit has no strings, only its virtual table marks it. */
 
 #include "common.h"
+#include <string.h>
+#include "engine/cd/file_load.h"
 #include "engine/lib/format.h"
 #include "engine/lib/string.h"
 #include "engine/system/memory.h"
@@ -60,9 +62,40 @@ void DigifontCache_destroy(DigifontCache *this, s32 flags) {
     cacheDestroy(&this->cache, flags);
 }
 
+extern u16 DIGIFONT_CLUT[];
+
 INCLUDE_RODATA("title/nonmatchings/digifont", DIGIFONT_CLUT);
 
-INCLUDE_ASM("title/nonmatchings/digifont", DigifontCache_loadFile);
+/* Loads the font file at path, builds its codes and glyphs tables, and loads DIGIFONT_CLUT into VRAM. */
+void DigifontCache_loadFile(DigifontCache *this, char *path) {
+    u16 *file;
+    s32 codeCount;
+    s32 i;
+    u16 *codes;
+    u16 clut[4];
+
+    file = (u16 *)loadFile(path);
+    codeCount = *file;
+    codes = file + 1;
+    for (i = codeCount - 1; i >= 0; i--) {
+        codes[i] += 0x300;
+        if (codes[i] == 0x845B) {
+            break;
+        }
+    }
+    this->file = file;
+    i = ((codeCount * 2) + 5) & ~3;
+    this->codeCount = codeCount;
+    this->codes = codes;
+    this->glyphs = (u8 *)file + i;
+    this->glyph = NULL;
+    memcpy(clut, DIGIFONT_CLUT, sizeof(clut));
+    this->clutRect.w = 16;
+    this->clutRect.h = 1;
+    this->clutRect.x = (this->area.x + 0xF) & ~0xF;
+    this->clutRect.y = this->area.y + this->area.h;
+    LoadImage(&this->clutRect, (u_long *)clut);
+}
 
 /* Picks the glyph of character code (0x28), from its index in codes. */
 void DigifontCache_selectGlyph(DigifontCache *this, u16 code) {
