@@ -747,7 +747,21 @@ void func_800D6DF4(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D6E48);
+/* The sine of an angle, from COS_SIN_TABLE, as an int. The match depends on this being a function that returns an
+ * int (getSinInline returns an s16 and loads it with lh, which this function's game code does not). */
+static inline s32 sineOf(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].sin;
+}
+
+/* Unk800D6D08's tick: its grey follows a sine of the angle around its shade (blue 10 lower), then the angle
+ * steps by 0x20. The match depends on the angle stepped after the color is stored: the game reads it again. */
+void func_800D6E48(Unk800D6D08 *this) {
+    u32 level = ((u8)this->shade + (sineOf(this->angle << 4) >> 9)) & 0xFF;
+    u32 blue = (level - 10) & 0xFF;
+
+    this->color = level | (level << 8) | (blue << 16);
+    this->angle += 0x20;
+}
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D6EA4);
 
