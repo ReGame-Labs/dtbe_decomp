@@ -296,6 +296,9 @@ void func_80073C80(SideHud *this, u_long *ot, s32 x, s32 y) {
     AddPrim(ot, allocDrTpageMode(0, 0, 0xF));
 }
 
+/* Not matched yet. A draft with the uv and xy macros is 33 instructions off: GCC gives x, y, the brightness and
+ * the clut row the saved registers in another order than the game (s5, s6, s3, s4) and stores the uvs in another
+ * order. */
 INCLUDE_ASM("game/nonmatchings/side_hud", func_80073D78);
 
 /* Draws the round wins' mark at (x, y): a 12 x 12 sprite of the HUD texture at u 0x78, v 0x58. While the side has

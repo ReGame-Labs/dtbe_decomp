@@ -18,6 +18,9 @@
 
 extern EntityVtable SCORE_TALLY_VTABLE;
 
+/* Not matched yet. A draft is 35 instructions off. Its switch (cases 11, 2 and 8: the game compares 8 first) and
+ * the tables are right; the game takes the layout table's address before kind * 8, copies the first word of the
+ * layout with lw and sw and stores the home rect in another order. */
 INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_init);
 
 /* A battle message (BattleMessage_init, 0x59C bytes): its kind's layout and text from BATTLE_MESSAGE_LAYOUTS, and
@@ -906,6 +909,9 @@ typedef struct ScoreTally {
 /* adds the tally's three bonuses into its score and clears them */
 void ScoreTally_addAll(ScoreTally *this);
 
+/* Not matched yet. A draft with this structure (the bonuses by FIGHT_MODE_BONUS, then the panel fields, wait
+ * set last) is 27 instructions off, mostly fight and side taking s2 and s1 where the game has s1 and s2. Copies of
+ * the parameters, the branches swapped and the store of player moved did not change it. */
 INCLUDE_ASM("game/nonmatchings/hud", ScoreTally_init);
 
 /* Destroys the score tally: adds what is left of the bonuses into the score first (ScoreTally_addAll). */
@@ -1058,6 +1064,8 @@ void ScoreTally_addAll(ScoreTally *this) {
     }
 }
 
+/* Not matched yet. A draft with four RECT locals, each cleared with memset, copied into an array is 88
+ * instructions off: its frame is 0x70 bytes against the game's 0x68, one saved register too many. */
 INCLUDE_ASM("game/nonmatchings/hud", ScoreTally_draw);
 
 void func_800CED10(u_long *ot, RECT *rect);
@@ -1302,6 +1310,9 @@ s32 getFontGlyphUv(u8 c) {
     return (v << 8) | u;
 }
 
+/* Not matched yet. A draft (a switch on '\n', ' ' and a default that builds a POLY_FT4; the right and bottom edges
+ * as s32 locals of x - 1 and y - 1) is 13 instructions off: the game loads the half width first, with a nop before
+ * its use, and stores the color bytes before x0 and y0, where GCC schedules the loads and stores the other way. */
 INCLUDE_ASM("game/nonmatchings/hud", drawGlyphAtCursor);
 
 INCLUDE_ASM("game/nonmatchings/hud", drawGlyph);
@@ -1333,6 +1344,8 @@ GlyphShard *GlyphShard_init(GlyphShard *this, Vec3 *position, VECTOR *corners, u
 
 INCLUDE_ASM("game/nonmatchings/hud", spawnGlyphShards);
 
+/* Not matched yet. A draft (corners copied through pointers, RANDOM and the velocity kept in pointers) is 18
+ * instructions off, all of them order: where the `% 128` branch falls and where &this->velocity is computed. */
 INCLUDE_ASM("game/nonmatchings/hud", GlyphShard_init);
 
 /* Waits its delay; then moves by its velocity under gravity (0x80) and bounces off the screen's sides (x at 0 or 320
