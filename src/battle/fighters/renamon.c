@@ -41,6 +41,9 @@ typedef struct RenamonSpecial1Hitbox {
 
 void func_800A4550(RenamonSpecial1Hitbox *this);
 void func_800A45C8(RenamonSpecial1Hitbox *this);
+void Renamon_swapWithOpponent(Fighter *this);
+struct RenamonSpecial2Effect *RenamonSpecial2Effect_init(struct RenamonSpecial2Effect *this, Fighter *fighter);
+struct Unk800A4F64 *func_800A4F64(struct Unk800A4F64 *this, Fighter *fighter, RECT *from, RECT *to);
 
 /* Renamon's class (CHARACTER_RENAMON). */
 typedef struct Renamon {
@@ -428,7 +431,56 @@ void Renamon_spawnSpecial1Effect(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/renamon", Renamon_special2);
+void Renamon_special2(Renamon *this, s32 frame) {
+    Fighter *fighter = &this->base;
+    Entity *child;
+
+    Fighter_special2(fighter, frame);
+    if (frame == 8) {
+        Fighter_playVoice(fighter, 0xD0);
+    }
+    if ((u32)frame < 25) {
+        Vec3 pos;
+
+        func_8007A650(fighter, &pos);
+        child = allocEntityMemory(0x3C);
+        if (child != NULL) {
+            ParticleBurst_init(entityOperatorNewAt(0x3C, child), 9, &pos, 0x40, 0x20, 1, 0x80C0FF);
+        }
+        Fighter_addEntity(fighter, child);
+
+        child = allocEntityMemory(0x44);
+        if (child != NULL) {
+            RenamonSpecial2Effect_init(entityOperatorNewAt(0x44, child), fighter);
+        }
+        Fighter_addEntity(fighter, child);
+    }
+    if (frame == 0) {
+        child = allocEntityMemory(0xB4);
+        if (child != NULL) {
+            func_800A4F64(entityOperatorNewAt(0xB4, child), fighter, this->vramCopies, this->vramAreas);
+        }
+        Fighter_addEntity(fighter, child);
+    }
+    if (!Fighter_hasFloorAhead(fighter, (fighter->velocity.vx >> 8) * Fighter_getFacing(fighter))) {
+        fighter->velocity.vx = 0;
+        fighter->force.vx = 0;
+    }
+    if (Fighter_hasFloorAhead(fighter, 0)) {
+        if (frame == 24) {
+            Fighter *opponent = (Fighter *)(child = (Entity *)Fighter_getOpponent(fighter));
+            if ((Fighter_probeFloorBelow(fighter) || opponent->unk48C <= 0) &&
+                !func_8007AEA8(opponent) &&
+                Fighter_getBodyStateId(opponent) != 0x13 &&
+                opponent->position.vy >= -0x200000) {
+                Renamon_swapWithOpponent(fighter);
+            }
+        } else {
+            return;
+        }
+    }
+    Fighter_stopActionClip(fighter);
+}
 
 /* A burst of 9 light blue particles at a fighter's point (func_8007A650), for the swap. */
 static inline Entity *Renamon_newSwapBurst(Fighter *fighter) {
