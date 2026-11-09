@@ -215,14 +215,28 @@ void BattleMessage_drawNewChallenger(BattleMessage *this, u_long *ot) {
     func_800CF2A4(ot + 1, 90 - this->frame);
 }
 
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_tickEvolution);
-#else
 /* The EVOLUTION tick (BATTLE_MESSAGE_TICKS): in state 0 types the text out on even frames up to its last
  * character, then in state 1 blinks that last character (the cursor '_'); deletes the message after 46 frames. The
- * length is the text's width over the step of a character (JP: 10, and that body is still asm: its registers
- * differ). */
-void BattleMessage_tickEvolution(BattleMessage *this) {
+ * length is the text's width over the step of a character (JP: 10, written as the literals 9 and 10). The match
+ * depends on this being a copy of the parameter. */
+void BattleMessage_tickEvolution(BattleMessage *arg) {
+#if VERSION_JP
+    BattleMessage *this = arg;
+
+    switch (this->state) {
+    case 0:
+        if ((this->frame ^ 1) & 1) {
+            if (++this->shownChars >= 9) {
+                this->state = 1;
+            }
+        }
+        break;
+    case 1:
+        this->shownChars = (this->frame & 2) ? 9 : 10;
+        break;
+    }
+#else
+    BattleMessage *this = arg;
     s32 length = this->textWidth / this->charStep;
 
     switch (this->state) {
@@ -242,11 +256,11 @@ void BattleMessage_tickEvolution(BattleMessage *this) {
         this->shownChars = length;
         break;
     }
+#endif
     if (++this->frame >= 46) {
         entityDelete(&this->entity);
     }
 }
-#endif
 
 /* The EVOLUTION draw (BATTLE_MESSAGE_DRAWS): the typed text, then the shade bands (func_800CF2A4) in the next slot
  * of ot, their brightness rising and falling with half a turn of the sine over the message's 45 frames. */
