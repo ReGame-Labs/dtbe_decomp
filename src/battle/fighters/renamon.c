@@ -712,19 +712,6 @@ void RenamonSpecial1Effect_tick(RenamonSpecial1Effect *this) {
     this->frames++;
 }
 
-/* Copies v into a matrix's translation, the three words read before any is stored. */
-static inline void setTranslation(long *t, Vec3 *v) {
-    s32 x = v->vx;
-    s32 y = v->vy;
-    s32 z = v->vz;
-
-    t[0] = x;
-    t[1] = y;
-    t[2] = z;
-}
-
-#define UV_BYTES(uv) ((u8 *)&(uv))
-
 /* Draws the special move 1's effect: four copies of the 56 by 56 picture at (0xC0, 0x50) of the texture page at
  * (0x1C0, vramY), forming a box centered at the position and rotated around y by facing, scaled by size and shaded by
  * brightness, with buildPolyFT4.
