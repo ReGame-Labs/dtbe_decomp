@@ -417,7 +417,57 @@ void BattleMessage_tickYouLose(BattleMessage *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_tickPlayerWin);
+void hudTextSetSizes(HudText *this, s32 w, s32 h);
+
+/* The PLAYER WIN tick (BATTLE_MESSAGE_TICKS), for "1P WIN" and "2P WIN": copies the text, moves its first two
+ * characters 8 right and the four from the 4th 8 left, and gives the first two the palette 2 for 1P and 1 for 2P;
+ * all characters are 0x20 wide and 0xA0 tall, and invisible. In state 1 they shrink to 0x20 square over 8 frames
+ * while they fade in, state 2 waits 31 frames, and in 3 the text fades out over 16 frames and the message is
+ * deleted. */
+void BattleMessage_tickPlayerWin(BattleMessage *this) {
+    HudText *text = &this->hudText;
+    s32 shown;
+
+    switch (this->state) {
+    case 0:
+        hudTextSetText(text, this->text);
+        hudTextSetOffsetRange(text, 8, 0, 0, 2);
+        hudTextSetOffsetRange(text, -8, 0, 3, 4);
+        /* the match depends on reading the character through this, not through text, as an unsigned byte */
+        if ((u8)this->hudText.text[0] == 0x31) {
+            hudTextSetPaletteRange(text, 2, 0, 2);
+        } else {
+            hudTextSetPaletteRange(text, 1, 0, 2);
+        }
+        hudTextSetSizes(text, 0x20, 0xA0);
+        hudTextSetOpacity(text, 0);
+        this->state++;
+        break;
+    case 1:
+        shown = this->frame * 0x10;
+        hudTextSetSizes(text, 0x20, 0xA0 - shown);
+        hudTextSetOpacity(text, shown);
+        if (this->frame >= 8) {
+            this->frame = 0;
+            this->state++;
+        }
+        break;
+    case 2:
+        if (this->frame >= 0x1F) {
+            this->frame = 0;
+            this->state = 3;
+        }
+        break;
+    case 3:
+        hudTextSetOpacity(text, 0x80 - this->frame * 8);
+        if (this->frame >= 0x10) {
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->frame++;
+}
 
 /* The TIME UP tick (BATTLE_MESSAGE_TICKS): slides the cursor in from x 320 to home by quarters, opens its height by
  * 4 a frame, waits 61 frames, then closes it by 4 a frame and deletes the message. */
