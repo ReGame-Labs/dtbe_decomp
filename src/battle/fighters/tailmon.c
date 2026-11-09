@@ -289,10 +289,10 @@ typedef struct TailmonSpecial1Effect {
     /* 0x20 */ u8 unk20;
     /* 0x21 */ u8 unk21;
     /* 0x22 */ s16 vramY;  /* the character's 0x440 (Fighter_getVramY) */
-    /* 0x24 */ s16 unk24;
+    /* 0x24 */ u16 unk24;
     /* 0x26 */ s16 facing; /* Fighter_getFacing of the character: 1 or -1 */
-    /* 0x28 */ s16 unk28;
-    /* 0x2A */ s16 unk2A;
+    /* 0x28 */ u16 unk28;
+    /* 0x2A */ u16 unk2A;
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30;
     /* 0x34 */ VECTOR position;
@@ -344,7 +344,80 @@ void TailmonSpecial1Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Effect_tick);
+extern VECTOR D_800D346C[2];
+
+/* Ticks the special move 1's effect. */
+void TailmonSpecial1Effect_tick(TailmonSpecial1Effect *this) {
+    s32 flag = 0;
+    VECTOR *offsets = D_800D346C;
+    VECTOR *pos = &this->position;
+    s32 i;
+
+    for (i = 1; i >= 0; i--) {
+        Fighter_getNodePosition(this->fighter, pos, 9, offsets);
+        offsets++;
+        pos++;
+    }
+
+    switch (this->unk28) {
+    case 0:
+        this->unk2C += this->unk24 << 8;
+        if (this->unk2C < 0x1800) {
+            flag = 1;
+            break;
+        }
+        this->unk2C = 0x1800;
+        this->unk28++;
+    case 1:
+        this->unk2C += (0x2016 - this->unk2C) >> 4;
+        if (this->unk2C < 0x1C80) {
+            flag = 1;
+            break;
+        }
+        this->unk2C = 0x2000;
+        this->unk28++;
+        flag = 1;
+        break;
+    case 2:
+        break;
+    }
+
+    switch (this->unk2A) {
+    case 0:
+        this->unk30 += this->unk24 << 7;
+        if (this->unk30 < 0x1800) {
+            flag = 1;
+            break;
+        }
+        this->unk30 = 0x1800;
+        this->unk2A++;
+    case 1:
+        this->unk30 += (0x2004 - this->unk30) >> 2;
+        if (this->unk30 < 0x2000) {
+            flag = 1;
+            break;
+        }
+        this->unk30 = 0x2000;
+        this->unk2A++;
+        flag = 1;
+        break;
+    case 2:
+        break;
+    }
+
+    if (this->unk2C > 0x1000) {
+        this->unk20 = -0x80 - ((this->unk2C - 0x1000) >> 5);
+    }
+    if (this->unk30 > 0x1000) {
+        this->unk21 = -0x80 - ((this->unk30 - 0x1000) >> 5);
+    }
+
+    if (!flag) {
+        entityDelete(&this->entity);
+    } else {
+        this->unk24++;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Effect_draw);
 
