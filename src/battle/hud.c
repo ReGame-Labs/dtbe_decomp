@@ -1138,7 +1138,78 @@ void ScoreTally_drawPanel(ScoreTally *this, u_long *ot) {
 
 INCLUDE_RODATA("game/nonmatchings/hud", SCORE_TALLY_DECIMAL_PLACES);
 
-INCLUDE_ASM("game/nonmatchings/hud", func_800CEB0C);
+/* 100000 down to 1, then 0: the decimal places of the tally's numbers (func_800CEB0C). */
+extern s32 SCORE_TALLY_DECIMAL_PLACES[];
+
+/* Draws value (at most 999999) from rect's x and y, a digit after the other and rect->w further right each: one
+ * POLY_FT4 per digit of the HUD texture, leading zeros skipped. Digits are 8 x 10 at v 0x6B for a rect narrower than
+ * 9, else 12 x 16 at v 0x58. The match depends on the (s16) cast of the right edge, on the clamp starting from
+ * 999999, and on the color stored as one word. */
+void func_800CEB0C(ScoreTally *this, u_long *ot, RECT *rect, s32 value) {
+    s32 clamp = 999999;
+    s32 number;
+    s32 started;
+    s32 *places;
+    s32 place;
+    s32 step;
+    s32 height;
+    s32 top;
+    s32 u;
+    POLY_FT4 *poly;
+
+    if (value < clamp) {
+        clamp = value;
+    }
+    number = clamp;
+    started = 0;
+    places = SCORE_TALLY_DECIMAL_PLACES;
+    if (rect->w < 9) {
+        top = 0x6B;
+        step = 8;
+        height = 10;
+    } else {
+        top = 0x58;
+        step = 12;
+        height = 16;
+    }
+    while ((place = *places++) != 0) {
+        u = 0;
+        if (number >= place) {
+            started = 1;
+            while (number >= place) {
+                number -= place;
+                u += step;
+            }
+        }
+        if (place == 1) {
+            started = 1;
+        }
+        if (started) {
+            poly = allocPolyFT4();
+            *(u32 *)&poly->r0 = (poly->code << 24) | 0x808080;
+            poly->x0 = rect->x;
+            poly->y0 = rect->y;
+            poly->x1 = (s16)(rect->x - 1) + rect->w;
+            poly->y1 = rect->y;
+            poly->x2 = rect->x;
+            poly->y2 = rect->y + rect->h;
+            poly->x3 = (s16)(rect->x - 1) + rect->w;
+            poly->y3 = rect->y + rect->h;
+            poly->u0 = u;
+            poly->v0 = top;
+            poly->u1 = u + step;
+            poly->v1 = top;
+            poly->u2 = u;
+            poly->v2 = top + height;
+            poly->u3 = u + step;
+            poly->v3 = top + height;
+            poly->tpage = 0xF;
+            poly->clut = getClut(0x3C0, 0x7B);
+            AddPrim(ot, poly);
+        }
+        rect->x += rect->w;
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/hud", D_8006DCDC);
 
