@@ -525,6 +525,11 @@ s32 CharacterSelectTask_checkChallenger(CharacterSelectTask *task) {
     return 0;
 }
 
+/* Not matched yet. A draft that puts a player in side's place (the cursor on the cell of character, nothing
+ * picked, flashes cleared, challengerJoined set, SELECT_SIDE on and SELECT_COMPUTER off for the side) has the
+ * game's chain of pointer copies but not its order: the game adds the side's address first and loads the
+ * addresses of GRID_CELLS and CHARACTER_CELLS together before the first store. Locals for the tables, helpers for
+ * the stores and the fields reached by task->sides[side] each gave another order. */
 INCLUDE_ASM("title/nonmatchings/chara_select", CharacterSelectTask_joinSide);
 
 /* The character picks (not versus): each side that picks moves its cursor and picks; a computer side picks

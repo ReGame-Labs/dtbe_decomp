@@ -10,11 +10,25 @@
 #include "title/title_classes.h"
 
 extern PrinterVtable ZASCII_PRINTER_VTABLE;
+extern u16 ZASCII_CODES[];
 
-/* The uv of code's cell in /zascii.tim: its index in ZASCII_CODES, 16 cells a row of 16 by 16. */
-u32 getZasciiUv(u16 code);
+/* The uv of code's cell in /zascii.tim: its index in ZASCII_CODES, 16 cells a row of 16 by 16. 0 for a code that is
+ * not there. The match depends on the result in a variable set in both branches. */
+u32 getZasciiUv(u16 code) {
+    s32 index = findCodeIndex(ZASCII_CODES, 0xD0, code);
+    u32 uv;
+    s32 u;
+    s32 v;
 
-INCLUDE_ASM("title/nonmatchings/zascii_printer", getZasciiUv);
+    if (index < 0) {
+        uv = 0;
+    } else {
+        u = ((index - ((index >> 4) << 4)) << 4) & 0xFF;
+        v = index & 0xF0;
+        uv = (v << 8) | u;
+    }
+    return uv;
+}
 
 /* The zascii printer's constructor: draws into ot after texture page 0x3B (zascii.tim), in gray (0x808080) and
  * semi-transparent. */

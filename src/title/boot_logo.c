@@ -20,6 +20,20 @@ typedef struct BootLogoKey {
     /* 0x3 */ u8 unk3;
 } BootLogoKey;
 
+/* A sprite of the boot logo's texture: its place and size on screen, and where its pixels and CLUT are in VRAM. */
+typedef struct BootLogoSprite {
+    /* 0x0 */ s16 x;
+    /* 0x2 */ s16 y;
+    /* 0x4 */ s16 w;
+    /* 0x6 */ s16 h;
+    /* 0x8 */ u8 u;
+    /* 0x9 */ u8 v;
+    /* 0xA */ u16 clutX;
+    /* 0xC */ u16 clutY;
+} BootLogoSprite;
+
+extern const BootLogoSprite BOOT_LOGO_SPRITES[];
+
 /* The boot logo's task (virtual table BOOT_LOGO_TASK_VTABLE), a TickTask. */
 typedef struct BootLogoTask {
     /* 0x00 */ Task task;
@@ -151,7 +165,48 @@ void BootLogoTask_tick(BootLogoTask *this) {
     AddPrim(ot, allocDrTpage(0x2A));
 }
 
-INCLUDE_ASM("title/nonmatchings/boot_logo", drawBootLogo);
+/* Draws the image index of BOOT_LOGO_SPRITES to the ordering table ot with the given brightness level (semi-trans
+ * unless level is 128). */
+void drawBootLogo(u_long *ot, s32 index, u8 level) {
+    const BootLogoSprite *sprite;
+    s16 x, y, w, h;
+    u8 u, v;
+    u16 clutX, clutY;
+    SPRT *sprt;
+    s32 offset;
+
+    if (level == 0) {
+        return;
+    }
+
+    sprite = BOOT_LOGO_SPRITES;
+    offset = (s32)sprite;
+    offset += index * sizeof(BootLogoSprite);
+    sprite = (const BootLogoSprite *)offset;
+
+    x = sprite->x;
+    y = sprite->y;
+    w = sprite->w;
+    h = sprite->h;
+    u = sprite->u;
+    v = sprite->v;
+    clutX = sprite->clutX;
+    clutY = sprite->clutY;
+
+    sprt = allocSprt();
+    sprt->r0 = level;
+    sprt->g0 = level;
+    sprt->b0 = level;
+    sprt->x0 = x;
+    sprt->y0 = y;
+    sprt->w = w;
+    sprt->u0 = u;
+    sprt->v0 = v;
+    sprt->clut = getClut(clutX, clutY);
+    sprt->h = h;
+    SetSemiTrans(sprt, level != 128);
+    AddPrim(ot, sprt);
+}
 
 /* The destructor of bootLogoTaskInit's task (virtual table BOOT_LOGO_TASK_VTABLE): Task's. */
 void BootLogoTask_destroy(Task *this, s32 flags) {
