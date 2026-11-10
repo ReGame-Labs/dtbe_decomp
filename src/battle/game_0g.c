@@ -42,11 +42,6 @@ Entity *func_800C38D8(Entity *this, Vec3 *arg1, Vec3 *arg2, s32 arg3, s32 arg4);
 /* The constructors of the particle classes of vtables D_8006D54C, D_8006D524 and D_8006D4D4, which
  * createParticle gets inlined like func_8006D574_init (out-of-line copies: func_800C69C4, func_800C6A74; the
  * D_8006D4D4 one is func_8006D4D4_initSized, game_classes.h). */
-static inline void func_8006D54C_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
-    Particle_initById((Particle *)this, frame + 3, pos, vel, size, 0x808080, 0);
-    this->vtable = &D_8006D54C;
-}
-
 static inline void func_8006D524_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, u32 color) {
     Particle_initById((Particle *)this, 6, pos, vel, size, color, 0);
     this->vtable = &D_8006D524;

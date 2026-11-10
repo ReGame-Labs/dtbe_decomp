@@ -597,7 +597,9 @@ typedef struct Gabumon {
 typedef struct Patamon {
     /* 0x000 */ Fighter base;
     /* 0x4A4 */ s32 special1Active; /* set while the special move 1's hitbox lives (its constructor, destructor) */
-    /* 0x4A8 */ u8 unk4A8[0x4B4 - 0x4A8];
+    /* 0x4A8 */ u8 unk4A8[4];
+    /* 0x4AC */ s32 special2Active; /* the special move 2 has caught the opponent */
+    /* 0x4B0 */ s32 special2Timer;  /* frames to its next hit */
     /* 0x4B4 */ s32 unk4B4;
     /* 0x4B8 */ s32 unk4B8; /* 0 to 0x1000: how far base.unk3C8 is from unk4CC to unk4DC */
     /* 0x4BC */ VECTOR unk4BC;
@@ -1120,6 +1122,7 @@ Fighter *Fighter_getOpponentInReach(Fighter *this, s32 index);
 void func_800C99B0(Fighter *this);
 /* the body state (the attack state: Fighter_getAttackState, in fighter.c) */
 FighterState *Fighter_getBodyState(Fighter *this);
+FighterState *Fighter_getAttackState(Fighter *this);
 InputHistory *Fighter_getInput(Fighter *this);
 void Fighter_guard(Fighter *this, s32 frame);
 void Fighter_crouchGuard(Fighter *this, s32 frame);
@@ -1362,6 +1365,15 @@ static inline void func_8006D4D4_init(Entity *this, VECTOR *pos) {
 static inline void func_8006D4D4_initSized(Entity *this, VECTOR *pos, s32 size, u32 color) {
     Particle_initById((Particle *)this, 8, pos, &ZERO_VECTOR, size, color, 0);
     this->vtable = &D_8006D4D4;
+}
+
+extern EntityVtable D_8006D54C;
+
+/* The constructor of the particle class of vtable D_8006D54C, which the game inlines (createParticle, Impmon's special
+ * move 2 hitbox; out-of-line copy func_800C69C4): Particle_initById on frame + 3, color 0x808080 and no flags. */
+static inline void func_8006D54C_init(Entity *this, VECTOR *pos, VECTOR *vel, s32 size, s32 frame) {
+    Particle_initById((Particle *)this, frame + 3, pos, vel, size, 0x808080, 0);
+    this->vtable = &D_8006D54C;
 }
 
 /* Imperialdramon's class (CHARACTER_IMPERIALDRAMON); ImperialdramonPaladinMode's is the same class with its own

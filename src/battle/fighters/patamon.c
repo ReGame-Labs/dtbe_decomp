@@ -360,7 +360,72 @@ void Patamon_spawnSpecial1Hitbox(Fighter *this) {
     func_80079B0C(this, 40);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/patamon", Patamon_special2);
+/* Special move 2: a lunge at the opponent. At frame 0 a push forward and up; until frame 15 (when the opponent is in
+ * reach, func_800A1CDC) it is pulled along, with the hit at frame 4; at frame 15 it catches the opponent if one is in
+ * reach (else the move is cut short), braking both and launching the opponent up unless it guards; then every 6
+ * frames a hit until frame 31 and a copy of the effect every other frame until frame 22. */
+void Patamon_special2(Patamon *this, s32 frame) {
+    Fighter *opponent;
+    s32 push;
+
+    func_80079AE4(&this->base);
+    Fighter_special2(&this->base, frame);
+    opponent = Fighter_getOpponent(&this->base);
+    if (frame == 0) {
+        Fighter_playSound(&this->base, 8);
+        push = ((s64)this->base.mass * 0x38E0) >> 16;
+        this->special2Active = 0;
+        this->base.force.vx += push * Fighter_getFacing(&this->base);
+        this->base.force.vy -= ((s64)this->base.mass * 0x2AA8) >> 16;
+    }
+    if (frame < 15) {
+        if (frame == 4) {
+            Fighter_setAttackParts(&this->base, 2);
+            this->base.hitDamage = 0xAC0800;
+        }
+        if (func_800A1CDC(&this->base)) {
+            s32 brake = ((s64)this->base.velocity.vx * -0x666) >> 12;
+            this->base.force.vy += 0x333;
+            this->base.force.vx += brake;
+        }
+    }
+    if (frame == 15) {
+        if (func_800A1CDC(&this->base) == NULL) {
+            Fighter_stopActionClip(&this->base);
+            return;
+        }
+        Fighter_playVoice(&this->base, 0xCA);
+        Fighter_playSound(&this->base, 8);
+        this->special2Active = 1;
+        this->special2Timer = 1;
+        this->base.force.vx = -this->base.velocity.vx;
+        this->base.force.vy = -(((s64)this->base.mass * 0x6388) >> 16);
+        if (!Fighter_isGuarding(opponent)) {
+            opponent->force.vx = -opponent->velocity.vx;
+            opponent->force.vy = -func_800A1D84(&this->base);
+        }
+        this->base.hitKnockback.vx = 0;
+    }
+    if (this->special2Active) {
+        if (frame < 0x1F) {
+            if (--this->special2Timer == 0) {
+                this->special2Timer = 6;
+                Fighter_setAttackParts(&this->base, 0xCC);
+                this->base.hitDamage = 0x44AC0900;
+            }
+        } else {
+            this->base.attackParts = 0;
+        }
+        if (Fighter_isGuarding(opponent)) {
+            this->base.hitKnockback.vy = 0;
+        } else {
+            this->base.hitKnockback.vy = -0xE38;
+        }
+        if (frame < 0x16 && (frame & 1) == 0) {
+            func_800A1DFC(&this->base);
+        }
+    }
+}
 
 /* an axis next to AXIS_Y and AXIS_Z in the executable's data */
 extern VECTOR D_80010874;

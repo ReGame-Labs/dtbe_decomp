@@ -3,6 +3,11 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/math/matrix.h"
+#include "gte.h"
 
 struct VMonSpecial2Effect *VMonSpecial2Effect_init(struct VMonSpecial2Effect *this, Fighter *fighter, Vec3 *position,
                                                    Fight *fight);
@@ -366,7 +371,7 @@ typedef struct VMonSpecial1Effect {
     /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Fight *fight;
     /* 0x20 */ s16 unk20; /* the pad of the position (VMon_spawnSpecial1Effect's arg) */
-    /* 0x22 */ s16 vramY; /* Fighter_getVramY of the character */
+    /* 0x22 */ u16 vramY; /* Fighter_getVramY of the character */
     /* 0x24 */ s16 unk24; /* minus the character's facing */
     /* 0x26 */ u16 frames;
     /* 0x28 */ SVECTOR corners[4];
@@ -421,7 +426,7 @@ typedef struct VMonSpecial2Effect {
     /* 0x00 */ Entity entity;
     /* 0x18 */ Fighter *fighter;
     /* 0x1C */ Fight *fight;
-    /* 0x20 */ s16 vramY; /* Fighter_getVramY of the character */
+    /* 0x20 */ u16 vramY; /* Fighter_getVramY of the character */
     /* 0x22 */ s16 unk22; /* minus the character's facing */
     /* 0x24 */ u16 frames; /* counts the frames of VMonSpecial2Effect_tick */
     /* 0x26 */ u8 unk26[0x28 - 0x26];
@@ -510,7 +515,64 @@ void VMonSpecial2Effect_tick(VMonSpecial2Effect *this) {
     this->frames++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMonSpecial2Effect_draw);
+/* Draws the special move 2's effect: its square (side 0x140) at the effect's position, turned in its plane by 64 (a
+ * sixty-fourth of a turn) a frame, the way opposite the character's facing, in a grey of the brightness,
+ * semi-transparent, with the 64 by 64 picture mirrored every other frame. */
+void VMonSpecial2Effect_draw(VMonSpecial2Effect *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    Vec3 *position;
+    MATRIX *matrix;
+    s32 brightness;
+    u8 *packet;
+
+    shape.flags = 0;
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    m.words[5] = 0;
+    m.words[6] = 0;
+    m.words[7] = 0;
+    matrix = &m.m;
+    if (this->unk22 < 0) {
+        matrixSetRotationZ(matrix, this->frames << 6);
+    } else {
+        matrixSetRotationZ(matrix, -(this->frames << 6));
+    }
+    position = &this->position;
+    m.m.t[0] = position->vx;
+    m.m.t[1] = position->vy;
+    m.m.t[2] = position->vz;
+    setModelMatrix(matrix);
+    shape.corners[0] = &this->corners[0];
+    shape.corners[1] = &this->corners[1];
+    shape.corners[2] = &this->corners[2];
+    shape.corners[3] = &this->corners[3];
+    if ((this->frames ^ 1) & 1) {
+        UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv0)[0] = 0;
+        UV_BYTES(shape.uv1)[0] = 0x3F;
+        UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[0] = 0;
+        UV_BYTES(shape.uv2)[1] = 0x3F;
+        UV_BYTES(shape.uv3)[1] = UV_BYTES(shape.uv3)[0] = 0x3F;
+    } else {
+        UV_BYTES(shape.uv0)[0] = 0x3F;
+        UV_BYTES(shape.uv0)[1] = 0;
+        UV_BYTES(shape.uv1)[1] = UV_BYTES(shape.uv1)[0] = 0;
+        UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv2)[0] = 0x3F;
+        UV_BYTES(shape.uv3)[0] = 0;
+        UV_BYTES(shape.uv3)[1] = 0x3F;
+    }
+    packet = PRIM_BUFFER_FREE;
+    shape.tpage = getTPage(0, 3, 0x1C0, (u32)this->vramY);
+    shape.clut = getClut(0x1C0, (u32)this->vramY + 0x7F);
+    shape.flags |= 0xB;
+    brightness = this->unk48;
+    shape.color = brightness | (brightness << 8) | (brightness << 16);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, camera->ot.slots, camera->zShift);
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/v_mon", D_8006C284);
 INCLUDE_RODATA("game/nonmatchings/fighters/v_mon", D_8006C28C);

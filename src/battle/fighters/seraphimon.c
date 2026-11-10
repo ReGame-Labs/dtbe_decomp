@@ -432,7 +432,24 @@ void SeraphimonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", SeraphimonSpecial2Hitbox_hit);
+/* On a hit: Hit_apply, a burst (kind 3, size 0x60, 6 particles of color 0x808080) of the hitbox's position with a
+ * radius of a quarter of its velocity's x, then deletes itself. The match depends on the delete as a statement
+ * macro's do-while. */
+void SeraphimonSpecial2Hitbox_hit(SeraphimonSpecial2Hitbox *this, CollisionSphere *sum) {
+    s32 radius;
+    Entity *child;
+
+    Hit_apply(&this->parts.base, sum);
+    radius = this->velocity.vx >> 2;
+    child = allocEntityMemory(0x3C);
+    if (child != NULL) {
+        ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->position, radius, 0x60, 6, 0x808080);
+    }
+    entityAddSibling(&this->parts.entity, child);
+    do {
+        entityDelete(&this->parts.entity);
+    } while (0);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", SeraphimonSpecial2Hitbox_tick);
 

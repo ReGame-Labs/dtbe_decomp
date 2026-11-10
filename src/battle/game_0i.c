@@ -1520,6 +1520,11 @@ void ItemEffectIcon_destroy(Entity *this, s32 flags) {
     }
 }
 
+/* Not matched yet. Deletes itself when its fighter is gone, the round is over or the fighter's item effect is not
+ * the icon's effectKind; else halfSize follows the sine of the frame ((COS_SIN_TABLE[(frame << 8) & 0xF00].sin +
+ * 0x80 >> 11) + 10) and the frame steps. A draft is 15 differences off (the game keeps this in $s0 and the fighter
+ * in $s1). decomp-permuter reaches 0 only with the delete wrapped in two nested do-whiles, the index and the sine in
+ * locals, and a redundant this->frame = frame before the sum, which are forms for the codegen alone. */
 INCLUDE_ASM("game/nonmatchings/game_0i", ItemEffectIcon_tick);
 
 /* Draws the icon while its fighter lives: a square of twice halfSize around (x, y), the item kind's 24x24 cell of

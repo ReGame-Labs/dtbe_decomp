@@ -4,8 +4,11 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/camera.h"
 #include "engine/gfx/prim/build_line_g2.h"
 #include "engine/gfx/prim_buffer.h"
+#include "engine/math/matrix.h"
+#include "engine/math/sin_cos.h"
 #include "gte.h"
 
 struct ImpmonIntroEffect *ImpmonIntroEffect_init(struct ImpmonIntroEffect *this, Fighter *fighter, Fight *fight);
@@ -274,8 +277,6 @@ s32 Impmon_getSpecial2Distance(Impmon *this) {
     return vecGetLength(&delta);
 }
 
-Entity *ImpmonSpecial2Effect_init(void *this, Fighter *fighter, Vec3 *position, s32 facing, Fight *fight);
-
 /* The special move 2's effect (0x54 bytes): a quad turning at a point in front of the fighter, which spawns the
  * move's hitboxes while the move lasts (ImpmonSpecial2Effect_tick). */
 typedef struct ImpmonSpecial2Effect {
@@ -294,6 +295,9 @@ typedef struct ImpmonSpecial2Effect {
     /* 0x4C */ s32 ticks;
     /* 0x50 */ s16 vramY;
 } ImpmonSpecial2Effect;
+
+ImpmonSpecial2Effect *ImpmonSpecial2Effect_init(ImpmonSpecial2Effect *this, Fighter *fighter, Vec3 *position, s32 facing,
+                                                Fight *fight);
 
 /* Spawns the special move 2's effect 384 in front of the fighter and 16 up, with its facing. */
 void Impmon_spawnSpecial2Effect(Impmon *this) {
@@ -678,7 +682,33 @@ void ImpmonIntroEffect_draw(ImpmonIntroEffect *this, Camera *camera) {
     } while (0);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/impmon", ImpmonSpecial2Effect_init);
+/* Builds the special move 2's effect for fighter at position, facing as given: 30 wide, 120 high, turned 0, with no
+ * hitbox yet (the first comes the next tick). */
+ImpmonSpecial2Effect *ImpmonSpecial2Effect_init(ImpmonSpecial2Effect *this, Fighter *fighter, Vec3 *position, s32 facing,
+                                                Fight *fight) {
+    s32 x, y, z;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &IMPMON_SPECIAL2_EFFECT_VTABLE;
+    this->fighter = (Impmon *)fighter;
+    this->fight = fight;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->facing = facing;
+    this->halfWidth = 30;
+    this->height = 120;
+    this->angle = 0;
+    this->hitboxCount = 0;
+    this->stopping = 0;
+    this->hitboxDelay = 1;
+    this->ticks = 0;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->vramY = Fighter_getVramY(fighter);
+    return this;
+}
 
 /* The special move 2 effect's destructor. */
 void ImpmonSpecial2Effect_destroy(Entity *this, s32 flags) {
@@ -690,7 +720,28 @@ void ImpmonSpecial2Effect_destroy(Entity *this, s32 flags) {
 }
 
 void ImpmonSpecial2Effect_spawnHitbox(ImpmonSpecial2Effect *this);
-Entity *ImpmonSpecial2Hitbox_init(Entity *this, Fighter *fighter, Vec3 *position, s32 facing, s32 index, Fight *fight);
+/* The special move 2's hitbox (0xD4 bytes): a sphere in the fight's list for its side that drops down and then runs
+ * away along the facing, shedding no more than 0x800 of distance before it shrinks. */
+typedef struct ImpmonSpecial2Hitbox {
+    /* 0x00 */ UnkPartsEntity3C parts;
+    /* 0x84 */ Impmon *fighter;
+    /* 0x88 */ VECTOR position;
+    /* 0x98 */ VECTOR velocity;
+    /* 0xA8 */ s32 facing;
+    /* 0xAC */ s32 variant; /* picture row, 0-3 */
+    /* 0xB0 */ s32 width;
+    /* 0xB4 */ s32 width2;
+    /* 0xB8 */ s32 shade;
+    /* 0xBC */ s32 delay;
+    /* 0xC0 */ s32 unkC0;
+    /* 0xC4 */ s32 speed;
+    /* 0xC8 */ s32 distance;
+    /* 0xCC */ s32 ticks;
+    /* 0xD0 */ u16 vramY;
+} ImpmonSpecial2Hitbox;
+
+ImpmonSpecial2Hitbox *ImpmonSpecial2Hitbox_init(ImpmonSpecial2Hitbox *this, Fighter *fighter, Vec3 *position, s32 facing,
+                                                s32 index, Fight *fight);
 
 /* Spawns a hitbox every hitboxDelay frames (half the count so far, plus 1) until the move stops or 150 frames
  * pass; the effect then widens no more, plays sound 0xA8 if it made any hitbox, and shrinks away. */
@@ -739,9 +790,137 @@ void ImpmonSpecial2Effect_spawnHitbox(ImpmonSpecial2Effect *this) {
     entityAddSibling(&this->entity, hitbox);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/impmon", ImpmonSpecial2Effect_draw);
+/* Draws the effect: a square of the half width in the flat (x z plane), turned by the angle around Y, then a ring of
+ * 16 flat quads (a band of the half width and a half more, as high as height) in a picture of 32 by 32 pixels. */
+extern MATRIX D_800108B4;
 
-INCLUDE_ASM("game/nonmatchings/fighters/impmon", ImpmonSpecial2Hitbox_init);
+void ImpmonSpecial2Effect_draw(ImpmonSpecial2Effect *this, Camera *camera) {
+    SVECTOR corners[4];
+    MATRIX m;
+    MATRIX *matrix;
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 zShift;
+    s32 halfWidth;
+    s32 height;
+    s32 angle;
+    s32 index;
+    s32 sine, cosine;
+    s32 outer;
+    u16 vramY;
+    void *packet;
+
+    matrix = &m;
+    packet = PRIM_BUFFER_FREE;
+    m = D_800108B4;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    halfWidth = this->halfWidth;
+    height = this->height;
+    matrixTranslate(matrix, this->position.vx, this->position.vy, this->position.vz);
+    matrixRotateY(matrix, this->angle);
+    setModelMatrix(matrix);
+    corners[0].vx = corners[2].vx = -halfWidth;
+    corners[1].vx = corners[3].vx = halfWidth;
+    corners[0].vy = corners[1].vy = 0;
+    corners[2].vy = corners[3].vy = 0;
+    corners[0].vz = corners[1].vz = halfWidth;
+    corners[2].vz = corners[3].vz = -halfWidth;
+    shape.flags = 0;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0x3F;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0x3F;
+    vramY = this->vramY;
+    shape.color = 0x808080;
+    shape.clut = ((vramY + 0x7D) << 6) | 0x1C;
+    shape.tpage = ((vramY & 0x100) >> 4) | 0x27 | ((vramY & 0x200) << 2);
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vy = corners[1].vy = -height;
+    corners[2].vy = corners[3].vy = 0;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0x60;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0x7F;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0x20;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0x3F;
+    vramY = this->vramY;
+    shape.color = 0x404040;
+    shape.clut = ((vramY + 0x7C) << 6) | 0x1C;
+    shape.tpage = ((vramY & 0x100) >> 4) | 0x27 | ((vramY & 0x200) << 2);
+    shape.flags |= 0xB;
+    for (angle = 0; angle <= 0x1000; angle += 0x100) {
+        index = angle & 0xFFF;
+        sine = COS_SIN_TABLE[index].sin;
+        cosine = COS_SIN_TABLE[index].cos;
+        corners[0].vx = corners[1].vx;
+        corners[2].vx = corners[3].vx;
+        corners[0].vz = corners[1].vz;
+        corners[2].vz = corners[3].vz;
+        corners[1].vx = ((halfWidth + (halfWidth >> 1)) * sine) >> 12;
+        corners[3].vx = (halfWidth * sine) >> 12;
+        corners[1].vz = ((halfWidth + (halfWidth >> 1)) * cosine) >> 12;
+        corners[3].vz = (halfWidth * cosine) >> 12;
+        if (angle != 0) {
+            packet = buildPolyFT4(&shape, packet, ot, zShift);
+        }
+    }
+    PRIM_BUFFER_FREE = packet;
+}
+
+/* Builds the special move 2 hitbox of fighter at position, with the facing and the index of the effect's count: a sphere
+ * of radius 0x60 in the fight's list for its side, disabled at first, knocking back 3276 along the facing. It starts
+ * going up and a little forward at random (x -16..15, y -80..-49, picture row 0-3), waits index ticks once the move has
+ * stopped; an even index raises its hit's kind to 1 (unkC0 is 1). */
+ImpmonSpecial2Hitbox *ImpmonSpecial2Hitbox_init(ImpmonSpecial2Hitbox *this, Fighter *fighter, Vec3 *position, s32 facing, s32 index,
+                                                Fight *fight) {
+    VECTOR knockback;
+    s32 x, y, z;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    this->parts.entity.vtable = &IMPMON_SPECIAL2_HITBOX_VTABLE;
+    TrackedHit_init(&this->parts.unk18, fighter, 0x6AC0500, position, 0);
+    CollisionSphere_init(&this->parts.part, position, 0x60, &this->parts.unk18);
+    knockback.vx = facing * 3276;
+    knockback.vy = 0;
+    knockback.vz = 0;
+    Hit_setKnockback(&this->parts.unk18.base, &knockback);
+    this->parts.part.entity = &this->parts.entity;
+    this->fighter = (Impmon *)fighter;
+    this->parts.part.flags.bits.disabled = 1;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->velocity.vx = (mersenneTwisterGenerate(&fight->random) & 0x1F) - 0x10;
+    this->velocity.vy = (mersenneTwisterGenerate(&fight->random) & 0x1F) - 0x50;
+    this->velocity.vz = this->velocity.pad = 0;
+    this->facing = facing;
+    this->delay = index;
+    this->unkC0 = 0;
+    this->variant = mersenneTwisterGenerate(&fight->random) & 3;
+    this->width = 8;
+    this->width2 = 0;
+    this->shade = 0;
+    this->speed = 0;
+    this->distance = 0;
+    this->ticks = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    if (!(this->delay & 1)) {
+        this->unkC0 = 1;
+        Hit_set(&this->parts.unk18.base, 0x6AC0500, 1);
+    }
+    if (Fighter_getSide(&this->fighter->base) == 0) {
+        Fight_addSide0Shape(fight, &this->parts.part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->parts.part.link);
+    }
+    return this;
+}
 
 /* The destructor of the UnkPartsEntity3C class of vtable IMPMON_SPECIAL2_HITBOX_VTABLE, which ImpmonSpecial2Hitbox_init installs. */
 void ImpmonSpecial2Hitbox_destroy(UnkPartsEntity3C *this, s32 flags) {
@@ -762,7 +941,91 @@ void ImpmonSpecial2Hitbox_destroy(UnkPartsEntity3C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/impmon", ImpmonSpecial2Hitbox_tick);
+/* The hitbox's frame: moves by the velocity, the sphere with it. While the move runs the velocity's y eases by 8 to 0 and
+ * then the x stops; once it has stopped the x halves while delay (2 less a tick) lasts and then grows by 8 along the
+ * facing, y 0. distance adds up |x|: under 0x800 the width grows by 4 up to 0x20, then it shrinks by 12 and the hitbox
+ * deletes itself at 0; from 0x20 the sphere is enabled. When it touches something it sheds a spark (a sixteenth of its
+ * velocity) and deletes itself; otherwise width2 follows (twice the width) and shade grows by 2 up to 0xC0. */
+void ImpmonSpecial2Hitbox_tick(ImpmonSpecial2Hitbox *this) {
+    VECTOR velocity;
+    VECTOR *vel;
+    Entity *child;
+    s32 speed;
+    s32 x, y, z;
+    s32 vx, vy, vz;
+
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    vx = this->velocity.vx;
+    vy = this->velocity.vy;
+    vz = this->velocity.vz;
+    x += vx;
+    y += vy;
+    z += vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->parts.part.position.vx = x;
+    this->parts.part.position.vy = y;
+    this->parts.part.position.vz = z;
+    if (this->fighter->special2Stopped == 0) {
+        if (vy != 0) {
+            this->velocity.vy = vy + 8;
+            if (this->velocity.vy >= 0) {
+                this->velocity.vy = 0;
+                this->velocity.vx = 0;
+            }
+        }
+    } else {
+        if (this->delay > 0) {
+            this->delay -= 2;
+            this->velocity.vx = vx >> 1;
+            if (this->velocity.vx == -1) {
+                this->velocity.vx = 0;
+            }
+        } else {
+            this->velocity.vx = vx + (this->facing << 3);
+        }
+        this->velocity.vy = 0;
+    }
+    speed = this->velocity.vx < 0 ? -this->velocity.vx : this->velocity.vx;
+    this->speed = speed;
+    this->distance += speed;
+    if (this->distance >= 0x800) {
+        this->width -= 12;
+        if (this->width <= 0) {
+            entityDelete(&this->parts.entity);
+            return;
+        }
+    } else if (this->width < 0x20) {
+        this->width += 4;
+    }
+    if (this->width >= 0x20) {
+        if (this->parts.part.flags.bits.disabled) {
+            this->parts.part.flags.bits.disabled = 0;
+        }
+    }
+    if (this->parts.part.flags.bits.touched) {
+        vel = &velocity;
+        velocity.vx = this->velocity.vx >> 4;
+        velocity.vy = this->velocity.vy >> 4;
+        velocity.vz = this->velocity.vz >> 4;
+        child = allocEntityMemory(0x58);
+        if (child != NULL) {
+            func_8006D54C_init(entityOperatorNewAt(0x58, child), &this->position, vel, 0x80, 1);
+        }
+        entityAddSibling(&this->parts.entity, child);
+        entityDelete(&this->parts.entity);
+    } else {
+        this->width2 = this->width << 1;
+        this->shade += 2;
+        if (this->shade > 0xC0) {
+            this->shade = 0xC0;
+        }
+        this->ticks++;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/impmon", ImpmonSpecial2Hitbox_draw);
 

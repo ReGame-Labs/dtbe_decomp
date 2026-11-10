@@ -2,7 +2,9 @@
  * guard's effect, the special move 1's hitbox and its hit's effect, and the special move 2's trail. */
 
 #include "common.h"
+#include <abs.h>
 #include "battle/game_classes.h"
+#include "engine/math/vector.h"
 
 void Wormmon_spawnSpecial1Hitbox(Fighter *this, s32 arg);
 extern FaceEntry WORMMON_FACES[];
@@ -355,12 +357,89 @@ typedef struct WormmonSpecial1Hitbox {
     /* 0x000 */ UnkPartsEntity38 parts;
     /* 0x080 */ Fighter *fighter;
     /* 0x084 */ Fight *fight;
-    /* 0x088 */ u8 unk88[0xB4 - 0x88];
+    /* 0x088 */ s16 direction;   /* 1, or -1 when it flies right */
+    /* 0x08A */ u16 age;         /* ticks so far */
+    /* 0x08C */ u16 vramY;       /* Fighter_getVramY of the character */
+    /* 0x08E */ u16 count;       /* trail pieces in use: one more every other tick, up to 7 */
+    /* 0x090 */ SVECTOR corners[4]; /* a square of side 0x200 around the origin */
+    /* 0x0B0 */ s32 speed;       /* the velocity's length */
     /* 0x0B4 */ Vec3 velocity;
-    /* 0x0C0 */ u8 unkC0[0x184 - 0xC0];
+    /* 0x0C0 */ s32 velocityPad;
+    /* 0x0C4 */ VECTOR trail[7]; /* the pieces' positions: all from the position it was made at, each moves on by velocity */
+    /* 0x134 */ u8 shade[7];     /* brightness: 0x80 less 0x12 a piece, halved a tick once the piece has gone its distance */
+    /* 0x13B */ u8 shadePad;
+    /* 0x13C */ u16 state[7];    /* 0 flying, 1 fading, 2 gone */
+    /* 0x14A */ u16 statePad;
+    /* 0x14C */ s32 distance[7]; /* gone so far: the speed a tick, to 0x300 */
+    /* 0x168 */ s32 growth[7];   /* 0x100 a tick; a thirty-second of the first is the sphere's radius */
 } WormmonSpecial1Hitbox;
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonSpecial1Hitbox_init);
+/* Builds the special move 1's hitbox for fighter, from position at velocity: a sphere of radius 0, the knockback along
+ * the character's facing, in the fight's list for its side; seven trail pieces start at the position, each darker by
+ * 0x12 than the one before, and sound 0x101. */
+WormmonSpecial1Hitbox *WormmonSpecial1Hitbox_init(WormmonSpecial1Hitbox *this, Fighter *fighter, Vec3 *position,
+                                                   Vec3 *velocity, Fight *fight) {
+    VECTOR knockback;
+    s32 i;
+    ListNode *node;
+    s32 vx, vy, vz;
+    s32 x, y, z;
+    Vec3 *dst;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    Hit_init(&this->parts.base, fighter, 0x7A80F00, velocity, 2);
+    this->parts.base.vtable = WORMMON_SPECIAL1_HITBOX_HIT_VTABLE;
+    this->parts.entity.vtable = &WORMMON_SPECIAL1_HITBOX_VTABLE;
+    CollisionSphere_init(&this->parts.part, position, 0, &this->parts.base);
+    this->speed = vecGetLength((VECTOR *)velocity);
+    this->count = 0;
+    this->age = 0;
+    vx = velocity->vx;
+    vy = velocity->vy;
+    vz = velocity->vz;
+    this->velocity.vx = vx;
+    this->velocity.vy = vy;
+    this->velocity.vz = vz;
+    this->vramY = Fighter_getVramY(fighter);
+    this->fighter = fighter;
+    this->fight = fight;
+    if (velocity->vx > 0) {
+        this->direction = -1;
+    } else {
+        this->direction = 1;
+    }
+    knockback.vx = Fighter_getFacing(this->fighter);
+    knockback.vy = 0;
+    knockback.vz = 0;
+    Hit_setKnockback(&this->parts.base, &knockback);
+    node = &this->parts.part.link;
+    this->corners[0].vy = this->corners[1].vy = -0x100;
+    this->corners[2].vy = this->corners[3].vy = 0x100;
+    this->corners[0].vx = this->corners[2].vx = -0x100;
+    this->corners[1].vx = this->corners[3].vx = 0x100;
+    this->corners[0].vz = this->corners[1].vz = this->corners[2].vz = this->corners[3].vz = 0;
+    this->parts.part.entity = &this->parts.entity;
+    if (Fighter_getSide(this->fighter) == 0) {
+        Fight_addSide0Shape(fight, node);
+    } else {
+        Fight_addSide1Shape(fight, node);
+    }
+    for (i = 0; i < 7; i++) {
+        x = position->vx;
+        y = position->vy;
+        z = position->vz;
+        dst = (Vec3 *)&this->trail[i];
+        dst->vx = x;
+        dst->vy = y;
+        dst->vz = z;
+        this->distance[i] = 0;
+        this->growth[i] = 0;
+        this->shade[i] = -0x80 - i * 0x12;
+        this->state[i] = 0;
+    }
+    Fighter_playSound(this->fighter, 0x101);
+    return this;
+}
 
 /* The special move 1 hitbox's destructor. */
 void WormmonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
@@ -382,7 +461,67 @@ void WormmonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonSpecial1Hitbox_tick);
+/* The special move 1 hitbox's frame: every other one it takes another trail piece into use (up to 7); a piece in state
+ * 0 flies on by the velocity, growing, for as far as 0x300, then fades (state 1) to nothing (state 2). Once the first
+ * piece has left state 0 the sphere is disabled; its position and radius follow the first piece. The hitbox deletes
+ * itself when every piece is gone. */
+void WormmonSpecial1Hitbox_tick(WormmonSpecial1Hitbox *this) {
+    s32 alive = 0;
+    s32 i;
+    s32 x, y, z;
+    VECTOR *trail;
+
+    if ((this->age ^ 1) & 1) {
+        this->count++;
+        if (this->count >= 8) {
+            this->count = 7;
+        }
+    }
+    for (i = 0; i < this->count; i++) {
+        switch (this->state[i]) {
+        case 0:
+            trail = &this->trail[i];
+            x = trail->vx;
+            y = trail->vy;
+            z = trail->vz;
+            x += this->velocity.vx;
+            y += this->velocity.vy;
+            z += this->velocity.vz;
+            trail->vx = x;
+            trail->vy = y;
+            trail->vz = z;
+            this->distance[i] += ABS(this->speed);
+            this->growth[i] += 0x100;
+            alive = 1;
+            if (this->distance[i] <= 0x300) {
+                break;
+            }
+            this->state[i]++;
+        case 1:
+            this->shade[i] -= this->shade[i] >> 1;
+            alive = 1;
+            if (this->shade[i] < 3) {
+                this->shade[i] = 0;
+                this->state[i]++;
+            }
+            break;
+        case 2:
+            break;
+        }
+    }
+    if (this->state[0] != 0) {
+        this->parts.part.flags.bits.disabled = 1;
+    }
+    if (!alive) {
+        entityDelete(&this->parts.entity);
+    } else {
+        this->parts.part.position.vx = this->trail[0].vx;
+        this->parts.part.position.vy = this->trail[0].vy;
+        this->parts.part.position.vz = this->trail[0].vz;
+        this->parts.part.radius = this->growth[0] >> 5;
+        this->age++;
+    }
+}
 
 struct Unk800BA734 *func_800BA734(struct Unk800BA734 *this, Fighter *fighter, BattleSide *owner);
 
@@ -469,8 +608,8 @@ typedef struct WormmonGuardEffect {
     /* 0x1C */ u32 handle; /* the character's (entityGetHandle) */
     /* 0x20 */ s16 unk20;
     /* 0x22 */ s16 facing; /* Fighter_getFacing */
-    /* 0x24 */ s16 vramY;  /* Fighter_getVramY */
-    /* 0x26 */ s16 unk26;
+    /* 0x24 */ u16 vramY;  /* Fighter_getVramY */
+    /* 0x26 */ u16 unk26;
     /* 0x28 */ VECTOR fighterPosition; /* the fighter's when made (Fighter_getPosition) */
     /* 0x38 */ VECTOR position; /* where the draw puts the rectangle */
     /* 0x48 */ s32 scale;       /* of the rectangle, in 4096ths; 0 draws nothing */
@@ -512,7 +651,54 @@ void WormmonGuardEffect_destroy(WormmonGuardEffect *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonGuardEffect_tick);
+/* The guard effect's frame: grows (scale up by 0x200 a tick more each, to 0xFFF) while the character guards (body state
+ * 9 or 0xA) unless the opponent is throwing; otherwise shrinks by 0x400 to 0. Its position eases halfway a tick to
+ * the character's, offset forward and up (the crouching guard's differs); it deletes itself with the character's
+ * entity (getEntityByHandle). */
+void WormmonGuardEffect_tick(WormmonGuardEffect *this) {
+    Fighter *opponent;
+    s32 crouching;
+    s32 body;
+    s32 attack;
+
+    opponent = Fighter_getOpponent(&this->fighter->base);
+    this->facing = Fighter_getFacing(&this->fighter->base);
+    {
+        VECTOR offsets[2] = { { this->facing * 200, -0x84 }, { this->facing * 0xE8, -0x60 } };
+
+        body = Fighter_getBodyState(&this->fighter->base)->state;
+        attack = Fighter_getAttackState(opponent)->state;
+        if (body != FIGHTER_STATE_GUARD && body != FIGHTER_STATE_CROUCH_GUARD) {
+            this->unk20 = 1;
+        } else {
+            this->unk20 = 0;
+        }
+        if (attack == FIGHTER_STATE_THROW) {
+            this->unk20 = 1;
+        }
+        crouching = body == FIGHTER_STATE_CROUCH_GUARD;
+        if (this->unk20 == 0) {
+            this->scale += this->unk26 << 9;
+            if (this->scale >= 0x1000) {
+                this->scale = 0xFFF;
+            }
+            this->unk26++;
+        } else {
+            this->scale -= 0x400;
+            if (this->scale < 0) {
+                this->scale = 0;
+                this->unk26 = 0;
+            }
+        }
+        Fighter_getPosition(&this->fighter->base, (Vec3 *)&this->fighterPosition);
+        this->position.vz = -0x80;
+        this->position.vx += (offsets[crouching].vx + this->fighterPosition.vx - this->position.vx) >> 1;
+        this->position.vy += (offsets[crouching].vy + this->fighterPosition.vy - this->position.vy) >> 1;
+    }
+    if (getEntityByHandle(this->handle) == NULL) {
+        entityDelete(&this->entity);
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/wormmon", D_8006C644);
 INCLUDE_RODATA("game/nonmatchings/fighters/wormmon", D_8006C664);

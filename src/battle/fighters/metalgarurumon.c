@@ -537,7 +537,35 @@ void MetalGarurumonSpecial2Projectile_tick(MetalGarurumonSpecial2Projectile *thi
     Projectile_tick(&this->base, arg);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", MetalGarurumonSpecial2Projectile_hit);
+/* Spawns the spray of the special move 2 projectile's hit at its position: of kind, size 0x80, 16 particles of color
+ * 0x808080, moving by velocity. Returns the entity, NULL if allocEntityMemory fails. */
+static inline Entity *MetalGarurumonSpecial2Projectile_newSpray(MetalGarurumonSpecial2Projectile *owner, s32 kind,
+                                                                Vec3 *velocity) {
+    Entity *child = allocEntityMemory(0x48);
+
+    if (child != NULL) {
+        ParticleSpray_init(entityOperatorNewAt(0x48, child), kind, &owner->base.position, velocity, 0x80, 0x10, 0x808080);
+    }
+    return child;
+}
+
+/* On a hit: Hit_apply, a spray of the projectile's position moving by half its velocity, then deletes itself.
+ * The match depends on the spray as an inline taking the address of the velocity (it stays in a saved register
+ * across the allocation) and on the delete as a statement macro's do-while. */
+void MetalGarurumonSpecial2Projectile_hit(MetalGarurumonSpecial2Projectile *this, CollisionSphere *sum) {
+    Vec3 velocity;
+    Entity *child;
+
+    Hit_apply(&this->base.parts.base, sum);
+    velocity.vx = this->base.velocity.vx >> 1;
+    velocity.vy = this->base.velocity.vy >> 1;
+    velocity.vz = this->base.velocity.vz >> 1;
+    child = MetalGarurumonSpecial2Projectile_newSpray(this, 3, &velocity);
+    entityAddSibling(&this->base.parts.entity, child);
+    do {
+        entityDelete(&this->base.parts.entity);
+    } while (0);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", MetalGarurumonSpecial2Projectile_draw);
 
@@ -750,7 +778,22 @@ MetalGarurumonSpecial2Projectile *func_8009CE8C(MetalGarurumonSpecial2Projectile
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009CEE0);
+/* The hit of the class func_8009CE8C constructs (virtual table D_8006A1AC): the special move 2 projectile's, with the
+ * spray of kind 4. */
+void func_8009CEE0(MetalGarurumonSpecial2Projectile *this, CollisionSphere *sum) {
+    Vec3 velocity;
+    Entity *child;
+
+    Hit_apply(&this->base.parts.base, sum);
+    velocity.vx = this->base.velocity.vx >> 1;
+    velocity.vy = this->base.velocity.vy >> 1;
+    velocity.vz = this->base.velocity.vz >> 1;
+    child = MetalGarurumonSpecial2Projectile_newSpray(this, 4, &velocity);
+    entityAddSibling(&this->base.parts.entity, child);
+    do {
+        entityDelete(&this->base.parts.entity);
+    } while (0);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009CFBC);
 
