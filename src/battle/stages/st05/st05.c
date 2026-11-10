@@ -320,8 +320,19 @@ void StageVolcano_updateCamera(StageVolcano *this) {
     }
 }
 
+/* Not matched yet. Shakes the camera: with riseBoost not 0, adds Fight_random % riseBoost to the target's x and
+ * another to its y (the pair also stored to a Vec3 on the stack, with z 0, which nothing reads). A draft (the two
+ * remainders in locals, then the Vec3, then the sums) is 16 differences off: the game keeps riseBoost in $s0 and
+ * the first remainder in $s1, and loads the target after the second remainder, before the Vec3's stores. */
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D4A74);
 
+/* Not matched yet. Puts each of unkE80's three sprites at its unk28 plus its unk38 scaled by the sine of
+ * (i << 10) + (frames << 5) + 0x10 (COS_SIN_TABLE), z 0, and also writes that point to a local Vec3 that nothing
+ * reads (the game's stores to 0(sp), 4(sp) and 8(sp)). The best C, with the sprite's VECTORs as offset[0..2] and
+ * the Vec3 assigned in the same statements, has the game's instructions (0xA4 bytes) but 22 differences of
+ * order and registers: the game loads unk38.x before the table entry and keeps the sine in ; the sine in a local
+ * (s16 or s32), written inline twice, and the order of the Vec3's stores did not move it (decomp-permuter: 305
+ * from 605 in 4 minutes). */
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D4B10);
 
 void func_800D4D3C(StageVolcano *this, u_long *ot, s32 y);
@@ -681,6 +692,10 @@ Unk800D5D54 *func_800D5D54(Unk800D5D54 *this, Fight *stage, Vec3 *position) {
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D5E3C);
 
+/* Not matched yet. A draft that keeps the push in a Vec3 on the stack (z 0), reads the sphere's knockback first
+ * and adds the push into it is 24 instructions off: the game stores the push after using it, sets its frame late,
+ * and takes the knockback's x and y in other registers. Variants of the order of the loads, a struct copy of the
+ * knockback and the damage added first did not change it. */
 INCLUDE_ASM("st05/nonmatchings/st05", St05Hit_apply);
 
 extern EntityVtable ST05_FADE_VTABLE;
@@ -875,6 +890,10 @@ Unk800D6740 *func_800D6740(Unk800D6740 *this, Vec3 *position, Vec3 *unk28) {
     return this;
 }
 
+/* Not matched yet. The tick of the entity of func_800D6740: unk28.vy + 2 (gravity), the position plus unk28,
+ * unk40 + 4 * unk28.vx, and a delete once y is past 0x100. A draft is 24 differences off: the game reads the
+ * position's three words and then unk28's, and keeps this in $t0, not in $a3. Reading everything into locals
+ * first, a vecAddInPlace inline and the parameter copy did not change it. */
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D6814);
 
 INCLUDE_ASM("st05/nonmatchings/st05", func_800D68A4);

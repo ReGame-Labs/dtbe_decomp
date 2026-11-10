@@ -282,6 +282,10 @@ void func_800D4B14(StageNature *this) {
     }
 }
 
+/* Not matched yet. It copies D_800D3A30 (3 words) into a Vec3 on the stack and the Vec3 into the stage at 0xF70
+ * with a loop of three word moves, then clears the halfword at 0xF60. A struct copy through a local gives the same
+ * thing unrolled, without the stack copy: the block move that GCC 2.95.2 does not emit as the game's does (as in
+ * engine/gfx/camera.c). */
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D4BFC);
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D4C54);
@@ -692,6 +696,9 @@ MATRIX *func_800D6C94(St01FallingObject *this) {
     return &this->mesh->object.transform.local.m;
 }
 
+/* Not matched yet. Clears a word of the mesh's node (when it has one) and copies a MATRIX (32 bytes) into the one
+ * 0x24 further on as two block moves of four loads then four stores, which GCC 2.95.2 does not emit (see
+ * engine/gfx/camera.c). func_800D636C of st09 has the same body. */
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D6CA0);
 
 /* Where StageNature_startRound puts one Unk800D6D08 (a 16-byte entry of its table, passed by value). */
@@ -747,7 +754,21 @@ void func_800D6DF4(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st01/nonmatchings/st01", func_800D6E48);
+/* The sine of an angle, from COS_SIN_TABLE, as an int. The match depends on this being a function that returns an
+ * int (getSinInline returns an s16 and loads it with lh, which this function's game code does not). */
+static inline s32 sineOf(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].sin;
+}
+
+/* Unk800D6D08's tick: its grey follows a sine of the angle around its shade (blue 10 lower), then the angle
+ * steps by 0x20. The match depends on the angle stepped after the color is stored: the game reads it again. */
+void func_800D6E48(Unk800D6D08 *this) {
+    u32 level = ((u8)this->shade + (sineOf(this->angle << 4) >> 9)) & 0xFF;
+    u32 blue = (level - 10) & 0xFF;
+
+    this->color = level | (level << 8) | (blue << 16);
+    this->angle += 0x20;
+}
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D6EA4);
 
@@ -836,7 +857,20 @@ void St01HoverQuad_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st01/nonmatchings/st01", St01HoverQuad_tick);
+/* getSin (engine/math/sin_cos.c), inline. */
+static inline s16 getSinInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].sin;
+}
+
+/* St01HoverQuad's tick: sets the quad's color from the sine of the phase, a level of 0 to 0xFF around 0x80 in
+ * green and blue and a quarter of it in red, then steps the phase. The match depends on the phase stepped after the
+ * color is stored: the game reads it again for the step. */
+void St01HoverQuad_tick(St01HoverQuad *this) {
+    u32 level = ((getSinInline(this->phase) >> 6) - 0x80) & 0xFF;
+
+    this->color = (level >> 2) | (level << 8) | (level << 16);
+    this->phase++;
+}
 
 INCLUDE_ASM("st01/nonmatchings/st01", St01HoverQuad_draw);
 
@@ -1026,6 +1060,11 @@ St01Debris *St01Debris_init(St01Debris *this, Fight *stage) {
     return this;
 }
 
+/* Not matched yet. St01Debris_init with the place given: x and z around it (x - 0xFF + 0..0x1FF, z - 0x80 + 0..0xFF)
+ * and y as it is. The position is a Vec3 passed by value (this, stage, then x and y in $a2 and $a3 and z on the
+ * stack): that is why the game reloads them from the stack after each Fight_random call, and a draft written so is
+ * 5 differences off. The game adds the random to x - 0xFF, with the addiu on x; the draft puts it on the random
+ * (no order of the sum, nor the random kept in a local, changed it). */
 INCLUDE_ASM("st01/nonmatchings/st01", St01Debris_initAt);
 
 /* St01Debris's destructor. */
@@ -1221,11 +1260,6 @@ void func_800D8EB4(Entity *this, s32 flags) {
     }
 }
 
-/* getSin (engine/math/sin_cos.c), inline. */
-static inline s16 getSinInline(s32 angle) {
-    return COS_SIN_TABLE[angle & 0xFFF].sin;
-}
-
 /* Unk800D8E1C's tick: position sways around center by sines of the phase (x and z by direction, cut to 16 bits),
  * tilts follow a faster sine, and the phase steps. The match depends on the x and z sways reading the table directly
  * (lhu, then shifts) while the others go through getSin (lh). */
@@ -1249,6 +1283,12 @@ void func_800D8F08(Unk800D8E1C *this) {
 
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D8FD4);
 
+/* Not matched yet. Constructs an entity of the class of virtual table D_800D3B6C: a quad of four corners (0x30,
+ * 0x38, 0x40, 0x48: x -0x80, 0x80, -0x80, 0x80; y and z 0) at a position (x at 0x18) shifted by size, which scales
+ * it (0x1000 - (size << 8), size at 0x20), a delay of 0x3F to 0x42 at 0x2A and 0x80 at 0x28. The position is a
+ * VECTOR passed by value (this, stage, then x and y in $a2 and $a3, z and the pad on the stack, size after them
+ * as a u16), as in St01Debris_initAt. A draft is 25 differences off: the game masks the shift count with
+ * andi 0xFFFF and truncates the shifted value to a halfword once, and stores x after size. */
 INCLUDE_ASM("st01/nonmatchings/st01", func_800D9158);
 
 /* The destructor of the entity class of vtable D_800D3B6C, which func_800D9158 installs. */

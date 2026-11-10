@@ -101,6 +101,11 @@ INCLUDE_ASM("st02/nonmatchings/st02", StageTurn_createNodeEntity);
 
 INCLUDE_ASM("st02/nonmatchings/st02", StageTurn_tickScenery);
 
+/* Not matched yet. Fight_tick, then the arena turned by its angle (matrixInitRotationZ, st02_turnPoints) and, unless
+ * unkD38 is 4, each fighter raised to at least twice the halfword at 0x2 of its Fighter_getParams table minus 0x900
+ * (Fighter_getPosition, Fighter_setPosition when y is lower). A draft written so is 11 differences off: the game
+ * keeps 0x900 in a register ($s4) set before the loop, where GCC subtracts it as an addiu. A constant in a local
+ * (before the loop or in it) and the expression twice with one Fighter_getParams call did not change that. */
 INCLUDE_ASM("st02/nonmatchings/st02", StageTurn_tick);
 
 /* The stage's override of Fight_isFallen: whether a
@@ -400,6 +405,10 @@ void func_800D5AF8(Unk800D554C *this) {
     }
 }
 
+/* Not matched yet. Puts the mesh's matrix at no rotation at unk84 (the shape of st03's meshSetPosition), then
+ * invalidates it again and copies its local MatrixWords (32 bytes) onto itself as two block moves of four loads then
+ * four stores, which GCC 2.95.2 does not emit (see scene_graph.c): assigning the MatrixWords or its MATRIX gives
+ * word-by-word copies, 58 differences. */
 INCLUDE_ASM("st02/nonmatchings/st02", func_800D5B30);
 
 /* Attaches its mesh's transform to the scene's mesh 15 (the one StageTurn_startRound gives the St02Terminal). */
@@ -703,7 +712,24 @@ void St02Terminal_clearQueue(St02Terminal *this) {
     this->writeIndex = 0;
 }
 
-INCLUDE_ASM("st02/nonmatchings/st02", St02Terminal_clearGrid);
+/* Empties the grid and puts the cursor and the first shown row back at the top. */
+void St02Terminal_clearGrid(St02Terminal *this) {
+    s32 row;
+    s32 next;
+    s32 i;
+
+    /* The match depends on working the next row out before the row's loop: the game keeps it in $a2 and moves it
+     * into row ($a1) after. */
+    for (row = 0; row < 12; row = next) {
+        next = row + 1;
+        for (i = 15; i >= 0; i--) {
+            this->grid[row][i] = 0;
+        }
+    }
+    this->column = 0;
+    this->row = 0;
+    this->topRow = 0;
+}
 
 /* Clears a row of the grid. */
 void St02Terminal_clearRow(St02Terminal *this, s32 row) {

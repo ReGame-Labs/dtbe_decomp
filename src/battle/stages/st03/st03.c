@@ -1072,8 +1072,6 @@ void func_800D6C94(Unk800D69C4 *this, StageShrine *stage) {
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D6D0C);
 
-INCLUDE_ASM("st03/nonmatchings/st03", func_800D6E38);
-
 /* A jittering line through up to 8 points (three of them sit at 0x18 of func_800D7AC4's object, 0x14C apart):
  * St03JitterLine_layOut lays the targets out, St03JitterLine_move moves each point toward its target plus a random
  * offset, St03JitterLine_draw draws the segments between the points. */
@@ -1090,6 +1088,42 @@ typedef struct St03JitterLine {
 void func_800D70BC(St03JitterLine *this, Camera *camera, VECTOR *point, u32 *color, s32 unk100);
 void St03JitterLine_layOut(St03JitterLine *this, VECTOR *from, VECTOR *to);
 void St03JitterLine_fadeColor(St03JitterLine *this, u32 from, u32 to);
+
+/* Copies the components of src to dst, reading the three words before storing any (vecCopy, inlined). */
+static inline void vecCopyInline(VECTOR *dst, VECTOR *src) {
+    s32 x = src->vx;
+    s32 y = src->vy;
+    s32 z = src->vz;
+
+    dst->vx = x;
+    dst->vy = y;
+    dst->vz = z;
+}
+
+/* Lays the line out between from and to (St03JitterLine_layOut), gives it the color 0xFF8040 and starts every point
+ * at its target, with a random 4 to 6 in each unk100 (a random mod 3, plus 4); its jitter is 0x200 and its unk148
+ * 0x20. The match depends on the copy taking its pointers as arguments incremented after (point++, target++),
+ * and on a loop that counts up: GCC then counts it down from 7 after the constant of the modulo. */
+void func_800D6E38(St03JitterLine *this, VECTOR *from, VECTOR *to) {
+    VECTOR *target;
+    VECTOR *point;
+    s32 *unk100;
+    s32 i;
+    MersenneTwister *random;
+
+    St03JitterLine_layOut(this, from, to);
+    St03JitterLine_fadeColor(this, 0xFF8040, 0xFF8040);
+    random = &RANDOM;
+    target = this->target;
+    point = this->point;
+    unk100 = this->unk100;
+    for (i = 0; i < 8; i++) {
+        vecCopyInline(point++, target++);
+        *unk100++ = mersenneTwisterGenerate(random) % 3 + 4;
+    }
+    this->jitter = 0x200;
+    this->unk148 = 0x20;
+}
 
 /* Moves each point a sixteenth of the way toward its target plus a random offset in x and y. */
 void St03JitterLine_move(St03JitterLine *this) {
@@ -1211,6 +1245,11 @@ INCLUDE_ASM("st03/nonmatchings/st03", func_800D7534);
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D7764);
 
+/* Not matched yet. Loads the scratchpad's view matrix (SCRATCH_VIEW_MATRIX) into the GTE (gte_setMatrix) and draws
+ * the four St03JitterLines of the entity from 0x18, 0x14C apart. A draft is 11 differences off, all in the
+ * registers of the eight loads: the game has the matrix address in $a3 and the temporaries in $a2, $a1, $v1 and
+ * $v0, GCC puts it in $v0. It matches with the address in a register variable pinned to $a3, which the project
+ * does not allow (tools/hacks.py); the temporaries' declaration order does not give it. */
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D7AC4);
 
 INCLUDE_ASM("st03/nonmatchings/st03", func_800D7B58);

@@ -789,6 +789,9 @@ MATRIX *Unk800D5BA0_getLocalMatrix(Unk800D5BA0 *this) {
     return &this->mesh->object.transform.local.m;
 }
 
+/* Not matched yet. Clears a word of the node (when it has one) and copies a MATRIX (32 bytes) as two block moves of
+ * four loads then four stores, which GCC 2.95.2 does not emit (see engine/gfx/camera.c). func_800D6CA0 of st01
+ * has the same body. */
 INCLUDE_ASM("st09/nonmatchings/st09", func_800D636C);
 
 /* Constructs a BonusLandingMark of owner at pos: a 512 by 512 square. */

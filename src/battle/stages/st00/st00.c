@@ -495,7 +495,22 @@ void func_800D7F34(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", func_800D7F88);
+/* The sine of an angle, from COS_SIN_TABLE, as an int. The match depends on this being a function that returns an
+ * int (one that returns an s16 loads the sine with lh, and the game's lhu plus shifts). */
+static inline s32 sineOf(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].sin;
+}
+
+/* The strip's tick: its red follows the sine of the phase, a level of 0 to 0xFF around 0x80, and green and blue a
+ * quarter of it; then the phase steps by 8. The match depends on the phase stepped after the color is stored: the
+ * game reads it again for the step. */
+void func_800D7F88(St00PulseStrip *this) {
+    u32 level = ((sineOf(this->phase) >> 6) - 0x80) & 0xFF;
+    u32 quarter = level >> 2;
+
+    this->color = level | (quarter << 8) | (quarter << 16);
+    this->phase += 8;
+}
 
 INCLUDE_ASM("st00/nonmatchings/st00", func_800D7FDC);
 
@@ -621,7 +636,7 @@ INCLUDE_ASM("st00/nonmatchings/st00", St00SignalQuads_draw);
 typedef struct St00ColorQuad {
     /* 0x00 */ Entity entity;
     /* 0x18 */ void *unk18;
-    /* 0x1C */ s16 unk1C;
+    /* 0x1C */ u16 phase; /* + 0x20 per frame, the COS_SIN_TABLE index */
     /* 0x1E */ u8 unk1E[0x20 - 0x1E];
     /* 0x20 */ u32 color;
     /* 0x24 */ SVECTOR corners[4];
@@ -632,7 +647,7 @@ St00ColorQuad *St00ColorQuad_init(St00ColorQuad *this, void *arg) {
     entityInit(&this->entity, 0);
     this->entity.vtable = &ST00_COLOR_QUAD_VTABLE;
     this->unk18 = arg;
-    this->unk1C = 0;
+    this->phase = 0;
     /* The match depends on these chained assignments, as in st07's BonusThrower_init. */
     this->corners[0].vx = this->corners[2].vx = -0x100;
     this->corners[1].vx = this->corners[3].vx = 0x100;
@@ -652,7 +667,15 @@ void St00ColorQuad_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("st00/nonmatchings/st00", St00ColorQuad_tick);
+/* St00ColorQuad's tick: its green and red follow the sine of the phase, a level of 0 to 0xFF around 0x80, and its
+ * blue is a quarter of it; then the phase steps by 0x20. */
+void St00ColorQuad_tick(St00ColorQuad *this) {
+    u32 level = ((sineOf(this->phase) >> 6) - 0x80) & 0xFF;
+    u32 quarter = level >> 2;
+
+    this->color = level | (level << 8) | (quarter << 16);
+    this->phase += 0x20;
+}
 
 INCLUDE_ASM("st00/nonmatchings/st00", St00ColorQuad_draw);
 

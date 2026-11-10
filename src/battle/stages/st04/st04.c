@@ -805,6 +805,11 @@ void St04SideSquare_destroy(Entity *this, s32 flags) {
     }
 }
 
+/* Not matched yet. Copies the side's fighter position (stage->fighterPositions[side]) into a Vec3 on the stack,
+ * puts the fighter's point (func_8007A650) in position, then deletes itself when that copy's y is negative, setting
+ * the side's unk1DEC to 0 first if it is 2 or more. A draft (a pointer to the position, the three words read before
+ * they are stored) is 10 differences off: the game loads side into $a1 and stage into $a0 at once, the arguments
+ * of Fight_getFighter, and reloads both after the call; the draft moves side through $v0. */
 INCLUDE_ASM("st04/nonmatchings/st04", St04SideSquare_tick);
 
 /* St04SideSquare's draw: unless the continue prompt is shown, the square at the fighter's position, with the 64 by
@@ -921,6 +926,11 @@ typedef struct St04Glow {
     /* 0x20 */ SVECTOR vertices[3][3][13]; /* three grids of 3 rows of 13 points (St04Glow_init) */
 } St04Glow; /* size 0x3C8 */
 
+/* Not matched yet. Constructs the glow: virtual table, phase and unk1C 0, level 0x80, and the points of its three
+ * grids of 3 rows of 13 (g, r, c): x = c * (r * 2 + 0x20 - c) - r * 0x10 + g * 0x32, z 0,
+ * y = r * 0x28 + (COS_SIN_TABLE[(g * 0x800 + c * 0x200) & 0xFFF].sin >> 9) + c * (6 - r * 2) - g * 0x14. A draft
+ * is 40 differences off (one instruction more): the game computes the row's base without the 0x20 of the vertices
+ * (it stores at 0x20($a0)); GCC folds it into the induction pointer, however the subscripts are written. */
 INCLUDE_ASM("st04/nonmatchings/st04", St04Glow_init);
 
 /* St04Glow's destructor. */
