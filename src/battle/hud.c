@@ -18,6 +18,9 @@
 
 extern EntityVtable SCORE_TALLY_VTABLE;
 
+/* Not matched yet. A draft is 35 instructions off. Its switch (cases 11, 2 and 8: the game compares 8 first) and
+ * the tables are right; the game takes the layout table's address before kind * 8, copies the first word of the
+ * layout with lw and sw and stores the home rect in another order. */
 INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_init);
 
 /* A battle message (BattleMessage_init, 0x59C bytes): its kind's layout and text from BATTLE_MESSAGE_LAYOUTS, and
@@ -215,14 +218,28 @@ void BattleMessage_drawNewChallenger(BattleMessage *this, u_long *ot) {
     func_800CF2A4(ot + 1, 90 - this->frame);
 }
 
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_tickEvolution);
-#else
 /* The EVOLUTION tick (BATTLE_MESSAGE_TICKS): in state 0 types the text out on even frames up to its last
  * character, then in state 1 blinks that last character (the cursor '_'); deletes the message after 46 frames. The
- * length is the text's width over the step of a character (JP: 10, and that body is still asm: its registers
- * differ). */
-void BattleMessage_tickEvolution(BattleMessage *this) {
+ * length is the text's width over the step of a character (JP: 10, written as the literals 9 and 10). The match
+ * depends on this being a copy of the parameter. */
+void BattleMessage_tickEvolution(BattleMessage *arg) {
+#if VERSION_JP
+    BattleMessage *this = arg;
+
+    switch (this->state) {
+    case 0:
+        if ((this->frame ^ 1) & 1) {
+            if (++this->shownChars >= 9) {
+                this->state = 1;
+            }
+        }
+        break;
+    case 1:
+        this->shownChars = (this->frame & 2) ? 9 : 10;
+        break;
+    }
+#else
+    BattleMessage *this = arg;
     s32 length = this->textWidth / this->charStep;
 
     switch (this->state) {
@@ -242,11 +259,11 @@ void BattleMessage_tickEvolution(BattleMessage *this) {
         this->shownChars = length;
         break;
     }
+#endif
     if (++this->frame >= 46) {
         entityDelete(&this->entity);
     }
 }
-#endif
 
 /* The EVOLUTION draw (BATTLE_MESSAGE_DRAWS): the typed text, then the shade bands (func_800CF2A4) in the next slot
  * of ot, their brightness rising and falling with half a turn of the sine over the message's 45 frames. */
@@ -317,6 +334,11 @@ void BattleMessage_tickKo(BattleMessage *arg) {
     this->frame++;
 }
 
+/* Not matched yet. Draws the KO message's two letters as slanted POLY_FT4s (the top 8 to the right and the bottom 8
+ * to the left of the box), each at its HudText character's offset around (0x7C + 0x48 * i, 0x50), in the
+ * character's color and its glyph (getFontGlyphUv) 0x20 square, clut 0x7ABB, tpage 0x3E, then func_800D008C. A draft
+ * is 42 differences off (one instruction too few): the game keeps the glyph word in the register of u and takes v
+ * from it first, which no order of the u and v locals (s32 or u8) gives, and decomp-permuter got to 970 from 1320. */
 INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_drawKo);
 
 /* The YOU WIN! tick (BATTLE_MESSAGE_TICKS): over 12 frames "YOU" closes in from the left (its 2nd and 3rd letters
@@ -400,7 +422,57 @@ void BattleMessage_tickYouLose(BattleMessage *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_tickPlayerWin);
+void hudTextSetSizes(HudText *this, s32 w, s32 h);
+
+/* The PLAYER WIN tick (BATTLE_MESSAGE_TICKS), for "1P WIN" and "2P WIN": copies the text, moves its first two
+ * characters 8 right and the four from the 4th 8 left, and gives the first two the palette 2 for 1P and 1 for 2P;
+ * all characters are 0x20 wide and 0xA0 tall, and invisible. In state 1 they shrink to 0x20 square over 8 frames
+ * while they fade in, state 2 waits 31 frames, and in 3 the text fades out over 16 frames and the message is
+ * deleted. */
+void BattleMessage_tickPlayerWin(BattleMessage *this) {
+    HudText *text = &this->hudText;
+    s32 shown;
+
+    switch (this->state) {
+    case 0:
+        hudTextSetText(text, this->text);
+        hudTextSetOffsetRange(text, 8, 0, 0, 2);
+        hudTextSetOffsetRange(text, -8, 0, 3, 4);
+        /* the match depends on reading the character through this, not through text, as an unsigned byte */
+        if ((u8)this->hudText.text[0] == 0x31) {
+            hudTextSetPaletteRange(text, 2, 0, 2);
+        } else {
+            hudTextSetPaletteRange(text, 1, 0, 2);
+        }
+        hudTextSetSizes(text, 0x20, 0xA0);
+        hudTextSetOpacity(text, 0);
+        this->state++;
+        break;
+    case 1:
+        shown = this->frame * 0x10;
+        hudTextSetSizes(text, 0x20, 0xA0 - shown);
+        hudTextSetOpacity(text, shown);
+        if (this->frame >= 8) {
+            this->frame = 0;
+            this->state++;
+        }
+        break;
+    case 2:
+        if (this->frame >= 0x1F) {
+            this->frame = 0;
+            this->state = 3;
+        }
+        break;
+    case 3:
+        hudTextSetOpacity(text, 0x80 - this->frame * 8);
+        if (this->frame >= 0x10) {
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->frame++;
+}
 
 /* The TIME UP tick (BATTLE_MESSAGE_TICKS): slides the cursor in from x 320 to home by quarters, opens its height by
  * 4 a frame, waits 61 frames, then closes it by 4 a frame and deletes the message. */
@@ -480,7 +552,75 @@ void BattleMessage_drawTimeUp(BattleMessage *this, u_long *ot) {
     AddPrim(ot, rightShadow);
 }
 
-INCLUDE_ASM("game/nonmatchings/hud", BattleMessage_tickDrawGame);
+void func_800CD534(HudText *this, s32 unk10, s32 step);
+
+/* The DRAW GAME tick: state 0 copies the text, moves its first four characters 8 right and the four from the 6th 8
+ * left, both 0x60 up, and has func_800CD534 give every character a drop speed; state 1 drops each character
+ * (dy += unk10, bouncing at 0 with unk10 = -unk10 >> 2, unk10 + 1 a frame) for 41 frames, then func_800CD534
+ * (0, 0); state 2 lets the first frame characters (at most all) fall on for 33 frames and deletes the message. The
+ * USA one moves only the first four characters (no x change) up. */
+void BattleMessage_tickDrawGame(BattleMessage *arg) {
+    BattleMessage *this = arg;
+    HudText *text = &this->hudText;
+    s32 *length = &this->hudText.length;
+    HudTextChar *c;
+    HudTextChar *d;
+    s32 i;
+    s32 n;
+    s32 k;
+
+    switch (this->state) {
+    case 0:
+        hudTextSetText(text, this->text);
+#if VERSION_JP
+        hudTextSetOffsetRange(text, 8, -0x60, 0, 4);
+        hudTextSetOffsetRange(text, -8, -0x60, 5, 4);
+#else
+        hudTextSetOffsetRange(text, 0, -0x60, 0, 4);
+#endif
+        func_800CD534(text, this->hudText.length, -1);
+        this->state++;
+        break;
+    case 1:
+        /* The match depends on the character pointer taken from the index in the loop, and on state 2 having its own. */
+        for (i = 0; i < *length; i++) {
+            c = &text->chars[i];
+            c->dy += c->unk10;
+            if (c->dy > 0) {
+                c->dy = 0;
+                c->unk10 = -c->unk10 >> 2;
+            }
+            c->unk10++;
+        }
+        if (this->frame >= 0x29) {
+            this->frame = 0;
+            func_800CD534(text, 0, 0);
+            this->state++;
+        }
+        break;
+    case 2:
+        n = this->frame;
+        if (this->hudText.length < n) {
+            n = this->hudText.length;
+        }
+        if (n > 0) {
+            d = text->chars;
+            k = n;
+            do {
+                d->dy += d->unk10;
+                d->unk10++;
+                d++;
+            } while (--k != 0);
+        }
+        if (this->frame >= 0x21) {
+            entityDelete(&this->entity);
+            return;
+        }
+        break;
+    }
+    this->frame++;
+}
+
 
 s32 spawnGlyphShards(EntityGroup *group, s32 x, s32 y, u8 c);
 
@@ -892,6 +1032,9 @@ typedef struct ScoreTally {
 /* adds the tally's three bonuses into its score and clears them */
 void ScoreTally_addAll(ScoreTally *this);
 
+/* Not matched yet. A draft with this structure (the bonuses by FIGHT_MODE_BONUS, then the panel fields, wait
+ * set last) is 27 instructions off, mostly fight and side taking s2 and s1 where the game has s1 and s2. Copies of
+ * the parameters, the branches swapped and the store of player moved did not change it. */
 INCLUDE_ASM("game/nonmatchings/hud", ScoreTally_init);
 
 /* Destroys the score tally: adds what is left of the bonuses into the score first (ScoreTally_addAll). */
@@ -1044,6 +1187,8 @@ void ScoreTally_addAll(ScoreTally *this) {
     }
 }
 
+/* Not matched yet. A draft with four RECT locals, each cleared with memset, copied into an array is 88
+ * instructions off: its frame is 0x70 bytes against the game's 0x68, one saved register too many. */
 INCLUDE_ASM("game/nonmatchings/hud", ScoreTally_draw);
 
 void func_800CED10(u_long *ot, RECT *rect);
@@ -1124,7 +1269,78 @@ void ScoreTally_drawPanel(ScoreTally *this, u_long *ot) {
 
 INCLUDE_RODATA("game/nonmatchings/hud", SCORE_TALLY_DECIMAL_PLACES);
 
-INCLUDE_ASM("game/nonmatchings/hud", func_800CEB0C);
+/* 100000 down to 1, then 0: the decimal places of the tally's numbers (func_800CEB0C). */
+extern s32 SCORE_TALLY_DECIMAL_PLACES[];
+
+/* Draws value (at most 999999) from rect's x and y, a digit after the other and rect->w further right each: one
+ * POLY_FT4 per digit of the HUD texture, leading zeros skipped. Digits are 8 x 10 at v 0x6B for a rect narrower than
+ * 9, else 12 x 16 at v 0x58. The match depends on the (s16) cast of the right edge, on the clamp starting from
+ * 999999, and on the color stored as one word. */
+void func_800CEB0C(ScoreTally *this, u_long *ot, RECT *rect, s32 value) {
+    s32 clamp = 999999;
+    s32 number;
+    s32 started;
+    s32 *places;
+    s32 place;
+    s32 step;
+    s32 height;
+    s32 top;
+    s32 u;
+    POLY_FT4 *poly;
+
+    if (value < clamp) {
+        clamp = value;
+    }
+    number = clamp;
+    started = 0;
+    places = SCORE_TALLY_DECIMAL_PLACES;
+    if (rect->w < 9) {
+        top = 0x6B;
+        step = 8;
+        height = 10;
+    } else {
+        top = 0x58;
+        step = 12;
+        height = 16;
+    }
+    while ((place = *places++) != 0) {
+        u = 0;
+        if (number >= place) {
+            started = 1;
+            while (number >= place) {
+                number -= place;
+                u += step;
+            }
+        }
+        if (place == 1) {
+            started = 1;
+        }
+        if (started) {
+            poly = allocPolyFT4();
+            *(u32 *)&poly->r0 = (poly->code << 24) | 0x808080;
+            poly->x0 = rect->x;
+            poly->y0 = rect->y;
+            poly->x1 = (s16)(rect->x - 1) + rect->w;
+            poly->y1 = rect->y;
+            poly->x2 = rect->x;
+            poly->y2 = rect->y + rect->h;
+            poly->x3 = (s16)(rect->x - 1) + rect->w;
+            poly->y3 = rect->y + rect->h;
+            poly->u0 = u;
+            poly->v0 = top;
+            poly->u1 = u + step;
+            poly->v1 = top;
+            poly->u2 = u;
+            poly->v2 = top + height;
+            poly->u3 = u + step;
+            poly->v3 = top + height;
+            poly->tpage = 0xF;
+            poly->clut = getClut(0x3C0, 0x7B);
+            AddPrim(ot, poly);
+        }
+        rect->x += rect->w;
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/hud", D_8006DCDC);
 
@@ -1217,6 +1433,9 @@ s32 getFontGlyphUv(u8 c) {
     return (v << 8) | u;
 }
 
+/* Not matched yet. A draft (a switch on '\n', ' ' and a default that builds a POLY_FT4; the right and bottom edges
+ * as s32 locals of x - 1 and y - 1) is 13 instructions off: the game loads the half width first, with a nop before
+ * its use, and stores the color bytes before x0 and y0, where GCC schedules the loads and stores the other way. */
 INCLUDE_ASM("game/nonmatchings/hud", drawGlyphAtCursor);
 
 INCLUDE_ASM("game/nonmatchings/hud", drawGlyph);
@@ -1248,6 +1467,8 @@ GlyphShard *GlyphShard_init(GlyphShard *this, Vec3 *position, VECTOR *corners, u
 
 INCLUDE_ASM("game/nonmatchings/hud", spawnGlyphShards);
 
+/* Not matched yet. A draft (corners copied through pointers, RANDOM and the velocity kept in pointers) is 18
+ * instructions off, all of them order: where the `% 128` branch falls and where &this->velocity is computed. */
 INCLUDE_ASM("game/nonmatchings/hud", GlyphShard_init);
 
 /* Waits its delay; then moves by its velocity under gravity (0x80) and bounces off the screen's sides (x at 0 or 320

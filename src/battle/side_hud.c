@@ -275,11 +275,56 @@ void SideHud_drawRight(SideHud *this, u_long *ot) {
     func_80073C80(this, ot, 0x102, 0xBD);
 }
 
-INCLUDE_ASM("game/nonmatchings/side_hud", func_80073C80);
+POLY_FT4 *func_80073D78(SideHud *this, s32 character, s32 x, s32 y, s32 brightness);
 
+/* Draws the side's portrait at (x, y): the current character's, or while the character changes (changeFlash above
+ * 0) the new one fading in and the previous one fading out over it; then a DR_TPAGE. */
+void func_80073C80(SideHud *this, u_long *ot, s32 x, s32 y) {
+    POLY_FT4 *poly;
+
+    /* The match depends on one poly for all three: the game keeps it in $v1 across the second call. */
+    if (this->changeFlash <= 0) {
+        poly = func_80073D78(this, this->character, x, y, 0x80);
+        AddPrim(ot, poly);
+    } else {
+        poly = func_80073D78(this, this->character, x, y, 0x80 - this->changeFlash);
+        setSemiTrans(poly, 1);
+        AddPrim(ot, poly);
+        poly = func_80073D78(this, this->previousCharacter, x, y, this->changeFlash);
+        AddPrim(ot, poly);
+    }
+    AddPrim(ot, allocDrTpageMode(0, 0, 0xF));
+}
+
+/* Not matched yet. A draft with the uv and xy macros is 33 instructions off: GCC gives x, y, the brightness and
+ * the clut row the saved registers in another order than the game (s5, s6, s3, s4) and stores the uvs in another
+ * order. */
 INCLUDE_ASM("game/nonmatchings/side_hud", func_80073D78);
 
-INCLUDE_ASM("game/nonmatchings/side_hud", SideHud_drawRoundWins);
+/* Draws the round wins' mark at (x, y): a 12 x 12 sprite of the HUD texture at u 0x78, v 0x58. While the side has
+ * wins its color pulses with the sine of the frame; otherwise it is dark and semi-transparent. */
+void SideHud_drawRoundWins(SideHud *this, u_long *ot, s32 x, s32 y) {
+    SPRT *sprt = allocSprt();
+
+    if (this->roundWins != 0) {
+        sprt->r0 = (COS_SIN_TABLE[(this->frame << 7) & 0xF80].sin >> 7) - 0x80;
+        sprt->g0 = 0x80;
+        sprt->b0 = 0x80;
+    } else {
+        sprt->r0 = 0x30;
+        sprt->g0 = 0;
+        sprt->b0 = 0;
+        setSemiTrans(sprt, 1);
+    }
+    sprt->x0 = x;
+    sprt->y0 = y;
+    sprt->u0 = 0x78;
+    sprt->v0 = 0x58;
+    sprt->clut = getClut(0x3C0, 0x7B);
+    sprt->w = 12;
+    sprt->h = 12;
+    AddPrim(ot, sprt);
+}
 
 /* Draws the round's seconds left (timeLeft / 30, at most 99) at (x, y): two 12x16 digits of the HUD texture's row at
  * v 0x58. The match depends on the digits' x copied from x after the clamp (the game copies the parameter there),
