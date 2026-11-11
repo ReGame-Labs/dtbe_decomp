@@ -24,13 +24,22 @@ typedef struct TailmonSpecial1Hitbox {
     /* 0x034 */ u8 unk34[0x38 - 0x34];
     /* 0x038 */ CollisionSphere unk38;
     /* 0x080 */ Fighter *fighter;
-    /* 0x084 */ u8 unk84[0xC8 - 0x84];
-    /* 0x0C8 */ Vec3 unkC8;
-    /* 0x0D4 */ u8 unkD4[0x118 - 0xD4];
+    /* 0x084 */ Fight *fight;
+    /* 0x088 */ u16 vramY;
+    /* 0x08A */ u16 unk8A;
+    /* 0x08C */ u16 trailCount;
+    /* 0x08E */ u8 trailColors[5];
+    /* 0x093 */ u8 pad93;
+    /* 0x094 */ u16 trailKinds[5];
+    /* 0x09E */ u8 pad9E[2];
+    /* 0x0A0 */ s32 unkA0[5];
+    /* 0x0B4 */ s32 trailScales[5];
+    /* 0x0C8 */ VECTOR trails[5];
     /* 0x118 */ Vec3 position;
     /* 0x124 */ u8 unk124[0x128 - 0x124];
     /* 0x128 */ Vec3 velocity;
-    /* 0x134 */ u8 unk134[0x158 - 0x134];
+    /* 0x134 */ u8 unk134[0x138 - 0x134];
+    /* 0x138 */ SVECTOR corners[4];
     /* 0x158 */ s32 speed; /* the length of velocity */
     /* 0x15C */ u32 soundHandle; /* Fighter_playSound's (sound 0xF2), which the destructor stops */
 } TailmonSpecial1Hitbox;
@@ -223,7 +232,103 @@ void Tailmon_spawnSpecial1Effect(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Hitbox_init);
+Entity *TailmonSpecial1Hitbox_init(Entity *this_, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *fight) {
+    TailmonSpecial1Hitbox *this = (TailmonSpecial1Hitbox *)this_;
+    Hit *hit;
+    CollisionSphere *sphere;
+    VECTOR knockback;
+    s32 vx;
+    s32 i;
+    s32 *pA0, *pS;
+    VECTOR *pT;
+    u16 *pK;
+    u8 *pC;
+    s32 color;
+
+    entityInit(&this->entity, 0x30000);
+    hit = &this->unk18;
+    Hit_init(hit, fighter, 0x6A81800, velocity, 3);
+    this->unk18.vtable = TAILMON_SPECIAL1_HITBOX_HIT_VTABLE;
+    this->entity.vtable = &TAILMON_SPECIAL1_HITBOX_VTABLE;
+    sphere = &this->unk38;
+    CollisionSphere_init(sphere, position, 0, hit);
+
+    vx = velocity->vx << 6;
+    knockback.pad = ((VECTOR *)velocity)->pad;
+    knockback.vz = 0;
+    knockback.vx = vx;
+    knockback.vy = -(vx < 0 ? -vx : vx);
+    Hit_setKnockback(hit, &knockback);
+
+    this->vramY = Fighter_getVramY(fighter);
+    this->corners[0].vx = this->corners[2].vx = -0x40;
+    this->corners[1].vx = this->corners[3].vx = 0x40;
+    this->fighter = fighter;
+    this->fight = fight;
+    this->corners[0].vy = this->corners[1].vy = -0x80;
+    this->corners[2].vy = this->corners[3].vy = 0x80;
+    this->corners[3].vz = 0;
+    this->corners[1].vz = 0;
+    this->corners[2].vz = 0;
+    this->corners[0].vz = 0;
+
+    {
+        s32 x = position->vx;
+        s32 y = position->vy;
+        s32 z = position->vz;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+    }
+    {
+        s32 x = velocity->vx;
+        s32 y = velocity->vy;
+        s32 z = velocity->vz;
+        this->velocity.vx = x;
+        this->velocity.vy = y;
+        this->velocity.vz = z;
+    }
+    this->speed = vecGetLength((VECTOR *)velocity);
+    this->unk8A = 0;
+    this->trailCount = 0;
+    this->unk38.entity = &this->entity;
+    if (Fighter_getSide(this->fighter) == 0) {
+        Fight_addSide0Shape(fight, (ListNode *)sphere);
+    } else {
+        Fight_addSide1Shape(fight, (ListNode *)sphere);
+    }
+
+    i = 0;
+    pC = this->trailColors;
+    pS = this->trailScales;
+    pK = this->trailKinds;
+    color = 0x40;
+    pT = this->trails;
+    pA0 = this->unkA0;
+    do {
+        s32 x, y, z;
+        u8 *c;
+        *pA0 = 0;
+        pA0++;
+        c = pC + i;
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        i++;
+        pT->vx = x;
+        pT->vy = y;
+        pT->vz = z;
+        *c = color;
+        *pK = 0;
+        *pS = 0;
+        pS++;
+        pK++;
+        color -= 12;
+        pT++;
+    } while (i < 5);
+    this->soundHandle = Fighter_playSound(this->fighter, 0xF2);
+    return &this->entity;
+}
 
 /* The special move 1 hitbox's destructor: first stops its sound if it plays. */
 void TailmonSpecial1Hitbox_destroy(TailmonSpecial1Hitbox *this, s32 flags) {
@@ -248,7 +353,94 @@ void TailmonSpecial1Hitbox_destroy(TailmonSpecial1Hitbox *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Hitbox_tick);
+void TailmonSpecial1Hitbox_tick(TailmonSpecial1Hitbox *this) {
+    s32 active;
+    s32 i;
+    u16 *kind;
+    VECTOR *trail;
+    s32 len;
+    s32 v;
+    u32 c;
+    s32 x, y, z;
+    s32 state;
+    s32 moving;
+
+    active = 0;
+    if ((this->unk8A & 3) == 0) {
+        if (++this->trailCount < 6) {
+        } else {
+            this->trailCount = 5;
+        }
+    }
+
+    i = 0;
+    if (this->trailCount != 0) {
+        moving = 1;
+        kind = this->trailKinds;
+        trail = this->trails;
+        do {
+            state = *kind;
+            if (state == moving) {
+                goto move;
+            }
+            if (state < 2) {
+                if (state == 0) {
+                    goto first;
+                }
+                goto next;
+            }
+            if (state == 2) {
+                goto fade;
+            }
+            goto next;
+        first:
+            active = 1;
+            *kind = active;
+        move:
+            this->trailScales[i] += 0x100;
+            x = trail->vx;
+            y = trail->vy;
+            z = trail->vz;
+            x += this->velocity.vx;
+            y += this->velocity.vy;
+            z += this->velocity.vz;
+            trail->vx = x;
+            trail->vy = y;
+            trail->vz = z;
+            len = this->speed;
+            v = this->unkA0[i] + (len < 0 ? -len : len);
+            this->unkA0[i] = v;
+            active = 1;
+            if (v > 0x600) {
+                (*kind)++;
+            } else {
+                goto next;
+            }
+        fade:
+            c = this->trailColors[i];
+            c -= c >> 1;
+            this->trailColors[i] = c;
+            if ((u8)c < 3) {
+                this->trailColors[i] = 0;
+                (*kind)++;
+            }
+        next:
+            kind++;
+            trail++;
+        } while (++i < this->trailCount);
+    }
+
+    if (this->trailKinds[0] >= 2) {
+        this->unk38.flags.word |= 1;
+    }
+    if (active == 0) {
+        entityDelete(&this->entity);
+        return;
+    }
+    this->unk38.position = *(Vec3 *)&this->trails[0];
+    this->unk38.radius = this->trailScales[0] >> 5;
+    this->unk8A++;
+}
 
 /* Fighter_isGuarding of a target, after taking its position (Fighter_getPosition), which is not used. */
 static inline s32 func_800B55EC_targetTest(Fighter *target) {
@@ -272,7 +464,7 @@ void TailmonSpecial1Hitbox_hit(TailmonSpecial1Hitbox *this, CollisionSphere *sum
     } else {
         child = allocEntityMemory(0x3C);
         if (child != NULL) {
-            ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->unkC8, this->speed >> 1, 0x60, 6, 0x808080);
+            ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, (Vec3 *)&this->trails[0], this->speed >> 1, 0x60, 6, 0x808080);
         }
         entityAddSibling(&this->entity, child);
     }
