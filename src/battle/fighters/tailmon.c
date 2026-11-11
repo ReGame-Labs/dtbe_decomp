@@ -135,6 +135,8 @@ void Tailmon_throw(Fighter *this, s32 frame) {
 
 void Tailmon_spawnSpecial1Hitbox(Fighter *this);
 void Tailmon_spawnSpecial1Effect(Fighter *this);
+void Tailmon_spawnSpecial2Effect(Fighter *this);
+s32 Fighter_isInvulnerable(Fighter *this);
 
 /* Special move 1: frame 0 its clip, the effect and the voice; frame 5 the hitbox and func_80079B0C(0x19). */
 void Tailmon_special1(Fighter *this, s32 frame) {
@@ -151,7 +153,142 @@ void Tailmon_special1(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", Tailmon_special2);
+void Tailmon_special2(Fighter *this, s32 frame) {
+    Fighter *opponent;
+    s16 facing;
+    Vec3 knockback;
+    Vec3 opponentPosition;
+    Vec3 position;
+    Vec3 difference;
+    Vec3 force;
+    Vec3 point;
+
+    opponent = Fighter_getOpponent(this);
+    func_80079AE4(this);
+    facing = Fighter_getFacing(this);
+    if (frame == 0) {
+        Fighter_playActionClip(this, FIGHTER_CLIP_DASH, 0, 0, -1);
+        Fighter_playSound(this, 7);
+        this->velocity.vx = 0;
+        ((Tailmon *)this)->unk4A4 = 0;
+        func_80079B14(this, 0x19);
+    }
+
+    {
+        s32 state = ((Tailmon *)this)->unk4A4;
+
+        if (state == 0) {
+            Fighter_getPosition(this, &position);
+            Fighter_getPosition(opponent, &opponentPosition);
+            difference.vx = position.vx - opponentPosition.vx;
+            difference.vy = position.vy - opponentPosition.vy;
+            difference.vz = position.vz - opponentPosition.vz;
+            Fighter_accelerateTo(this, Fighter_getFacing(this) * 0x38E0);
+            if (Fighter_getOpponentInReach(this, 0) != NULL) {
+                if (!Fighter_isGuarding(opponent) && !Fighter_isInvulnerable(opponent)) {
+                    if ((facing > 0 && opponentPosition.vx > position.vx) ||
+                        (facing < 0 && opponentPosition.vx < position.vx)) {
+                        this->velocity.vx = 0;
+                        Fighter_playActionClip(this, FIGHTER_CLIP_SPECIAL2, 0, 0, -1);
+                        Fighter_takeHit(opponent, 1, (Vec3 *)&ZERO_VECTOR, 0);
+                        ((Tailmon *)this)->unk4A4 = 1;
+                        func_80079B14(this, 0x2A);
+                        Fighter_playVoice(this, 0xF6);
+                        this->velocity.vx = 0;
+                    }
+                } else {
+                    if (!Fighter_isInvulnerable(opponent)) {
+                        {
+                            s32 fx = Fighter_getFacing(this) * 0x71C;
+                            s32 fy = -0x1C70;
+
+                            force.vx = fx;
+                            force.vy = fy;
+                            force.vz = 0;
+                            opponent->force.vx = fx;
+                            opponent->force.vy = fy;
+                            opponent->force.vz = 0;
+                            func_8007A650(opponent, &point);
+                        }
+                        force.vx = -(Fighter_getFacing(this) * 0xE38);
+                        force.vy = -0x238C;
+                        force.vz = 0;
+                        this->force = force;
+                        this->velocity.vx = 0;
+                        this->velocity.vy = 0;
+                        this->velocity.vz = 0;
+                        this->velocityPad = 0;
+                    }
+                    entityAddSibling(&this->entity, createHitSpark((Entity *)opponent, &this->velocity, 0x60));
+                    func_80079B14(this, 0x19);
+                    Fighter_stopActionClip(this);
+                    return;
+                }
+            }
+        } else {
+            switch (state) {
+            case 2: {
+                s64 speed = ((s64)this->mass * 0x1C70) >> 16;
+
+                this->velocity.vx = 0;
+                this->force.vx += (s32)speed * Fighter_getFacing(this);
+                this->force.vy -= ((s64)this->mass * 0x2AA8) >> 16;
+                knockback.vx = 0;
+                knockback.vy = -0x2AA8;
+                knockback.vz = 0;
+                Fighter_takeHit(opponent, 1, &knockback, 0);
+                this->hitDamage = 0x5AAC0800;
+                Fighter_setAttackParts(this, 0xC);
+                this->hitKind = 1;
+                break;
+            }
+            case 6: {
+                s64 speed = ((s64)this->mass * 0xE38) >> 16;
+
+                this->velocity.vx = 0;
+                this->force.vx += (s32)speed * Fighter_getFacing(this);
+                this->force.vy -= ((s64)this->mass * 0x2AA8) >> 16;
+                knockback.vx = 0;
+                knockback.vy = -0x2AA8;
+                knockback.vz = 0;
+                Fighter_takeHit(opponent, 1, &knockback, 0);
+                this->hitDamage = 0x5AAC0800;
+                Fighter_setAttackParts(this, 0xC);
+                this->hitKind = 1;
+                break;
+            }
+            case 12: {
+                s64 speed = ((s64)this->mass * 0x71C) >> 16;
+
+                this->velocity.vx = 0;
+                this->force.vx += (s32)speed * Fighter_getFacing(this);
+                this->force.vy -= ((s64)this->mass * 0x2AA8) >> 16;
+                knockback.vx = Fighter_getFacing(this) * 0xE38;
+                knockback.vy = -0x4718;
+                knockback.vz = 0;
+                Fighter_takeHit(opponent, 1, &knockback, 0);
+                this->hitDamage = 0x5AAC0800;
+                Fighter_setAttackParts(this, 0xC);
+                this->hitKind = 2;
+                break;
+            }
+            case 19:
+                this->velocity.vx = 0;
+                this->attackParts = 0;
+                ((Tailmon *)this)->unk4A4 = 0;
+                break;
+            }
+            if (this->velocity.vx != 0) {
+                this->force.vx -= this->velocity.vx >> 4;
+            }
+            ((Tailmon *)this)->unk4A4++;
+        }
+    }
+    if ((frame & 3) == 0) {
+        Tailmon_spawnSpecial2Effect(this);
+        Fighter_spawnDust(this, -1, 0x50, 4);
+    }
+}
 
 /* Special move 1 in the air: frame 0 its clip, the effect and the voice; frame 5 a push back by 0x3000, the hitbox and
  * func_80079B0C(0x19); until frame 14 the force brakes a sixteenth of the horizontal velocity and all of a fall. */
