@@ -39,6 +39,12 @@ typedef struct RenamonSpecial1Hitbox {
     /* 0xDC */ s32 vramY;        /* Fighter_getVramY of the fighter */
 } RenamonSpecial1Hitbox;
 
+void func_800A4550(RenamonSpecial1Hitbox *this);
+void func_800A45C8(RenamonSpecial1Hitbox *this);
+void Renamon_swapWithOpponent(Fighter *this);
+struct RenamonSpecial2Effect *RenamonSpecial2Effect_init(struct RenamonSpecial2Effect *this, Fighter *fighter);
+struct Unk800A4F64 *func_800A4F64(struct Unk800A4F64 *this, Fighter *fighter, RECT *from, RECT *to);
+
 /* Renamon's class (CHARACTER_RENAMON). */
 typedef struct Renamon {
     /* 0x000 */ Fighter base;
@@ -425,7 +431,56 @@ void Renamon_spawnSpecial1Effect(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/renamon", Renamon_special2);
+void Renamon_special2(Renamon *this, s32 frame) {
+    Fighter *fighter = &this->base;
+    Entity *child;
+
+    Fighter_special2(fighter, frame);
+    if (frame == 8) {
+        Fighter_playVoice(fighter, 0xD0);
+    }
+    if ((u32)frame < 25) {
+        Vec3 pos;
+
+        func_8007A650(fighter, &pos);
+        child = allocEntityMemory(0x3C);
+        if (child != NULL) {
+            ParticleBurst_init(entityOperatorNewAt(0x3C, child), 9, &pos, 0x40, 0x20, 1, 0x80C0FF);
+        }
+        Fighter_addEntity(fighter, child);
+
+        child = allocEntityMemory(0x44);
+        if (child != NULL) {
+            RenamonSpecial2Effect_init(entityOperatorNewAt(0x44, child), fighter);
+        }
+        Fighter_addEntity(fighter, child);
+    }
+    if (frame == 0) {
+        child = allocEntityMemory(0xB4);
+        if (child != NULL) {
+            func_800A4F64(entityOperatorNewAt(0xB4, child), fighter, this->vramCopies, this->vramAreas);
+        }
+        Fighter_addEntity(fighter, child);
+    }
+    if (!Fighter_hasFloorAhead(fighter, (fighter->velocity.vx >> 8) * Fighter_getFacing(fighter))) {
+        fighter->velocity.vx = 0;
+        fighter->force.vx = 0;
+    }
+    if (Fighter_hasFloorAhead(fighter, 0)) {
+        if (frame == 24) {
+            Fighter *opponent = (Fighter *)(child = (Entity *)Fighter_getOpponent(fighter));
+            if ((Fighter_probeFloorBelow(fighter) || opponent->unk48C <= 0) &&
+                !func_8007AEA8(opponent) &&
+                Fighter_getBodyStateId(opponent) != 0x13 &&
+                opponent->position.vy >= -0x200000) {
+                Renamon_swapWithOpponent(fighter);
+            }
+        } else {
+            return;
+        }
+    }
+    Fighter_stopActionClip(fighter);
+}
 
 /* A burst of 9 light blue particles at a fighter's point (func_8007A650), for the swap. */
 static inline Entity *Renamon_newSwapBurst(Fighter *fighter) {
@@ -514,7 +569,146 @@ RenamonSpecial1Hitbox *RenamonSpecial1Hitbox_init(RenamonSpecial1Hitbox *this, F
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/renamon", RenamonSpecial1Hitbox_tick);
+void RenamonSpecial1Hitbox_tick(RenamonSpecial1Hitbox *this) {
+    Fighter *owner;
+    Fighter *opponent;
+    VECTOR knockback;
+
+    owner = (Fighter *)getEntityByHandle(this->ownerHandle);
+    if (owner == NULL) {
+        func_800A4550(this);
+        entityDelete(&this->parts.entity);
+        return;
+    }
+
+    opponent = Fighter_getOpponent(owner);
+    switch (this->state) {
+    case 0: {
+        s32 dx, dy, dz;
+        s32 x, y, z;
+        if (this->age < 16) {
+            s32 aim = func_800A3710(owner);
+            if (aim != -1) {
+                this->heading.vy = aim;
+            }
+        }
+        if (this->timer >= 16 && Fighter_isAttackIdle(owner)) {
+            func_800A4550(this);
+            goto delete;
+        }
+        dx = this->hitOffset.vx;
+        dy = this->hitOffset.vy;
+        dz = this->hitOffset.vz;
+        dx -= this->position.vx;
+        dy -= this->position.vy;
+        dz -= this->position.vz;
+        this->velocity.vx = dx >> 3;
+        this->velocity.vy = dy >> 3;
+        this->velocity.vz = dz >> 3;
+        this->angle = ratan2(this->velocity.vy, this->velocity.vx);
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        x += this->velocity.vx;
+        y += this->velocity.vy;
+        z += this->velocity.vz;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+        if (--this->timer < 0) {
+            Fight *fight = CURRENT_FIGHT;
+            MersenneTwister *random;
+            if (Fighter_getSide(owner) == 0) {
+                Fight_addSide0Shape(fight, &this->parts.part.link);
+            } else {
+                Fight_addSide1Shape(fight, &this->parts.part.link);
+            }
+            this->parts.part.position = this->position;
+            random = &RANDOM;
+            vecNormalize((VECTOR *)&this->heading, (VECTOR *)&this->heading);
+            this->heading.vx = (this->heading.vx >> 3) + ((s32)mersenneTwisterGenerate(random) % 96);
+            this->heading.vy = (this->heading.vy >> 3) + ((s32)mersenneTwisterGenerate(random) % 96);
+            this->heading.vz = (this->heading.vz >> 3) + ((s32)mersenneTwisterGenerate(random) % 96);
+            knockback.vx = this->heading.vx;
+            knockback.vy = this->heading.vy;
+            knockback.vz = 0;
+            Hit_setKnockback(&this->parts.base, &knockback);
+            this->state++;
+        }
+        break;
+    }
+
+    case 1: {
+        s32 x, y, z;
+        this->velocity.vx += (this->heading.vx - this->velocity.vx) >> 5;
+        this->velocity.vy += (this->heading.vy - this->velocity.vy) >> 5;
+        this->velocity.vz += (this->heading.vz - this->velocity.vz) >> 5;
+        this->angle = ratan2(this->velocity.vy, this->velocity.vx);
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        x += this->velocity.vx;
+        y += this->velocity.vy;
+        z += this->velocity.vz;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+        this->parts.part.position = this->position;
+        if (++this->timer >= 31) {
+            goto delete;
+        }
+        break;
+    }
+
+    case 2: {
+        s32 x, y, z;
+        Fighter_getPosition(opponent, &this->position);
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        x -= this->hitOffset.vx;
+        y -= this->hitOffset.vy;
+        z -= this->hitOffset.vz;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+        if (this->age >= 61) {
+            func_800A45C8(this);
+            goto delete;
+        }
+        break;
+    }
+
+    case 3: {
+        s32 x, y, z;
+        s32 vx, vy, vz;
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        vx = this->velocity.vx;
+        vy = this->velocity.vy;
+        vz = this->velocity.vz;
+        x += vx;
+        y += vy;
+        this->velocity.vy = vy + 7;
+        z += vz;
+        this->position.vz = z;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->angle += vx << 3;
+        if (this->age >= 81) {
+            goto delete;
+        }
+        break;
+    }
+    }
+
+    this->age++;
+    return;
+
+delete:
+    entityDelete(&this->parts.entity);
+}
 
 /* On a hit: Hit_apply; a guarding fighter bounces it back at a quarter of its speed (state 3, sound 0xB), any other
  * keeps its offset from it (state 2); either way the sphere leaves its list. The match depends on reading the offset
@@ -573,6 +767,17 @@ void func_800A45C8(RenamonSpecial1Hitbox *this) {
         ParticleBurst_init(entityOperatorNewAt(0x3C, child), 9, &this->position, 0x20, 0x10, 8, 0x408080);
     }
     entityAddSibling(&this->parts.entity, child);
+}
+
+/* Copies v into a matrix's translation, the three words read before any is stored. */
+static inline void setTranslation(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
 }
 
 /* Draws the special move 1 hitbox as a streak: a quad turned to its direction (angle), as wide as its radius and as
@@ -712,7 +917,65 @@ void RenamonSpecial1Effect_tick(RenamonSpecial1Effect *this) {
     this->frames++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/renamon", RenamonSpecial1Effect_draw);
+/* Draws the special move 1's effect: four copies of the 56 by 56 picture at (0xC0, 0x50) of the texture page at
+ * (0x1C0, vramY), forming a box centered at the position and rotated around y by facing, scaled by size and shaded by
+ * brightness, with buildPolyFT4.
+ * The match depends on setTranslation copied first, and on the four corners and uv assignments chained. */
+void RenamonSpecial1Effect_draw(RenamonSpecial1Effect *this, Camera *camera) {
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    MATRIX *mat;
+    u8 *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 facing;
+    s32 size;
+    s32 c;
+    s32 vramY;
+
+    mat = &m.m;
+    setTranslation(m.m.t, &this->position);
+    m.words[0] = ONE;
+    m.words[1] = 0;
+    m.words[2] = ONE;
+    m.words[3] = 0;
+    m.words[4] = ONE;
+    facing = this->facing;
+    packet = PRIM_BUFFER_FREE;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    matrixRotateY(mat, facing << 8);
+    setModelMatrix(mat);
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0xC0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xF7;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0x50;
+    corners[0].vx = corners[1].vx = corners[2].vx = corners[3].vx = 0;
+    corners[2].vy = corners[3].vy = 0;
+    corners[1].vz = corners[3].vz = 0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0x87;
+    shape.flags = 9;
+    size = this->size;
+    corners[0].vy = corners[1].vy = -size;
+    corners[0].vz = corners[2].vz = -size;
+    c = this->brightness;
+    shape.color = (c << 8) | ((c >> 2) << 16);
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xFF);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vz = corners[2].vz = size;
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vy = corners[1].vy = size;
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    corners[0].vz = corners[2].vz = -size;
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    PRIM_BUFFER_FREE = packet;
+}
 
 /* The special move 2's effect (Renamon_special2 spawns it, 0x44 bytes): a sprite rising and drifting in x and z. */
 typedef struct RenamonSpecial2Effect {
@@ -775,10 +1038,6 @@ void RenamonSpecial2Effect_tick(RenamonSpecial2Effect *this) {
         entityDelete(&this->entity);
     }
 }
-
-/* PolyFT4Shape's uv words as their u and v bytes (as in saintgargomon.c): game_classes.h types them u16, and the game
- * stores the bytes. */
-#define UV_BYTES(uv) ((u8 *)&(uv))
 
 /* The corners of a 64 by 64 square around the origin. */
 extern SVECTOR RENAMON_SPECIAL2_EFFECT_CORNERS[4];

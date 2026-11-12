@@ -419,7 +419,88 @@ void VMonSpecial1Effect_tick(VMonSpecial1Effect *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/v_mon", VMonSpecial1Effect_draw);
+/* Copies v into a matrix's translation, the three words read before any is stored. */
+static inline void setTranslation(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws the special move 1's effect: four copies of the 32 by 32 picture at (0x40 + (frames & 3) * 32, 0) of the
+ * texture page at (0x1C0, vramY), mirrored by the facing, each 64 further along x than the last and 32 darker, turned
+ * by unk24 * 512 when unk20 is set, semi-transparent, with buildPolyFT4.
+ * The match depends on the view matrix in a local, with shape.flags and the GTE load in a do { } while (0) block
+ * (without it, the scratchpad base and &corners[0] swap $a2/$a3), and on the matrix pointer assigned in the loop. */
+void VMonSpecial1Effect_draw(VMonSpecial1Effect *this, Camera *camera) {
+    MATRIX *view = SCRATCH_VIEW_MATRIX;
+    MatrixWords m;
+    MATRIX *mat;
+    Vec3 pos;
+    PolyFT4Shape shape;
+    s32 frame;
+    u8 u;
+    u8 c;
+    s32 i;
+
+    do {
+        shape.flags = 0;
+        gte_loadRotTrans(view);
+    } while (0);
+    shape.corners[0] = &this->corners[0];
+    shape.corners[1] = &this->corners[1];
+    shape.corners[2] = &this->corners[2];
+    shape.corners[3] = &this->corners[3];
+    frame = this->frames;
+    u = ((frame & 3) << 5) + 0x40;
+    if (this->unk24 < 0) {
+        UV_BYTES(shape.uv0)[0] = u;
+        UV_BYTES(shape.uv0)[1] = 0;
+        UV_BYTES(shape.uv1)[0] = u + 0x1F;
+        UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[0] = u;
+        UV_BYTES(shape.uv2)[1] = 0x1F;
+        UV_BYTES(shape.uv3)[0] = u + 0x1F;
+        UV_BYTES(shape.uv3)[1] = 0x1F;
+    } else {
+        UV_BYTES(shape.uv0)[0] = u + 0x1F;
+        UV_BYTES(shape.uv0)[1] = 0;
+        UV_BYTES(shape.uv1)[0] = u;
+        UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[0] = u + 0x1F;
+        UV_BYTES(shape.uv2)[1] = 0x1F;
+        UV_BYTES(shape.uv3)[0] = u;
+        UV_BYTES(shape.uv3)[1] = 0x1F;
+    }
+    shape.tpage = getTPage(0, 3, 0x1C0, this->vramY);
+    shape.clut = getClut(0x1C0, this->vramY + 0x7E);
+    shape.flags |= SPRITE_SEMI_TRANS | 3;
+    for (i = 0; i < 4; i++) {
+        mat = &m.m;
+        m.words[0] = ONE;
+        m.words[1] = 0;
+        m.words[2] = ONE;
+        m.words[3] = 0;
+        m.words[4] = ONE;
+        m.m.t[0] = 0;
+        m.m.t[1] = 0;
+        m.m.t[2] = 0;
+        pos.vx = this->position.vx + (i << 6) * this->unk24;
+        pos.vy = this->position.vy;
+        pos.vz = this->position.vz;
+        c = 0x80 - (i << 5);
+        if (this->unk20 != 0) {
+            matrixRotateZ(mat, -(this->unk24 << 9));
+        }
+        setTranslation(m.m.t, &pos);
+        setModelMatrix(mat);
+        shape.color = c | (c << 8) | (c << 16);
+        PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+    }
+}
 
 /* The special move 2's effect: a flat square of side 0x140 facing the character's way, at a position. */
 typedef struct VMonSpecial2Effect {

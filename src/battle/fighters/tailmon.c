@@ -3,6 +3,10 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/math/matrix.h"
 #include "engine/sound/sound_control.h"
 
 struct TailmonSpecial1Effect *TailmonSpecial1Effect_init(struct TailmonSpecial1Effect *this, Fighter *fighter,
@@ -20,13 +24,22 @@ typedef struct TailmonSpecial1Hitbox {
     /* 0x034 */ u8 unk34[0x38 - 0x34];
     /* 0x038 */ CollisionSphere unk38;
     /* 0x080 */ Fighter *fighter;
-    /* 0x084 */ u8 unk84[0xC8 - 0x84];
-    /* 0x0C8 */ Vec3 unkC8;
-    /* 0x0D4 */ u8 unkD4[0x118 - 0xD4];
+    /* 0x084 */ Fight *fight;
+    /* 0x088 */ u16 vramY;
+    /* 0x08A */ u16 unk8A;
+    /* 0x08C */ u16 trailCount;
+    /* 0x08E */ u8 trailColors[5];
+    /* 0x093 */ u8 pad93;
+    /* 0x094 */ u16 trailKinds[5];
+    /* 0x09E */ u8 pad9E[2];
+    /* 0x0A0 */ s32 unkA0[5];
+    /* 0x0B4 */ s32 trailScales[5];
+    /* 0x0C8 */ VECTOR trails[5];
     /* 0x118 */ Vec3 position;
     /* 0x124 */ u8 unk124[0x128 - 0x124];
     /* 0x128 */ Vec3 velocity;
-    /* 0x134 */ u8 unk134[0x158 - 0x134];
+    /* 0x134 */ u8 unk134[0x138 - 0x134];
+    /* 0x138 */ SVECTOR corners[4];
     /* 0x158 */ s32 speed; /* the length of velocity */
     /* 0x15C */ u32 soundHandle; /* Fighter_playSound's (sound 0xF2), which the destructor stops */
 } TailmonSpecial1Hitbox;
@@ -122,6 +135,8 @@ void Tailmon_throw(Fighter *this, s32 frame) {
 
 void Tailmon_spawnSpecial1Hitbox(Fighter *this);
 void Tailmon_spawnSpecial1Effect(Fighter *this);
+void Tailmon_spawnSpecial2Effect(Fighter *this);
+s32 Fighter_isInvulnerable(Fighter *this);
 
 /* Special move 1: frame 0 its clip, the effect and the voice; frame 5 the hitbox and func_80079B0C(0x19). */
 void Tailmon_special1(Fighter *this, s32 frame) {
@@ -138,7 +153,142 @@ void Tailmon_special1(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", Tailmon_special2);
+void Tailmon_special2(Fighter *this, s32 frame) {
+    Fighter *opponent;
+    s16 facing;
+    Vec3 knockback;
+    Vec3 opponentPosition;
+    Vec3 position;
+    Vec3 difference;
+    Vec3 force;
+    Vec3 point;
+
+    opponent = Fighter_getOpponent(this);
+    func_80079AE4(this);
+    facing = Fighter_getFacing(this);
+    if (frame == 0) {
+        Fighter_playActionClip(this, FIGHTER_CLIP_DASH, 0, 0, -1);
+        Fighter_playSound(this, 7);
+        this->velocity.vx = 0;
+        ((Tailmon *)this)->unk4A4 = 0;
+        func_80079B14(this, 0x19);
+    }
+
+    {
+        s32 state = ((Tailmon *)this)->unk4A4;
+
+        if (state == 0) {
+            Fighter_getPosition(this, &position);
+            Fighter_getPosition(opponent, &opponentPosition);
+            difference.vx = position.vx - opponentPosition.vx;
+            difference.vy = position.vy - opponentPosition.vy;
+            difference.vz = position.vz - opponentPosition.vz;
+            Fighter_accelerateTo(this, Fighter_getFacing(this) * 0x38E0);
+            if (Fighter_getOpponentInReach(this, 0) != NULL) {
+                if (!Fighter_isGuarding(opponent) && !Fighter_isInvulnerable(opponent)) {
+                    if ((facing > 0 && opponentPosition.vx > position.vx) ||
+                        (facing < 0 && opponentPosition.vx < position.vx)) {
+                        this->velocity.vx = 0;
+                        Fighter_playActionClip(this, FIGHTER_CLIP_SPECIAL2, 0, 0, -1);
+                        Fighter_takeHit(opponent, 1, (Vec3 *)&ZERO_VECTOR, 0);
+                        ((Tailmon *)this)->unk4A4 = 1;
+                        func_80079B14(this, 0x2A);
+                        Fighter_playVoice(this, 0xF6);
+                        this->velocity.vx = 0;
+                    }
+                } else {
+                    if (!Fighter_isInvulnerable(opponent)) {
+                        {
+                            s32 fx = Fighter_getFacing(this) * 0x71C;
+                            s32 fy = -0x1C70;
+
+                            force.vx = fx;
+                            force.vy = fy;
+                            force.vz = 0;
+                            opponent->force.vx = fx;
+                            opponent->force.vy = fy;
+                            opponent->force.vz = 0;
+                            func_8007A650(opponent, &point);
+                        }
+                        force.vx = -(Fighter_getFacing(this) * 0xE38);
+                        force.vy = -0x238C;
+                        force.vz = 0;
+                        this->force = force;
+                        this->velocity.vx = 0;
+                        this->velocity.vy = 0;
+                        this->velocity.vz = 0;
+                        this->velocityPad = 0;
+                    }
+                    entityAddSibling(&this->entity, createHitSpark((Entity *)opponent, &this->velocity, 0x60));
+                    func_80079B14(this, 0x19);
+                    Fighter_stopActionClip(this);
+                    return;
+                }
+            }
+        } else {
+            switch (state) {
+            case 2: {
+                s64 speed = ((s64)this->mass * 0x1C70) >> 16;
+
+                this->velocity.vx = 0;
+                this->force.vx += (s32)speed * Fighter_getFacing(this);
+                this->force.vy -= ((s64)this->mass * 0x2AA8) >> 16;
+                knockback.vx = 0;
+                knockback.vy = -0x2AA8;
+                knockback.vz = 0;
+                Fighter_takeHit(opponent, 1, &knockback, 0);
+                this->hitDamage = 0x5AAC0800;
+                Fighter_setAttackParts(this, 0xC);
+                this->hitKind = 1;
+                break;
+            }
+            case 6: {
+                s64 speed = ((s64)this->mass * 0xE38) >> 16;
+
+                this->velocity.vx = 0;
+                this->force.vx += (s32)speed * Fighter_getFacing(this);
+                this->force.vy -= ((s64)this->mass * 0x2AA8) >> 16;
+                knockback.vx = 0;
+                knockback.vy = -0x2AA8;
+                knockback.vz = 0;
+                Fighter_takeHit(opponent, 1, &knockback, 0);
+                this->hitDamage = 0x5AAC0800;
+                Fighter_setAttackParts(this, 0xC);
+                this->hitKind = 1;
+                break;
+            }
+            case 12: {
+                s64 speed = ((s64)this->mass * 0x71C) >> 16;
+
+                this->velocity.vx = 0;
+                this->force.vx += (s32)speed * Fighter_getFacing(this);
+                this->force.vy -= ((s64)this->mass * 0x2AA8) >> 16;
+                knockback.vx = Fighter_getFacing(this) * 0xE38;
+                knockback.vy = -0x4718;
+                knockback.vz = 0;
+                Fighter_takeHit(opponent, 1, &knockback, 0);
+                this->hitDamage = 0x5AAC0800;
+                Fighter_setAttackParts(this, 0xC);
+                this->hitKind = 2;
+                break;
+            }
+            case 19:
+                this->velocity.vx = 0;
+                this->attackParts = 0;
+                ((Tailmon *)this)->unk4A4 = 0;
+                break;
+            }
+            if (this->velocity.vx != 0) {
+                this->force.vx -= this->velocity.vx >> 4;
+            }
+            ((Tailmon *)this)->unk4A4++;
+        }
+    }
+    if ((frame & 3) == 0) {
+        Tailmon_spawnSpecial2Effect(this);
+        Fighter_spawnDust(this, -1, 0x50, 4);
+    }
+}
 
 /* Special move 1 in the air: frame 0 its clip, the effect and the voice; frame 5 a push back by 0x3000, the hitbox and
  * func_80079B0C(0x19); until frame 14 the force brakes a sixteenth of the horizontal velocity and all of a fall. */
@@ -219,7 +369,103 @@ void Tailmon_spawnSpecial1Effect(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Hitbox_init);
+Entity *TailmonSpecial1Hitbox_init(Entity *this_, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *fight) {
+    TailmonSpecial1Hitbox *this = (TailmonSpecial1Hitbox *)this_;
+    Hit *hit;
+    CollisionSphere *sphere;
+    VECTOR knockback;
+    s32 vx;
+    s32 i;
+    s32 *pA0, *pS;
+    VECTOR *pT;
+    u16 *pK;
+    u8 *pC;
+    s32 color;
+
+    entityInit(&this->entity, 0x30000);
+    hit = &this->unk18;
+    Hit_init(hit, fighter, 0x6A81800, velocity, 3);
+    this->unk18.vtable = TAILMON_SPECIAL1_HITBOX_HIT_VTABLE;
+    this->entity.vtable = &TAILMON_SPECIAL1_HITBOX_VTABLE;
+    sphere = &this->unk38;
+    CollisionSphere_init(sphere, position, 0, hit);
+
+    vx = velocity->vx << 6;
+    knockback.pad = ((VECTOR *)velocity)->pad;
+    knockback.vz = 0;
+    knockback.vx = vx;
+    knockback.vy = -(vx < 0 ? -vx : vx);
+    Hit_setKnockback(hit, &knockback);
+
+    this->vramY = Fighter_getVramY(fighter);
+    this->corners[0].vx = this->corners[2].vx = -0x40;
+    this->corners[1].vx = this->corners[3].vx = 0x40;
+    this->fighter = fighter;
+    this->fight = fight;
+    this->corners[0].vy = this->corners[1].vy = -0x80;
+    this->corners[2].vy = this->corners[3].vy = 0x80;
+    this->corners[3].vz = 0;
+    this->corners[1].vz = 0;
+    this->corners[2].vz = 0;
+    this->corners[0].vz = 0;
+
+    {
+        s32 x = position->vx;
+        s32 y = position->vy;
+        s32 z = position->vz;
+        this->position.vx = x;
+        this->position.vy = y;
+        this->position.vz = z;
+    }
+    {
+        s32 x = velocity->vx;
+        s32 y = velocity->vy;
+        s32 z = velocity->vz;
+        this->velocity.vx = x;
+        this->velocity.vy = y;
+        this->velocity.vz = z;
+    }
+    this->speed = vecGetLength((VECTOR *)velocity);
+    this->unk8A = 0;
+    this->trailCount = 0;
+    this->unk38.entity = &this->entity;
+    if (Fighter_getSide(this->fighter) == 0) {
+        Fight_addSide0Shape(fight, (ListNode *)sphere);
+    } else {
+        Fight_addSide1Shape(fight, (ListNode *)sphere);
+    }
+
+    i = 0;
+    pC = this->trailColors;
+    pS = this->trailScales;
+    pK = this->trailKinds;
+    color = 0x40;
+    pT = this->trails;
+    pA0 = this->unkA0;
+    do {
+        s32 x, y, z;
+        u8 *c;
+        *pA0 = 0;
+        pA0++;
+        c = pC + i;
+        x = this->position.vx;
+        y = this->position.vy;
+        z = this->position.vz;
+        i++;
+        pT->vx = x;
+        pT->vy = y;
+        pT->vz = z;
+        *c = color;
+        *pK = 0;
+        *pS = 0;
+        pS++;
+        pK++;
+        color -= 12;
+        pT++;
+    } while (i < 5);
+    this->soundHandle = Fighter_playSound(this->fighter, 0xF2);
+    return &this->entity;
+}
 
 /* The special move 1 hitbox's destructor: first stops its sound if it plays. */
 void TailmonSpecial1Hitbox_destroy(TailmonSpecial1Hitbox *this, s32 flags) {
@@ -244,7 +490,94 @@ void TailmonSpecial1Hitbox_destroy(TailmonSpecial1Hitbox *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Hitbox_tick);
+void TailmonSpecial1Hitbox_tick(TailmonSpecial1Hitbox *this) {
+    s32 active;
+    s32 i;
+    u16 *kind;
+    VECTOR *trail;
+    s32 len;
+    s32 v;
+    u32 c;
+    s32 x, y, z;
+    s32 state;
+    s32 moving;
+
+    active = 0;
+    if ((this->unk8A & 3) == 0) {
+        if (++this->trailCount < 6) {
+        } else {
+            this->trailCount = 5;
+        }
+    }
+
+    i = 0;
+    if (this->trailCount != 0) {
+        moving = 1;
+        kind = this->trailKinds;
+        trail = this->trails;
+        do {
+            state = *kind;
+            if (state == moving) {
+                goto move;
+            }
+            if (state < 2) {
+                if (state == 0) {
+                    goto first;
+                }
+                goto next;
+            }
+            if (state == 2) {
+                goto fade;
+            }
+            goto next;
+        first:
+            active = 1;
+            *kind = active;
+        move:
+            this->trailScales[i] += 0x100;
+            x = trail->vx;
+            y = trail->vy;
+            z = trail->vz;
+            x += this->velocity.vx;
+            y += this->velocity.vy;
+            z += this->velocity.vz;
+            trail->vx = x;
+            trail->vy = y;
+            trail->vz = z;
+            len = this->speed;
+            v = this->unkA0[i] + (len < 0 ? -len : len);
+            this->unkA0[i] = v;
+            active = 1;
+            if (v > 0x600) {
+                (*kind)++;
+            } else {
+                goto next;
+            }
+        fade:
+            c = this->trailColors[i];
+            c -= c >> 1;
+            this->trailColors[i] = c;
+            if ((u8)c < 3) {
+                this->trailColors[i] = 0;
+                (*kind)++;
+            }
+        next:
+            kind++;
+            trail++;
+        } while (++i < this->trailCount);
+    }
+
+    if (this->trailKinds[0] >= 2) {
+        this->unk38.flags.word |= 1;
+    }
+    if (active == 0) {
+        entityDelete(&this->entity);
+        return;
+    }
+    this->unk38.position = *(Vec3 *)&this->trails[0];
+    this->unk38.radius = this->trailScales[0] >> 5;
+    this->unk8A++;
+}
 
 /* Fighter_isGuarding of a target, after taking its position (Fighter_getPosition), which is not used. */
 static inline s32 func_800B55EC_targetTest(Fighter *target) {
@@ -268,7 +601,7 @@ void TailmonSpecial1Hitbox_hit(TailmonSpecial1Hitbox *this, CollisionSphere *sum
     } else {
         child = allocEntityMemory(0x3C);
         if (child != NULL) {
-            ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, &this->unkC8, this->speed >> 1, 0x60, 6, 0x808080);
+            ParticleBurst_init(entityOperatorNewAt(0x3C, child), 3, (Vec3 *)&this->trails[0], this->speed >> 1, 0x60, 6, 0x808080);
         }
         entityAddSibling(&this->entity, child);
     }
@@ -285,10 +618,10 @@ typedef struct TailmonSpecial1Effect {
     /* 0x20 */ u8 unk20;
     /* 0x21 */ u8 unk21;
     /* 0x22 */ s16 vramY;  /* the character's 0x440 (Fighter_getVramY) */
-    /* 0x24 */ s16 unk24;
+    /* 0x24 */ u16 unk24;
     /* 0x26 */ s16 facing; /* Fighter_getFacing of the character: 1 or -1 */
-    /* 0x28 */ s16 unk28;
-    /* 0x2A */ s16 unk2A;
+    /* 0x28 */ u16 unk28;
+    /* 0x2A */ u16 unk2A;
     /* 0x2C */ s32 unk2C;
     /* 0x30 */ s32 unk30;
     /* 0x34 */ VECTOR position;
@@ -340,9 +673,170 @@ void TailmonSpecial1Effect_destroy(Entity *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Effect_tick);
+extern VECTOR D_800D346C[2];
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial1Effect_draw);
+/* Ticks the special move 1's effect. */
+void TailmonSpecial1Effect_tick(TailmonSpecial1Effect *this) {
+    s32 flag = 0;
+    VECTOR *offsets = D_800D346C;
+    VECTOR *pos = &this->position;
+    s32 i;
+
+    for (i = 1; i >= 0; i--) {
+        Fighter_getNodePosition(this->fighter, pos, 9, offsets);
+        offsets++;
+        pos++;
+    }
+
+    switch (this->unk28) {
+    case 0:
+        this->unk2C += this->unk24 << 8;
+        if (this->unk2C < 0x1800) {
+            flag = 1;
+            break;
+        }
+        this->unk2C = 0x1800;
+        this->unk28++;
+    case 1:
+        this->unk2C += (0x2016 - this->unk2C) >> 4;
+        if (this->unk2C < 0x1C80) {
+            flag = 1;
+            break;
+        }
+        this->unk2C = 0x2000;
+        this->unk28++;
+        flag = 1;
+        break;
+    case 2:
+        break;
+    }
+
+    switch (this->unk2A) {
+    case 0:
+        this->unk30 += this->unk24 << 7;
+        if (this->unk30 < 0x1800) {
+            flag = 1;
+            break;
+        }
+        this->unk30 = 0x1800;
+        this->unk2A++;
+    case 1:
+        this->unk30 += (0x2004 - this->unk30) >> 2;
+        if (this->unk30 < 0x2000) {
+            flag = 1;
+            break;
+        }
+        this->unk30 = 0x2000;
+        this->unk2A++;
+        flag = 1;
+        break;
+    case 2:
+        break;
+    }
+
+    if (this->unk2C > 0x1000) {
+        this->unk20 = -0x80 - ((this->unk2C - 0x1000) >> 5);
+    }
+    if (this->unk30 > 0x1000) {
+        this->unk21 = -0x80 - ((this->unk30 - 0x1000) >> 5);
+    }
+
+    if (!flag) {
+        entityDelete(&this->entity);
+    } else {
+        this->unk24++;
+    }
+}
+
+static inline void setTranslation(long *t, VECTOR *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws the special move 1's effect: two two-layer quads (at position and start) rotated in opposite Z directions. */
+void TailmonSpecial1Effect_draw(TailmonSpecial1Effect *this, Camera *camera) {
+    MatrixWords m;
+    MATRIX *mat = &m.m;
+    PolyFT4Shape shape;
+    PolyFT4Shape *shp;
+    VECTOR *pos;
+    s32 i;
+    u8 c;
+    s32 angle;
+    u16 vramY;
+
+    shape.color = 0x202080;
+    shape.flags = 9;
+    shape.corners[0] = &this->corners[0];
+    shape.corners[1] = &this->corners[1];
+    shape.corners[2] = &this->corners[2];
+    shape.corners[3] = &this->corners[3];
+    for (i = 0; i < 2; i++) {
+        angle = this->unk2C;
+        m.words[5] = 0;
+        m.words[6] = 0;
+        m.words[7] = 0;
+        m.words[1] = 0;
+        m.words[3] = 0;
+        m.words[0] = (u16)angle;
+        m.words[2] = (u16)angle;
+        m.words[4] = (u16)angle;
+        if (i == 0) {
+            matrixRotateZ(mat, angle);
+        } else {
+            matrixRotateZ(mat, -angle);
+        }
+        pos = &(&this->position)[i];
+        setTranslation(m.m.t, pos);
+        setModelMatrix(&m.m);
+        vramY = this->vramY;
+        UV_BYTES(shape.uv0)[0] = 0xE0;
+        UV_BYTES(shape.uv0)[1] = 0;
+        UV_BYTES(shape.uv1)[0] = 0xFF;
+        UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[0] = 0xE0;
+        UV_BYTES(shape.uv2)[1] = 0x1F;
+        UV_BYTES(shape.uv3)[0] = 0xFF;
+        UV_BYTES(shape.uv3)[1] = 0x1F;
+        shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+        shape.clut = ((vramY + 0x7D) << 6) | 0x1C;
+        c = this->unk20;
+        shape.color = (c | ((c >> 1) << 8)) | (c << 16);
+        shp = &shape;
+        PRIM_BUFFER_FREE = buildPolyFT4(shp, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+        {
+            s32 scale = (u16)this->unk30;
+            MATRIX *m2 = &m.m;
+
+            m.words[1] = 0;
+            m.words[3] = 0;
+            m.words[0] = scale;
+            m.words[2] = scale;
+            m.words[4] = scale;
+            setTranslation(m.m.t, pos);
+            setModelMatrix(m2);
+        }
+        vramY = this->vramY;
+        UV_BYTES(shape.uv0)[0] = 0xC0;
+        UV_BYTES(shape.uv0)[1] = 0;
+        UV_BYTES(shape.uv1)[0] = 0xDF;
+        UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[0] = 0xC0;
+        UV_BYTES(shape.uv2)[1] = 0x1F;
+        UV_BYTES(shape.uv3)[0] = 0xDF;
+        UV_BYTES(shape.uv3)[1] = 0x1F;
+        shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+        shape.clut = ((vramY + 0x7E) << 6) | 0x1C;
+        c = this->unk21;
+        shape.color = (c | ((c >> 1) << 8)) | (c << 16);
+        PRIM_BUFFER_FREE = buildPolyFT4(shp, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+    }
+}
 
 /* The special move 2's effect, made for a character at a position. */
 typedef struct TailmonSpecial2Effect {
@@ -433,7 +927,74 @@ void TailmonSpecial2Effect_tick(TailmonSpecial2Effect *this) {
     this->age += 2;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/tailmon", TailmonSpecial2Effect_draw);
+extern SVECTOR D_8006BE2C[4];
+
+/* Draws the special move 2's effect: the square D_8006BE2C at position, with the texture at vramY + 0x80, mirrored
+ * when facing right, in two layers (tpage 0x25 clut 0x14 flags 9, tpage 0x45 clut 0x14 flags 10). */
+void TailmonSpecial2Effect_draw(TailmonSpecial2Effect *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    Vec3 *pos;
+    s32 x, y, z;
+    u16 v;
+    u16 vramY;
+    void *packet;
+
+    shape.flags = 0;
+    pos = &this->position;
+    x = pos->vx;
+    y = pos->vy;
+    z = pos->vz;
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    setModelMatrix(&m.m);
+
+    shape.corners[0] = &D_8006BE2C[0];
+    shape.corners[1] = &D_8006BE2C[1];
+    shape.corners[2] = &D_8006BE2C[2];
+    shape.corners[3] = &D_8006BE2C[3];
+    shape.color = this->r | (this->g << 8) | (this->b << 16);
+
+    v = (u16)(this->vramY + 0x80);
+    if (this->facing > 0) {
+        UV_BYTES(shape.uv0)[0] = 0;
+        UV_BYTES(shape.uv0)[1] = v;
+        UV_BYTES(shape.uv1)[0] = 0x5F;
+        UV_BYTES(shape.uv1)[1] = v;
+        UV_BYTES(shape.uv2)[0] = 0;
+        UV_BYTES(shape.uv2)[1] = v + 0x3F;
+        UV_BYTES(shape.uv3)[0] = 0x5F;
+        UV_BYTES(shape.uv3)[1] = v + 0x3F;
+    } else {
+        UV_BYTES(shape.uv0)[0] = 0x5F;
+        UV_BYTES(shape.uv0)[1] = v;
+        UV_BYTES(shape.uv1)[0] = 0;
+        UV_BYTES(shape.uv1)[1] = v;
+        UV_BYTES(shape.uv2)[0] = 0x5F;
+        UV_BYTES(shape.uv2)[1] = v + 0x3F;
+        UV_BYTES(shape.uv3)[0] = 0;
+        UV_BYTES(shape.uv3)[1] = v + 0x3F;
+    }
+
+    vramY = this->vramY;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x25) | ((vramY & 0x200) << 2);
+    shape.clut = ((vramY + 0xF6) << 6) | 0x14;
+    shape.flags = (shape.flags & ~3) | 9;
+    packet = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+
+    vramY = this->vramY;
+    PRIM_BUFFER_FREE = packet;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x45) | ((vramY & 0x200) << 2);
+    shape.clut = ((vramY + 0xF7) << 6) | 0x14;
+    shape.flags = (shape.flags & ~3) | 10;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, camera->ot.slots, camera->zShift);
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/tailmon", D_8006BDCC);
 INCLUDE_RODATA("game/nonmatchings/fighters/tailmon", D_8006BDD4);
