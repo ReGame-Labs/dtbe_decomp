@@ -3,6 +3,9 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/gfx/camera.h"
 
 extern FaceEntry GABUMON_FACES[];
 extern EntityVtable GABUMON_VTABLE;
@@ -261,7 +264,44 @@ void func_80087EC4(Unk80087E14 *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gabumon", func_80087F3C);
+void func_80087F3C(Unk80087E14 *this, Camera *camera) {
+    SVECTOR corners[4];
+    PolyGT4Shape shape;
+    s32 x;
+    s32 c;
+    void *ot;
+    s32 zShift;
+    u8 *packet;
+    s32 vramY;
+
+    setModelMatrix(&this->matrix);
+    corners[0].vy = corners[1].vy = -0x40;
+    corners[2].vy = corners[3].vy = 0x40;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.colors[1] = shape.colors[3] = 0;
+    shape.u0 = shape.u2 = 0;
+    shape.u1 = shape.u3 = 0x1F;
+    shape.v0 = shape.v1 = 0x20;
+    x = this->unk38;
+    corners[0].vx = corners[2].vx = x;
+    corners[1].vx = corners[3].vx = x - (x >> 2);
+    corners[0].vz = corners[2].vz = 0x120 - x;
+    corners[1].vz = corners[3].vz = 0x120 - (x >> 3);
+    c = this->unk3C;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    packet = PRIM_BUFFER_FREE;
+    vramY = this->unk44;
+    shape.colors[0] = shape.colors[2] = (c | (c << 8)) | (c << 16);
+    shape.v2 = shape.v3 = 0x37;
+    shape.clut = ((vramY + 0x7E) << 6) | 0x1C;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+    shape.flags = 9;
+    PRIM_BUFFER_FREE = buildPolyGT4(&shape, packet, ot, zShift + 1);
+}
 
 /* Gabumon's destructor. */
 void Gabumon_destroy(Entity *this, s32 flags) {
