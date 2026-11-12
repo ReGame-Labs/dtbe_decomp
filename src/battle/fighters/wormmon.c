@@ -5,6 +5,10 @@
 #include <abs.h>
 #include "battle/game_classes.h"
 #include "engine/math/vector.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/lights.h"
 
 void Wormmon_spawnSpecial1Hitbox(Fighter *this, s32 arg);
 extern FaceEntry WORMMON_FACES[];
@@ -553,7 +557,60 @@ void WormmonSpecial1Hitbox_hit(WormmonSpecial1Hitbox *this, CollisionSphere *sum
     entityDelete(&this->parts.entity);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonSpecial1Hitbox_draw);
+void WormmonSpecial1Hitbox_draw(WormmonSpecial1Hitbox *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    VECTOR *trail;
+    s32 i;
+    s32 a, b;
+    u16 vramY;
+
+    shape.flags = 0;
+    shape.corners[0] = &this->corners[0];
+    shape.corners[1] = &this->corners[1];
+    shape.corners[2] = &this->corners[2];
+    shape.corners[3] = &this->corners[3];
+    if (this->direction > 0) {
+        UV_BYTES(shape.uv0)[0] = 0x7F;
+        UV_BYTES(shape.uv1)[0] = 0x40;
+        UV_BYTES(shape.uv2)[0] = 0x7F;
+        UV_BYTES(shape.uv3)[0] = 0x40;
+    } else {
+        UV_BYTES(shape.uv0)[0] = 0x40;
+        UV_BYTES(shape.uv1)[0] = 0x7F;
+        UV_BYTES(shape.uv2)[0] = 0x40;
+        UV_BYTES(shape.uv3)[0] = 0x7F;
+    }
+    UV_BYTES(shape.uv0)[1] = 0;
+    UV_BYTES(shape.uv1)[1] = 0;
+    UV_BYTES(shape.uv2)[1] = 0x3F;
+    UV_BYTES(shape.uv3)[1] = 0x3F;
+    vramY = this->vramY;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+    shape.clut = ((vramY + 0x7E) << 6) | 0x1C;
+    shape.flags = (shape.flags & ~3) | 9;
+    for (i = 0; i < this->count; i++) {
+        s32 g = (u16)this->growth[i];
+        u16 sz = 0x1000;
+        VECTOR *p = &this->trail[i];
+        s32 x = p->vx;
+        s32 y = p->vy;
+        s32 z = p->vz;
+        s32 c;
+        m.words[1] = 0;
+        m.words[3] = 0;
+        m.words[4] = sz;
+        m.words[0] = g;
+        m.words[2] = g;
+        m.m.t[0] = x;
+        m.m.t[1] = y;
+        m.m.t[2] = z;
+        setModelMatrix(&m.m);
+        c = this->shade[i] >> 1;
+        shape.color = c | (c << 8) | (c << 16);
+        PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+    }
+}
 
 /* The entity class func_800BA734 constructs (virtual table D_8006C6F4): an Unk800C4F74 with 0x488 at 5/6. */
 typedef struct Unk800BA734 {
@@ -599,7 +656,73 @@ void func_800BA7AC(Unk800BA734 *this) {
     this->base.unk49C++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", func_800BA8AC);
+static inline void setTranslation(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+void func_800BA8AC(Unk800BA734 *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    MATRIX *mat = &m.m;
+    u8 *packet = PRIM_BUFFER_FREE;
+    s32 sy, sxz;
+    void *ot;
+    s32 zShift;
+    u8 (*face)[4];
+    u8 (*end)[4];
+    s32 count;
+    s32 c;
+    u16 vramY;
+
+    sy = this->base.unk488;
+    setTranslation(m.m.t, &this->base.position);
+    m.words[0] = ONE;
+    m.words[1] = 0;
+    m.words[2] = ONE;
+    m.words[3] = 0;
+    m.words[4] = ONE;
+    sxz = sy + (sy >> 3);
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    matrixRotateY(mat, this->base.unk49C << 6);
+    matrixScale(mat, sxz, sy, sxz);
+    setModelMatrix(mat);
+    face = this->base.faces;
+    count = this->base.unk4A0;
+    UV_BYTES(shape.uv2)[0] = 0x40;
+    UV_BYTES(shape.uv0)[0] = 0x40;
+    UV_BYTES(shape.uv3)[0] = 0x4F;
+    UV_BYTES(shape.uv1)[0] = 0x4F;
+    UV_BYTES(shape.uv1)[1] = 0x50;
+    UV_BYTES(shape.uv0)[1] = 0x50;
+    UV_BYTES(shape.uv3)[1] = 0x5F;
+    UV_BYTES(shape.uv2)[1] = 0x5F;
+    c = this->base.unk494;
+    shape.flags = 9;
+    vramY = this->vramY;
+    shape.color = (c | (c << 8)) | (c << 16);
+    shape.clut = ((vramY + 0xF6) << 6) | 0x1C;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+    if (count >= 85) {
+        count = 84;
+    }
+    end = face + count;
+    do {
+        shape.corners[0] = &this->base.vertices[(*face)[0]];
+        shape.corners[1] = &this->base.vertices[(*face)[1]];
+        shape.corners[2] = &this->base.vertices[(*face)[2]];
+        shape.corners[3] = &this->base.vertices[(*face)[3]];
+        packet = buildPolyFT4(&shape, packet, ot, zShift);
+        face++;
+    } while (face < end);
+    PRIM_BUFFER_FREE = packet;
+}
 
 /* The guard's effect, one at a time for a Wormmon (guardEffectActive). */
 typedef struct WormmonGuardEffect {
