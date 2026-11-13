@@ -3,6 +3,10 @@
 
 #include "common.h"
 #include "battle/game_classes.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/lights.h"
 
 extern FaceEntry GABUMON_FACES[];
 extern EntityVtable GABUMON_VTABLE;
@@ -209,7 +213,71 @@ Projectile *GabumonSpecial1Projectile_init(Projectile *this, Fighter *fighter, V
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gabumon", GabumonSpecial1Projectile_draw);
+void GabumonSpecial1Projectile_draw(Projectile *this, Camera *camera) {
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    Vec3 *pos;
+    u_long *ot;
+    s32 zShift;
+    s32 dir;
+    s32 radius;
+    s32 doubleRadius;
+    s32 prod1;
+    s32 prod2;
+    s32 vramY;
+    s32 u;
+    s32 x, y, z;
+
+    pos = &this->position;
+    x = pos->vx;
+    y = pos->vy;
+    z = pos->vz;
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    setModelMatrix(&m.m);
+
+    dir = 1;
+    if (this->velocity.vx < 0) {
+        dir = -1;
+    }
+
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = 0;
+    shape.flags = 0;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0x1F;
+    shape.color = 0x808080;
+
+    radius = this->radius;
+    doubleRadius = radius * 2;
+    corners[0].vy = corners[1].vy = -radius;
+    corners[2].vy = corners[3].vy = radius;
+    prod1 = dir * doubleRadius;
+
+    u = (this->age << 4) & 0x60;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = u + 0x1F;
+    vramY = this->unkBC;
+    shape.clut = ((vramY + 0x7F) << 6) | 0x1C;
+    prod2 = dir * radius;
+    shape.tpage = (((vramY & 0x100) >> 4) | 7) | ((vramY & 0x200) << 2);
+    corners[0].vx = corners[2].vx = -prod1;
+    corners[1].vx = corners[3].vx = prod2;
+
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, zShift);
+}
 
 /* Builds the special move 2's effect for fighter: three 0x1000 scales (0x1C, 0x24, 0x2C) and 0x80 at 0x44. */
 GabumonSpecial2Effect *GabumonSpecial2Effect_init(GabumonSpecial2Effect *this, Fighter *fighter) {
@@ -235,7 +303,47 @@ GabumonSpecial2Effect *GabumonSpecial2Effect_init(GabumonSpecial2Effect *this, F
 
 INCLUDE_ASM("game/nonmatchings/fighters/gabumon", GabumonSpecial2Effect_tick);
 
-INCLUDE_ASM("game/nonmatchings/fighters/gabumon", GabumonSpecial2Effect_draw);
+void GabumonSpecial2Effect_draw(GabumonSpecial2Effect *this, Camera *camera) {
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    u8 *packet;
+    void *ot;
+    s32 zShift;
+    s32 c;
+    u8 u;
+    s32 vramY;
+    s16 z = 0x100;
+
+    setModelMatrix((MATRIX *)&this->unk1C);
+    packet = PRIM_BUFFER_FREE;
+    corners[0].vy = corners[1].vy = -0xC0;
+    corners[2].vy = corners[3].vy = 0xC0;
+    corners[0].vx = corners[1].vx = corners[2].vx = corners[3].vx = 0;
+    corners[1].vz = corners[3].vz = z;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0x1F;
+    ot = camera->ot.slots;
+    zShift = camera->zShift + 1;
+    corners[0].vz = corners[2].vz = z - this->unk40;
+    c = this->unk44;
+    shape.color = (c | (c << 8)) | (c << 16);
+    u = (this->unk3C << 5) - 0x80;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = u + 0x1F;
+    vramY = this->vramY;
+    shape.clut = ((vramY + 0x7C) << 6) | 0x1C;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+    shape.flags = 9;
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    shape.clut = ((vramY + 0x7D) << 6) | 0x1C;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x47) | ((vramY & 0x200) << 2);
+    shape.flags = (shape.flags & ~3) | 0xA;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/gabumon", func_80087E14);
 
@@ -261,7 +369,44 @@ void func_80087EC4(Unk80087E14 *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gabumon", func_80087F3C);
+void func_80087F3C(Unk80087E14 *this, Camera *camera) {
+    SVECTOR corners[4];
+    PolyGT4Shape shape;
+    s32 x;
+    s32 c;
+    void *ot;
+    s32 zShift;
+    u8 *packet;
+    s32 vramY;
+
+    setModelMatrix(&this->matrix);
+    corners[0].vy = corners[1].vy = -0x40;
+    corners[2].vy = corners[3].vy = 0x40;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.colors[1] = shape.colors[3] = 0;
+    shape.u0 = shape.u2 = 0;
+    shape.u1 = shape.u3 = 0x1F;
+    shape.v0 = shape.v1 = 0x20;
+    x = this->unk38;
+    corners[0].vx = corners[2].vx = x;
+    corners[1].vx = corners[3].vx = x - (x >> 2);
+    corners[0].vz = corners[2].vz = 0x120 - x;
+    corners[1].vz = corners[3].vz = 0x120 - (x >> 3);
+    c = this->unk3C;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    packet = PRIM_BUFFER_FREE;
+    vramY = this->unk44;
+    shape.colors[0] = shape.colors[2] = (c | (c << 8)) | (c << 16);
+    shape.v2 = shape.v3 = 0x37;
+    shape.clut = ((vramY + 0x7E) << 6) | 0x1C;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+    shape.flags = 9;
+    PRIM_BUFFER_FREE = buildPolyGT4(&shape, packet, ot, zShift + 1);
+}
 
 /* Gabumon's destructor. */
 void Gabumon_destroy(Entity *this, s32 flags) {

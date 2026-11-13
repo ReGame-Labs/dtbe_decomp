@@ -427,7 +427,65 @@ void ImpmonSpecial1Projectile_hit(ImpmonSpecial1Projectile *this, CollisionSpher
     entityDelete(&this->base.parts.entity);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/impmon", ImpmonSpecial1Projectile_draw);
+/* Draws the projectile: two quads of its two colors (unkCC, then unkD0), twice as wide behind it as in front and as
+ * high as its radius, on the picture cell unkC8 selects, at its position, with buildPolyFT4. The match depends on
+ * the width as a local (radius << 1) and on gte_loadRotTrans clobbering memory. */
+void ImpmonSpecial1Projectile_draw(ImpmonSpecial1Projectile *this, s32 arg) {
+    Camera *camera = (Camera *)arg;
+    VECTOR p;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 zShift;
+    s32 side;
+    s32 r;
+    s32 w;
+    u8 u;
+    u16 vramY;
+    void *packet;
+
+    if (this->unkCC | this->unkD0) {
+        gte_loadRotTrans(SCRATCH_VIEW_MATRIX);
+        packet = PRIM_BUFFER_FREE;
+        ot = camera->ot.slots;
+        zShift = camera->zShift;
+        side = this->base.velocity.vx < 0 ? -1 : 1;
+        shape.flags = 0;
+        shape.corners[0] = &corners[0];
+        shape.corners[1] = &corners[1];
+        shape.corners[2] = &corners[2];
+        shape.corners[3] = &corners[3];
+        r = this->base.radius;
+        w = r << 1;
+        p = *(VECTOR *)&this->base.position;
+        u = (this->unkC8 << 5) + 0x40;
+        corners[0].vx = corners[2].vx = (s16)p.vx - side * w;
+        corners[0].vy = corners[1].vy = (s16)p.vy - r;
+        corners[1].vx = corners[3].vx = (s16)p.vx + side * r;
+        corners[2].vy = corners[3].vy = (s16)p.vy + r;
+        corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = (s16)p.vz;
+        vramY = this->base.unkBC;
+        UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = u;
+        UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = u + 0x1F;
+        UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0x1F;
+        if (this->unkCC != 0) {
+            shape.color = this->unkCC;
+            shape.clut = ((vramY + 0x7E) << 6) | 0x1C;
+            shape.tpage = ((vramY & 0x100) >> 4) | 0x27 | ((vramY & 0x200) << 2);
+            shape.flags = 9;
+            packet = buildPolyFT4(&shape, packet, ot, zShift);
+        }
+        if (this->unkD0 != 0) {
+            shape.color = this->unkD0;
+            shape.clut = ((vramY + 0x7F) << 6) | 0x1C;
+            shape.tpage = ((vramY & 0x100) >> 4) | 0x47 | ((vramY & 0x200) << 2);
+            shape.flags = (shape.flags & ~3) | 0xA;
+            packet = buildPolyFT4(&shape, packet, ot, zShift);
+        }
+        PRIM_BUFFER_FREE = packet;
+    }
+}
 
 /* Constructs an entity of D_800697A4: Particle_initById with entry 9 of PARTICLE_ANIMS, 0x19 and 0x202080. */
 Entity *func_800938A4(Entity *this, s32 arg1, VECTOR *pos, VECTOR *vel) {

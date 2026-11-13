@@ -1290,7 +1290,10 @@ typedef struct Unk800C4F74 {
     /* 0x018 */ u8 unk18[0x1C - 0x18];
     /* 0x01C */ BattleSide *owner;
     /* 0x020 */ Vec3 position; /* the current fighter's point (func_8007A650) in func_800BA7AC */
-    /* 0x02C */ u8 unk2C[0x488 - 0x2C];
+    /* 0x02C */ u8 unk2C[4];
+    /* 0x030 */ SVECTOR vertices[96];
+    /* 0x330 */ u8 faces[84][4];
+    /* 0x480 */ u8 unk480[8];
     /* 0x488 */ s32 unk488;
     /* 0x48C */ s32 unk48C;
     /* 0x490 */ s32 unk490;

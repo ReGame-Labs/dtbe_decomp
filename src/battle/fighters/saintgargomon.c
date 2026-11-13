@@ -456,6 +456,8 @@ void SaintGargomonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
+void func_800ABB54(SaintGargomonSpecial1Hitbox *this);
+
 INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AB830);
 
 /* On a hit: Hit_apply with sum, then func_800AB830 (a spray and a child hitbox). */
@@ -464,13 +466,94 @@ void SaintGargomonSpecial1Hitbox_hit(UnkPartsEntity38 *this, void *sum) {
     func_800AB830(this);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", SaintGargomonSpecial1Hitbox_tick);
+/* Updates the special move 1's hitbox: steps position and velocity (func_800ABB54), sets the knockback from velocity,
+ * copies position to the sphere, and either detonates (func_800AB830) after frame 120 or when unkC4 is 1, or spawns a
+ * particle burst (ParticleBurst_init) at position and advances unkB8. */
+void SaintGargomonSpecial1Hitbox_tick(SaintGargomonSpecial1Hitbox *this) {
+    VECTOR kb;
+    Vec3 *pos;
+
+    func_800ABB54(this);
+    kb.vz = 0;
+    kb.pad = this->velocityPad;
+    kb.vx = this->velocity.vx << 2;
+    kb.vy = -abs(this->velocity.vy) << 5;
+    Hit_setKnockback(&this->parts.base, &kb);
+    {
+        s32 x = this->position.vx;
+        s32 y = this->position.vy;
+        s32 z = this->position.vz;
+
+        this->parts.part.position.vx = x;
+        pos = &this->position;
+        this->parts.part.position.vy = y;
+        this->parts.part.position.vz = z;
+    }
+    if (this->unkB8 >= 121) {
+        this->unkC4 = 1;
+    }
+    if (this->unkC4 == 1) {
+        func_800AB830(&this->parts);
+    } else {
+        Entity *child = allocEntityMemory(0x3C);
+
+        if (child != NULL) {
+            ParticleBurst_init(entityOperatorNewAt(0x3C, child), 6, pos, 0x30, 0xC0, 1, 0x808080);
+        }
+        entityAddSibling(&this->parts.entity, child);
+        this->unkB8++;
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800ABB54);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/saintgargomon", D_8006B2B4);
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", SaintGargomonSpecial1Hitbox_draw);
+extern SVECTOR D_8006B2B4[4];
+
+static inline void setTranslationSG(long *t, VECTOR *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws the special move 1's hitbox: the 64 by 64 picture at (0x80, 0x80) of the texture page at (0x180, vramY) with
+ * CLUT (0x180, vramY + 0xF5) on D_8006B2B4, rotated around z along velocity at position. */
+void SaintGargomonSpecial1Hitbox_draw(SaintGargomonSpecial1Hitbox *this, Camera *camera) {
+    VECTOR pos;
+    MATRIX m;
+    PolyFT4Shape shape;
+    u8 *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 vramY;
+
+    pos = *(VECTOR *)&this->position;
+    packet = PRIM_BUFFER_FREE;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    matrixInitRotationZ(&m, ratan2(this->velocity.vy, this->velocity.vx));
+    setTranslationSG(m.t, &pos);
+    setModelMatrix(&m);
+    shape.flags = 0;
+    shape.corners[0] = &D_8006B2B4[0];
+    shape.corners[1] = &D_8006B2B4[1];
+    shape.corners[2] = &D_8006B2B4[2];
+    shape.corners[3] = &D_8006B2B4[3];
+    shape.color = 0x808080;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0x80;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xBF;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0x80;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xBF;
+    vramY = (u16)this->vramY;
+    shape.clut = ((vramY + 0xF5) << 6) | 0x18;
+    shape.tpage = (((vramY & 0x100) >> 4) | 0x26) | ((vramY & 0x200) << 2);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* The class func_800ABE6C constructs (virtual tables D_8006B454, and D_8006B434 for its base at 0x18). */
 typedef struct Unk800ABE6C {
