@@ -826,7 +826,58 @@ void WormmonGuardEffect_tick(WormmonGuardEffect *this) {
 INCLUDE_RODATA("game/nonmatchings/fighters/wormmon", D_8006C644);
 INCLUDE_RODATA("game/nonmatchings/fighters/wormmon", D_8006C664);
 
-INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonGuardEffect_draw);
+extern SVECTOR D_8006C644[4];
+extern SVECTOR D_8006C664[4];
+
+/* Draws the guard's effect when scale is non-zero: the 64 by 48 picture at (0, 0) of the texture page at
+ * (0x1C0, vramY) with CLUT (0x1C0, vramY + 0x7F), shaded 0x606060 and semi-transparent, on the rectangle extending
+ * 400 behind the position (D_8006C644 facing right, D_8006C664 facing left) and 150 up and down, scaled by scale. */
+void WormmonGuardEffect_draw(WormmonGuardEffect *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    u16 vramY;
+    s32 scale;
+
+    if (this->scale != 0) {
+        m.words[5] = 0;
+        m.words[6] = 0;
+        m.words[7] = 0;
+        scale = this->scale & 0xFFFF;
+        m.words[0] = scale;
+        m.words[1] = 0;
+        m.words[2] = scale;
+        m.words[3] = 0;
+        m.words[4] = scale;
+        setTranslation(m.m.t, (Vec3 *)&this->position);
+        setModelMatrix(&m.m);
+        shape.flags = 0;
+        if (this->facing > 0) {
+            shape.corners[0] = D_8006C644;
+            shape.corners[1] = &D_8006C644[1];
+            shape.corners[2] = &D_8006C644[2];
+            shape.corners[3] = &D_8006C644[3];
+        } else {
+            shape.corners[0] = D_8006C664;
+            shape.corners[1] = &D_8006C664[1];
+            shape.corners[2] = &D_8006C664[2];
+            shape.corners[3] = &D_8006C664[3];
+        }
+        shape.color = 0x606060;
+        UV_BYTES(shape.uv0)[0] = 0;
+        UV_BYTES(shape.uv0)[1] = 0;
+        UV_BYTES(shape.uv1)[0] = 0x3F;
+        UV_BYTES(shape.uv1)[1] = 0;
+        UV_BYTES(shape.uv2)[0] = 0;
+        UV_BYTES(shape.uv2)[1] = 0x2F;
+        UV_BYTES(shape.uv3)[0] = 0x3F;
+        UV_BYTES(shape.uv3)[1] = 0x2F;
+        vramY = this->vramY;
+        shape.tpage = (((vramY & 0x100) >> 4) | 0x27) | ((vramY & 0x200) << 2);
+        shape.clut = ((vramY + 0x7F) << 6) | 0x1C;
+        shape.flags = (shape.flags & ~3) | 9;
+        PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+    }
+}
 
 /* The destructor of the entity class of vtable D_8006C6F4, which func_800BA734 installs. */
 void func_800BAFEC(Entity *this, s32 flags) {
