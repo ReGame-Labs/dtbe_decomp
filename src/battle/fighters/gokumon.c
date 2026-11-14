@@ -585,7 +585,56 @@ void GokumonSpecial1Hitbox_destroy(GokumonSpecial1Hitbox *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial1Hitbox_tick);
+void GokumonSpecial1Hitbox_tick(GokumonSpecial1Hitbox *this) {
+    VECTOR vec;
+    s32 speed;
+    ListNode *node;
+
+    if (this->frames < 8) {
+        Fighter_getNodePosition(this->owner, &this->position, 5, &D_8006CD60);
+    } else {
+        this->size += (0x400 - this->size) >> 3;
+    }
+    speed = this->size << 3;
+    vec.vx = speed * Fighter_getFacing(this->owner);
+    vec.vy = (-speed) << 1;
+    vec.vz = 0;
+    Hit_setKnockback(&this->parts.base, &vec);
+    {
+        s32 x = this->position.vx;
+        s32 y = this->position.vy;
+        s32 r = this->size >> 1;
+
+        vec.vx = x;
+        vec.vy = y - r;
+        vec.vz = 0;
+        this->parts.part.position.vx = x;
+        this->parts.part.position.vy = vec.vy;
+        this->parts.part.position.vz = 0;
+        this->parts.part.radius = r;
+    }
+    node = &this->parts.part.link;
+    if (this->frames >= 8) {
+        this->parts.part.flags.bits.disabled = (this->frames & 3) != 0;
+    }
+    this->animFrame = this->frames & 3;
+    if (this->frames == 40) {
+        this->parts.part.link.next->prev = this->parts.part.link.prev;
+        node->prev->next = this->parts.part.link.next;
+        this->parts.part.link.next = node;
+        this->parts.part.link.prev = node;
+    }
+    this->frames++;
+    if (this->frames >= 31) {
+        this->brightness -= 12;
+        if (this->brightness <= 0) {
+            if (this != NULL) {
+                this->parts.entity.vtable->destroy.func(
+                    (u8 *)&this->parts.entity + this->parts.entity.vtable->destroy.delta, DESTROY_DELETE);
+            }
+        }
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial1Hitbox_draw);
 
