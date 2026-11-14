@@ -760,7 +760,43 @@ void func_800A6778(Unk800A65F8 *this) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A68FC);
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A6AB0);
+/* Advances Unk800A65F8 toward its rotated offset around owner's position and returns the x step. */
+s32 func_800A6AB0(Unk800A65F8 *this, Entity *owner) {
+    VECTOR pos;
+    VECTOR step;
+    VECTOR target;
+    VECTOR rotated;
+    MATRIX m;
+
+    this->unkC8 += (100 - this->unkC8) >> 2;
+    pos = this->position;
+    *(Vec3 *)&target = ((Unk800A6220 *)owner)->position;
+    this->angle += 0x40;
+    matrixInitInverseRotationAxis(&m, &this->axis, this->angle);
+    matrixTransformVec(&m, &rotated, &this->offset);
+    {
+        s32 tx = target.vx;
+        s32 ty = target.vy;
+        s32 tz = target.vz;
+
+        tx += rotated.vx;
+        ty += rotated.vy;
+        tz += rotated.vz;
+        target.vx = tx;
+        target.vy = ty;
+        target.vz = tz;
+    }
+    step.vx = (target.vx - pos.vx) >> 4;
+    step.vy = (target.vy - pos.vy) >> 4;
+    step.vz = (target.vz - pos.vz) >> 4;
+    pos.vx += step.vx;
+    pos.vy += step.vy;
+    pos.vz += step.vz;
+    this->position.vx = pos.vx;
+    this->position.vy = pos.vy;
+    this->position.vz = pos.vz;
+    return step.vx;
+}
 
 /* Takes 2 from value, 4 while it is under limit, and caps it at limit. The match depends on this being an expanded
  * MIN(*value -= 2, limit), side effect evaluated twice: value is stored twice, the last time through the pointer. */
