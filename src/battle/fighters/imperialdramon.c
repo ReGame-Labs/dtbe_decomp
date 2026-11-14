@@ -6,6 +6,9 @@
 #include <abs.h>
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
+#include "engine/gfx/lights.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
 #include "engine/math/sin_cos.h"
 #include "engine/math/vector.h"
 
@@ -1218,7 +1221,55 @@ void ImperialdramonSpecial3Hitbox_hit(ImperialdramonSpecial3Hitbox *this, Collis
     entityDelete(&this->parts.entity);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", func_80091328);
+static inline void setTranslationImp(long *t, VECTOR *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws Unk800919EC's spark quad using its SpriteAnim transform and vramY's sprite sheet. */
+void func_80091328(Unk800919EC *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    MATRIX *mp = &m.m;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+
+    zShift = camera->zShift + 1;
+    setTranslationImp(m.m.t, &this->base.sprite.position);
+    packet = PRIM_BUFFER_FREE;
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    ot = camera->ot.slots;
+    matrixSetRotationZ(mp, this->base.sprite.angle);
+    matrixScale(mp, this->base.sprite.size, this->base.sprite.size, this->base.sprite.size);
+    setModelMatrix(mp);
+    shape.corners[0] = &SQUARE_CORNERS[0];
+    shape.corners[1] = &SQUARE_CORNERS[1];
+    shape.corners[2] = &SQUARE_CORNERS[2];
+    shape.corners[3] = &SQUARE_CORNERS[3];
+    shape.color = 0x808080;
+    UV_BYTES(shape.uv0)[0] = 0x40;
+    UV_BYTES(shape.uv0)[1] = 0x60;
+    UV_BYTES(shape.uv1)[0] = 0x7F;
+    UV_BYTES(shape.uv1)[1] = 0x60;
+    UV_BYTES(shape.uv2)[0] = 0x40;
+    UV_BYTES(shape.uv2)[1] = 0x9F;
+    UV_BYTES(shape.uv3)[0] = 0x7F;
+    UV_BYTES(shape.uv3)[1] = 0x9F;
+    shape.flags = 9;
+    shape.clut = getClut(0x1C0, this->vramY + 0xFA);
+    shape.tpage = getTPage(0, 1, 0x1C0, this->vramY);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* The entity class of vtable D_800691EC (0x38 bytes), made for a character 0x40 below a position. */
 typedef struct Unk80091498 {
