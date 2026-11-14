@@ -947,7 +947,25 @@ void func_800A7F88(Unk800A7F88 *this, void *arg) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A7FEC);
+/* Moves the part to start + unk94 * unkB0 / 4, scales its radius to |unk94| * unkB0 / 4, and disables it when unkB0
+ * is not a multiple of 4. */
+void func_800A7FEC(Unk800A7F88 *this) {
+    Vec3 pos;
+    s32 step;
+    s32 r;
+
+    r = vecGetLength((VECTOR *)&this->unk94) * 4;
+    step = this->unkB0;
+    r = (r * step) / 16;
+    pos.vx = this->start.vx + (this->unk94.vx * step) / 4;
+    pos.vy = this->start.vy + (this->unk94.vy * step) / 4;
+    pos.vz = 0;
+    this->part.position.vx = pos.vx;
+    this->part.position.vz = 0;
+    this->part.radius = r;
+    this->part.position.vy = pos.vy;
+    this->part.flags.bits.disabled = (step & 3) != 0;
+}
 
 /* Keeps vec at 0x94, clears 0xA8 and 0xB0, counts the call in 0xAC, and sets the second base's vector to
  * vec's unit direction with x doubled, y quadrupled and z cleared, and its word at 0x8 to unk8. */

@@ -478,17 +478,6 @@ INCLUDE_ASM("game/nonmatchings/fighters/dukemon", DukemonSpecial2Effect_draw);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/dukemon", D_80068664);
 
-INCLUDE_ASM("game/nonmatchings/fighters/dukemon", func_80085B7C);
-
-/* The destructor of the special3 effect of vtable D_8006870C. */
-void func_80085C90(Entity *this, s32 flags) {
-    this->vtable = &D_8006870C;
-    entityDestroy(this, 0);
-    if (flags & DESTROY_FREE) {
-        entityOperatorDelete(this);
-    }
-}
-
 /* The entity class of vtable D_8006870C (0xDC bytes, func_80085B7C constructs it for the character): a point of
  * the owner that rises and fades out in steps. */
 typedef struct Unk80085B7C {
@@ -509,6 +498,53 @@ typedef struct Unk80085B7C {
     /* 0x58 */ s32 unk58;       /* 0x1800 from func_80085B7C, a quarter less every frame of state 3 */
     /* 0x5C */ SVECTOR points[16]; /* 192 apart toward side, from func_80085B7C */
 } Unk80085B7C; /* size 0xDC */
+
+extern VECTOR D_80068664;
+
+/* Constructs the special3 effect of vtable D_8006870C for arg, places it at node 18 with D_80068664, initializes the
+ * 16 points 192 apart toward side, and plays sound 0x7B. */
+Entity *func_80085B7C(Entity *entity, Fighter *arg, Vec3 *vec) {
+    Unk80085B7C *this = (Unk80085B7C *)entity;
+    Unk80085B7C *p;
+    s32 i;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_8006870C;
+    this->vramY = Fighter_getVramY(arg);
+    this->unk1C = 0x80;
+    this->owner = (Dukemon *)arg;
+    this->state = 0;
+    this->counter = 0;
+    this->unk1D = 0;
+    this->timer = 0;
+    this->unk28 = 0;
+    this->unk54 = 0x1000;
+    this->unk58 = 0x1800;
+    this->side = Fighter_getFacing(arg);
+    Fighter_getNodePosition(&this->owner->base, &this->position, 18, &D_80068664);
+    this->unk44.vy = this->position.vy;
+    this->unk44.vz = this->position.vz;
+    this->unk44.vx = this->position.vx + (this->side << 7);
+    for (i = 0, p = this; i < 16; i++) {
+        s32 step = this->side * 192;
+
+        p->points[0].vy = 0;
+        p->points[0].vz = 0;
+        p->points[0].vx = i * step;
+        p = (Unk80085B7C *)((u8 *)p + 8);
+    }
+    Fighter_playSound(&this->owner->base, 0x7B);
+    return &this->entity;
+}
+
+/* The destructor of the special3 effect of vtable D_8006870C. */
+void func_80085C90(Entity *this, s32 flags) {
+    this->vtable = &D_8006870C;
+    entityDestroy(this, 0);
+    if (flags & DESTROY_FREE) {
+        entityOperatorDelete(this);
+    }
+}
 
 extern VECTOR D_80068674;
 
