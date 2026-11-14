@@ -5,6 +5,8 @@
 #include "common.h"
 #include <abs.h>
 #include "battle/game_classes.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
 #include "engine/math/sin_cos.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
@@ -1057,7 +1059,66 @@ void func_800A8150(Unk800A7F88 *this) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/sakuyamon", D_8006AC5C);
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A8274);
+extern SVECTOR D_8006AC5C[4];
+
+static inline void setTranslationSak(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws Unk800A7F88's sprite quad at start scaled by unkA8, selecting the 48x48 frame from unkA4. */
+void func_800A8274(Unk800A7F88 *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 zShift;
+    void *packet;
+    s32 unkA4;
+    u8 u;
+    u8 v;
+    s32 vramY;
+    s32 scale = this->unkA8;
+
+    if (scale <= 0) {
+        return;
+    }
+    packet = PRIM_BUFFER_FREE;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    setTranslationSak(m.m.t, &this->start);
+    m.words[0] = (u16)scale;
+    m.words[1] = 0;
+    m.words[2] = (u16)scale;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    setModelMatrix(&m.m);
+    shape.flags = 0;
+    shape.corners[0] = &D_8006AC5C[0];
+    shape.corners[1] = &D_8006AC5C[1];
+    shape.corners[2] = &D_8006AC5C[2];
+    shape.corners[3] = &D_8006AC5C[3];
+    shape.color = 0x808080;
+    unkA4 = this->unkA4;
+    u = (unkA4 & 3) * 48;
+    UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv0)[0] = u;
+    UV_BYTES(shape.uv3)[0] = u + 0x2F;
+    UV_BYTES(shape.uv1)[0] = u + 0x2F;
+    v = (unkA4 & 4) * 12 + 0x40;
+    UV_BYTES(shape.uv1)[1] = v;
+    UV_BYTES(shape.uv0)[1] = v;
+    UV_BYTES(shape.uv3)[1] = v + 0x2F;
+    UV_BYTES(shape.uv2)[1] = v + 0x2F;
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xFA);
+    shape.tpage = getTPage(0, 0, 0x1C0, vramY);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 extern EntityVtable D_8006AF04;
 
