@@ -697,7 +697,46 @@ VECTOR *func_800A6550(Unk800A6220 *this, VECTOR *out) {
     return out;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A65F8);
+UnkPartsEntity38 *func_800A65F8(UnkPartsEntity38 *parts, Fighter *fighter, s32 handle, VECTOR *from, VECTOR to) {
+    Unk800A65F8 *this = (Unk800A65F8 *)parts;
+    struct Fight *scene;
+
+    entityInit(&this->base.entity, 0x30000);
+    Hit_init(&this->base.base, fighter, 0x4A80300, (Vec3 *)&ZERO_VECTOR, 0);
+    this->base.base.vtable = D_8006AFC4;
+    this->base.entity.vtable = &D_8006AFE4;
+    CollisionSphere_init(&this->base.part, (Vec3 *)&this->position, 0, &this->base.base);
+    this->fighter = fighter;
+    this->handle = handle;
+    {
+        s32 x = from->vx;
+        s32 y = from->vy;
+        s32 z = from->vz;
+
+        this->offset.vx = x;
+        this->offset.vy = y;
+        this->offset.vz = z;
+    }
+    vecNormalize(&this->axis, &to);
+    this->angle = 0;
+    this->unkAC = 12;
+    func_8007A650(fighter, (Vec3 *)&this->position);
+    this->unkC0 = Fighter_getFacing(fighter);
+    this->unkC4 = 0;
+    this->unkC8 = 0;
+    this->unkCC = 0x80;
+    this->frames = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    scene = Fighter_getScene(fighter);
+    this->base.part.entity = &this->base.entity;
+    this->base.part.position = *(Vec3 *)&this->position;
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(scene, &this->base.part.link);
+    } else {
+        Fight_addSide1Shape(scene, &this->base.part.link);
+    }
+    return &this->base;
+}
 
 s32 func_800A6AB0(Unk800A65F8 *this, Entity *owner);
 s32 func_800A6BE4(Unk800A65F8 *this);
