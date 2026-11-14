@@ -990,7 +990,34 @@ void func_800A80B4(Unk800A7F88 *this, VECTOR *vec, s32 unk8) {
     Hit_set(&this->unk18, unk8, 0);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A8150);
+struct Unk800A83E0 *func_800A83E0(struct Unk800A83E0 *this, Vec3 *position, Vec3 *velocity, Vec3 *target,
+                                  s32 steerFrames, s32 vramY);
+
+/* Spawns a ring of 8 Unk800A83E0 projectiles around the axis of unk94, rotated by unkB0 * 0x80 + i * 0x200. */
+void func_800A8150(Unk800A7F88 *this) {
+    VECTOR baseVel;
+    VECTOR axis;
+    MATRIX m;
+    VECTOR vel;
+    VECTOR *dir = (VECTOR *)&this->unk94;
+    s32 angle;
+    s32 i;
+
+    vecNormalize(&axis, dir);
+    matrixInitRotationZ(&m, 0x280);
+    matrixTransformVec(&m, &baseVel, dir);
+    angle = this->unkB0 << 7;
+    for (i = 0; i < 8; i++) {
+        Entity *child;
+
+        matrixInitInverseRotationAxis(&m, &axis, angle);
+        matrixTransformVec(&m, &vel, &baseVel);
+        child = NEW_ENTITY(0x60, func_800A83E0, &this->start, (Vec3 *)&vel, (Vec3 *)dir, 17 - this->unkB0,
+                           this->vramY);
+        entityAddSibling(&this->entity, child);
+        angle += 0x200;
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/sakuyamon", D_8006AC5C);
 
