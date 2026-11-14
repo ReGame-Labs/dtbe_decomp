@@ -1187,7 +1187,50 @@ void func_800AD3B0(Unk800AD050 *this) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/saintgargomon", D_8006B2F0);
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AD450);
+extern SVECTOR D_8006B2F0[4];
+
+static inline void setTranslationSg(long *t, VECTOR *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws Unk800AD050's projectile sprite rotated along its velocity vector. */
+void func_800AD450(Unk800AD050 *this, Camera *camera) {
+    VECTOR pos;
+    MATRIX m;
+    PolyFT4Shape shape;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 vramY;
+
+    packet = PRIM_BUFFER_FREE;
+    pos = *(VECTOR *)&this->position;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    matrixInitRotationZ(&m, ratan2(this->velocity.vy, this->velocity.vx));
+    setTranslationSg(m.t, &pos);
+    setModelMatrix(&m);
+    shape.flags = 0;
+    shape.corners[0] = &D_8006B2F0[0];
+    shape.corners[1] = &D_8006B2F0[1];
+    shape.corners[2] = &D_8006B2F0[2];
+    shape.corners[3] = &D_8006B2F0[3];
+    shape.color = 0x808080;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0x20;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0x3F;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0xC0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xCF;
+    vramY = (u16)this->vramY;
+    shape.clut = getClut(0x180, vramY + 0xF2);
+    shape.tpage = getTPage(0, 1, 0x180, vramY);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* func_800AD5BC's class with its own fields (Unk800AD5BC is the part it shares with GuilmonSpecial2Hitbox_init's). */
 typedef struct Unk800AD7CC {
