@@ -263,7 +263,45 @@ void Dukemon_airSpecial2(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/dukemon", Dukemon_special3);
+void func_80084E58(Fighter *this);
+void func_80084EC0(Fighter *this);
+void Dukemon_spawnSpecial3Hitbox(Fighter *this, s16 arg);
+
+void Dukemon_special3(Dukemon *this, s32 frame) {
+    Fighter_special3(&this->base, frame);
+    func_80079AE4(&this->base);
+    this->special3Active = 1;
+    switch (frame) {
+    case 0:
+        Fighter_playActionClip(&this->base, 0x1A, 0, 0, -1);
+        this->base.velocity.vy = 0;
+        this->special3Landed = 0;
+        Fighter_playVoice(&this->base, 0x81);
+        Fighter_addGauge(&this->base, -0x10000);
+        this->base.invulnerableFrames = 12;
+        break;
+    case 14:
+        func_80084EC0(&this->base);
+        break;
+    case 23:
+        func_80084E58(&this->base);
+        break;
+    case 84:
+        this->base.velocity.vx = 0;
+        break;
+    }
+    if (frame >= 15 && frame < 70) {
+        s32 accel = ((s64)this->base.mass * 0x38) >> 16;
+
+        this->base.force.vx += -accel * Fighter_getFacing(&this->base);
+        if ((frame & 3) == 0) {
+            Fighter_spawnDust(&this->base, -1, 0xA0, 4);
+        }
+    }
+    if (frame >= 15 && frame < 65 && (frame & 7) == 0) {
+        Dukemon_spawnSpecial3Hitbox(&this->base, 0);
+    }
+}
 
 /* The two entries of a table that Dukemon_spawnTrail, Dukemon_spawnSpecial2Trails and Dukemon_spawnAttack3Trails each
  * initialise. cc1 gives identical array initializers one constant per unit, so the three share its data (D_800685DC in
