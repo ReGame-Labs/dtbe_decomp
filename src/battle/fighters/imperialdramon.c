@@ -890,7 +890,47 @@ void ImperialdramonSpecial1Effect_tick(ImperialdramonSpecial1Effect *this) {
     this->frames++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", func_8008F7F8);
+s16 func_8008F9B0(ImperialdramonSpecial1Effect *this, s32 index);
+s32 turnAngleToward(s32 target, s32 from, s32 step);
+
+/* Steers each active point's angle toward func_8008F9B0 by up to 0x80, advances it by (-sin, -cos) >> 7, and in
+ * state 0 respawns any point within 0x40 of centre to a random (-0x7F..0x80) offset with a random angle. */
+void func_8008F7F8(ImperialdramonSpecial1Effect *this) {
+    VECTOR diff;
+    s32 i;
+
+    for (i = 0; i < this->pointCount; i++) {
+        VECTOR *v;
+        s32 dx, dy;
+        s32 idx;
+
+        idx = turnAngleToward(func_8008F9B0(this, i), this->unkE8[i], 0x80);
+        this->unkE8[i] = idx;
+        dx = -COS_SIN_TABLE[idx & 0xFFF].sin >> 7;
+        dy = -COS_SIN_TABLE[idx & 0xFFF].cos >> 7;
+        this->unk48[i].vx += dx;
+        this->unk48[i].vy += dy;
+        v = &this->unk48[i];
+        {
+            s32 vy, vz;
+            diff.vx = v->vx - this->centre.vx;
+            vy = v->vy;
+            vz = v->vz;
+            diff.vy = vy - this->centre.vy;
+            diff.vz = vz - this->centre.vz;
+        }
+        if (vecGetLength(&diff) < 0x40 && this->state == 0) {
+            s32 r = Fight_random(this->fight);
+            s32 c = this->centre.vx - 0x7F;
+            this->unk48[i].vx = (r & 0xFF) + c;
+            r = Fight_random(this->fight);
+            c = this->centre.vy - 0x7F;
+            this->unk48[i].vy = (r & 0xFF) + c;
+            this->unk48[i].vz = 0;
+            this->unkE8[i] = Fight_random(this->fight) & 0xFFF;
+        }
+    }
+}
 
 /* The direction (ratan2) from the centre at 0x38 to point index, on x and y. */
 s16 func_8008F9B0(ImperialdramonSpecial1Effect *this, s32 index) {
