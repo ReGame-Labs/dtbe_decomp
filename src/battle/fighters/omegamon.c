@@ -62,7 +62,34 @@ void Omegamon_endMove(Fighter *this) {
     Fighter_detach(Fighter_getOpponent(this));
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/omegamon", Omegamon_attack2);
+void Omegamon_attack2(Fighter *this, s32 frame) {
+    FighterParams *params = Fighter_getParams(this);
+    s32 *lunge = &params->attacks[1].lungeX;
+    s64 lungeX;
+    s32 drag;
+
+    if (frame == 0) {
+        Fighter_playActionClip(this, FIGHTER_CLIP_ATTACK2, 0, 0, -1);
+        this->hitDamage = params->attacks[1].hitDamage;
+    }
+    if (frame == 4) {
+        lungeX = (s64)params->attacks[1].lungeX * this->mass >> 16;
+        this->force.vx += (s32)lungeX * Fighter_getFacing(this);
+        this->force.vy -= (s64)lunge[1] * this->mass >> 16;
+    }
+    if (frame >= 5) {
+        drag = (s64)this->velocity.vx * lunge[2] >> 12;
+        this->force.vx += drag;
+    }
+    if (frame >= params->attacks[1].firstActiveFrame && frame <= params->attacks[1].lastActiveFrame) {
+        Fighter_setAttackParts(this, params->attacks[1].parts);
+    } else {
+        this->attackParts = 0;
+    }
+    if (frame > lunge[3]) {
+        func_80079AF8(this);
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/omegamon", D_8006A3D4);
 
