@@ -1313,7 +1313,46 @@ Unk800A83E0 *func_800A83E0(Unk800A83E0 *this, Vec3 *position, Vec3 *velocity, Ve
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A84E4);
+/* Moves by velocity, steers toward steer for steerFrames (else damps velocity by 1/4), grows size by 4, advances
+ * animFrame, fades brightness by 12, and deletes itself at 0. */
+void func_800A84E4(Unk800A83E0 *this) {
+    s32 x = this->position.vx, y = this->position.vy, z = this->position.vz;
+    s32 vx = this->velocity.vx, vy = this->velocity.vy, vz = this->velocity.vz;
+
+    x += vx;
+    y += vy;
+    z += vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    if (--this->steerFrames >= 0) {
+        s32 sx = this->steer.vx;
+        s32 sy = this->steer.vy;
+        s32 sz = this->steer.vz;
+        s32 nvx = vx + (sx - vx) / 10;
+        s32 nvy = vy + (sy - vy) / 10;
+        s32 nvz = vz + (sz - vz) / 10;
+
+        this->velocity.vx = nvx;
+        this->velocity.vy = nvy;
+        this->velocity.vz = nvz;
+        this->steer.vx = sx - sx / 20;
+        this->steer.vy = sy - sy / 20;
+        this->steer.vz = sz - sz / 20;
+        this->angle = ratan2(nvy, nvx) + 0x500;
+    } else {
+        this->velocity.vx = vx - (vx >> 2);
+        this->velocity.vy = vy - (vy >> 2);
+        this->velocity.vz = vz - (vz >> 2);
+    }
+    this->size += 4;
+    this->animFrame = (this->animFrame + 1) & 7;
+    this->brightness -= 12;
+    if (this->brightness <= 0 && this != NULL) {
+        this->entity.vtable->destroy.func(
+            (u8 *)&this->entity + this->entity.vtable->destroy.delta, DESTROY_DELETE);
+    }
+}
 
 void func_800A86A8(Unk800A83E0 *this, Camera *camera) {
     MatrixWords m;
