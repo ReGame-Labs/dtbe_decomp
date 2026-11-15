@@ -235,7 +235,51 @@ void Dukemon_special2(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/dukemon", Dukemon_airUpAttack);
+void Dukemon_airUpAttack(Fighter *this, s32 frame) {
+    Fighter *opponent = Fighter_getOpponent(this);
+    FighterParams *params = Fighter_getParams(this);
+    Attack *attack = &params->attacks[6];
+    s32 *lunge = &attack->lungeX;
+
+    switch (frame) {
+    case 0:
+        Dukemon_spawnTrail(this, 20);
+        Fighter_playActionClip(this, FIGHTER_CLIP_AIR_UP_ATTACK, 2, 0, -1);
+        this->velocity.vy = 0;
+        break;
+    case 5:
+        this->force.vy -= ((s64)lunge[1] * this->mass) >> 16;
+        if (Fighter_getOpponentInReach(this, 0)) {
+            Vec3 knockback;
+
+            knockback.vx = 0;
+            knockback.vy = -0x8E30;
+            knockback.vz = 0;
+            Fighter_takeHit(opponent, 0x81900200, (Vec3 *)&ZERO_VECTOR, 0);
+            Fighter_detach(opponent);
+            {
+                s32 x = knockback.vx;
+                s32 y = knockback.vy;
+                s32 z = knockback.vz;
+
+                opponent->velocity.vx = 0;
+                opponent->velocity.vy = 0;
+                opponent->force.vx = x;
+                opponent->force.vy = y;
+                opponent->force.vz = z;
+            }
+        }
+        break;
+    }
+    if (frame < 20 && this->velocity.vy > 0) {
+        this->force.vy -= this->velocity.vy;
+    }
+    if (frame >= attack->firstActiveFrame && frame <= attack->lastActiveFrame) {
+        Fighter_setAttackParts(this, attack->parts);
+    } else {
+        this->attackParts = 0;
+    }
+}
 
 /* Special move 2 in the air: as on the ground, with the lift at frames 0 and 5 and the braking until frame 12. */
 void Dukemon_airSpecial2(Fighter *this, s32 frame) {
