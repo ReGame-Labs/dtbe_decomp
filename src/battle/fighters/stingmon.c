@@ -614,7 +614,72 @@ void Stingmon_spawnAttack3Hitbox(Stingmon *this) {
     Fighter_addEntity(&this->base, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial2Hitbox_init);
+/* The UnkPartsEntity38 class StingmonSpecial2Hitbox_init constructs (virtual tables STINGMON_SPECIAL2_HITBOX_VTABLE and
+ * STINGMON_SPECIAL2_HITBOX_HIT_VTABLE). */
+typedef struct StingmonSpecial2Hitbox {
+    /* 0x00 */ UnkPartsEntity38 parts;
+    /* 0x80 */ Fighter *fighter;
+    /* 0x84 */ u16 frame;
+    /* 0x86 */ s16 facing; /* the character's (Fighter_getFacing) */
+    /* 0x88 */ u8 unk88;   /* 10, or 3: the frames state 2 waits */
+    /* 0x89 */ u8 unk89;   /* rises to 0x80 in state 1, falls to 0 in state 3 */
+    /* 0x8A */ u16 state;
+    /* 0x8C */ u16 unk8C;  /* state 2's frame count */
+    /* 0x8E */ s16 vramY;  /* the character's 0x440 (Fighter_getVramY) */
+    /* 0x90 */ VECTOR position; /* the character's point 20 (Fighter_getNodePosition) */
+    /* 0xA0 */ SVECTOR corners[4];
+} StingmonSpecial2Hitbox;
+
+/* Builds a special move 2 hitbox for fighter at position with velocity (its z selects state 0 with unk88 10 and part
+ * flag 1, or state 1 with unk88 3) and adds its sphere to fighter's side of list. */
+StingmonSpecial2Hitbox *StingmonSpecial2Hitbox_init(StingmonSpecial2Hitbox *this, Fighter *fighter, Vec3 *position,
+                                                     VECTOR *velocity, Fight *list) {
+    CollisionSphere *part;
+    s32 x, y, z;
+
+    entityInit(&this->parts.entity, 0x30000);
+    Hit_init(&this->parts.base, fighter, 0x7AC1FD9, (Vec3 *)velocity, 1);
+    this->parts.base.vtable = STINGMON_SPECIAL2_HITBOX_HIT_VTABLE;
+    this->parts.entity.vtable = &STINGMON_SPECIAL2_HITBOX_VTABLE;
+    CollisionSphere_init(&this->parts.part, position, 0x80, &this->parts.base);
+    this->vramY = Fighter_getVramY(fighter);
+    this->facing = Fighter_getFacing(fighter);
+    this->fighter = fighter;
+    this->state = 0;
+    this->unk8C = 0;
+    this->unk89 = 0;
+    this->frame = 0;
+    if (velocity->vz == 0) {
+        this->unk88 = 10;
+        this->state = 0;
+    } else {
+        this->unk88 = 3;
+        this->state = 1;
+    }
+    this->corners[0].vx = this->corners[1].vx = this->corners[2].vx = this->corners[3].vx = 0x20;
+    this->corners[0].vy = this->corners[1].vy = 0x54;
+    this->corners[2].vy = this->corners[3].vy = 0x17C;
+    this->corners[0].vz = this->corners[2].vz = 0x20;
+    this->corners[1].vz = this->corners[3].vz = -0x20;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    part = &this->parts.part;
+    this->parts.part.entity = &this->parts.entity;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    if (Fighter_getSide(this->fighter) == 0) {
+        Fight_addSide0Shape(list, &part->link);
+    } else {
+        Fight_addSide1Shape(list, &part->link);
+    }
+    Fighter_playSound(this->fighter, 0xEB);
+    if (this->unk88 == 10) {
+        this->parts.part.flags.word |= 1;
+    }
+    return this;
+}
 
 /* The special move 2 hitbox's destructor. */
 void StingmonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
@@ -635,21 +700,6 @@ void StingmonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
         entityOperatorDelete(this);
     }
 }
-
-/* The UnkPartsEntity38 class StingmonSpecial2Hitbox_init constructs (virtual tables STINGMON_SPECIAL2_HITBOX_VTABLE and
- * STINGMON_SPECIAL2_HITBOX_HIT_VTABLE). */
-typedef struct StingmonSpecial2Hitbox {
-    /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Fighter *fighter;
-    /* 0x84 */ u16 frame;
-    /* 0x86 */ s16 facing; /* the character's (Fighter_getFacing) */
-    /* 0x88 */ u8 unk88;   /* 10, or 3: the frames state 2 waits */
-    /* 0x89 */ u8 unk89;   /* rises to 0x80 in state 1, falls to 0 in state 3 */
-    /* 0x8A */ u16 state;
-    /* 0x8C */ u16 unk8C;  /* state 2's frame count */
-    /* 0x8E */ s16 vramY;  /* the character's 0x440 (Fighter_getVramY) */
-    /* 0x90 */ VECTOR position; /* the character's point 20 (Fighter_getNodePosition) */
-} StingmonSpecial2Hitbox;
 
 extern VECTOR D_800D344C;
 
