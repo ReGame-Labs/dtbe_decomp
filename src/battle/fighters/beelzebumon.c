@@ -41,6 +41,7 @@ typedef struct Beelzebumon {
     /* 0x4A4 */ s32 unk4A4;
     /* 0x4A8 */ s32 unk4A8;
     /* 0x4AC */ s32 unk4AC; /* Beelzebumon_endMove sets it */
+    /* 0x4B0 */ s32 unk4B0; /* airborne frames before special 3 ends early */
 } Beelzebumon;
 
 /* Builds Beelzebumon: a Fighter with its own vtable. */
@@ -377,7 +378,64 @@ void Beelzebumon_spawnSpecial2Particle(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", Beelzebumon_special3);
+void Beelzebumon_spawnSpecial3Effect(Fighter *this);
+void func_80095E8C(Fighter *this);
+void func_80095C44(Fighter *this);
+void func_800955D4(Fighter *this, s32 arg1);
+void func_80095CB4(Fighter *this);
+
+/* Special move 3: Fighter's, consumes 0x10000 gauge and plays voice 0xB5 at frame 0, spawns 3 effects and calls
+ * func_80095E8C while frame < 40, spawns func_80095C44 at frame 10 and func_800955D4(16) at frame 40, cancels if
+ * airborne for 4 frames before frame 44, spawns func_80095CB4 at frame 44, recoils at frame 47, and brakes with
+ * dust from frame 48. */
+void Beelzebumon_special3(Beelzebumon *this, s32 frame) {
+    Fighter_special3(&this->base, frame);
+    if (frame == 0) {
+        this->base.invulnerableFrames = 10;
+        this->unk4AC = 0;
+        this->unk4B0 = 0;
+        Fighter_addGauge(&this->base, -0x10000);
+        Fighter_playVoice(&this->base, 0xB5);
+    }
+    if (frame < 0x28) {
+        Beelzebumon_spawnSpecial3Effect(&this->base);
+        Beelzebumon_spawnSpecial3Effect(&this->base);
+        Beelzebumon_spawnSpecial3Effect(&this->base);
+        func_80095E8C(&this->base);
+    }
+    if (frame == 10) {
+        func_80095C44(&this->base);
+    }
+    if (frame == 0x28) {
+        func_800955D4(&this->base, 0x10);
+    }
+    if (frame < 0x2C) {
+        if (Fighter_isOnGround(&this->base)) {
+            this->unk4B0 = 0;
+        } else {
+            this->unk4B0++;
+        }
+        if (this->unk4B0 >= 4) {
+            this->unk4AC = 1;
+            Fighter_stopActionClip(&this->base);
+            return;
+        }
+    }
+    if (frame == 0x2C) {
+        func_80095CB4(&this->base);
+    }
+    if (frame == 0x2F) {
+        s32 x = ((s64)this->base.mass * 0xB1BC) >> 16;
+
+        this->base.force.vx -= x * Fighter_getFacing(&this->base);
+    }
+    if (frame >= 0x30) {
+        this->base.force.vx = ((s64)this->base.velocity.vx * -0x800) >> 12;
+        if (frame < 0x35) {
+            Fighter_spawnDust(&this->base, 1, 0x80, 2);
+        }
+    }
+}
 
 /* Creates an entity of func_80097FA0's class (0xB4 bytes) with g++'s new, for this one and its
  * Fighter_getScene object, and hands it to Fighter_addEntity. */
