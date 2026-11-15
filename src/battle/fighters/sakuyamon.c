@@ -800,7 +800,43 @@ void func_800A6778(Unk800A65F8 *this) {
     this->frames++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A68FC);
+void func_800A68FC(Unk800A65F8 *this, CollisionSphere *sum) {
+    Entity *entity = sum->entity;
+
+    if (entity == NULL) {
+        return;
+    }
+    switch (entityGetKind(entity)) {
+    case ENTITY_KIND_FIGHTER:
+        if ((this->frames & 3) != 0) {
+            return;
+        }
+        Hit_apply(&this->base.base, sum);
+        entityAddSibling(&this->base.entity,
+                         NEW_ENTITY(sizeof(ParticleEmitter), ParticleBurst_init, 9, (Vec3 *)&this->position, 0x20, 8,
+                                    2, 0x794CFF));
+        if (Fighter_isGuarding((Fighter *)entity)) {
+            soundControlPlaySound(&SOUND_CONTROL, 0xD, 0);
+            this->unkAC--;
+        } else {
+            this->unkAC -= 2;
+        }
+        if (this->unkAC <= 0) {
+            removePart(&this->base);
+            this->handle = 0;
+        }
+        break;
+    case ENTITY_KIND_FIGHTER_OBJECT:
+        Hit_apply(&this->base.base, sum);
+        removePart(&this->base);
+        soundControlPlaySound(&SOUND_CONTROL, 0xD1, 0);
+        this->handle = 0;
+        break;
+    default:
+        Hit_apply(&this->base.base, sum);
+        break;
+    }
+}
 
 /* Advances Unk800A65F8 toward its rotated offset around owner's position and returns the x step. */
 s32 func_800A6AB0(Unk800A65F8 *this, Entity *owner) {
