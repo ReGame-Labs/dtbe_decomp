@@ -786,8 +786,11 @@ typedef struct GokumonSpecial3Hitbox {
     /* 0x000 */ UnkPartsEntity38 parts;
     /* 0x080 */ u8 unk80[0x280 - 0x80];
     /* 0x280 */ Fighter *owner;
-    /* 0x284 */ Vec3 position; /* the owner's, while 0x29C is below 2 */
-    /* 0x290 */ u8 unk290[0x2A0 - 0x290];
+    /* 0x284 */ Vec3 position; /* the owner's, while state is below 2 */
+    /* 0x290 */ u8 unk290[0x294 - 0x290];
+    /* 0x294 */ s32 unk294;
+    /* 0x298 */ s32 unk298;
+    /* 0x29C */ s32 state;
     /* 0x2A0 */ s32 pulses;    /* func_800C1180's so far: they cycle through D_8006CD70's three sizes */
     /* 0x2A4 */ u8 unk2A4[0x2A8 - 0x2A4];
     /* 0x2A8 */ u32 soundHandle;

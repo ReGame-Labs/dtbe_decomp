@@ -660,7 +660,60 @@ void GokumonSpecial3Hitbox_destroy(GokumonSpecial3Hitbox *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial3Hitbox_tick);
+void func_800C12A4();
+void func_800C1180();
+
+/* Updates Gokumon's special move 3 hitbox: detaches its collision shape once the owner's attack ends or hits body
+ * state 0x13, grows unk298 to > 0x80 before attaching the shape and advancing state, ticks func_800C12A4 in state 1,
+ * shrinks unk298 in state 2 until destroyed, and calls func_800C1180 while advancing unk294 and pulses. */
+void GokumonSpecial3Hitbox_tick(GokumonSpecial3Hitbox *this, void *arg) {
+    s32 idle = 0;
+
+    if (Fighter_isAttackIdle(this->owner) || Fighter_getBodyStateId(this->owner) == 0x13) {
+        idle = 1;
+    }
+    if (idle) {
+        ListNode *node = &this->parts.part.link;
+        this->parts.part.link.next->prev = this->parts.part.link.prev;
+        node->prev->next = this->parts.part.link.next;
+        this->parts.part.link.next = node;
+        this->parts.part.link.prev = node;
+        this->state = 2;
+    }
+    if (this->state < 2) {
+        Fighter_getPosition(this->owner, &this->position);
+    }
+    switch (this->state) {
+        case 0:
+            this->unk298 += 8;
+            if (this->unk298 > 0x80) {
+                Fight *scene = Fighter_getScene(this->owner);
+                if (Fighter_getSide(this->owner) == 0) {
+                    Fight_addSide0Shape(scene, &this->parts.part.link);
+                } else {
+                    Fight_addSide1Shape(scene, &this->parts.part.link);
+                }
+                this->state++;
+            }
+            break;
+        case 1:
+            func_800C12A4(this, arg);
+            break;
+        case 2:
+            this->unk298 -= 8;
+            if (this->unk298 <= 0) {
+                if (this != NULL) {
+                    this->parts.entity.vtable->destroy.func(
+                        (u8 *)&this->parts.entity + this->parts.entity.vtable->destroy.delta, DESTROY_DELETE);
+                }
+                return;
+            }
+            break;
+    }
+    func_800C1180(this, arg);
+    this->unk294 += 0x100;
+    this->pulses++;
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/gokumon", D_8006CD70);
 
