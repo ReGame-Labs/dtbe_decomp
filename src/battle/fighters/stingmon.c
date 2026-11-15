@@ -855,7 +855,74 @@ void StingmonSpecial2Effect_tick(StingmonSpecial2Effect *this) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006BA10);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial2Effect_draw);
+#define UV_BYTES(uv) ((u8 *)&(uv))
+
+extern SVECTOR D_8006BA10[4];
+
+void StingmonSpecial2Effect_draw(StingmonSpecial2Effect *this, Camera *camera) {
+    MatrixWords m;
+    MATRIX *matrix;
+    PolyFT4Shape shape;
+    Vec3 *position;
+    s32 x, y, z;
+
+    shape.flags = 0;
+    m.m.t[0] = 0;
+    m.m.t[1] = 0;
+    m.m.t[2] = 0;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    m.words[4] = m.words[2] = m.words[0] = (u16)this->unk28;
+    matrix = &m.m;
+    if ((u16)this->unk1C != 0) {
+        if (this->facing > 0) {
+            matrixRotateZ(matrix, 0x200);
+        } else {
+            matrixRotateZ(matrix, -0x200);
+        }
+    }
+    position = &this->position;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    setModelMatrix(matrix);
+    shape.corners[0] = &D_8006BA10[0];
+    shape.corners[1] = &D_8006BA10[1];
+    shape.corners[2] = &D_8006BA10[2];
+    shape.corners[3] = &D_8006BA10[3];
+    shape.color = this->unk22 | (this->unk22 << 8) | (this->unk22 << 16);
+    if (this->facing > 0) {
+        UV_BYTES(shape.uv0)[0] = 0x50;
+        UV_BYTES(shape.uv0)[1] = 0x40;
+        UV_BYTES(shape.uv1)[0] = 0x7F;
+        UV_BYTES(shape.uv1)[1] = 0x40;
+        UV_BYTES(shape.uv2)[0] = 0x50;
+        UV_BYTES(shape.uv2)[1] = 0x7F;
+        UV_BYTES(shape.uv3)[0] = 0x7F;
+        UV_BYTES(shape.uv3)[1] = 0x7F;
+    } else {
+        UV_BYTES(shape.uv0)[0] = 0x7F;
+        UV_BYTES(shape.uv0)[1] = 0x40;
+        UV_BYTES(shape.uv1)[0] = 0x50;
+        UV_BYTES(shape.uv1)[1] = 0x40;
+        UV_BYTES(shape.uv2)[0] = 0x7F;
+        UV_BYTES(shape.uv2)[1] = 0x7F;
+        UV_BYTES(shape.uv3)[0] = 0x50;
+        UV_BYTES(shape.uv3)[1] = 0x7F;
+    }
+    {
+        u16 vramY = this->vramY;
+
+        shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+        shape.clut = getClut(0x1C0, vramY + 0xF7);
+    }
+    shape.flags &= ~3;
+    shape.flags |= 9;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
+}
 
 /* The entity class of vtable D_8006BBE4 (0x3C bytes), made for a character at a position. */
 typedef struct Unk800B25CC {
@@ -1004,7 +1071,6 @@ INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", STINGMON_SPECIAL1_PROJECTI
 
 /* PolyFT4Shape's uv words as their u and v bytes (as in saintgargomon.c): game_classes.h types them u16, and the game
  * stores the bytes. */
-#define UV_BYTES(uv) ((u8 *)&(uv))
 
 /* The corners of the rectangle StingmonSpecial1Projectile_drawHead draws. */
 extern SVECTOR STINGMON_SPECIAL1_PROJECTILE_HEAD_CORNERS[4];
