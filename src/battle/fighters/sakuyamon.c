@@ -5,6 +5,9 @@
 #include "common.h"
 #include <abs.h>
 #include "battle/game_classes.h"
+#include "engine/gfx/lights.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
 #include "engine/math/sin_cos.h"
 #include "engine/pad/pad.h"
 #include "engine/sound/sound_control.h"
@@ -695,7 +698,46 @@ VECTOR *func_800A6550(Unk800A6220 *this, VECTOR *out) {
     return out;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A65F8);
+UnkPartsEntity38 *func_800A65F8(UnkPartsEntity38 *parts, Fighter *fighter, s32 handle, VECTOR *from, VECTOR to) {
+    Unk800A65F8 *this = (Unk800A65F8 *)parts;
+    struct Fight *scene;
+
+    entityInit(&this->base.entity, 0x30000);
+    Hit_init(&this->base.base, fighter, 0x4A80300, (Vec3 *)&ZERO_VECTOR, 0);
+    this->base.base.vtable = D_8006AFC4;
+    this->base.entity.vtable = &D_8006AFE4;
+    CollisionSphere_init(&this->base.part, (Vec3 *)&this->position, 0, &this->base.base);
+    this->fighter = fighter;
+    this->handle = handle;
+    {
+        s32 x = from->vx;
+        s32 y = from->vy;
+        s32 z = from->vz;
+
+        this->offset.vx = x;
+        this->offset.vy = y;
+        this->offset.vz = z;
+    }
+    vecNormalize(&this->axis, &to);
+    this->angle = 0;
+    this->unkAC = 12;
+    func_8007A650(fighter, (Vec3 *)&this->position);
+    this->unkC0 = Fighter_getFacing(fighter);
+    this->unkC4 = 0;
+    this->unkC8 = 0;
+    this->unkCC = 0x80;
+    this->frames = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    scene = Fighter_getScene(fighter);
+    this->base.part.entity = &this->base.entity;
+    this->base.part.position = *(Vec3 *)&this->position;
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(scene, &this->base.part.link);
+    } else {
+        Fight_addSide1Shape(scene, &this->base.part.link);
+    }
+    return &this->base;
+}
 
 s32 func_800A6AB0(Unk800A65F8 *this, Entity *owner);
 s32 func_800A6BE4(Unk800A65F8 *this);
@@ -758,9 +800,81 @@ void func_800A6778(Unk800A65F8 *this) {
     this->frames++;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A68FC);
+void func_800A68FC(Unk800A65F8 *this, CollisionSphere *sum) {
+    Entity *entity = sum->entity;
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A6AB0);
+    if (entity == NULL) {
+        return;
+    }
+    switch (entityGetKind(entity)) {
+    case ENTITY_KIND_FIGHTER:
+        if ((this->frames & 3) != 0) {
+            return;
+        }
+        Hit_apply(&this->base.base, sum);
+        entityAddSibling(&this->base.entity,
+                         NEW_ENTITY(sizeof(ParticleEmitter), ParticleBurst_init, 9, (Vec3 *)&this->position, 0x20, 8,
+                                    2, 0x794CFF));
+        if (Fighter_isGuarding((Fighter *)entity)) {
+            soundControlPlaySound(&SOUND_CONTROL, 0xD, 0);
+            this->unkAC--;
+        } else {
+            this->unkAC -= 2;
+        }
+        if (this->unkAC <= 0) {
+            removePart(&this->base);
+            this->handle = 0;
+        }
+        break;
+    case ENTITY_KIND_FIGHTER_OBJECT:
+        Hit_apply(&this->base.base, sum);
+        removePart(&this->base);
+        soundControlPlaySound(&SOUND_CONTROL, 0xD1, 0);
+        this->handle = 0;
+        break;
+    default:
+        Hit_apply(&this->base.base, sum);
+        break;
+    }
+}
+
+/* Advances Unk800A65F8 toward its rotated offset around owner's position and returns the x step. */
+s32 func_800A6AB0(Unk800A65F8 *this, Entity *owner) {
+    VECTOR pos;
+    VECTOR step;
+    VECTOR target;
+    VECTOR rotated;
+    MATRIX m;
+
+    this->unkC8 += (100 - this->unkC8) >> 2;
+    pos = this->position;
+    *(Vec3 *)&target = ((Unk800A6220 *)owner)->position;
+    this->angle += 0x40;
+    matrixInitInverseRotationAxis(&m, &this->axis, this->angle);
+    matrixTransformVec(&m, &rotated, &this->offset);
+    {
+        s32 tx = target.vx;
+        s32 ty = target.vy;
+        s32 tz = target.vz;
+
+        tx += rotated.vx;
+        ty += rotated.vy;
+        tz += rotated.vz;
+        target.vx = tx;
+        target.vy = ty;
+        target.vz = tz;
+    }
+    step.vx = (target.vx - pos.vx) >> 4;
+    step.vy = (target.vy - pos.vy) >> 4;
+    step.vz = (target.vz - pos.vz) >> 4;
+    pos.vx += step.vx;
+    pos.vy += step.vy;
+    pos.vz += step.vz;
+    this->position.vx = pos.vx;
+    this->position.vy = pos.vy;
+    this->position.vz = pos.vz;
+    return step.vx;
+}
 
 /* Takes 2 from value, 4 while it is under limit, and caps it at limit. The match depends on this being an expanded
  * MIN(*value -= 2, limit), side effect evaluated twice: value is stored twice, the last time through the pointer. */
@@ -800,7 +914,68 @@ s32 func_800A6BE4(Unk800A65F8 *this) {
     return delta.vx;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A6CF4);
+static inline void setTranslationSak(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+void func_800A6CF4(Unk800A65F8 *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 scaleX;
+    s32 scaleY;
+    s32 color;
+    s32 u;
+    s32 vramY;
+
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    scaleX = this->unkC8;
+    packet = PRIM_BUFFER_FREE;
+    if (this->unkC0 < 0) {
+        scaleX = -scaleX;
+    }
+    setTranslationSak(m.m.t, (Vec3 *)&this->position);
+    m.words[0] = (u16)scaleX;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    scaleY = this->unkC8;
+    m.words[4] = 0x1000;
+    m.words[2] = (u16)scaleY;
+    setModelMatrix(&m.m);
+    shape.corners[0] = &SQUARE_CORNERS[0];
+    shape.corners[1] = &SQUARE_CORNERS[1];
+    shape.corners[2] = &SQUARE_CORNERS[2];
+    shape.corners[3] = &SQUARE_CORNERS[3];
+    UV_BYTES(shape.uv1)[1] = 0xC0;
+    UV_BYTES(shape.uv0)[1] = 0xC0;
+    UV_BYTES(shape.uv3)[1] = 0xDF;
+    UV_BYTES(shape.uv2)[1] = 0xDF;
+    color = this->unkCC;
+    shape.flags = 9;
+    u = ((u8)this->unkC4 << 5) & 0xFF;
+    shape.color = color | (color << 8) | (color << 16);
+    UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv0)[0] = u;
+    vramY = this->vramY;
+    UV_BYTES(shape.uv3)[0] = u + 0x1F;
+    UV_BYTES(shape.uv1)[0] = u + 0x1F;
+    shape.clut = getClut(0x1C0, vramY + 0xF8);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    packet = buildPolyFT4(&shape, packet, ot, zShift + 1);
+    shape.clut = getClut(0x1C0, vramY + 0xF9);
+    shape.tpage = getTPage(0, 2, 0x1C0, vramY);
+    shape.flags = (shape.flags & ~3) | 0xA;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* Builds an Unk800A6EB8 on the Unk800A65F8 of handle: its six points at that entity's position (at the origin
  * without one). The match depends on reading the position's three words before storing any (as vecCopy does) and on
@@ -947,7 +1122,25 @@ void func_800A7F88(Unk800A7F88 *this, void *arg) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A7FEC);
+/* Moves the part to start + unk94 * unkB0 / 4, scales its radius to |unk94| * unkB0 / 4, and disables it when unkB0
+ * is not a multiple of 4. */
+void func_800A7FEC(Unk800A7F88 *this) {
+    Vec3 pos;
+    s32 step;
+    s32 r;
+
+    r = vecGetLength((VECTOR *)&this->unk94) * 4;
+    step = this->unkB0;
+    r = (r * step) / 16;
+    pos.vx = this->start.vx + (this->unk94.vx * step) / 4;
+    pos.vy = this->start.vy + (this->unk94.vy * step) / 4;
+    pos.vz = 0;
+    this->part.position.vx = pos.vx;
+    this->part.position.vz = 0;
+    this->part.radius = r;
+    this->part.position.vy = pos.vy;
+    this->part.flags.bits.disabled = (step & 3) != 0;
+}
 
 /* Keeps vec at 0x94, clears 0xA8 and 0xB0, counts the call in 0xAC, and sets the second base's vector to
  * vec's unit direction with x doubled, y quadrupled and z cleared, and its word at 0x8 to unk8. */
@@ -972,11 +1165,87 @@ void func_800A80B4(Unk800A7F88 *this, VECTOR *vec, s32 unk8) {
     Hit_set(&this->unk18, unk8, 0);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A8150);
+struct Unk800A83E0 *func_800A83E0(struct Unk800A83E0 *this, Vec3 *position, Vec3 *velocity, Vec3 *target,
+                                  s32 steerFrames, s32 vramY);
+
+/* Spawns a ring of 8 Unk800A83E0 projectiles around the axis of unk94, rotated by unkB0 * 0x80 + i * 0x200. */
+void func_800A8150(Unk800A7F88 *this) {
+    VECTOR baseVel;
+    VECTOR axis;
+    MATRIX m;
+    VECTOR vel;
+    VECTOR *dir = (VECTOR *)&this->unk94;
+    s32 angle;
+    s32 i;
+
+    vecNormalize(&axis, dir);
+    matrixInitRotationZ(&m, 0x280);
+    matrixTransformVec(&m, &baseVel, dir);
+    angle = this->unkB0 << 7;
+    for (i = 0; i < 8; i++) {
+        Entity *child;
+
+        matrixInitInverseRotationAxis(&m, &axis, angle);
+        matrixTransformVec(&m, &vel, &baseVel);
+        child = NEW_ENTITY(0x60, func_800A83E0, &this->start, (Vec3 *)&vel, (Vec3 *)dir, 17 - this->unkB0,
+                           this->vramY);
+        entityAddSibling(&this->entity, child);
+        angle += 0x200;
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/sakuyamon", D_8006AC5C);
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A8274);
+extern SVECTOR D_8006AC5C[4];
+
+/* Draws Unk800A7F88's sprite quad at start scaled by unkA8, selecting the 48x48 frame from unkA4. */
+void func_800A8274(Unk800A7F88 *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    u_long *ot;
+    s32 zShift;
+    void *packet;
+    s32 unkA4;
+    u8 u;
+    u8 v;
+    s32 vramY;
+    s32 scale = this->unkA8;
+
+    if (scale <= 0) {
+        return;
+    }
+    packet = PRIM_BUFFER_FREE;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    setTranslationSak(m.m.t, &this->start);
+    m.words[0] = (u16)scale;
+    m.words[1] = 0;
+    m.words[2] = (u16)scale;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    setModelMatrix(&m.m);
+    shape.flags = 0;
+    shape.corners[0] = &D_8006AC5C[0];
+    shape.corners[1] = &D_8006AC5C[1];
+    shape.corners[2] = &D_8006AC5C[2];
+    shape.corners[3] = &D_8006AC5C[3];
+    shape.color = 0x808080;
+    unkA4 = this->unkA4;
+    u = (unkA4 & 3) * 48;
+    UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv0)[0] = u;
+    UV_BYTES(shape.uv3)[0] = u + 0x2F;
+    UV_BYTES(shape.uv1)[0] = u + 0x2F;
+    v = (unkA4 & 4) * 12 + 0x40;
+    UV_BYTES(shape.uv1)[1] = v;
+    UV_BYTES(shape.uv0)[1] = v;
+    UV_BYTES(shape.uv3)[1] = v + 0x2F;
+    UV_BYTES(shape.uv2)[1] = v + 0x2F;
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xFA);
+    shape.tpage = getTPage(0, 0, 0x1C0, vramY);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 extern EntityVtable D_8006AF04;
 
@@ -1046,7 +1315,58 @@ Unk800A83E0 *func_800A83E0(Unk800A83E0 *this, Vec3 *position, Vec3 *velocity, Ve
 
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A84E4);
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A86A8);
+void func_800A86A8(Unk800A83E0 *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    MATRIX *mp;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 animFrame;
+    s32 u;
+    u8 v;
+    s32 brightness;
+    s32 vramY;
+
+    mp = &m.m;
+    packet = PRIM_BUFFER_FREE;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    setTranslationSak(m.m.t, &this->position);
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    matrixSetRotationZ(mp, this->angle);
+    matrixScale(mp, this->size, this->size, 0x1000);
+    setModelMatrix(mp);
+    shape.flags = 0;
+    shape.corners[0] = &SQUARE_CORNERS[0];
+    shape.corners[1] = &SQUARE_CORNERS[1];
+    shape.corners[2] = &SQUARE_CORNERS[2];
+    shape.corners[3] = &SQUARE_CORNERS[3];
+    animFrame = this->animFrame;
+    u = (animFrame & 3) * 48;
+    UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv0)[0] = u;
+    UV_BYTES(shape.uv3)[0] = u + 0x2F;
+    UV_BYTES(shape.uv1)[0] = u + 0x2F;
+    v = (animFrame & 4) * 12 + 0x40;
+    UV_BYTES(shape.uv1)[1] = v;
+    UV_BYTES(shape.uv0)[1] = v;
+    UV_BYTES(shape.uv3)[1] = v + 0x2F;
+    UV_BYTES(shape.uv2)[1] = v + 0x2F;
+    brightness = this->brightness;
+    vramY = this->unk5C;
+    shape.color = brightness | (brightness << 8) | ((brightness - (brightness >> 2) + 0x3F) << 16);
+    shape.clut = getClut(0x1C0, vramY + 0xFA);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    if (brightness < 0x40) {
+        shape.flags = 9;
+    }
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* Builds the special move 3's effect for fighter, its fields 0; its one caller (Sakuyamon_spawnSpecial3Effect) also
  * passes a position, which it does not read. */
@@ -1089,7 +1409,72 @@ INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A8F80);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/sakuyamon", D_8006ACD4);
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A926C);
+static const CVECTOR D_8006AE3C = { 0x43, 0xE0, 0x98, 0 };
+void func_800A94D0(Unk800A9944 *this);
+
+Unk800A9944 *func_800A926C(Unk800A9944 *this, Fighter *fighter, Vec3 *position) {
+    Hit *hit;
+    s32 x, y, z;
+    CVECTOR color;
+    s32 i;
+    u8 *p;
+    ListNode *link;
+    Fight *scene;
+
+    entityInit(&this->entity, ENTITY_KIND_FIGHTER_OBJECT);
+    hit = &this->unk18;
+    Hit_init(hit, fighter, 0, (Vec3 *)&ZERO_VECTOR, 0);
+    this->unk18.vtable = D_8006AE8C;
+    this->entity.vtable = &D_8006AEAC;
+    CollisionSphere_init(&this->unk38, position, 0, hit);
+    this->fighter = fighter;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    color = D_8006AE3C;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->color = color;
+    this->unk98 = 0x40;
+    this->unk9A = 0;
+    this->unk9C = 0x40;
+    this->unk9E = 0x40;
+    this->facing = Fighter_getFacing(fighter);
+    this->unkB4 = 0x6000;
+    this->unkB8 = 0;
+    this->unkBC = 0x80;
+    this->unkC0 = 0;
+    this->unkC4 = 0;
+    this->unkC8 = 0;
+    this->unkCC = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    i = 4;
+    this->clut = getClut(0x1C0, (u16)this->vramY + 0xFD);
+    p = &this->unkA4[4];
+    for (; i >= 0; i--) {
+        *p-- = 0;
+    }
+    link = &this->unk38.link;
+    {
+        u8 *p2;
+
+        i = 8;
+        p2 = &this->unkA9[8];
+        for (; i >= 0; i--) {
+            *p2-- = 0;
+        }
+    }
+    scene = Fighter_getScene(fighter);
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(scene, link);
+    } else {
+        Fight_addSide1Shape(scene, link);
+    }
+    this->unk38.entity = &this->entity;
+    func_800A94D0(this);
+    return this;
+}
 
 /* The destructor of func_800A926C's class: stops its sound, takes its member at 0x38 out of its list. */
 void func_800A9428(Unk800A9944 *this, s32 flags) {

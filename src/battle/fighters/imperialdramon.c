@@ -6,6 +6,9 @@
 #include <abs.h>
 #include "battle/game_classes.h"
 #include "engine/game/game_state.h"
+#include "engine/gfx/lights.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
 #include "engine/math/sin_cos.h"
 #include "engine/math/vector.h"
 
@@ -903,15 +906,90 @@ void ImperialdramonSpecial2Hitbox_tick(ImperialdramonSpecial2Hitbox *this) {
     this->parts.part.radius = this->size >> 4;
 }
 
-/* Not matched yet. Hit_apply, then when it struck a fighter (getHitFighter) it disables its sphere and adds a hit
- * spark (HitSpark_init, size 0x60, color 0x808080) at the fighter's position (Fighter_getPosition) with a zero
- * VECTOR as the direction. A draft is 30 instructions off: the game keeps the addresses of its two locals in $s3 and
- * $s1 across the calls, and the spark as an inline taking them did not give that. */
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial2Hitbox_hit);
+/* Applies hit, and when it struck a fighter (getHitFighter) disables its sphere and adds a hit spark (HitSpark_init,
+ * size 0x60, color 0x808080) at the fighter's position (Fighter_getPosition) with a zero VECTOR as the direction. */
+void ImperialdramonSpecial2Hitbox_hit(ImperialdramonSpecial2Hitbox *this, void *hit) {
+    Entity *fighter;
+
+    Hit_apply(&this->parts.base, hit);
+    fighter = getHitFighter(hit);
+    if (fighter != NULL) {
+        VECTOR velocity;
+        Vec3 position;
+        Entity *child;
+        VECTOR *vel;
+
+        velocity.vx = 0;
+        velocity.vy = 0;
+        velocity.vz = 0;
+        velocity.pad = 0;
+        vel = &velocity;
+        this->parts.part.flags.bits.disabled = 1;
+        Fighter_getPosition((Fighter *)fighter, &position);
+        child = NEW_ENTITY(0x48, HitSpark_init, &position, vel, 0x60, 0x808080);
+        entityAddSibling(&this->parts.entity, child);
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/imperialdramon", D_80069158);
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial2Hitbox_draw);
+extern SVECTOR D_80069158[4];
+
+void ImperialdramonSpecial2Hitbox_draw(ImperialdramonSpecial2Hitbox *this, Camera *arg) {
+    Camera *camera = arg;
+    MatrixWords m;
+    PolyFT4Shape shape;
+    s32 i;
+    s32 color;
+    u16 vramY;
+    MATRIX *mp;
+    Vec3 *pos;
+
+    i = 0;
+    shape.corners[0] = &D_80069158[0];
+    shape.corners[1] = &D_80069158[1];
+    shape.corners[2] = &D_80069158[2];
+    shape.corners[3] = &D_80069158[3];
+    UV_BYTES(shape.uv0)[0] = 0xBF;
+    UV_BYTES(shape.uv1)[0] = 0x80;
+    UV_BYTES(shape.uv2)[0] = 0xBF;
+    UV_BYTES(shape.uv3)[0] = 0x80;
+    UV_BYTES(shape.uv0)[1] = 0x20;
+    UV_BYTES(shape.uv1)[1] = 0x20;
+    UV_BYTES(shape.uv2)[1] = 0x5F;
+    UV_BYTES(shape.uv3)[1] = 0x5F;
+    color = this->speed;
+    shape.flags = 9;
+    vramY = this->vramY;
+    shape.color = color | (color << 8) | (color << 16);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    shape.clut = getClut(0x1C0, vramY + 0xF2);
+    mp = &m.m;
+    for (; i < 2; i++) {
+        s32 size = (u16)this->size;
+
+        m.m.t[0] = 0;
+        m.m.t[1] = 0;
+        m.m.t[2] = 0;
+        m.words[1] = 0;
+        m.words[3] = 0;
+        m.words[0] = size;
+        m.words[2] = size;
+        m.words[4] = size;
+        if (i != 0) {
+            matrixRotateX(mp, 0x800);
+        }
+        if (this->facing < 0) {
+            matrixRotateY(mp, 0x800);
+        }
+        pos = &this->position;
+        m.m.t[0] = pos->vx;
+        m.m.t[1] = pos->vy;
+        m.m.t[2] = pos->vz;
+        setModelMatrix(mp);
+        PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/imperialdramon", D_80069178);
 
@@ -1199,7 +1277,55 @@ void ImperialdramonSpecial3Hitbox_hit(ImperialdramonSpecial3Hitbox *this, Collis
     entityDelete(&this->parts.entity);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", func_80091328);
+static inline void setTranslationImp(long *t, VECTOR *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws Unk800919EC's spark quad using its SpriteAnim transform and vramY's sprite sheet. */
+void func_80091328(Unk800919EC *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    MATRIX *mp = &m.m;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+
+    zShift = camera->zShift + 1;
+    setTranslationImp(m.m.t, &this->base.sprite.position);
+    packet = PRIM_BUFFER_FREE;
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    ot = camera->ot.slots;
+    matrixSetRotationZ(mp, this->base.sprite.angle);
+    matrixScale(mp, this->base.sprite.size, this->base.sprite.size, this->base.sprite.size);
+    setModelMatrix(mp);
+    shape.corners[0] = &SQUARE_CORNERS[0];
+    shape.corners[1] = &SQUARE_CORNERS[1];
+    shape.corners[2] = &SQUARE_CORNERS[2];
+    shape.corners[3] = &SQUARE_CORNERS[3];
+    shape.color = 0x808080;
+    UV_BYTES(shape.uv0)[0] = 0x40;
+    UV_BYTES(shape.uv0)[1] = 0x60;
+    UV_BYTES(shape.uv1)[0] = 0x7F;
+    UV_BYTES(shape.uv1)[1] = 0x60;
+    UV_BYTES(shape.uv2)[0] = 0x40;
+    UV_BYTES(shape.uv2)[1] = 0x9F;
+    UV_BYTES(shape.uv3)[0] = 0x7F;
+    UV_BYTES(shape.uv3)[1] = 0x9F;
+    shape.flags = 9;
+    shape.clut = getClut(0x1C0, this->vramY + 0xFA);
+    shape.tpage = getTPage(0, 1, 0x1C0, this->vramY);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* The entity class of vtable D_800691EC (0x38 bytes), made for a character 0x40 below a position. */
 typedef struct Unk80091498 {

@@ -585,7 +585,56 @@ void GokumonSpecial1Hitbox_destroy(GokumonSpecial1Hitbox *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial1Hitbox_tick);
+void GokumonSpecial1Hitbox_tick(GokumonSpecial1Hitbox *this) {
+    VECTOR vec;
+    s32 speed;
+    ListNode *node;
+
+    if (this->frames < 8) {
+        Fighter_getNodePosition(this->owner, &this->position, 5, &D_8006CD60);
+    } else {
+        this->size += (0x400 - this->size) >> 3;
+    }
+    speed = this->size << 3;
+    vec.vx = speed * Fighter_getFacing(this->owner);
+    vec.vy = (-speed) << 1;
+    vec.vz = 0;
+    Hit_setKnockback(&this->parts.base, &vec);
+    {
+        s32 x = this->position.vx;
+        s32 y = this->position.vy;
+        s32 r = this->size >> 1;
+
+        vec.vx = x;
+        vec.vy = y - r;
+        vec.vz = 0;
+        this->parts.part.position.vx = x;
+        this->parts.part.position.vy = vec.vy;
+        this->parts.part.position.vz = 0;
+        this->parts.part.radius = r;
+    }
+    node = &this->parts.part.link;
+    if (this->frames >= 8) {
+        this->parts.part.flags.bits.disabled = (this->frames & 3) != 0;
+    }
+    this->animFrame = this->frames & 3;
+    if (this->frames == 40) {
+        this->parts.part.link.next->prev = this->parts.part.link.prev;
+        node->prev->next = this->parts.part.link.next;
+        this->parts.part.link.next = node;
+        this->parts.part.link.prev = node;
+    }
+    this->frames++;
+    if (this->frames >= 31) {
+        this->brightness -= 12;
+        if (this->brightness <= 0) {
+            if (this != NULL) {
+                this->parts.entity.vtable->destroy.func(
+                    (u8 *)&this->parts.entity + this->parts.entity.vtable->destroy.delta, DESTROY_DELETE);
+            }
+        }
+    }
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial1Hitbox_draw);
 
@@ -615,7 +664,40 @@ INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial3Hitbox_tick);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/gokumon", D_8006CD70);
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", func_800C1180);
+typedef struct Unk8006CD70 {
+    /* 0x0 */ s32 radius;
+    /* 0x4 */ s32 yOffset;
+    /* 0x8 */ u32 hitFlags;
+} Unk8006CD70;
+
+extern Unk8006CD70 D_8006CD70[3];
+
+/* Updates GokumonSpecial3Hitbox's collision sphere and hit properties for the current pulse, and aims knockback away
+ * from its owner's position toward the opponent. */
+void func_800C1180(GokumonSpecial3Hitbox *this) {
+    Vec3 pos;
+    VECTOR kb;
+    Hit *hit;
+    s32 pulses = this->pulses;
+    Unk8006CD70 *table = D_8006CD70;
+    u8 isSixth;
+    Unk8006CD70 *entry = &table[pulses % 3];
+    u32 flags;
+
+    this->parts.part.radius = entry->radius;
+    isSixth = (pulses % 6) == 0;
+    pos = this->position;
+    pos.vy += entry->yOffset;
+    this->parts.part.position = pos;
+    hit = &this->parts.base;
+    flags = entry->hitFlags;
+    Hit_set(hit, flags | ((u32)isSixth << 26), 1);
+    Fighter_getOpponentPosition(this->owner, (Vec3 *)&kb);
+    kb.vy = -0x1C70;
+    kb.vz = 0;
+    kb.vx = (this->position.vx - kb.vx) << 6;
+    Hit_setKnockback(hit, &kb);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/gokumon", func_800C12A4);
 

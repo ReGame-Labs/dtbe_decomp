@@ -37,7 +37,7 @@
     "ctc2 $5, $0; ctc2 $4, $1; ctc2 $3, $2; ctc2 $2, $3;"                   \
     "lw $5, 16(%0); lw $4, 20(%0); lw $3, 24(%0); lw $2, 28(%0);"           \
     "ctc2 $5, $4; ctc2 $4, $5; ctc2 $3, $6; ctc2 $2, $7"                    \
-    : : "r"(m) : "$2", "$3", "$4", "$5")
+    : : "r"(m) : "$2", "$3", "$4", "$5", "memory")
 
 /* The same through $7, $6, $3 and $2, which leaves $a0 and $a1 to a call after it (Trail_draw). */
 #define gte_loadRotTransKeepArgs(m) __asm__ volatile(                       \

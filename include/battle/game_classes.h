@@ -1019,9 +1019,16 @@ typedef struct Unk800A9944 {
     /* 0x9E */ s16 unk9E;
     /* 0xA0 */ u16 clut;   /* in VRAM row vramY + 0xFD (0xFE in func_800BE39C's), x 0x1C0 */
     /* 0xA2 */ s16 facing; /* Fighter_getFacing of the fighter */
-    /* 0xA4 */ u8 unkA4[0xB4 - 0xA4];
+    /* 0xA4 */ u8 unkA4[5];
+    /* 0xA9 */ u8 unkA9[9];
+    /* 0xB2 */ s16 unkB2;
     /* 0xB4 */ s32 unkB4;
-    /* 0xB8 */ u8 unkB8[0xD0 - 0xB8];
+    /* 0xB8 */ s32 unkB8;
+    /* 0xBC */ s32 unkBC;
+    /* 0xC0 */ s32 unkC0;
+    /* 0xC4 */ s32 unkC4;
+    /* 0xC8 */ s32 unkC8;
+    /* 0xCC */ s32 unkCC;
     /* 0xD0 */ s32 vramY;  /* Fighter_getVramY of the fighter */
     /* 0xD4 */ u32 unkD4;  /* a sound's handle (stopSound) */
 } Unk800A9944;
@@ -1290,7 +1297,10 @@ typedef struct Unk800C4F74 {
     /* 0x018 */ u8 unk18[0x1C - 0x18];
     /* 0x01C */ BattleSide *owner;
     /* 0x020 */ Vec3 position; /* the current fighter's point (func_8007A650) in func_800BA7AC */
-    /* 0x02C */ u8 unk2C[0x488 - 0x2C];
+    /* 0x02C */ u8 unk2C[4];
+    /* 0x030 */ SVECTOR vertices[96];
+    /* 0x330 */ u8 faces[84][4];
+    /* 0x480 */ u8 unk480[8];
     /* 0x488 */ s32 unk488;
     /* 0x48C */ s32 unk48C;
     /* 0x490 */ s32 unk490;

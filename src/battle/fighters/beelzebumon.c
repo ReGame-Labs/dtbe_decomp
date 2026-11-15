@@ -671,7 +671,48 @@ void func_80096AA8(Unk800969E0 *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80096B54);
+extern MATRIX D_800108B4;
+
+void func_80096B54(Unk800969E0 *this, Camera *camera) {
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    MATRIX m;
+    u_long *ot;
+    s32 size;
+    s32 u;
+    u16 vramY;
+    s32 color;
+
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    UV_BYTES(shape.uv1)[1] = 0xE0;
+    UV_BYTES(shape.uv0)[1] = 0xE0;
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = 0;
+    UV_BYTES(shape.uv3)[1] = 0xFF;
+    UV_BYTES(shape.uv2)[1] = 0xFF;
+    shape.flags = 9;
+    size = this->unk30;
+    u = (((u8)this->unk38 << 5) + 0x40) & 0xFF;
+    corners[0].vx = corners[2].vx = -size;
+    corners[1].vx = corners[3].vx = size;
+    corners[0].vy = corners[1].vy = -size;
+    corners[2].vy = corners[3].vy = size;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = u;
+    vramY = this->vramY;
+    color = this->color;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = u + 0x1F;
+    shape.color = color;
+    shape.clut = getClut(0x1C0, vramY + 0xEE);
+    ot = camera->ot.slots;
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    m = D_800108B4;
+    matrixTranslate(&m, this->position.vx, this->position.vy, this->position.vz);
+    matrixRotateZ(&m, this->unk34);
+    setModelMatrix(&m);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift + 1);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80096CFC);
 

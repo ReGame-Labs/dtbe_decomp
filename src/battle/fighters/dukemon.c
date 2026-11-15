@@ -235,7 +235,51 @@ void Dukemon_special2(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/dukemon", Dukemon_airUpAttack);
+void Dukemon_airUpAttack(Fighter *this, s32 frame) {
+    Fighter *opponent = Fighter_getOpponent(this);
+    FighterParams *params = Fighter_getParams(this);
+    Attack *attack = &params->attacks[6];
+    s32 *lunge = &attack->lungeX;
+
+    switch (frame) {
+    case 0:
+        Dukemon_spawnTrail(this, 20);
+        Fighter_playActionClip(this, FIGHTER_CLIP_AIR_UP_ATTACK, 2, 0, -1);
+        this->velocity.vy = 0;
+        break;
+    case 5:
+        this->force.vy -= ((s64)lunge[1] * this->mass) >> 16;
+        if (Fighter_getOpponentInReach(this, 0)) {
+            Vec3 knockback;
+
+            knockback.vx = 0;
+            knockback.vy = -0x8E30;
+            knockback.vz = 0;
+            Fighter_takeHit(opponent, 0x81900200, (Vec3 *)&ZERO_VECTOR, 0);
+            Fighter_detach(opponent);
+            {
+                s32 x = knockback.vx;
+                s32 y = knockback.vy;
+                s32 z = knockback.vz;
+
+                opponent->velocity.vx = 0;
+                opponent->velocity.vy = 0;
+                opponent->force.vx = x;
+                opponent->force.vy = y;
+                opponent->force.vz = z;
+            }
+        }
+        break;
+    }
+    if (frame < 20 && this->velocity.vy > 0) {
+        this->force.vy -= this->velocity.vy;
+    }
+    if (frame >= attack->firstActiveFrame && frame <= attack->lastActiveFrame) {
+        Fighter_setAttackParts(this, attack->parts);
+    } else {
+        this->attackParts = 0;
+    }
+}
 
 /* Special move 2 in the air: as on the ground, with the lift at frames 0 and 5 and the braking until frame 12. */
 void Dukemon_airSpecial2(Fighter *this, s32 frame) {
@@ -263,7 +307,45 @@ void Dukemon_airSpecial2(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/dukemon", Dukemon_special3);
+void func_80084E58(Fighter *this);
+void func_80084EC0(Fighter *this);
+void Dukemon_spawnSpecial3Hitbox(Fighter *this, s16 arg);
+
+void Dukemon_special3(Dukemon *this, s32 frame) {
+    Fighter_special3(&this->base, frame);
+    func_80079AE4(&this->base);
+    this->special3Active = 1;
+    switch (frame) {
+    case 0:
+        Fighter_playActionClip(&this->base, 0x1A, 0, 0, -1);
+        this->base.velocity.vy = 0;
+        this->special3Landed = 0;
+        Fighter_playVoice(&this->base, 0x81);
+        Fighter_addGauge(&this->base, -0x10000);
+        this->base.invulnerableFrames = 12;
+        break;
+    case 14:
+        func_80084EC0(&this->base);
+        break;
+    case 23:
+        func_80084E58(&this->base);
+        break;
+    case 84:
+        this->base.velocity.vx = 0;
+        break;
+    }
+    if (frame >= 15 && frame < 70) {
+        s32 accel = ((s64)this->base.mass * 0x38) >> 16;
+
+        this->base.force.vx += -accel * Fighter_getFacing(&this->base);
+        if ((frame & 3) == 0) {
+            Fighter_spawnDust(&this->base, -1, 0xA0, 4);
+        }
+    }
+    if (frame >= 15 && frame < 65 && (frame & 7) == 0) {
+        Dukemon_spawnSpecial3Hitbox(&this->base, 0);
+    }
+}
 
 /* The two entries of a table that Dukemon_spawnTrail, Dukemon_spawnSpecial2Trails and Dukemon_spawnAttack3Trails each
  * initialise. cc1 gives identical array initializers one constant per unit, so the three share its data (D_800685DC in
@@ -478,17 +560,6 @@ INCLUDE_ASM("game/nonmatchings/fighters/dukemon", DukemonSpecial2Effect_draw);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/dukemon", D_80068664);
 
-INCLUDE_ASM("game/nonmatchings/fighters/dukemon", func_80085B7C);
-
-/* The destructor of the special3 effect of vtable D_8006870C. */
-void func_80085C90(Entity *this, s32 flags) {
-    this->vtable = &D_8006870C;
-    entityDestroy(this, 0);
-    if (flags & DESTROY_FREE) {
-        entityOperatorDelete(this);
-    }
-}
-
 /* The entity class of vtable D_8006870C (0xDC bytes, func_80085B7C constructs it for the character): a point of
  * the owner that rises and fades out in steps. */
 typedef struct Unk80085B7C {
@@ -509,6 +580,53 @@ typedef struct Unk80085B7C {
     /* 0x58 */ s32 unk58;       /* 0x1800 from func_80085B7C, a quarter less every frame of state 3 */
     /* 0x5C */ SVECTOR points[16]; /* 192 apart toward side, from func_80085B7C */
 } Unk80085B7C; /* size 0xDC */
+
+extern VECTOR D_80068664;
+
+/* Constructs the special3 effect of vtable D_8006870C for arg, places it at node 18 with D_80068664, initializes the
+ * 16 points 192 apart toward side, and plays sound 0x7B. */
+Entity *func_80085B7C(Entity *entity, Fighter *arg, Vec3 *vec) {
+    Unk80085B7C *this = (Unk80085B7C *)entity;
+    Unk80085B7C *p;
+    s32 i;
+
+    entityInit(&this->entity, 0);
+    this->entity.vtable = &D_8006870C;
+    this->vramY = Fighter_getVramY(arg);
+    this->unk1C = 0x80;
+    this->owner = (Dukemon *)arg;
+    this->state = 0;
+    this->counter = 0;
+    this->unk1D = 0;
+    this->timer = 0;
+    this->unk28 = 0;
+    this->unk54 = 0x1000;
+    this->unk58 = 0x1800;
+    this->side = Fighter_getFacing(arg);
+    Fighter_getNodePosition(&this->owner->base, &this->position, 18, &D_80068664);
+    this->unk44.vy = this->position.vy;
+    this->unk44.vz = this->position.vz;
+    this->unk44.vx = this->position.vx + (this->side << 7);
+    for (i = 0, p = this; i < 16; i++) {
+        s32 step = this->side * 192;
+
+        p->points[0].vy = 0;
+        p->points[0].vz = 0;
+        p->points[0].vx = i * step;
+        p = (Unk80085B7C *)((u8 *)p + 8);
+    }
+    Fighter_playSound(&this->owner->base, 0x7B);
+    return &this->entity;
+}
+
+/* The destructor of the special3 effect of vtable D_8006870C. */
+void func_80085C90(Entity *this, s32 flags) {
+    this->vtable = &D_8006870C;
+    entityDestroy(this, 0);
+    if (flags & DESTROY_FREE) {
+        entityOperatorDelete(this);
+    }
+}
 
 extern VECTOR D_80068674;
 

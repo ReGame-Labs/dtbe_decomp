@@ -694,7 +694,52 @@ void HolydramonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/holydramon", HolydramonSpecial2Hitbox_hit);
+struct Unk8008C94C *func_8008C94C(struct Unk8008C94C *this, Fighter *fighter);
+struct Unk8008CE68 *func_8008CE68(struct Unk8008CE68 *this, Fighter *fighter, Fight *fight);
+
+void HolydramonSpecial2Hitbox_hit(HolydramonSpecial2Hitbox *this, CollisionSphere *shape) {
+    Entity *target;
+    Entity *child;
+    s32 i;
+
+    if (this->owner->unk4A8 != 0) {
+        return;
+    }
+    Hit_apply(&this->parts.base, shape);
+    target = shape->entity;
+    this->stopped = 1;
+    this->parts.part.flags.bits.disabled = 1;
+    if (target == NULL || entityGetKind(target) != ENTITY_KIND_FIGHTER) {
+        return;
+    }
+    this->owner->unk4A8 = 1;
+    if (Fighter_isGuarding((Fighter *)target)) {
+        Entity *flash = allocEntityMemory(0x58);
+        if (flash != NULL) {
+            func_8006D4D4_init(entityOperatorNewAt(0x58, flash), (VECTOR *)&this->position);
+        }
+        entityAddSibling(&this->parts.entity, flash);
+    } else {
+        child = allocEntityMemory(0x48);
+        if (child != NULL) {
+            HitSpark_init(entityOperatorNewAt(0x48, child), &this->position, (VECTOR *)&ZERO_VECTOR, 0x80, 0x808080);
+        }
+        entityAddSibling(&this->parts.entity, child);
+        child = allocEntityMemory(0x30);
+        if (child != NULL) {
+            func_8008C94C(entityOperatorNewAt(0x30, child), &this->owner->base);
+        }
+        entityAddSibling(&this->parts.entity, child);
+        Fighter_hold((Fighter *)target, 25);
+        for (i = 4; i >= 0; i--) {
+            child = allocEntityMemory(0x40);
+            if (child != NULL) {
+                func_8008CE68(entityOperatorNewAt(0x40, child), &this->owner->base, this->fight);
+            }
+            entityAddSibling(&this->parts.entity, child);
+        }
+    }
+}
 
 /* Moves by its velocity with the part following; stopped while the owner's 0x4A8 is set and after 32 frames, then slows
  * by a quarter a frame; deletes itself after 40. The match depends on the unit's -fno-cse-follow-jumps (Makefile): the
