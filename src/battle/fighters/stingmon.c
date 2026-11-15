@@ -34,17 +34,24 @@ typedef struct StingmonSpecial3Hitbox {
     /* 0x034 */ u8 unk34[0x38 - 0x34];
     /* 0x038 */ CollisionSphere part;
     /* 0x080 */ Fighter *fighter;
-    /* 0x084 */ u8 unk84[0x88 - 0x84];
+    /* 0x084 */ Fight *fight;
     /* 0x088 */ u16 unk88;           /* 60 - unk8E when it takes hold of the opponent */
     /* 0x08A */ u16 holdingOpponent; /* while set, the destructor releases the opponent (Fighter_hold(0)) */
     /* 0x08C */ u16 unk8C;
     /* 0x08E */ u16 unk8E;
-    /* 0x090 */ u8 unk90[0xAC - 0x90];
+    /* 0x090 */ u16 unk90;
+    /* 0x092 */ u16 unk92;
+    /* 0x094 */ s16 vramY;
+    /* 0x096 */ u8 unk96[16];
+    /* 0x0A6 */ u8 unkA6[2];
+    /* 0x0A8 */ s32 unkA8;
     /* 0x0AC */ Vec3 unkAC;
     /* 0x0B8 */ u8 unkB8[4];
     /* 0x0BC */ Vec3 unkBC; /* StingmonSpecial3Hitbox_init's third argument */
     /* 0x0C8 */ u8 unkC8[4];
     /* 0x0CC */ VECTOR unkCC[16];
+    /* 0x1CC */ s32 unk1CC[16];
+    /* 0x20C */ s16 unk20C[16];
 } StingmonSpecial3Hitbox;
 void Stingmon_spawnAttack3Hitbox(Stingmon *this);
 
@@ -1103,7 +1110,54 @@ void StingmonSpecial3Hitbox_hit(StingmonSpecial3Hitbox *this, CollisionSphere *s
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", func_800B34D0);
+s16 func_800B36B4(StingmonSpecial3Hitbox *this, s32 index);
+s32 turnAngleToward(s32 target, s32 from, s32 step);
+
+void func_800B34D0(StingmonSpecial3Hitbox *this) {
+    VECTOR diff;
+    s32 i;
+
+    this->unk92++;
+    if (this->unk92 >= 17) {
+        this->unk92 = 16;
+    }
+    for (i = 0; i < this->unk92; i++) {
+        s32 *unk1CC = &this->unk1CC[i];
+        s16 *angle = &this->unk20C[i];
+        VECTOR *v = &this->unkCC[i];
+        s32 dx, dy;
+        s16 idx;
+
+        this->unk96[i] -= 4;
+        *unk1CC -= 16;
+        *unk1CC = (*unk1CC * this->unkA8) >> 12;
+        this->unk20C[i] = turnAngleToward(func_800B36B4(this, i), *angle, 0x40);
+        idx = *angle;
+        dx = -COS_SIN_TABLE[idx & 0xFFF].sin >> 7;
+        dy = -COS_SIN_TABLE[idx & 0xFFF].cos >> 7;
+        this->unkCC[i].vx += dx;
+        this->unkCC[i].vy += dy;
+        {
+            s32 vy, vz;
+            diff.vx = v->vx - this->unkAC.vx;
+            vy = v->vy;
+            vz = v->vz;
+            diff.vy = vy - this->unkAC.vy;
+            diff.vz = vz - this->unkAC.vz;
+        }
+        if (vecGetLength(&diff) < 0x80) {
+            s32 x = this->unkBC.vx;
+            s32 y = this->unkBC.vy;
+            s32 z = this->unkBC.vz;
+
+            v->vx = x;
+            v->vy = y;
+            v->vz = z;
+            *unk1CC = 0x1000;
+            *angle = Fight_random(this->fight) & 0xFFF;
+        }
+    }
+}
 
 /* The direction (ratan2) from the centre at 0xAC to point index, on x and y. */
 s16 func_800B36B4(StingmonSpecial3Hitbox *this, s32 index) {
