@@ -27,10 +27,13 @@ extern EntityVtable SERAPHIMON_VTABLE;
 /* Seraphimon's class (CHARACTER_SERAPHIMON). */
 typedef struct Seraphimon {
     /* 0x000 */ Fighter base;
-    /* 0x4A4 */ u8 unk4A4[4];
+    /* 0x4A4 */ s32 unk4A4;
     /* 0x4A8 */ s32 unk4A8;
 } Seraphimon;
 void Seraphimon_spawnSpecial1Hitbox(Fighter *this);
+void func_800AE438(Fighter *this);
+void func_800AE4A8(Fighter *this);
+void func_800AE518(Fighter *this);
 
 /* Builds Seraphimon: a Fighter with its own vtable, 0x4A8 0. */
 Seraphimon *Seraphimon_init(Seraphimon *this) {
@@ -299,7 +302,50 @@ void Seraphimon_spawnSpecial1Hitbox(Fighter *this) {
     func_80079B0C(this, 20);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", Seraphimon_special3);
+/* Runs Seraphimon's special move 3 (Testament). If the opponent is out of reach on frame 0, cancels into
+ * action clip 5 after draining 0x2000 gauge; otherwise holds the opponent and spawns effects and hits. */
+void Seraphimon_special3(Seraphimon *this, s32 frame) {
+    Fighter *opponent = Fighter_getOpponent(&this->base);
+
+    if (frame == 0) {
+        this->unk4A4 = 0;
+        if (!Fighter_getOpponentInReach(&this->base, 2)) {
+            Fighter_addGauge(&this->base, -0x2000);
+            Fighter_playActionClip(&this->base, 5, 0, 0, -1);
+            return;
+        }
+        Fighter_addGauge(&this->base, -0x10000);
+        this->unk4A4 = 1;
+        Fighter_playVoice(&this->base, 0xE9);
+        Fighter_hold(opponent, 0x28);
+    }
+    Fighter_special3(&this->base, frame);
+    func_80079AE4(&this->base);
+    if (frame == 0) {
+        s32 push = ((s64)this->base.mass * 0x2AA8) >> 16;
+        this->base.force.vx -= push * Fighter_getFacing(&this->base);
+        this->base.velocity.vy = 0;
+        this->base.force.vy -= ((s64)this->base.mass * 0x4718) >> 16;
+    } else if (this->base.velocity.vy > 0) {
+        this->base.velocity.vy = 0;
+        this->base.force.vx = -this->base.velocity.vx >> 1;
+    }
+    if (this->unk4A4 != 0) {
+        if (frame >= 9 && frame < 30 && (frame & 3) == 0) {
+            func_800AE4A8(&this->base);
+        }
+        if (frame >= 40) {
+            if ((frame & 3) == 0) {
+                func_800AE438(&this->base);
+                func_800AE518(&this->base);
+                Fighter_takeHit(opponent, 0x1FB00D00, (Vec3 *)&ZERO_VECTOR, 0);
+            }
+            if ((frame & 7) == 0) {
+                Fighter_playSound(&this->base, 0xE4);
+            }
+        }
+    }
+}
 
 /* Spawns a special move 3 effect (func_800AFD78) for this fighter and its fight. */
 void func_800AE438(Fighter *this) {
