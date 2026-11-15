@@ -1409,7 +1409,72 @@ INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A8F80);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/sakuyamon", D_8006ACD4);
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A926C);
+static const CVECTOR D_8006AE3C = { 0x43, 0xE0, 0x98, 0 };
+void func_800A94D0(Unk800A9944 *this);
+
+Unk800A9944 *func_800A926C(Unk800A9944 *this, Fighter *fighter, Vec3 *position) {
+    Hit *hit;
+    s32 x, y, z;
+    CVECTOR color;
+    s32 i;
+    u8 *p;
+    ListNode *link;
+    Fight *scene;
+
+    entityInit(&this->entity, ENTITY_KIND_FIGHTER_OBJECT);
+    hit = &this->unk18;
+    Hit_init(hit, fighter, 0, (Vec3 *)&ZERO_VECTOR, 0);
+    this->unk18.vtable = D_8006AE8C;
+    this->entity.vtable = &D_8006AEAC;
+    CollisionSphere_init(&this->unk38, position, 0, hit);
+    this->fighter = fighter;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    color = D_8006AE3C;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->color = color;
+    this->unk98 = 0x40;
+    this->unk9A = 0;
+    this->unk9C = 0x40;
+    this->unk9E = 0x40;
+    this->facing = Fighter_getFacing(fighter);
+    this->unkB4 = 0x6000;
+    this->unkB8 = 0;
+    this->unkBC = 0x80;
+    this->unkC0 = 0;
+    this->unkC4 = 0;
+    this->unkC8 = 0;
+    this->unkCC = 0;
+    this->vramY = Fighter_getVramY(fighter);
+    i = 4;
+    this->clut = getClut(0x1C0, (u16)this->vramY + 0xFD);
+    p = &this->unkA4[4];
+    for (; i >= 0; i--) {
+        *p-- = 0;
+    }
+    link = &this->unk38.link;
+    {
+        u8 *p2;
+
+        i = 8;
+        p2 = &this->unkA9[8];
+        for (; i >= 0; i--) {
+            *p2-- = 0;
+        }
+    }
+    scene = Fighter_getScene(fighter);
+    if (Fighter_getSide(fighter) == 0) {
+        Fight_addSide0Shape(scene, link);
+    } else {
+        Fight_addSide1Shape(scene, link);
+    }
+    this->unk38.entity = &this->entity;
+    func_800A94D0(this);
+    return this;
+}
 
 /* The destructor of func_800A926C's class: stops its sound, takes its member at 0x38 out of its list. */
 void func_800A9428(Unk800A9944 *this, s32 flags) {

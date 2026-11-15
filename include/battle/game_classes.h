@@ -1019,9 +1019,16 @@ typedef struct Unk800A9944 {
     /* 0x9E */ s16 unk9E;
     /* 0xA0 */ u16 clut;   /* in VRAM row vramY + 0xFD (0xFE in func_800BE39C's), x 0x1C0 */
     /* 0xA2 */ s16 facing; /* Fighter_getFacing of the fighter */
-    /* 0xA4 */ u8 unkA4[0xB4 - 0xA4];
+    /* 0xA4 */ u8 unkA4[5];
+    /* 0xA9 */ u8 unkA9[9];
+    /* 0xB2 */ s16 unkB2;
     /* 0xB4 */ s32 unkB4;
-    /* 0xB8 */ u8 unkB8[0xD0 - 0xB8];
+    /* 0xB8 */ s32 unkB8;
+    /* 0xBC */ s32 unkBC;
+    /* 0xC0 */ s32 unkC0;
+    /* 0xC4 */ s32 unkC4;
+    /* 0xC8 */ s32 unkC8;
+    /* 0xCC */ s32 unkCC;
     /* 0xD0 */ s32 vramY;  /* Fighter_getVramY of the fighter */
     /* 0xD4 */ u32 unkD4;  /* a sound's handle (stopSound) */
 } Unk800A9944;
