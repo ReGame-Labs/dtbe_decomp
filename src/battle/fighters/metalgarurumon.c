@@ -5,6 +5,10 @@
 #include "common.h"
 #include <abs.h>
 #include "battle/game_classes.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/math/matrix.h"
 #include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 
@@ -492,7 +496,74 @@ INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009AFC4);
 
 INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009B370);
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009B664);
+/* Draws the third layer of an Unk8009AB40: an identity-rotated PolyFT4 at position + (facing * unk34, 0, 0)
+ * scaled asymmetrically by facing * unk3C. */
+void func_8009B664(Entity *base, s32 arg) {
+    Unk8009AB40 *this = (Unk8009AB40 *)base;
+    Camera *camera = (Camera *)arg;
+    VECTOR pos;
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 facing;
+    s32 u;
+    s32 vramY;
+    s32 w;
+
+    facing = this->facing;
+    {
+        s32 dx = facing * this->unk34;
+        pos = this->position;
+        pos.vx += dx;
+    }
+    packet = PRIM_BUFFER_FREE;
+    {
+        VECTOR *p = &pos;
+        s32 x = p->vx;
+        s32 y = p->vy;
+        s32 z = p->vz;
+
+        m.words[0] = 0x1000;
+        m.words[1] = 0;
+        m.words[2] = 0x1000;
+        m.words[3] = 0;
+        m.words[4] = 0x1000;
+        m.m.t[0] = x;
+        m.m.t[1] = y;
+        m.m.t[2] = z;
+    }
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    setModelMatrix(&m.m);
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = -0x20;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.color = 0x808080;
+    UV_BYTES(shape.uv1)[1] = 0;
+    UV_BYTES(shape.uv0)[1] = 0;
+    UV_BYTES(shape.uv3)[1] = 0x1F;
+    UV_BYTES(shape.uv2)[1] = 0x1F;
+    u = (((u8)this->unk44 & 3) << 5) | 0x80;
+    shape.flags = 9;
+    UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv0)[0] = u;
+    UV_BYTES(shape.uv3)[0] = u + 0x1F;
+    UV_BYTES(shape.uv1)[0] = u + 0x1F;
+    vramY = this->vramY;
+    w = facing * this->unk3C;
+    shape.clut = getClut(0x1C0, vramY + 0x7C);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    corners[0].vx = corners[2].vx = (-w) << 2;
+    corners[1].vx = corners[3].vx = w >> 1;
+    corners[0].vy = corners[1].vy = -(w << 1);
+    corners[2].vy = corners[3].vy = w << 1;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009B834);
 
