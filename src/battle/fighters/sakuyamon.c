@@ -5,6 +5,7 @@
 #include "common.h"
 #include <abs.h>
 #include "battle/game_classes.h"
+#include "engine/gfx/lights.h"
 #include "engine/gfx/prim/build_line_g2.h"
 #include "engine/gfx/prim_buffer.h"
 #include "engine/math/sin_cos.h"
@@ -1227,7 +1228,58 @@ Unk800A83E0 *func_800A83E0(Unk800A83E0 *this, Vec3 *position, Vec3 *velocity, Ve
 
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A84E4);
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A86A8);
+void func_800A86A8(Unk800A83E0 *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    MATRIX *mp;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 animFrame;
+    s32 u;
+    u8 v;
+    s32 brightness;
+    s32 vramY;
+
+    mp = &m.m;
+    packet = PRIM_BUFFER_FREE;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    setTranslationSak(m.m.t, &this->position);
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    matrixSetRotationZ(mp, this->angle);
+    matrixScale(mp, this->size, this->size, 0x1000);
+    setModelMatrix(mp);
+    shape.flags = 0;
+    shape.corners[0] = &SQUARE_CORNERS[0];
+    shape.corners[1] = &SQUARE_CORNERS[1];
+    shape.corners[2] = &SQUARE_CORNERS[2];
+    shape.corners[3] = &SQUARE_CORNERS[3];
+    animFrame = this->animFrame;
+    u = (animFrame & 3) * 48;
+    UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv0)[0] = u;
+    UV_BYTES(shape.uv3)[0] = u + 0x2F;
+    UV_BYTES(shape.uv1)[0] = u + 0x2F;
+    v = (animFrame & 4) * 12 + 0x40;
+    UV_BYTES(shape.uv1)[1] = v;
+    UV_BYTES(shape.uv0)[1] = v;
+    UV_BYTES(shape.uv3)[1] = v + 0x2F;
+    UV_BYTES(shape.uv2)[1] = v + 0x2F;
+    brightness = this->brightness;
+    vramY = this->unk5C;
+    shape.color = brightness | (brightness << 8) | ((brightness - (brightness >> 2) + 0x3F) << 16);
+    shape.clut = getClut(0x1C0, vramY + 0xFA);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    if (brightness < 0x40) {
+        shape.flags = 9;
+    }
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* Builds the special move 3's effect for fighter, its fields 0; its one caller (Sakuyamon_spawnSpecial3Effect) also
  * passes a position, which it does not read. */
