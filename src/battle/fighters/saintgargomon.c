@@ -458,7 +458,51 @@ void SaintGargomonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
 
 void func_800ABB54(SaintGargomonSpecial1Hitbox *this);
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AB830);
+/* Clamps velocity to [-0x40, 0x40] on each axis, spawns a ParticleSpray with half the negated velocity and a
+ * func_800AD5BC hitbox at position, then deletes itself. */
+void func_800AB830(UnkPartsEntity38 *base) {
+    SaintGargomonSpecial1Hitbox *this = (SaintGargomonSpecial1Hitbox *)base;
+    Vec3 vel;
+    Entity *child;
+    Vec3 *vp;
+
+    if (this->velocity.vx < -0x40) {
+        this->velocity.vx = -0x40;
+    }
+    if (this->velocity.vy < -0x40) {
+        this->velocity.vy = -0x40;
+    }
+    if (this->velocity.vz < -0x40) {
+        this->velocity.vz = -0x40;
+    }
+    if (this->velocity.vx > 0x40) {
+        this->velocity.vx = 0x40;
+    }
+    if (this->velocity.vy > 0x40) {
+        this->velocity.vy = 0x40;
+    }
+    if (this->velocity.vz > 0x40) {
+        this->velocity.vz = 0x40;
+    }
+    vp = &vel;
+    vel.vx = -this->velocity.vx >> 1;
+    vel.vy = -this->velocity.vy >> 1;
+    vel.vz = -this->velocity.vz >> 1;
+    child = allocEntityMemory(0x48);
+    if (child != NULL) {
+        ParticleSpray_init(entityOperatorNewAt(0x48, child), 3, &this->position, vp, 0x100, 6, 0x808080);
+    }
+    entityAddSibling(&this->parts.entity, child);
+    child = allocEntityMemory(0xB0);
+    if (child != NULL) {
+        func_800AD5BC(entityOperatorNewAt(0xB0, child), this->owner, this->fight, &this->position, 0x280, 0x7A81800);
+    }
+    entityAddSibling(&this->parts.entity, child);
+    if (this != NULL) {
+        this->parts.entity.vtable->destroy.func(
+            (u8 *)&this->parts.entity + this->parts.entity.vtable->destroy.delta, DESTROY_DELETE);
+    }
+}
 
 /* On a hit: Hit_apply with sum, then func_800AB830 (a spray and a child hitbox). */
 void SaintGargomonSpecial1Hitbox_hit(UnkPartsEntity38 *this, void *sum) {
