@@ -914,7 +914,68 @@ s32 func_800A6BE4(Unk800A65F8 *this) {
     return delta.vx;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A6CF4);
+static inline void setTranslationSak(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+void func_800A6CF4(Unk800A65F8 *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 scaleX;
+    s32 scaleY;
+    s32 color;
+    s32 u;
+    s32 vramY;
+
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    scaleX = this->unkC8;
+    packet = PRIM_BUFFER_FREE;
+    if (this->unkC0 < 0) {
+        scaleX = -scaleX;
+    }
+    setTranslationSak(m.m.t, (Vec3 *)&this->position);
+    m.words[0] = (u16)scaleX;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    scaleY = this->unkC8;
+    m.words[4] = 0x1000;
+    m.words[2] = (u16)scaleY;
+    setModelMatrix(&m.m);
+    shape.corners[0] = &SQUARE_CORNERS[0];
+    shape.corners[1] = &SQUARE_CORNERS[1];
+    shape.corners[2] = &SQUARE_CORNERS[2];
+    shape.corners[3] = &SQUARE_CORNERS[3];
+    UV_BYTES(shape.uv1)[1] = 0xC0;
+    UV_BYTES(shape.uv0)[1] = 0xC0;
+    UV_BYTES(shape.uv3)[1] = 0xDF;
+    UV_BYTES(shape.uv2)[1] = 0xDF;
+    color = this->unkCC;
+    shape.flags = 9;
+    u = ((u8)this->unkC4 << 5) & 0xFF;
+    shape.color = color | (color << 8) | (color << 16);
+    UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv0)[0] = u;
+    vramY = this->vramY;
+    UV_BYTES(shape.uv3)[0] = u + 0x1F;
+    UV_BYTES(shape.uv1)[0] = u + 0x1F;
+    shape.clut = getClut(0x1C0, vramY + 0xF8);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    packet = buildPolyFT4(&shape, packet, ot, zShift + 1);
+    shape.clut = getClut(0x1C0, vramY + 0xF9);
+    shape.tpage = getTPage(0, 2, 0x1C0, vramY);
+    shape.flags = (shape.flags & ~3) | 0xA;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* Builds an Unk800A6EB8 on the Unk800A65F8 of handle: its six points at that entity's position (at the origin
  * without one). The match depends on reading the position's three words before storing any (as vecCopy does) and on
@@ -1136,16 +1197,6 @@ void func_800A8150(Unk800A7F88 *this) {
 INCLUDE_RODATA("game/nonmatchings/fighters/sakuyamon", D_8006AC5C);
 
 extern SVECTOR D_8006AC5C[4];
-
-static inline void setTranslationSak(long *t, Vec3 *v) {
-    s32 x = v->vx;
-    s32 y = v->vy;
-    s32 z = v->vz;
-
-    t[0] = x;
-    t[1] = y;
-    t[2] = z;
-}
 
 /* Draws Unk800A7F88's sprite quad at start scaled by unkA8, selecting the 48x48 frame from unkA4. */
 void func_800A8274(Unk800A7F88 *this, Camera *camera) {
