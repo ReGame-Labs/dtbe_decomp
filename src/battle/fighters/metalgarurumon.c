@@ -730,7 +730,94 @@ void MetalGarurumonSpecial3Hitbox_draw(MetalGarurumonSpecial3Hitbox *this, s32 a
     func_8009CB58(this, arg);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009C678);
+void func_8009C678(MetalGarurumonSpecial3Hitbox *this) {
+    Entity *target;
+    s32 length;
+    s32 x, y, z, vx, vy, vz, dist, step;
+    s32 d[3];
+
+    target = getEntityByHandle(this->targetHandle);
+    if (target != NULL) {
+        func_8007A650((Fighter *)target, &this->targetPoint);
+    }
+    length = vecGetLength((VECTOR *)&this->velocity);
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    vx = this->velocity.vx;
+    vy = this->velocity.vy;
+    vz = this->velocity.vz;
+    x += vx;
+    y += vy;
+    z += vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->unkB8 += length;
+    dist = this->unkB8;
+    step = this->unkC4;
+    switch (step) {
+    case 0:
+        if (dist > 0x600) {
+            this->unkC4 = 1;
+        }
+        break;
+    case 1:
+        d[0] = (((this->targetPoint.vx - x) >> 3) - vx) >> 4;
+        d[1] = (((this->targetPoint.vy - y) >> 3) - vy) >> 4;
+        d[2] = (((this->targetPoint.vz - z) >> 3) - vz) >> 4;
+        this->velocity.vx = vx + d[0];
+        this->velocity.vy = vy + d[1];
+        this->velocity.vz = vz + d[2];
+        if (length < 0x20) {
+            this->unkC4 = 2;
+        }
+        break;
+    case 2:
+        d[0] = vx >> 3;
+        d[1] = vy >> 3;
+        d[2] = vz >> 3;
+        if (d[0] == 0) {
+            d[0] = 1;
+        }
+        if (d[1] == 0) {
+            d[1] = 1;
+        }
+        if (d[2] == 0) {
+            d[2] = 1;
+        }
+        {
+            s32 vx2 = this->velocity.vx;
+            s32 vy2 = this->velocity.vy;
+            s32 vz2 = this->velocity.vz;
+            vx2 += d[0];
+            vy2 += d[1];
+            this->velocity.vx = vx2;
+            this->velocity.vy = vy2;
+            vz2 += d[2];
+            this->velocity.vz = vz2;
+        }
+        break;
+    }
+    if (this->unkB8 > 0x2000 || this->ticks > 0x96) {
+        this->unkB4 = 1;
+        {
+            ListNode *node = &this->parts.part.link;
+            this->parts.part.link.next->prev = this->parts.part.link.prev;
+            node->prev->next = this->parts.part.link.next;
+            this->parts.part.link.next = node;
+            this->parts.part.link.prev = node;
+        }
+    }
+    {
+        s32 px = this->position.vx;
+        s32 py = this->position.vy;
+        s32 pz = this->position.vz;
+        this->parts.part.position.vx = px;
+        this->parts.part.position.vy = py;
+        this->parts.part.position.vz = pz;
+    }
+}
 
 /* Adds the position as the newest point of the trail (age 16) and ages every point by 3. */
 void func_8009C898(MetalGarurumonSpecial3Hitbox *this) {
