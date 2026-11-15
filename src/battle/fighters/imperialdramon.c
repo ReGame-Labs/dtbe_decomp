@@ -236,7 +236,53 @@ void Imperialdramon_special1(Fighter *this, s32 frame) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", Imperialdramon_special2);
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", Imperialdramon_special3);
+void Imperialdramon_spawnSpecial3Effect(Fighter *this);
+void Imperialdramon_spawnSpecial3Hitbox(Fighter *this);
+void Imperialdramon_special3Hold(Imperialdramon *this, s32 frame);
+void Imperialdramon_special3(Imperialdramon *this, s32 frame) {
+    Fighter *opponent = Fighter_getOpponent(&this->base);
+
+    func_80079AE4(&this->base);
+    Imperialdramon_special3Hold(this, frame);
+    switch (frame) {
+    case 58: {
+        s32 forceX = ((s64)this->base.mass * 0x1C70) >> 16;
+        this->base.force.vx += -forceX * Fighter_getFacing(&this->base);
+        this->base.force.vy -= ((s64)this->base.mass * 0x4718) >> 16;
+        if (this->holding != 0) {
+            Vec3 knockback;
+            knockback.vx = 0;
+            knockback.vy = -0x71C0;
+            knockback.vz = 0;
+            Fighter_takeHit(opponent, 0x5B01500, (Vec3 *)&ZERO_VECTOR, 0);
+            this->carryVelocity.vy = 0;
+            this->hitPending = 1;
+            this->carryForce = knockback;
+        }
+        this->special3Parts = 0;
+        break;
+    }
+    case 78:
+        this->holding = 0;
+        Imperialdramon_spawnSpecial3Effect(&this->base);
+        Fighter_playVoice(&this->base, 0x9C);
+        break;
+    case 80:
+        this->base.velocity.vx = 0;
+        this->base.velocity.vy = 0;
+        break;
+    case 113:
+        this->base.velocity.vx = 0;
+        break;
+    }
+    if (frame >= 81 && frame < 96 && ((frame ^ 1) & 1)) {
+        Imperialdramon_spawnSpecial3Hitbox(&this->base);
+    }
+    if (frame >= 87 && frame < 112) {
+        s32 forceX = ((s64)this->base.mass * 0x1C7) >> 16;
+        this->base.force.vx += -forceX * Fighter_getFacing(&this->base);
+    }
+}
 
 /* Up attack in the air (both classes): Fighter's; at frame 5 a push up by mass * 0x6388 (16.16); while falling the
  * force brakes the fall. */
