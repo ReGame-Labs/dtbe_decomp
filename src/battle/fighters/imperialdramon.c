@@ -933,7 +933,63 @@ void ImperialdramonSpecial2Hitbox_hit(ImperialdramonSpecial2Hitbox *this, void *
 
 INCLUDE_RODATA("game/nonmatchings/fighters/imperialdramon", D_80069158);
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial2Hitbox_draw);
+extern SVECTOR D_80069158[4];
+
+void ImperialdramonSpecial2Hitbox_draw(ImperialdramonSpecial2Hitbox *this, Camera *arg) {
+    Camera *camera = arg;
+    MatrixWords m;
+    PolyFT4Shape shape;
+    s32 i;
+    s32 color;
+    u16 vramY;
+    MATRIX *mp;
+    Vec3 *pos;
+
+    i = 0;
+    shape.corners[0] = &D_80069158[0];
+    shape.corners[1] = &D_80069158[1];
+    shape.corners[2] = &D_80069158[2];
+    shape.corners[3] = &D_80069158[3];
+    UV_BYTES(shape.uv0)[0] = 0xBF;
+    UV_BYTES(shape.uv1)[0] = 0x80;
+    UV_BYTES(shape.uv2)[0] = 0xBF;
+    UV_BYTES(shape.uv3)[0] = 0x80;
+    UV_BYTES(shape.uv0)[1] = 0x20;
+    UV_BYTES(shape.uv1)[1] = 0x20;
+    UV_BYTES(shape.uv2)[1] = 0x5F;
+    UV_BYTES(shape.uv3)[1] = 0x5F;
+    color = this->speed;
+    shape.flags = 9;
+    vramY = this->vramY;
+    shape.color = color | (color << 8) | (color << 16);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    shape.clut = getClut(0x1C0, vramY + 0xF2);
+    mp = &m.m;
+    for (; i < 2; i++) {
+        s32 size = (u16)this->size;
+
+        m.m.t[0] = 0;
+        m.m.t[1] = 0;
+        m.m.t[2] = 0;
+        m.words[1] = 0;
+        m.words[3] = 0;
+        m.words[0] = size;
+        m.words[2] = size;
+        m.words[4] = size;
+        if (i != 0) {
+            matrixRotateX(mp, 0x800);
+        }
+        if (this->facing < 0) {
+            matrixRotateY(mp, 0x800);
+        }
+        pos = &this->position;
+        m.m.t[0] = pos->vx;
+        m.m.t[1] = pos->vy;
+        m.m.t[2] = pos->vz;
+        setModelMatrix(mp);
+        PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
+    }
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/imperialdramon", D_80069178);
 
