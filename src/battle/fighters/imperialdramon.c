@@ -1157,17 +1157,6 @@ void ImperialdramonSpecial2Hitbox_draw(ImperialdramonSpecial2Hitbox *this, Camer
 
 INCLUDE_RODATA("game/nonmatchings/fighters/imperialdramon", D_80069178);
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial3Effect_init);
-
-/* The special move 3 effect's destructor. */
-void ImperialdramonSpecial3Effect_destroy(Entity *this, s32 flags) {
-    this->vtable = &IMPERIALDRAMON_SPECIAL3_EFFECT_VTABLE;
-    entityDestroy(this, 0);
-    if (flags & DESTROY_FREE) {
-        entityOperatorDelete(this);
-    }
-}
-
 /* The special move 3's effect (0x920 bytes): 64 particles drawn to a point of the character, with a square of four
  * corners. */
 typedef struct ImperialdramonSpecial3Effect {
@@ -1196,6 +1185,96 @@ typedef struct ImperialdramonSpecial3Effect {
     /* 0x120 */ VECTOR particles[64]; /* positions */
     /* 0x520 */ VECTOR velocities[64];
 } ImperialdramonSpecial3Effect; /* size 0x920 */
+
+/* Offset from fighter node 1 used by ImperialdramonSpecial3Effect_init. */
+extern VECTOR D_80069178;
+
+/* Constructs the special move 3 effect for fighter at node 1 + D_80069178: scatters 64 particles, sets the quad's
+ * corners (+-0x80, +-0x40, 0) and initializes the 16 trail segments. */
+Entity *ImperialdramonSpecial3Effect_init(void *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *unk228) {
+    ImperialdramonSpecial3Effect *e = (ImperialdramonSpecial3Effect *)this;
+    long *vz, *vy, *vx;
+    long *pz, *py, *px;
+    s32 i;
+    ImperialdramonSpecial3Effect *p;
+
+    entityInit(this, 0);
+    e->entity.vtable = &IMPERIALDRAMON_SPECIAL3_EFFECT_VTABLE;
+    e->vramY = Fighter_getVramY(fighter);
+    e->unk22 = 0x80;
+    e->fighter = fighter;
+    e->state = 0;
+    e->unk23 = 0;
+    e->unk34 = 0;
+    e->timer = 0;
+    e->count = 0;
+    e->unk98 = 0x1000;
+    e->unk9C = 0x1000;
+    e->unk20 = 0;
+    e->obj = unk228;
+    if (velocity->vx >= 0) {
+        e->side = 1;
+    } else {
+        e->side = -1;
+    }
+    Fighter_getNodePosition(e->fighter, &e->position, 1, &D_80069178);
+    vz = &e->velocities[0].vz;
+    vy = &e->velocities[0].vy;
+    vx = &e->velocities[0].vx;
+    pz = &e->particles[0].vz;
+    py = &e->particles[0].vy;
+    px = &e->particles[0].vx;
+    e->corners[2].vx = -0x80;
+    e->corners[0].vx = -0x80;
+    e->corners[3].vx = 0x80;
+    e->corners[1].vx = 0x80;
+    e->corners[1].vy = -0x40;
+    e->corners[0].vy = -0x40;
+    e->corners[3].vy = 0x40;
+    e->corners[2].vy = 0x40;
+    e->corners[3].vz = 0;
+    e->corners[2].vz = 0;
+    e->corners[1].vz = 0;
+    e->corners[0].vz = 0;
+    e->unk58.vy = e->position.vy;
+    e->unk58.vz = e->position.vz;
+    e->unk58.vx = e->position.vx + (e->side << 7);
+    for (i = 0x3F; i >= 0; i--) {
+        *px = (Fight_random(e->obj) & 0xFFF) - 0x800;
+        *py = (Fight_random(e->obj) & 0xFFF) - 0x800;
+        *pz = 0;
+        pz += 4;
+        *vx = -*px >> 2;
+        px += 4;
+        vx += 4;
+        *vy = -*py >> 2;
+        py += 4;
+        *vz = 0;
+        vz += 4;
+        vy += 4;
+    }
+    i = 0;
+    p = e;
+    for (; i < 16; i++) {
+        s16 v = i * (e->side * 3 << 6);
+
+        p->unkA0[0][1] = 0;
+        p->unkA0[0][2] = 0;
+        p->unkA0[0][0] = v;
+        p = (ImperialdramonSpecial3Effect *)((u8 *)p + 8);
+    }
+    Fighter_playSound(e->fighter, 0x97);
+    return this;
+}
+
+/* The special move 3 effect's destructor. */
+void ImperialdramonSpecial3Effect_destroy(Entity *this, s32 flags) {
+    this->vtable = &IMPERIALDRAMON_SPECIAL3_EFFECT_VTABLE;
+    entityDestroy(this, 0);
+    if (flags & DESTROY_FREE) {
+        entityOperatorDelete(this);
+    }
+}
 
 extern VECTOR D_80069188;
 
