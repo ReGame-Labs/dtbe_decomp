@@ -48,6 +48,7 @@ typedef struct ImperialdramonSpecial1Effect {
     /* 0x38 */ VECTOR centre;  /* the init's position, then the fighter's node 12 + D_80069148 every tick; pad 0x1000 */
     /* 0x48 */ VECTOR unk48[10];
     /* 0xE8 */ s32 unkE8[10];
+    /* 0x110 */ SVECTOR corners[8]; /* a quad of +-32 and a fan from (0, +-256) to 3 * 128 forward, z -32 */
 } ImperialdramonSpecial1Effect;
 void Imperialdramon_spawnSpecial1Hitbox(Fighter *this);
 void Imperialdramon_spawnSpecial1Effect(Fighter *this, s32 air);
@@ -837,7 +838,84 @@ void ImperialdramonSpecial1Hitbox_hit(UnkPartsEntity38 *this, CollisionSphere *s
 
 INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial1Hitbox_draw);
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial1Effect_init);
+/* Constructs the special move 1 effect for fighter in fight at pos (unk20 0xF00 on the ground, 0xC00 when pos->pad is
+ * set): the ten points 0..0xFF around the centre with random angles, then the corners. The match needs the corners'
+ * stores in this order (corners[2].vx first). */
+Entity *ImperialdramonSpecial1Effect_init(Entity *this, Fighter *fighter, VECTOR *pos, Fight *fight) {
+    ImperialdramonSpecial1Effect *e = (ImperialdramonSpecial1Effect *)this;
+    s32 i;
+    s32 *pa;
+    long *pz, *py, *px;
+
+    entityInit(this, 0);
+    e->entity.vtable = &IMPERIALDRAMON_SPECIAL1_EFFECT_VTABLE;
+    e->vramY = Fighter_getVramY(fighter);
+    e->fighter = fighter;
+    e->fight = fight;
+    e->state = 0;
+    e->unk30 = 0;
+    e->frames = 0;
+    e->pointCount = 0;
+    e->unk28 = 0;
+    if (pos->pad == 0) {
+        e->unk20 = 0xF00;
+    } else {
+        e->unk20 = 0xC00;
+    }
+    i = 9;
+    {
+        s32 x = pos->vx, y = pos->vy, z = pos->vz;
+        e->centre.pad = 0x1000;
+        e->centre.vx = x;
+        e->centre.vy = y;
+        e->centre.vz = z;
+    }
+    e->facing = Fighter_getFacing(e->fighter);
+    pa = e->unkE8;
+    pz = &e->unk48[0].vz;
+    py = &e->unk48[0].vy;
+    px = &e->unk48[0].vx;
+    e->shade = 0x80;
+    for (; i >= 0; i--) {
+        s32 r = Fight_random(e->fight);
+        s32 c = e->centre.vx - 0x7F;
+        *px = (r & 0xFF) + c;
+        px += 4;
+        r = Fight_random(e->fight);
+        c = e->centre.vy - 0x7F;
+        *py = (r & 0xFF) + c;
+        *pz = 0;
+        pz += 4;
+        py += 4;
+        *pa = Fight_random(e->fight) & 0xFFF;
+        pa++;
+    }
+    e->corners[2].vx = -32;
+    e->corners[3].vx = 32;
+    e->corners[1].vx = 32;
+    e->corners[3].vy = 32;
+    e->corners[2].vy = 32;
+    e->corners[0].vx = -32;
+    e->corners[5].vy = -256;
+    e->corners[4].vy = -256;
+    e->corners[1].vy = -32;
+    e->corners[0].vy = -32;
+    e->corners[3].vz = 0;
+    e->corners[2].vz = 0;
+    e->corners[1].vz = 0;
+    e->corners[0].vz = 0;
+    e->corners[6].vx = 0;
+    e->corners[4].vx = 0;
+    e->corners[7].vy = 256;
+    e->corners[6].vy = 256;
+    e->corners[7].vz = -32;
+    e->corners[6].vz = -32;
+    e->corners[5].vz = -32;
+    e->corners[4].vz = -32;
+    e->corners[7].vx = e->facing * 3 << 7;
+    e->corners[5].vx = e->facing * 3 << 7;
+    return this;
+}
 
 /* The special move 1 effect's destructor. */
 void ImperialdramonSpecial1Effect_destroy(Entity *this, s32 flags) {
