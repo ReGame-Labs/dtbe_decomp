@@ -1432,7 +1432,72 @@ void func_80098C04(UnkPartsEntity3C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80098C98);
+void func_8009918C(Unk80098A78 *this);
+
+/* Advances the Unk80098A78 projectile: moves by velocity, grows radius by 0x18 (doubled), spawns an effect every
+ * 10 ticks while total x distance < 0x1000, fades out once past 0x1000, and on hit disables itself and spawns a
+ * grey spin particle at 1/16 velocity. */
+void func_80098C98(Unk80098A78 *this, void *arg) {
+    s32 x = this->position.vx;
+    s32 y = this->position.vy;
+    s32 z = this->position.vz;
+    s32 vx = this->velocity.vx;
+    s32 vy = this->velocity.vy;
+    s32 vz = this->velocity.vz;
+    s32 r;
+
+    x += vx;
+    y += vy;
+    z += vz;
+    this->unkBC += 0x18;
+    r = this->unkBC << 1;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->parts.part.position.vx = x;
+    this->parts.part.position.vy = y;
+    this->parts.part.position.vz = z;
+    this->parts.part.radius = r;
+    this->unkAC += abs(vx);
+    if (this->unkAC < 0x1000) {
+        if (this->unkC0 < 0x80) {
+            this->unkC0 += 0x20;
+        }
+        if ((this->unkC4 + 6) % 10 == 0) {
+            func_8009918C(this);
+        }
+    } else {
+        this->unkC0 -= 0x14;
+    }
+    if (this->unkC0 <= 0) {
+        entityDelete(&this->parts.entity);
+        return;
+    }
+    if (this->parts.part.flags.bits.touched) {
+        this->parts.part.flags.bits.touched = 0;
+        if (TrackedHit_hitFighter(&this->parts.unk18)) {
+            VECTOR vel;
+            VECTOR *v;
+            Entity *child;
+
+            v = &vel;
+            this->parts.part.flags.bits.disabled = 1;
+            vel.vx = this->velocity.vx >> 4;
+            vel.vy = this->velocity.vy >> 4;
+            vel.vz = this->velocity.vz >> 4;
+            child = allocEntityMemory(0x58);
+            if (child != NULL) {
+                Entity *e = entityOperatorNewAt(0x58, child);
+
+                Particle_initById((Particle *)e, 0, (VECTOR *)&this->position, v, 0x80, 0x808080, 0);
+                e->vtable = &SPIN_PARTICLE_VTABLE;
+            }
+            entityAddSibling(&this->parts.entity, child);
+        }
+    }
+    this->unkB6 ^= 1;
+    this->unkC4++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80098ECC);
 
