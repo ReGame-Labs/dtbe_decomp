@@ -799,7 +799,126 @@ Unk8008E9B4 *func_8008EA58(Unk8008E9B4 *this, Fighter *owner, Fight *unk228, Vec
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial1Hitbox_init);
+typedef struct ImperialdramonSpecial1Hitbox {
+    /* 0x000 */ UnkPartsEntity38 parts;
+    /* 0x080 */ Fighter *fighter;
+    /* 0x084 */ Fight *fight;
+    /* 0x088 */ s16 side;
+    /* 0x08A */ s16 unk8A;
+    /* 0x08C */ s32 unk8C;
+    /* 0x090 */ s16 unk90;
+    /* 0x092 */ s16 unk92;
+    /* 0x094 */ s16 unk94;
+    /* 0x096 */ s16 vramY;
+    /* 0x098 */ s32 speed;
+    /* 0x09C */ s32 unk9C;
+    /* 0x0A0 */ Vec3 velocity;
+    /* 0x0AC */ u8 unkAC[4];
+    /* 0x0B0 */ Vec3 position;
+    /* 0x0BC */ u8 unkBC[4];
+    /* 0x0C0 */ SVECTOR unkC0[4][4];
+    /* 0x140 */ SVECTOR corners[4];
+} ImperialdramonSpecial1Hitbox;
+
+/* Builds Imperialdramon's special move 1 hitbox (0x160 bytes): a 0xF0 sphere with knockback (vx << 6, -|vx << 6|, 0),
+ * four 4-cornered quads and a 4-cornered head quad, and plays sound 0x95 (Imperialdramon) or 0x9E (Fighter Mode). */
+Entity *ImperialdramonSpecial1Hitbox_init(void *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *unk228) {
+    ImperialdramonSpecial1Hitbox *h = (ImperialdramonSpecial1Hitbox *)this;
+    VECTOR knockback;
+    s32 i;
+    ImperialdramonSpecial1Hitbox *p;
+    CollisionSphere *part;
+
+    entityInit(this, ENTITY_KIND_FIGHTER_OBJECT);
+    Hit_init(&h->parts.base, fighter, 0x5A81F33, velocity, 3);
+    h->parts.base.vtable = IMPERIALDRAMON_SPECIAL1_HITBOX_HIT_VTABLE;
+    h->parts.entity.vtable = &IMPERIALDRAMON_SPECIAL1_HITBOX_VTABLE;
+    CollisionSphere_init(&h->parts.part, position, 0xF0, &h->parts.base);
+    knockback = *(VECTOR *)velocity;
+    knockback.vx <<= 6;
+    knockback.vz = 0;
+    knockback.vy = -abs(knockback.vx);
+    Hit_setKnockback(&h->parts.base, (Vec3 *)&knockback);
+    h->vramY = Fighter_getVramY(fighter);
+    h->fighter = fighter;
+    h->fight = unk228;
+    h->unk92 = 0;
+    h->unk94 = 0;
+    h->speed = vecGetLength((VECTOR *)velocity);
+    h->unk9C = 0;
+    {
+        s32 x = velocity->vx;
+        s32 y = velocity->vy;
+        s32 z = velocity->vz;
+
+        h->unk90 = 0;
+        h->unk8A = 0;
+        h->velocity.vx = x;
+        h->velocity.vy = y;
+        h->velocity.vz = z;
+        h->side = x < 0 ? -1 : 1;
+    }
+    h->parts.part.entity = &h->parts.entity;
+    part = &h->parts.part;
+    if (Fighter_getSide(h->fighter) == 0) {
+        Fight_addSide0Shape(unk228, &part->link);
+    } else {
+        Fight_addSide1Shape(unk228, &part->link);
+    }
+    h->unk8C = 0;
+    {
+        s32 x = position->vx;
+        s32 y = position->vy;
+        s32 z = position->vz;
+
+        h->position.vx = x;
+        h->position.vy = y;
+        h->position.vz = z;
+    }
+    {
+        s16 neg = -0x80;
+        s16 pos = 0x80;
+
+        p = h;
+        for (i = 3; i >= 0; i--) {
+            p->unkC0[0][3].vx = 0;
+            p->unkC0[0][1].vx = 0;
+            p->unkC0[0][2].vx = 0;
+            p->unkC0[0][0].vx = 0;
+            p->unkC0[0][1].vy = neg;
+            p->unkC0[0][0].vy = neg;
+            p->unkC0[0][3].vy = pos;
+            p->unkC0[0][2].vy = pos;
+            p->unkC0[0][3].vz = 0;
+            p->unkC0[0][2].vz = 0;
+            p->unkC0[0][1].vz = 0;
+            p->unkC0[0][0].vz = 0;
+            p = (ImperialdramonSpecial1Hitbox *)((u8 *)p + 0x20);
+        }
+    }
+    {
+        s32 side = h->side;
+
+        h->corners[1].vy = -0x100;
+        h->corners[0].vy = -0x100;
+        h->corners[3].vy = 0x100;
+        h->corners[2].vy = 0x100;
+        h->corners[3].vz = -0x40;
+        h->corners[2].vz = -0x40;
+        h->corners[1].vz = -0x40;
+        h->corners[0].vz = -0x40;
+        h->corners[2].vx = -side << 7;
+        h->corners[0].vx = -side << 7;
+        h->corners[3].vx = side << 8;
+        h->corners[1].vx = side << 8;
+    }
+    if (Fighter_getCharacter(h->fighter) == 5) {
+        Fighter_playSound(h->fighter, 0x95);
+    } else {
+        Fighter_playSound(h->fighter, 0x9E);
+    }
+    return this;
+}
 
 /* The special move 1 hitbox's destructor. */
 void ImperialdramonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
