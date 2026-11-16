@@ -1017,7 +1017,69 @@ void BeelzebumonSpecial2Hitbox_destroy(UnkPartsEntity3C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", BeelzebumonSpecial2Hitbox_tick);
+/* Advances the special move 2 hitbox: deletes at tick 13, enables at tick 2, disables at tick 7, sweeps a
+ * 512-unit arc around the fighter (centered 0x140 above), and on contact knocks an unguarded opponent upward and
+ * forward by facing * 0x1554. */
+void BeelzebumonSpecial2Hitbox_tick(BeelzebumonSpecial2Hitbox *this, void *arg) {
+    Vec3 position;
+    s32 step;
+    s32 angle;
+
+    if (this->unk9C >= 0xD) {
+        entityDelete(&this->parts.entity);
+        return;
+    }
+    if (this->unk9C == 2) {
+        this->parts.part.flags.bits.disabled = 0;
+    }
+    if (this->unk9C == 7) {
+        this->parts.part.flags.bits.disabled = 1;
+    }
+    Fighter_getPosition(this->fighter, &position);
+    step = this->unk9C;
+    if (step >= 7) {
+        step = 6;
+    }
+    step *= 0x140;
+    if (Fighter_getFacing(this->fighter) > 0) {
+        angle = step + 0x100;
+    } else {
+        angle = 0xF00 - step;
+    }
+    angle &= 0xFFF;
+    {
+        u32 touched = this->parts.part.flags.bits.touched;
+
+        position.vx += (COS_SIN_TABLE[angle].sin * 512) >> 12;
+        position.vy += ((COS_SIN_TABLE[angle].cos * 512) >> 12) - 0x140;
+        this->parts.part.position = position;
+        if (touched) {
+            this->parts.part.flags.bits.touched = 0;
+            if (TrackedHit_hitFighter(&this->parts.unk18)) {
+                Fighter *opponent;
+
+                this->parts.part.flags.bits.disabled = 1;
+                opponent = Fighter_getOpponent(this->fighter);
+                if (!Fighter_isGuarding(opponent)) {
+                    Vec3 force;
+                    s32 y = -0x7FF8;
+
+                    force.vy = y;
+                    force.vz = 0;
+                    force.vx = this->facing * 0x1554;
+                    opponent->force.vx = force.vx;
+                    opponent->force.vy = y;
+                    opponent->force.vz = 0;
+                }
+                Fighter_spawnContactEffect(this->fighter);
+            }
+        }
+    }
+    this->unk90 -= 0x12;
+    this->unk94 += 0x14;
+    this->unk98 += 8;
+    this->unk9C++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", BeelzebumonSpecial2Hitbox_draw);
 

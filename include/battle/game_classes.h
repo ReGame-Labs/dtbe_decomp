@@ -1231,6 +1231,7 @@ s32 Fighter_hasFloorAhead(Fighter *this, s32 distance);
 s32 Fighter_isAttackIdle(Fighter *this);
 
 s32 Fighter_isGuarding(Fighter *this);
+void Fighter_spawnContactEffect(Fighter *this);
 
 void Fighter_hold(Fighter *this, s32 arg);
 
