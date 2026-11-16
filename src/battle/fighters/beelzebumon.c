@@ -20,6 +20,7 @@ struct BeelzebumonSpecial1Projectile *BeelzebumonSpecial1Projectile_init(struct 
                                                                          VECTOR *vel);
 struct Unk80096F6C *func_80096F6C(struct Unk80096F6C *this, Fighter *fighter);
 Unk80097FA0 *func_80097FA0(Unk80097FA0 *this, Fighter *fighter, Fight *fight);
+void func_800986C0(Unk80097FA0 *this);
 struct Unk80098720 *func_80098720(struct Unk80098720 *this, Fighter *fighter, Vec3 *position);
 struct Unk80098A78 *func_80098A78(struct Unk80098A78 *this, Fighter *fighter, Fight *fight, Vec3 *position,
                                  VECTOR *velocity);
@@ -1211,7 +1212,59 @@ void func_80098128(UnkPartsEntity3C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_800981BC);
+/* Updates the Unk80097FA0 entity: deletes itself once the fighter ends the move or after 50 ticks, updates
+ * unkA4, spawns a child effect every 2 ticks for the first 18 ticks, sweeps its hitbox in front of the fighter,
+ * and on contact pulls/pushes an unguarded opponent toward/away from its x position. */
+void func_800981BC(Unk80097FA0 *this, void *arg) {
+    VECTOR position;
+
+    if (((Beelzebumon *)this->fighter)->unk4AC != 0 || this->unkAC >= 0x32) {
+        entityDelete(&this->parts.entity);
+        return;
+    }
+    if (this->unkAC < 0x1E) {
+        this->unkA4 = this->unkAC * 4;
+    }
+    if (this->unkAC >= 0x2E) {
+        this->unkA4 = 0x80 - (this->unkAC - 0x2D) * 0x20;
+    }
+    if (this->unkAC < 0x12 && (this->unkAC & 1) == 0) {
+        func_800986C0(this);
+    }
+    position = *(VECTOR *)&this->position;
+    position.vx -= Fighter_getFacing(this->fighter) << 7;
+    position.vy -= 0x120;
+    position.vy += (this->unkAC & 3) * 0xC0;
+    this->parts.part.position = *(Vec3 *)&position;
+    if (this->unkA8 != 0 && --this->unkA8 == 0) {
+        this->parts.part.flags.bits.disabled = 0;
+    }
+    if (this->parts.part.flags.bits.touched) {
+        this->parts.part.flags.bits.touched = 0;
+        if (TrackedHit_hitFighter(&this->parts.unk18)) {
+            Fighter *opponent;
+
+            this->unkA8 = 7;
+            this->parts.part.flags.bits.disabled = 1;
+            opponent = Fighter_getOpponent(this->fighter);
+            if (!Fighter_isGuarding(opponent)) {
+                Vec3 pos;
+                s32 dir;
+
+                func_8007A650(opponent, &pos);
+                dir = (this->position.vx < pos.vx) ? 1 : -1;
+                pos.vx = dir * 0x1554;
+                pos.vy = 0;
+                pos.vz = 0;
+                opponent->force.vx = pos.vx;
+                opponent->force.vy = 0;
+                opponent->force.vz = 0;
+            }
+        }
+    }
+    this->unkA0 += 0x30;
+    this->unkAC++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_800983FC);
 
