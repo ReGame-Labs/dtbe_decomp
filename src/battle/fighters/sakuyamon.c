@@ -1517,6 +1517,7 @@ Unk800A9944 *func_800A926C(Unk800A9944 *this, Fighter *fighter, Vec3 *position) 
     func_800A94D0(this);
     return this;
 }
+#endif
 
 /* The destructor of func_800A926C's class: stops its sound, takes its member at 0x38 out of its list. */
 void func_800A9428(Unk800A9944 *this, s32 flags) {
