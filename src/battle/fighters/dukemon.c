@@ -311,12 +311,15 @@ void func_80084E58(Fighter *this);
 void func_80084EC0(Fighter *this);
 void Dukemon_spawnSpecial3Hitbox(Fighter *this, s16 arg);
 
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/dukemon", Dukemon_special3);
-#else
 void Dukemon_special3(Dukemon *this, s32 frame) {
     Fighter_special3(&this->base, frame);
     func_80079AE4(&this->base);
+#if VERSION_JP
+    if (Fight_isRoundOver(Fighter_getScene(&this->base))) {
+        Fighter_stopActionClip(&this->base);
+        return;
+    }
+#endif
     this->special3Active = 1;
     switch (frame) {
     case 0:
@@ -349,7 +352,6 @@ void Dukemon_special3(Dukemon *this, s32 frame) {
         Dukemon_spawnSpecial3Hitbox(&this->base, 0);
     }
 }
-#endif
 
 /* The two entries of a table that Dukemon_spawnTrail, Dukemon_spawnSpecial2Trails and Dukemon_spawnAttack3Trails each
  * initialise. cc1 gives identical array initializers one constant per unit, so the three share its data (D_800685DC in
