@@ -513,9 +513,6 @@ void SaintGargomonSpecial1Hitbox_hit(UnkPartsEntity38 *this, void *sum) {
 /* Updates the special move 1's hitbox: steps position and velocity (func_800ABB54), sets the knockback from velocity,
  * copies position to the sphere, and either detonates (func_800AB830) after frame 120 or when unkC4 is 1, or spawns a
  * particle burst (ParticleBurst_init) at position and advances unkB8. */
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", SaintGargomonSpecial1Hitbox_tick);
-#else
 void SaintGargomonSpecial1Hitbox_tick(SaintGargomonSpecial1Hitbox *this) {
     VECTOR kb;
     Vec3 *pos;
@@ -551,7 +548,6 @@ void SaintGargomonSpecial1Hitbox_tick(SaintGargomonSpecial1Hitbox *this) {
         this->unkB8++;
     }
 }
-#endif
 
 INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800ABB54);
 
@@ -571,9 +567,6 @@ static inline void setTranslationSG(long *t, VECTOR *v) {
 
 /* Draws the special move 1's hitbox: the 64 by 64 picture at (0x80, 0x80) of the texture page at (0x180, vramY) with
  * CLUT (0x180, vramY + 0xF5) on D_8006B2B4, rotated around z along velocity at position. */
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", SaintGargomonSpecial1Hitbox_draw);
-#else
 void SaintGargomonSpecial1Hitbox_draw(SaintGargomonSpecial1Hitbox *this, Camera *camera) {
     VECTOR pos;
     MATRIX m;
@@ -605,7 +598,6 @@ void SaintGargomonSpecial1Hitbox_draw(SaintGargomonSpecial1Hitbox *this, Camera 
     shape.tpage = (((vramY & 0x100) >> 4) | 0x26) | ((vramY & 0x200) << 2);
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
 }
-#endif
 
 /* The class func_800ABE6C constructs (virtual tables D_8006B454, and D_8006B434 for its base at 0x18). */
 typedef struct Unk800ABE6C {
@@ -1252,9 +1244,6 @@ static inline void setTranslationSg(long *t, VECTOR *v) {
 }
 
 /* Draws Unk800AD050's projectile sprite rotated along its velocity vector. */
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AD450);
-#else
 void func_800AD450(Unk800AD050 *this, Camera *camera) {
     VECTOR pos;
     MATRIX m;
@@ -1286,7 +1275,6 @@ void func_800AD450(Unk800AD050 *this, Camera *camera) {
     shape.tpage = getTPage(0, 1, 0x180, vramY);
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
 }
-#endif
 
 /* func_800AD5BC's class with its own fields (Unk800AD5BC is the part it shares with GuilmonSpecial2Hitbox_init's). */
 typedef struct Unk800AD7CC {

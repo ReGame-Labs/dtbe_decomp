@@ -757,9 +757,6 @@ void HolydramonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
 struct Unk8008C94C *func_8008C94C(struct Unk8008C94C *this, Fighter *fighter);
 struct Unk8008CE68 *func_8008CE68(struct Unk8008CE68 *this, Fighter *fighter, Fight *fight);
 
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/holydramon", HolydramonSpecial2Hitbox_hit);
-#else
 void HolydramonSpecial2Hitbox_hit(HolydramonSpecial2Hitbox *this, CollisionSphere *shape) {
     Entity *target;
     Entity *child;
@@ -803,7 +800,6 @@ void HolydramonSpecial2Hitbox_hit(HolydramonSpecial2Hitbox *this, CollisionSpher
         }
     }
 }
-#endif
 
 /* Moves by its velocity with the part following; stopped while the owner's 0x4A8 is set and after 32 frames, then slows
  * by a quarter a frame; deletes itself after 40. The match depends on the unit's -fno-cse-follow-jumps (Makefile): the

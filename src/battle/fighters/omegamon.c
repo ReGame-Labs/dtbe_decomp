@@ -62,9 +62,6 @@ void Omegamon_endMove(Fighter *this) {
     Fighter_detach(Fighter_getOpponent(this));
 }
 
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/omegamon", Omegamon_attack2);
-#else
 void Omegamon_attack2(Fighter *this, s32 frame) {
     FighterParams *params = Fighter_getParams(this);
     s32 *lunge = &params->attacks[1].lungeX;
@@ -93,7 +90,6 @@ void Omegamon_attack2(Fighter *this, s32 frame) {
         func_80079AF8(this);
     }
 }
-#endif
 
 INCLUDE_RODATA("game/nonmatchings/fighters/omegamon", D_8006A3D4);
 

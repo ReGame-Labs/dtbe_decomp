@@ -1193,9 +1193,6 @@ void ImperialdramonSpecial2Hitbox_tick(ImperialdramonSpecial2Hitbox *this) {
 
 /* Applies hit, and when it struck a fighter (getHitFighter) disables its sphere and adds a hit spark (HitSpark_init,
  * size 0x60, color 0x808080) at the fighter's position (Fighter_getPosition) with a zero VECTOR as the direction. */
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial2Hitbox_hit);
-#else
 void ImperialdramonSpecial2Hitbox_hit(ImperialdramonSpecial2Hitbox *this, void *hit) {
     Entity *fighter;
 
@@ -1218,15 +1215,11 @@ void ImperialdramonSpecial2Hitbox_hit(ImperialdramonSpecial2Hitbox *this, void *
         entityAddSibling(&this->parts.entity, child);
     }
 }
-#endif
 
 INCLUDE_RODATA("game/nonmatchings/fighters/imperialdramon", D_80069158);
 
 extern SVECTOR D_80069158[4];
 
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial2Hitbox_draw);
-#else
 void ImperialdramonSpecial2Hitbox_draw(ImperialdramonSpecial2Hitbox *this, Camera *arg) {
     Camera *camera = arg;
     MatrixWords m;
@@ -1282,7 +1275,6 @@ void ImperialdramonSpecial2Hitbox_draw(ImperialdramonSpecial2Hitbox *this, Camer
         PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
     }
 }
-#endif
 
 INCLUDE_RODATA("game/nonmatchings/fighters/imperialdramon", D_80069178);
 
@@ -1660,9 +1652,6 @@ static inline void setTranslationImp(long *t, VECTOR *v) {
 }
 
 /* Draws Unk800919EC's spark quad using its SpriteAnim transform and vramY's sprite sheet. */
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", func_80091328);
-#else
 void func_80091328(Unk800919EC *this, Camera *camera) {
     MatrixWords m;
     PolyFT4Shape shape;
@@ -1701,7 +1690,6 @@ void func_80091328(Unk800919EC *this, Camera *camera) {
     shape.tpage = getTPage(0, 1, 0x1C0, this->vramY);
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
 }
-#endif
 
 /* The entity class of vtable D_800691EC (0x38 bytes), made for a character 0x40 below a position. */
 typedef struct Unk80091498 {

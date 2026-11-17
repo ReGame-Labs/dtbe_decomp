@@ -585,9 +585,6 @@ void GokumonSpecial1Hitbox_destroy(GokumonSpecial1Hitbox *this, s32 flags) {
     }
 }
 
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial1Hitbox_tick);
-#else
 void GokumonSpecial1Hitbox_tick(GokumonSpecial1Hitbox *this) {
     VECTOR vec;
     s32 speed;
@@ -638,7 +635,6 @@ void GokumonSpecial1Hitbox_tick(GokumonSpecial1Hitbox *this) {
         }
     }
 }
-#endif
 
 INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial1Hitbox_draw);
 
@@ -731,9 +727,6 @@ extern Unk8006CD70 D_8006CD70[3];
 
 /* Updates GokumonSpecial3Hitbox's collision sphere and hit properties for the current pulse, and aims knockback away
  * from its owner's position toward the opponent. */
-#if VERSION_JP
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", func_800C1180);
-#else
 void func_800C1180(GokumonSpecial3Hitbox *this) {
     Vec3 pos;
     VECTOR kb;
@@ -758,7 +751,6 @@ void func_800C1180(GokumonSpecial3Hitbox *this) {
     kb.vx = (this->position.vx - kb.vx) << 6;
     Hit_setKnockback(hit, &kb);
 }
-#endif
 
 INCLUDE_ASM("game/nonmatchings/fighters/gokumon", func_800C12A4);
 
