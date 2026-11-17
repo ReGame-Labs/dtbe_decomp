@@ -499,7 +499,77 @@ void SeraphimonSpecial2Hitbox_hit(SeraphimonSpecial2Hitbox *this, CollisionSpher
 
 INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", SeraphimonSpecial2Hitbox_tick);
 
-INCLUDE_ASM("game/nonmatchings/fighters/seraphimon", SeraphimonSpecial2Hitbox_draw);
+static inline void setSVector(SVECTOR *v, s16 x, s16 y, s16 z) {
+    v->vx = x;
+    v->vy = y;
+    v->vz = z;
+}
+
+/* Draws the special move 2's hitbox as a rotating textured quad at its start position. */
+void SeraphimonSpecial2Hitbox_draw(SeraphimonSpecial2Hitbox *this, Camera *arg) {
+    Camera *camera = arg;
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyGT4Shape shape;
+    s32 xs[4];
+    s32 ys[4];
+    Vec3 *pos;
+    s32 x, y, z;
+    u_long *ot;
+    void *packet;
+    s32 angle;
+    s32 i;
+    u16 vramY;
+    s32 rx;
+    s32 ry;
+
+    pos = &this->start;
+    x = pos->vx;
+    y = pos->vy;
+    z = pos->vz;
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    ot = camera->ot.slots;
+    setModelMatrix(&m.m);
+
+    vramY = this->vramY;
+    shape.flags = 0;
+    rx = 0x50;
+    ry = 0x50;
+    angle = this->unkC8 << 6;
+    for (i = 0; i < 4; i++) {
+        xs[i] = (COS_SIN_TABLE[angle & 0xFFF].cos * rx) >> 11;
+        ys[i] = (COS_SIN_TABLE[angle & 0xFFF].sin * ry) >> 11;
+        angle += 0x400;
+    }
+    setSVector(&corners[0], xs[0], ys[0], 0);
+    setSVector(&corners[1], xs[1], ys[1], 0);
+    setSVector(&corners[3], xs[2], ys[2], 0);
+    setSVector(&corners[2], xs[3], ys[3], 0);
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.u0 = shape.u2 = 0xC0;
+    shape.u1 = shape.u3 = 0xFF;
+    shape.v0 = shape.v1 = 0;
+    shape.v2 = shape.v3 = 0x3F;
+    shape.colors[3] = 0x808080;
+    shape.colors[1] = 0x808080;
+    shape.colors[2] = 0x808080;
+    shape.colors[0] = 0x808080;
+    shape.clut = getClut(0x1C0, vramY + 0xFB);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    shape.flags = (shape.flags & ~3) | 9;
+    packet = PRIM_BUFFER_FREE;
+    PRIM_BUFFER_FREE = buildPolyGT4(&shape, packet, ot, camera->zShift);
+}
 
 /* Builds the special move 2's effect for fighter at its position (Fighter_getPosition). */
 SeraphimonSpecial2Effect *SeraphimonSpecial2Effect_init(SeraphimonSpecial2Effect *this, Fighter *fighter) {
