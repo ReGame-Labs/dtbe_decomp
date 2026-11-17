@@ -18,7 +18,7 @@ s32 Gokumon_getAttackTrailColor(Fighter *this);
 /* whether the character's fighter (by Fighter_getSide) has the other colors (altColor) */
 s32 Gokumon_hasAltColor(Fighter *this);
 GokumonSpecial1Hitbox *GokumonSpecial1Hitbox_init(GokumonSpecial1Hitbox *this, Fighter *fighter);
-Entity *GokumonSpecial3Hitbox_init(Entity *this, Fighter *arg, Vec3 *vec);
+GokumonSpecial3Hitbox *GokumonSpecial3Hitbox_init(GokumonSpecial3Hitbox *this, Fighter *owner, Vec3 *pos);
 extern EntityVtable GOKUMON_SPECIAL3_HITBOX_VTABLE;
 extern EntityVtable GOKUMON_SPECIAL1_HITBOX_VTABLE;
 extern EntityVtable GOKUMON_VTABLE;
@@ -717,7 +717,77 @@ void GokumonSpecial1Hitbox_tick(GokumonSpecial1Hitbox *this) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial1Hitbox_draw);
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial3Hitbox_init);
+static inline void copySVectorWords(SVECTOR *dst, SVECTOR *src) {
+    s32 w0 = ((s32 *)src)[0];
+    s32 w1 = ((s32 *)src)[1];
+    ((s32 *)dst)[0] = w0;
+    ((s32 *)dst)[1] = w1;
+}
+
+/* Constructs Gokumon's special move 3 hitbox: initializes its entity/hit/sphere, builds the 8 stacked 8-vertex
+ * cyclone rings with random horizontal jitter, and starts sound 0x112. */
+GokumonSpecial3Hitbox *GokumonSpecial3Hitbox_init(GokumonSpecial3Hitbox *this, Fighter *owner, Vec3 *pos) {
+    MATRIX m;
+    VECTOR inVec;
+    VECTOR outVec;
+    s32 radius;
+    s32 height;
+    s32 offX;
+    s32 offZ;
+    s32 i, j;
+    s32 x, y, z;
+    MersenneTwister *rng = &RANDOM;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    this->parts.entity.vtable = &GOKUMON_SPECIAL3_HITBOX_VTABLE;
+    Hit_init(&this->parts.base, owner, 0, (Vec3 *)&ZERO_VECTOR, 0);
+    CollisionSphere_init(&this->parts.part, pos, 0x100, &this->parts.base);
+    this->parts.part.entity = &this->parts.entity;
+    this->owner = owner;
+    x = pos->vx;
+    y = pos->vy;
+    z = pos->vz;
+    this->unk294 = 0;
+    this->unk298 = 0;
+    this->state = 0;
+    this->pulses = 0;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->vramY = Fighter_getVramY(owner);
+    radius = 0x100;
+    offX = 0;
+    offZ = 0;
+    height = 0;
+
+    for (i = 0; i < 8; i++) {
+        matrixInitRotationY(&m, i << 10);
+        memset(&inVec, 0, sizeof(inVec));
+        inVec.vx = radius;
+        inVec.vy = height;
+        for (j = 0; j < 7; j++) {
+            s16 vx, vy, vz;
+            SVECTOR *v = &this->rings[i][j];
+
+            matrixRotateY(&m, 0x249);
+            matrixTransformVec(&m, &outVec, &inVec);
+            vx = outVec.vx + offX;
+            vy = outVec.vy;
+            vz = outVec.vz + offZ;
+            v->vx = vx;
+            v->vy = vy;
+            v->vz = vz;
+        }
+        radius += 0x80;
+        height -= 0x180;
+        copySVectorWords(&this->rings[i][7], &this->rings[i][0]);
+        offX = (s32)mersenneTwisterGenerate(rng) % 128;
+        offZ = (s32)mersenneTwisterGenerate(rng) % 128;
+    }
+
+    this->soundHandle = soundControlPlaySound(&SOUND_CONTROL, 0x112, 0);
+    return this;
+}
 
 /* The special move 3 hitbox's destructor: the same as the special move 1 hitbox's. */
 void GokumonSpecial3Hitbox_destroy(GokumonSpecial3Hitbox *this, s32 flags) {
