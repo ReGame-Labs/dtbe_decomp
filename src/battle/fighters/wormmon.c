@@ -557,6 +557,9 @@ void WormmonSpecial1Hitbox_hit(WormmonSpecial1Hitbox *this, CollisionSphere *sum
     entityDelete(&this->parts.entity);
 }
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonSpecial1Hitbox_draw);
+#else
 void WormmonSpecial1Hitbox_draw(WormmonSpecial1Hitbox *this, Camera *camera) {
     MatrixWords m;
     PolyFT4Shape shape;
@@ -611,6 +614,7 @@ void WormmonSpecial1Hitbox_draw(WormmonSpecial1Hitbox *this, Camera *camera) {
         PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
     }
 }
+#endif
 
 /* The entity class func_800BA734 constructs (virtual table D_8006C6F4): an Unk800C4F74 with 0x488 at 5/6. */
 typedef struct Unk800BA734 {
@@ -666,6 +670,9 @@ static inline void setTranslation(long *t, Vec3 *v) {
     t[2] = z;
 }
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/wormmon", func_800BA8AC);
+#else
 void func_800BA8AC(Unk800BA734 *this, Camera *camera) {
     MatrixWords m;
     PolyFT4Shape shape;
@@ -723,6 +730,7 @@ void func_800BA8AC(Unk800BA734 *this, Camera *camera) {
     } while (face < end);
     PRIM_BUFFER_FREE = packet;
 }
+#endif
 
 /* The guard's effect, one at a time for a Wormmon (guardEffectActive). */
 typedef struct WormmonGuardEffect {
@@ -832,6 +840,9 @@ extern SVECTOR D_8006C664[4];
 /* Draws the guard's effect when scale is non-zero: the 64 by 48 picture at (0, 0) of the texture page at
  * (0x1C0, vramY) with CLUT (0x1C0, vramY + 0x7F), shaded 0x606060 and semi-transparent, on the rectangle extending
  * 400 behind the position (D_8006C644 facing right, D_8006C664 facing left) and 150 up and down, scaled by scale. */
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/wormmon", WormmonGuardEffect_draw);
+#else
 void WormmonGuardEffect_draw(WormmonGuardEffect *this, Camera *camera) {
     MatrixWords m;
     PolyFT4Shape shape;
@@ -878,6 +889,7 @@ void WormmonGuardEffect_draw(WormmonGuardEffect *this, Camera *camera) {
         PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
     }
 }
+#endif
 
 /* The destructor of the entity class of vtable D_8006C6F4, which func_800BA734 installs. */
 void func_800BAFEC(Entity *this, s32 flags) {

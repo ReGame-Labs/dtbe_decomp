@@ -430,6 +430,9 @@ void ImpmonSpecial1Projectile_hit(ImpmonSpecial1Projectile *this, CollisionSpher
 /* Draws the projectile: two quads of its two colors (unkCC, then unkD0), twice as wide behind it as in front and as
  * high as its radius, on the picture cell unkC8 selects, at its position, with buildPolyFT4. The match depends on
  * the width as a local (radius << 1) and on gte_loadRotTrans clobbering memory. */
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/impmon", ImpmonSpecial1Projectile_draw);
+#else
 void ImpmonSpecial1Projectile_draw(ImpmonSpecial1Projectile *this, s32 arg) {
     Camera *camera = (Camera *)arg;
     VECTOR p;
@@ -486,6 +489,7 @@ void ImpmonSpecial1Projectile_draw(ImpmonSpecial1Projectile *this, s32 arg) {
         PRIM_BUFFER_FREE = packet;
     }
 }
+#endif
 
 /* Constructs an entity of D_800697A4: Particle_initById with entry 9 of PARTICLE_ANIMS, 0x19 and 0x202080. */
 Entity *func_800938A4(Entity *this, s32 arg1, VECTOR *pos, VECTOR *vel) {

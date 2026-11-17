@@ -235,6 +235,9 @@ void Dukemon_special2(Fighter *this, s32 frame) {
     }
 }
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/dukemon", Dukemon_airUpAttack);
+#else
 void Dukemon_airUpAttack(Fighter *this, s32 frame) {
     Fighter *opponent = Fighter_getOpponent(this);
     FighterParams *params = Fighter_getParams(this);
@@ -280,6 +283,7 @@ void Dukemon_airUpAttack(Fighter *this, s32 frame) {
         this->attackParts = 0;
     }
 }
+#endif
 
 /* Special move 2 in the air: as on the ground, with the lift at frames 0 and 5 and the braking until frame 12. */
 void Dukemon_airSpecial2(Fighter *this, s32 frame) {
@@ -311,6 +315,9 @@ void func_80084E58(Fighter *this);
 void func_80084EC0(Fighter *this);
 void Dukemon_spawnSpecial3Hitbox(Fighter *this, s16 arg);
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/dukemon", Dukemon_special3);
+#else
 void Dukemon_special3(Dukemon *this, s32 frame) {
     Fighter_special3(&this->base, frame);
     func_80079AE4(&this->base);
@@ -346,6 +353,7 @@ void Dukemon_special3(Dukemon *this, s32 frame) {
         Dukemon_spawnSpecial3Hitbox(&this->base, 0);
     }
 }
+#endif
 
 /* The two entries of a table that Dukemon_spawnTrail, Dukemon_spawnSpecial2Trails and Dukemon_spawnAttack3Trails each
  * initialise. cc1 gives identical array initializers one constant per unit, so the three share its data (D_800685DC in
@@ -585,6 +593,9 @@ extern VECTOR D_80068664;
 
 /* Constructs the special3 effect of vtable D_8006870C for arg, places it at node 18 with D_80068664, initializes the
  * 16 points 192 apart toward side, and plays sound 0x7B. */
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/dukemon", func_80085B7C);
+#else
 Entity *func_80085B7C(Entity *entity, Fighter *arg, Vec3 *vec) {
     Unk80085B7C *this = (Unk80085B7C *)entity;
     Unk80085B7C *p;
@@ -618,6 +629,7 @@ Entity *func_80085B7C(Entity *entity, Fighter *arg, Vec3 *vec) {
     Fighter_playSound(&this->owner->base, 0x7B);
     return &this->entity;
 }
+#endif
 
 /* The destructor of the special3 effect of vtable D_8006870C. */
 void func_80085C90(Entity *this, s32 flags) {

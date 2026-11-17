@@ -732,6 +732,9 @@ void func_80096AA8(Unk800969E0 *this) {
 
 extern MATRIX D_800108B4;
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80096B54);
+#else
 void func_80096B54(Unk800969E0 *this, Camera *camera) {
     SVECTOR corners[4];
     PolyFT4Shape shape;
@@ -772,6 +775,7 @@ void func_80096B54(Unk800969E0 *this, Camera *camera) {
     setModelMatrix(&m);
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift + 1);
 }
+#endif
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80096CFC);
 

@@ -698,6 +698,9 @@ VECTOR *func_800A6550(Unk800A6220 *this, VECTOR *out) {
     return out;
 }
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A65F8);
+#else
 UnkPartsEntity38 *func_800A65F8(UnkPartsEntity38 *parts, Fighter *fighter, s32 handle, VECTOR *from, VECTOR to) {
     Unk800A65F8 *this = (Unk800A65F8 *)parts;
     struct Fight *scene;
@@ -738,6 +741,7 @@ UnkPartsEntity38 *func_800A65F8(UnkPartsEntity38 *parts, Fighter *fighter, s32 h
     }
     return &this->base;
 }
+#endif
 
 s32 func_800A6AB0(Unk800A65F8 *this, Entity *owner);
 s32 func_800A6BE4(Unk800A65F8 *this);
@@ -800,6 +804,9 @@ void func_800A6778(Unk800A65F8 *this) {
     this->frames++;
 }
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A68FC);
+#else
 void func_800A68FC(Unk800A65F8 *this, CollisionSphere *sum) {
     Entity *entity = sum->entity;
 
@@ -837,8 +844,12 @@ void func_800A68FC(Unk800A65F8 *this, CollisionSphere *sum) {
         break;
     }
 }
+#endif
 
 /* Advances Unk800A65F8 toward its rotated offset around owner's position and returns the x step. */
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A6AB0);
+#else
 s32 func_800A6AB0(Unk800A65F8 *this, Entity *owner) {
     VECTOR pos;
     VECTOR step;
@@ -875,6 +886,7 @@ s32 func_800A6AB0(Unk800A65F8 *this, Entity *owner) {
     this->position.vz = pos.vz;
     return step.vx;
 }
+#endif
 
 /* Takes 2 from value, 4 while it is under limit, and caps it at limit. The match depends on this being an expanded
  * MIN(*value -= 2, limit), side effect evaluated twice: value is stored twice, the last time through the pointer. */
@@ -924,6 +936,9 @@ static inline void setTranslationSak(long *t, Vec3 *v) {
     t[2] = z;
 }
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A6CF4);
+#else
 void func_800A6CF4(Unk800A65F8 *this, Camera *camera) {
     MatrixWords m;
     PolyFT4Shape shape;
@@ -976,6 +991,7 @@ void func_800A6CF4(Unk800A65F8 *this, Camera *camera) {
     shape.flags = (shape.flags & ~3) | 0xA;
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
 }
+#endif
 
 /* Builds an Unk800A6EB8 on the Unk800A65F8 of handle: its six points at that entity's position (at the origin
  * without one). The match depends on reading the position's three words before storing any (as vecCopy does) and on
@@ -1124,6 +1140,9 @@ void func_800A7F88(Unk800A7F88 *this, void *arg) {
 
 /* Moves the part to start + unk94 * unkB0 / 4, scales its radius to |unk94| * unkB0 / 4, and disables it when unkB0
  * is not a multiple of 4. */
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A7FEC);
+#else
 void func_800A7FEC(Unk800A7F88 *this) {
     Vec3 pos;
     s32 step;
@@ -1141,6 +1160,7 @@ void func_800A7FEC(Unk800A7F88 *this) {
     this->part.position.vy = pos.vy;
     this->part.flags.bits.disabled = (step & 3) != 0;
 }
+#endif
 
 /* Keeps vec at 0x94, clears 0xA8 and 0xB0, counts the call in 0xAC, and sets the second base's vector to
  * vec's unit direction with x doubled, y quadrupled and z cleared, and its word at 0x8 to unk8. */
@@ -1169,6 +1189,9 @@ struct Unk800A83E0 *func_800A83E0(struct Unk800A83E0 *this, Vec3 *position, Vec3
                                   s32 steerFrames, s32 vramY);
 
 /* Spawns a ring of 8 Unk800A83E0 projectiles around the axis of unk94, rotated by unkB0 * 0x80 + i * 0x200. */
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A8150);
+#else
 void func_800A8150(Unk800A7F88 *this) {
     VECTOR baseVel;
     VECTOR axis;
@@ -1193,12 +1216,16 @@ void func_800A8150(Unk800A7F88 *this) {
         angle += 0x200;
     }
 }
+#endif
 
 INCLUDE_RODATA("game/nonmatchings/fighters/sakuyamon", D_8006AC5C);
 
 extern SVECTOR D_8006AC5C[4];
 
 /* Draws Unk800A7F88's sprite quad at start scaled by unkA8, selecting the 48x48 frame from unkA4. */
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A8274);
+#else
 void func_800A8274(Unk800A7F88 *this, Camera *camera) {
     MatrixWords m;
     PolyFT4Shape shape;
@@ -1246,6 +1273,7 @@ void func_800A8274(Unk800A7F88 *this, Camera *camera) {
     shape.tpage = getTPage(0, 0, 0x1C0, vramY);
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
 }
+#endif
 
 extern EntityVtable D_8006AF04;
 
@@ -1354,6 +1382,9 @@ void func_800A84E4(Unk800A83E0 *this) {
     }
 }
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A86A8);
+#else
 void func_800A86A8(Unk800A83E0 *this, Camera *camera) {
     MatrixWords m;
     PolyFT4Shape shape;
@@ -1406,6 +1437,7 @@ void func_800A86A8(Unk800A83E0 *this, Camera *camera) {
     }
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
 }
+#endif
 
 /* Builds the special move 3's effect for fighter, its fields 0; its one caller (Sakuyamon_spawnSpecial3Effect) also
  * passes a position, which it does not read. */
@@ -1451,6 +1483,9 @@ INCLUDE_RODATA("game/nonmatchings/fighters/sakuyamon", D_8006ACD4);
 static const CVECTOR D_8006AE3C = { 0x43, 0xE0, 0x98, 0 };
 void func_800A94D0(Unk800A9944 *this);
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A926C);
+#else
 Unk800A9944 *func_800A926C(Unk800A9944 *this, Fighter *fighter, Vec3 *position) {
     Hit *hit;
     s32 x, y, z;
@@ -1514,6 +1549,7 @@ Unk800A9944 *func_800A926C(Unk800A9944 *this, Fighter *fighter, Vec3 *position) 
     func_800A94D0(this);
     return this;
 }
+#endif
 
 /* The destructor of func_800A926C's class: stops its sound, takes its member at 0x38 out of its list. */
 void func_800A9428(Unk800A9944 *this, s32 flags) {

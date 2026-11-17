@@ -213,6 +213,9 @@ Projectile *GabumonSpecial1Projectile_init(Projectile *this, Fighter *fighter, V
     return this;
 }
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/gabumon", GabumonSpecial1Projectile_draw);
+#else
 void GabumonSpecial1Projectile_draw(Projectile *this, Camera *camera) {
     MatrixWords m;
     SVECTOR corners[4];
@@ -278,6 +281,7 @@ void GabumonSpecial1Projectile_draw(Projectile *this, Camera *camera) {
 
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, zShift);
 }
+#endif
 
 /* Builds the special move 2's effect for fighter: three 0x1000 scales (0x1C, 0x24, 0x2C) and 0x80 at 0x44. */
 GabumonSpecial2Effect *GabumonSpecial2Effect_init(GabumonSpecial2Effect *this, Fighter *fighter) {
@@ -303,6 +307,9 @@ GabumonSpecial2Effect *GabumonSpecial2Effect_init(GabumonSpecial2Effect *this, F
 
 INCLUDE_ASM("game/nonmatchings/fighters/gabumon", GabumonSpecial2Effect_tick);
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/gabumon", GabumonSpecial2Effect_draw);
+#else
 void GabumonSpecial2Effect_draw(GabumonSpecial2Effect *this, Camera *camera) {
     SVECTOR corners[4];
     PolyFT4Shape shape;
@@ -344,6 +351,7 @@ void GabumonSpecial2Effect_draw(GabumonSpecial2Effect *this, Camera *camera) {
     shape.flags = (shape.flags & ~3) | 0xA;
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
 }
+#endif
 
 INCLUDE_ASM("game/nonmatchings/fighters/gabumon", func_80087E14);
 
@@ -369,6 +377,9 @@ void func_80087EC4(Unk80087E14 *this) {
     }
 }
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/gabumon", func_80087F3C);
+#else
 void func_80087F3C(Unk80087E14 *this, Camera *camera) {
     SVECTOR corners[4];
     PolyGT4Shape shape;
@@ -407,6 +418,7 @@ void func_80087F3C(Unk80087E14 *this, Camera *camera) {
     shape.flags = 9;
     PRIM_BUFFER_FREE = buildPolyGT4(&shape, packet, ot, zShift + 1);
 }
+#endif
 
 /* Gabumon's destructor. */
 void Gabumon_destroy(Entity *this, s32 flags) {
