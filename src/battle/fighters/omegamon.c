@@ -835,7 +835,63 @@ void func_800A0214(UnkPartsEntity3C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A02A8);
+void func_800A0680(Unk800A0054 *this);
+void func_800A0774(Unk800A0054 *this);
+
+/* Hands parent a new SpinParticle (0x58 bytes, frame 0, size 0x80) at pos, moving at vel. The match depends on this
+ * being an inline: its copies of both pointers stay in saved registers across allocEntityMemory. */
+static inline void spawnSpinParticle(Entity *parent, VECTOR *pos, VECTOR *vel) {
+    Entity *child = allocEntityMemory(0x58);
+
+    if (child != NULL) {
+        func_8006D574_init(entityOperatorNewAt(0x58, child), pos, vel, 0x80, 0);
+    }
+    entityAddSibling(parent, child);
+}
+
+/* The tick of Unk800A0054: on frame 0 sprays a particle and (below index 15) spawns the next link; rises and falls
+ * under gravity (-100 a frame) once unkC8 != 0 or from frame 23, deleting itself when rise reaches 0. When touched it
+ * sets the owner's 0x4A8 and spawns a spinning particle; while 0x4A8 is set the part stays disabled. */
+void func_800A02A8(Unk800A0054 *this) {
+    VECTOR vel;
+    VECTOR *pos;
+    s32 touched;
+
+    if (this->unkD0 == 0) {
+        func_800A0774(this);
+    }
+    if (this->unkD0 == 0 && this->index < 15) {
+        func_800A0680(this);
+    }
+    if (this->unkC8 != 0 || this->unkD0 >= 23) {
+        s32 step = this->unkC8;
+
+        this->unkC8 = step - 100;
+        this->rise += step;
+        this->position.vy -= step;
+    }
+    if (this->rise <= 0) {
+        entityDelete(&this->parts.entity);
+        return;
+    }
+    pos = (VECTOR *)&this->position;
+    touched = this->parts.part.flags.bits.touched;
+    this->parts.part.position = this->position;
+    if (touched) {
+        this->parts.part.flags.bits.touched = 0;
+        ((Omegamon *)this->owner)->unk4A8 = 1;
+        vel.vx = this->velocity.vx >> 4;
+        vel.vy = this->velocity.vy >> 4;
+        vel.vz = this->velocity.vz >> 4;
+        spawnSpinParticle(&this->parts.entity, pos, &vel);
+    }
+    if (((Omegamon *)this->owner)->unk4A8 != 0) {
+        this->parts.part.flags.bits.disabled = 1;
+    } else {
+        this->parts.part.flags.bits.disabled = 0;
+    }
+    this->unkD0++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/omegamon", func_800A04BC);
 
