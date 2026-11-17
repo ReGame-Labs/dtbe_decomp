@@ -320,7 +320,86 @@ void Gokumon_spawnSpecial1Hitbox(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", Gokumon_special2);
+/* Special move 2: Fighter's; frames 0, 14, and 28 lunge forward and set hit properties (with voice/trail at 0);
+ * frame 46 spawns func_800C0298; frames 40..59 accelerate forward with dust and periodic hit updates; parts 0x400
+ * are active until frame 57. */
+void Gokumon_special2(Fighter *this, s32 frame) {
+    Fighter *opponent;
+    Entity *child;
+
+    Fighter_special2(this, frame);
+    func_80079AE4(this);
+    opponent = Fighter_getOpponent(this);
+    switch (frame) {
+    case 0:
+        Fighter_playVoice(this, 0x117);
+        Fighter_playSound(this, 7);
+        Gokumon_spawnTrail(this, 8, 60, Gokumon_getSpecialTrailColor(this), 0);
+        {
+            s64 impulse = ((s64)this->mass * 0x1C70) >> 16;
+            this->force.vx += (s32)impulse * Fighter_getFacing(this);
+        }
+        this->hitDamage = 0x4AC1000;
+        this->hitKind = 1;
+        this->invulnerableFrames = 14;
+        break;
+    case 14:
+        Fighter_playSound(this, 7);
+        {
+            s64 impulse = ((s64)this->mass * 0x238C) >> 16;
+            this->force.vx += (s32)impulse * Fighter_getFacing(this);
+        }
+        this->hitDamage = 0x4AC0C00;
+        this->hitKnockback.vx = Fighter_getFacing(this) * 5460;
+        this->hitKnockback.vy = -0x5550;
+        this->hitKnockback.vz = 0;
+        this->hitKind = 1;
+        break;
+    case 28:
+        Fighter_playSound(this, 7);
+        {
+            s64 impulse = ((s64)this->mass * 0x2AA8) >> 16;
+            s32 facing;
+            s32 vy;
+
+            this->force.vx += (s32)impulse * Fighter_getFacing(this);
+            this->hitDamage = 0x4AC0800;
+            facing = Fighter_getFacing(this);
+            vy = -(s32)(((s64)opponent->mass * 0x38E0) >> 16);
+            this->hitKnockback.vx = facing * 1820;
+            this->hitKnockback.vz = 0;
+            this->hitKind = 1;
+            this->hitKnockback.vy = vy;
+        }
+        break;
+    case 46:
+        Fighter_playSound(this, 0x113);
+        child = allocEntityMemory(0xB4);
+        if (child != NULL) {
+            func_800C0298((void *)entityOperatorNewAt(0xB4, child), this);
+        }
+        Fighter_addEntity(this, child);
+        break;
+    }
+    if ((u32)(frame - 40) < 20) {
+        Fighter_accelerateTo(this, Fighter_getFacing(this) * 21840);
+        if ((frame ^ 1) & 1) {
+            this->hitDamage = 0xCAC0800;
+            this->hitKnockback.vx = this->force.vx;
+            this->hitKnockback.vy = 0;
+            this->hitKnockback.vz = 0;
+        }
+        if ((frame & 3) == 0) {
+            this->hitKind = 1;
+        }
+        Fighter_spawnDust(this, -1, 0x60, 2);
+    }
+    if (frame < 57) {
+        this->attackParts = 0x400;
+    } else {
+        this->attackParts = 0;
+    }
+}
 
 /* Special move 3: Fighter's; frame 0 voice 0x116, 10 invulnerable frames and a gauge unit spent; frame 4 the hitbox,
  * from frame 5 func_800C00EC; every frame the burst, and (JP only) the clip stopped when the round is over. */
