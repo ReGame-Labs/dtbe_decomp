@@ -989,7 +989,89 @@ void func_800B26B8(Unk800B25CC *this) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006BA30);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", func_800B275C);
+extern SVECTOR D_8006BA30[4];
+
+static inline void setTranslation(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws Unk800B25CC as two layered additive textured quads from D_8006BA30 scaled by unk28 (the second half as tall)
+ * at position, shaded by unk20. */
+void func_800B275C(Unk800B25CC *this, Camera *camera) {
+    MatrixWords m;
+    MATRIX *mat = &m.m;
+    PolyFT4Shape shape;
+    u16 vramY;
+    s32 scale;
+    s32 s;
+
+    shape.flags = 0;
+    m.words[5] = 0;
+    m.words[6] = 0;
+    m.words[7] = 0;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    s = (u16)this->unk28;
+    m.words[0] = s;
+    m.words[2] = s;
+    m.words[4] = s;
+    setTranslation(m.m.t, &this->position);
+    setModelMatrix(mat);
+
+    shape.corners[0] = &D_8006BA30[0];
+    shape.corners[1] = &D_8006BA30[1];
+    shape.corners[2] = &D_8006BA30[2];
+    shape.corners[3] = &D_8006BA30[3];
+    UV_BYTES(shape.uv0)[0] = 0xA0;
+    UV_BYTES(shape.uv0)[1] = 0x80;
+    UV_BYTES(shape.uv1)[0] = 0xBF;
+    UV_BYTES(shape.uv1)[1] = 0x80;
+    UV_BYTES(shape.uv2)[0] = 0xA0;
+    UV_BYTES(shape.uv2)[1] = 0x9F;
+    UV_BYTES(shape.uv3)[0] = 0xBF;
+    UV_BYTES(shape.uv3)[1] = 0x9F;
+    shape.color = this->unk20 | (this->unk20 << 8) | (this->unk20 << 16);
+    vramY = this->vramY;
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    shape.clut = getClut(0x1C0, vramY + 0xF8);
+    shape.flags &= ~3;
+    shape.flags |= 9;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+
+    scale = this->unk28;
+    m.words[5] = 0;
+    m.words[6] = 0;
+    m.words[7] = 0;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    m.words[0] = scale & 0xFFFF;
+    m.words[2] = (scale >> 1) & 0xFFFF;
+    m.words[4] = scale & 0xFFFF;
+    setTranslation(m.m.t, &this->position);
+    setModelMatrix(mat);
+
+    UV_BYTES(shape.uv0)[0] = 0x40;
+    UV_BYTES(shape.uv0)[1] = 0xD0;
+    UV_BYTES(shape.uv1)[0] = 0x5F;
+    UV_BYTES(shape.uv1)[1] = 0xD0;
+    UV_BYTES(shape.uv2)[0] = 0x40;
+    UV_BYTES(shape.uv2)[1] = 0xDF;
+    UV_BYTES(shape.uv3)[0] = 0x5F;
+    UV_BYTES(shape.uv3)[1] = 0xDF;
+    shape.color = this->unk20 | (this->unk20 << 8) | (this->unk20 << 16);
+    vramY = this->vramY;
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    shape.clut = getClut(0x1C0, vramY + 0xF9);
+    shape.flags &= ~3;
+    shape.flags |= 9;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
+}
 
 extern VtableEntry STINGMON_SPECIAL1_PROJECTILE_HIT_VTABLE[];
 extern EntityVtable STINGMON_SPECIAL1_PROJECTILE_VTABLE;
