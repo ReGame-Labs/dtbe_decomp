@@ -1138,7 +1138,75 @@ s16 func_8008F9B0(ImperialdramonSpecial1Effect *this, s32 index) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial1Effect_draw);
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial2Hitbox_init);
+/* The special move 2's hitbox (0xA4 bytes): a sphere that grows to radius 0x200 while it slides forward, slowing
+ * down, from the fighter's node 1. */
+typedef struct ImperialdramonSpecial2Hitbox {
+    /* 0x00 */ UnkPartsEntity38 parts;
+    /* 0x80 */ Fighter *fighter;
+    /* 0x84 */ u8 speed;     /* 0x80 at first, loses an eighth every frame; the hitbox goes under 9 */
+    /* 0x88 */ u32 size;     /* 16 times the sphere's radius: 0 at first, half way to 0x2020 every frame, up to 0x2000 */
+    /* 0x8C */ s16 facing;   /* Fighter_getFacing of the fighter */
+    /* 0x8E */ s16 unk8E;
+    /* 0x90 */ s16 vramY;    /* Fighter_getVramY of the fighter */
+    /* 0x92 */ s16 unk92;
+    /* 0x94 */ Vec3 position;
+} ImperialdramonSpecial2Hitbox;
+
+/* Builds Imperialdramon's special move 2 hitbox (0xA4 bytes): a 0x80 sphere with knockback (vx << 6, -|vx << 6|, 0),
+ * at the fighter's node 1, and plays sound 0x96 (Imperialdramon) or 0x9D (Fighter Mode). */
+Entity *ImperialdramonSpecial2Hitbox_init(void *this, Fighter *fighter, Vec3 *position, Vec3 *velocity, Fight *unk228) {
+    ImperialdramonSpecial2Hitbox *h = (ImperialdramonSpecial2Hitbox *)this;
+    VECTOR offset;
+    VECTOR knockback;
+    VECTOR *pos;
+    VECTOR *off;
+    CollisionSphere *part;
+    s32 x, y, z;
+
+    entityInit(this, 0);
+    Hit_init(&h->parts.base, fighter, 0x5AC118C, velocity, 3);
+    h->parts.base.vtable = IMPERIALDRAMON_SPECIAL2_HITBOX_HIT_VTABLE;
+    h->parts.entity.vtable = &IMPERIALDRAMON_SPECIAL2_HITBOX_VTABLE;
+    CollisionSphere_init(&h->parts.part, position, 0x80, &h->parts.base);
+    knockback = *(VECTOR *)velocity;
+    off = &offset;
+    offset.vx = 0;
+    offset.vy = 0;
+    offset.vz = 0;
+    offset.pad = 0;
+    knockback.vz = 0;
+    knockback.vx <<= 6;
+    knockback.vy = -abs(knockback.vx);
+    Hit_setKnockback(&h->parts.base, &knockback);
+    h->vramY = Fighter_getVramY(fighter);
+    h->fighter = fighter;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    pos = (VECTOR *)&h->position;
+    h->unk8E = 0;
+    h->speed = 0x80;
+    h->size = 0;
+    h->position.vx = x;
+    h->position.vy = y;
+    h->position.vz = z;
+    h->facing = Fighter_getFacing(fighter);
+    Fighter_getNodePosition(h->fighter, pos, 1, off);
+    h->parts.part.entity = &h->parts.entity;
+    h->position.vy += 0x100;
+    part = &h->parts.part;
+    if (Fighter_getSide(h->fighter) == 0) {
+        Fight_addSide0Shape(unk228, &part->link);
+    } else {
+        Fight_addSide1Shape(unk228, &part->link);
+    }
+    if (Fighter_getCharacter(h->fighter) == 5) {
+        Fighter_playSound(h->fighter, 0x96);
+    } else {
+        Fighter_playSound(h->fighter, 0x9D);
+    }
+    return (Entity *)this;
+}
 
 /* The special move 2 hitbox's destructor. */
 void ImperialdramonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
@@ -1159,20 +1227,6 @@ void ImperialdramonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
         entityOperatorDelete(this);
     }
 }
-
-/* The special move 2's hitbox (0xA4 bytes): a sphere that grows to radius 0x200 while it slides forward, slowing
- * down, from the fighter's node 1. */
-typedef struct ImperialdramonSpecial2Hitbox {
-    /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Fighter *fighter;
-    /* 0x84 */ u8 speed;     /* 0x80 at first, loses an eighth every frame; the hitbox goes under 9 */
-    /* 0x88 */ u32 size;     /* 16 times the sphere's radius: 0 at first, half way to 0x2020 every frame, up to 0x2000 */
-    /* 0x8C */ s16 facing;   /* Fighter_getFacing of the fighter */
-    /* 0x8E */ s16 unk8E;
-    /* 0x90 */ s16 vramY;    /* Fighter_getVramY of the fighter */
-    /* 0x92 */ s16 unk92;
-    /* 0x94 */ Vec3 position;
-} ImperialdramonSpecial2Hitbox;
 
 /* Slides forward by 1.5 times its speed and grows; it slows down by an eighth a frame and deletes
  * itself under speed 9. */
