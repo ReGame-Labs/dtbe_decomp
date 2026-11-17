@@ -1246,7 +1246,129 @@ s16 func_8008F9B0(ImperialdramonSpecial1Effect *this, s32 index) {
     return ratan2(this->unk48[index].vx - this->centre.vx, this->unk48[index].vy - this->centre.vy);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial1Effect_draw);
+static inline VECTOR *impKeepVecPtr(VECTOR *v) {
+    return v;
+}
+
+static inline MATRIX *impKeepMatPtr(MATRIX *m) {
+    return m;
+}
+
+static inline void setTranslationImp1(long *t, VECTOR *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws the special move 1 effect: from frame 6 draws two layered charging fan quads at centre scaled by unk28, and
+ * draws up to pointCount spark quads at unk48[0..pointCount-1]. */
+void ImperialdramonSpecial1Effect_draw(ImperialdramonSpecial1Effect *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    s32 i;
+    s32 j;
+
+    shape.flags = 0;
+    if (this->frames >= 6) {
+        u32 shade;
+
+        shape.corners[0] = &this->corners[4];
+        shape.corners[1] = &this->corners[5];
+        shape.corners[2] = &this->corners[6];
+        shape.corners[3] = &this->corners[7];
+        shade = this->shade;
+        shape.color = shade | (shade << 8) | (shade << 16);
+        if (((*(volatile u16 *)&this->frames) ^ 1) & 1) {
+            UV_BYTES(shape.uv0)[0] = 0x7F;
+            UV_BYTES(shape.uv0)[1] = 0x20;
+            UV_BYTES(shape.uv1)[0] = 0x40;
+            UV_BYTES(shape.uv1)[1] = 0x20;
+            UV_BYTES(shape.uv2)[0] = 0x7F;
+            UV_BYTES(shape.uv2)[1] = 0x5F;
+            UV_BYTES(shape.uv3)[0] = 0x40;
+            UV_BYTES(shape.uv3)[1] = 0x5F;
+        } else {
+            UV_BYTES(shape.uv0)[0] = 0x7F;
+            UV_BYTES(shape.uv0)[1] = 0x5F;
+            UV_BYTES(shape.uv1)[0] = 0x40;
+            UV_BYTES(shape.uv1)[1] = 0x5F;
+            UV_BYTES(shape.uv2)[0] = 0x7F;
+            UV_BYTES(shape.uv2)[1] = 0x20;
+            UV_BYTES(shape.uv3)[0] = 0x40;
+            UV_BYTES(shape.uv3)[1] = 0x20;
+        }
+        for (i = 0; i < 2; i++) {
+            s32 s;
+            VECTOR *pos;
+            s32 x, y, z;
+
+            m.m.t[0] = 0;
+            m.m.t[1] = 0;
+            m.m.t[2] = 0;
+            m.words[1] = 0;
+            m.words[3] = 0;
+            s = this->unk28;
+            m.words[0] = (u16)s;
+            m.words[2] = (u16)(s + (i << 10));
+            m.words[4] = (u16)s;
+            pos = impKeepVecPtr(&this->centre);
+            x = pos->vx;
+            y = pos->vy;
+            z = pos->vz;
+            m.m.t[0] = x;
+            m.m.t[1] = y;
+            m.m.t[2] = z;
+            setModelMatrix(impKeepMatPtr(&m.m));
+            if (i == 0) {
+                u16 vramY = this->vramY;
+                shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+                shape.clut = getClut(0x1C0, vramY + 0xFB);
+                shape.flags &= ~3;
+                shape.flags |= 9;
+            } else {
+                u16 vramY = this->vramY;
+                shape.tpage = getTPage(0, 3, 0x1C0, vramY);
+                shape.clut = getClut(0x1C0, vramY + 0xFB);
+                shape.flags &= ~3;
+                shape.flags |= 0xB;
+            }
+            PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+        }
+    }
+    if (this->pointCount != 0) {
+        shape.color = 0x604020;
+        UV_BYTES(shape.uv0)[0] = 0;
+        UV_BYTES(shape.uv0)[1] = 0xD0;
+        UV_BYTES(shape.uv1)[0] = 0xF;
+        UV_BYTES(shape.uv1)[1] = 0xD0;
+        UV_BYTES(shape.uv2)[0] = 0;
+        UV_BYTES(shape.uv2)[1] = 0xDF;
+        UV_BYTES(shape.uv3)[0] = 0xF;
+        UV_BYTES(shape.uv3)[1] = 0xDF;
+        shape.tpage = getTPage(0, 1, 0x200, 0x100);
+        shape.clut = getClut(0x200, 0x1FF);
+        shape.flags &= ~3;
+        shape.flags |= 9;
+        for (j = 0; j < this->pointCount; j++) {
+            setTranslationImp1(m.m.t, &this->unk48[j]);
+            m.words[0] = ONE;
+            m.words[1] = 0;
+            m.words[2] = ONE;
+            m.words[3] = 0;
+            m.words[4] = ONE;
+            setModelMatrix(&m.m);
+            shape.corners[0] = &this->corners[0];
+            shape.corners[1] = &this->corners[1];
+            shape.corners[2] = &this->corners[2];
+            shape.corners[3] = &this->corners[3];
+            PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+        }
+    }
+}
 
 /* The special move 2's hitbox (0xA4 bytes): a sphere that grows to radius 0x200 while it slides forward, slowing
  * down, from the fighter's node 1. */
