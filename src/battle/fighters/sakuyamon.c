@@ -1480,12 +1480,12 @@ INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A8F80);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/sakuyamon", D_8006ACD4);
 
-static const CVECTOR D_8006AE3C = { 0x43, 0xE0, 0x98, 0 };
 void func_800A94D0(Unk800A9944 *this);
 
 #if VERSION_JP
 INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A926C);
 #else
+static const CVECTOR D_8006AE3C = { 0x43, 0xE0, 0x98, 0 };
 Unk800A9944 *func_800A926C(Unk800A9944 *this, Fighter *fighter, Vec3 *position) {
     Hit *hit;
     s32 x, y, z;

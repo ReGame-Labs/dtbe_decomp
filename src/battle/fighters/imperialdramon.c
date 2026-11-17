@@ -264,7 +264,9 @@ void Imperialdramon_special3(Imperialdramon *this, s32 frame) {
         break;
     }
     case 78:
+#if !VERSION_JP
         this->holding = 0;
+#endif
         Imperialdramon_spawnSpecial3Effect(&this->base);
         Fighter_playVoice(&this->base, 0x9C);
         break;
