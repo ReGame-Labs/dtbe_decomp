@@ -235,7 +235,55 @@ void Imperialdramon_special1(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", Imperialdramon_special2);
+void Imperialdramon_spawnSpecial2Hitbox(Fighter *this);
+void Imperialdramon_spawnSpecial2Trail(Fighter *this);
+
+/* Special move 2 (both classes): at frame 0 the clip and voice (another one for Paladin Mode); at frame 5 the attack
+ * parts, knockback, forward/upward lunge and trail; at frame 16 the hitbox and clearing attackParts; when the clip
+ * finishes, clears velocity.vx and attackParts. */
+void Imperialdramon_special2(Fighter *this, s32 frame) {
+    Fighter *opponent = Fighter_getOpponent(this);
+
+    switch (frame) {
+    case 0:
+        Fighter_playActionClip(this, FIGHTER_CLIP_SPECIAL2, 0, 0, -1);
+        if (Fighter_getCharacter(this) == CHARACTER_IMPERIALDRAMON) {
+            Fighter_playVoice(this, 0x9B);
+        } else {
+            Fighter_playVoice(this, 0xA4);
+        }
+        break;
+    case 5: {
+        s32 kbX;
+        s32 kbY;
+        s32 fx;
+
+        Fighter_setAttackParts(this, FIGHTER_CLIP_SPECIAL2);
+        this->hitDamage = 0x1AC118C;
+        kbX = ((s64)opponent->mass * 0x38E0) >> 16;
+        kbX *= Fighter_getFacing(this);
+        kbY = -(((s64)opponent->mass * 0x5550) >> 16);
+        this->hitKnockback.vx = kbX;
+        this->hitKnockback.vy = kbY;
+        this->hitKnockback.vz = 0;
+        this->velocity.vx = 0;
+        this->velocity.vy = 0;
+        fx = ((s64)this->mass * 0x6388) >> 16;
+        this->force.vx += fx * Fighter_getFacing(this);
+        this->force.vy -= ((s64)this->mass * 0x2AA8) >> 16;
+        Imperialdramon_spawnSpecial2Trail(this);
+        break;
+    }
+    case 16:
+        Imperialdramon_spawnSpecial2Hitbox(this);
+        this->attackParts = 0;
+        break;
+    }
+    if (Fighter_isActionClipDone(this)) {
+        this->velocity.vx = 0;
+        this->attackParts = 0;
+    }
+}
 
 void Imperialdramon_spawnSpecial3Effect(Fighter *this);
 void Imperialdramon_spawnSpecial3Hitbox(Fighter *this);
