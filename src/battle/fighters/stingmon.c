@@ -1168,10 +1168,86 @@ void StingmonSpecial1Projectile_drawStart(StingmonSpecial1Projectile *this, Came
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Hitbox_init);
-
 extern VtableEntry STINGMON_SPECIAL3_HITBOX_HIT_VTABLE[];
 extern EntityVtable STINGMON_SPECIAL3_HITBOX_VTABLE;
+
+/* Builds the special move 3's hitbox: 16 points around position, sphere at radius 0x180, zero damage until
+ * StingmonSpecial3Hitbox_tick sets it. */
+StingmonSpecial3Hitbox *StingmonSpecial3Hitbox_init(StingmonSpecial3Hitbox *this, Stingmon *fighter, Vec3 *position,
+                                                    VECTOR *knockback, Fight *fight) {
+    VECTOR offset;
+    VECTOR *offsetPtr;
+    VECTOR *posNode;
+    s32 i;
+    s32 x, y, z;
+    VECTOR *vec;
+    s16 *p20C;
+    s32 *p1CC;
+    u8 *unk96;
+
+    entityInit(&this->entity, ENTITY_KIND_FIGHTER_OBJECT);
+    Hit_init(&this->unk18, &fighter->base, 0, (Vec3 *)knockback, 1);
+    this->unk18.vtable = STINGMON_SPECIAL3_HITBOX_HIT_VTABLE;
+    this->entity.vtable = &STINGMON_SPECIAL3_HITBOX_VTABLE;
+    CollisionSphere_init(&this->part, position, 0x180, &this->unk18);
+
+    this->vramY = Fighter_getVramY(&fighter->base);
+    this->fighter = &fighter->base;
+    this->unk8C = 0;
+    this->unk90 = 0;
+    this->unk8E = 0;
+    this->unkA8 = 0;
+    this->unk92 = 0;
+    this->fight = fight;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->holdingOpponent = 0;
+    this->unk88 = 0;
+    this->part.entity = (Entity *)this;
+    this->unkBC.vx = x;
+    this->unkBC.vy = y;
+    this->unkBC.vz = z;
+
+    if (Fighter_getSide(&fighter->base) == 0) {
+        Fight_addSide0Shape(fight, &this->part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->part.link);
+    }
+
+    i = 0;
+    unk96 = this->unk96;
+    offsetPtr = &offset;
+    posNode = (VECTOR *)&this->unkAC;
+    p20C = this->unk20C;
+    p1CC = this->unk1CC;
+    vec = this->unkCC;
+    do {
+        s32 vx = this->unkBC.vx;
+        s32 vy = this->unkBC.vy;
+        s32 vz = this->unkBC.vz;
+
+        vec->vx = vx;
+        vec->vy = vy;
+        vec->vz = vz;
+        unk96[i] = 0x80;
+        *p1CC = 0x1000;
+        *p20C = Fight_random(fight) & 0xFFF;
+        p20C++;
+        p1CC++;
+        vec++;
+        i++;
+    } while (i < 16);
+
+    offset.vx = 0;
+    offset.vy = 0;
+    offset.vz = 0;
+    offset.pad = 0;
+    Fighter_getNodePosition(this->fighter, posNode, 10, offsetPtr);
+    Fighter_playSound(this->fighter, 0xEC);
+
+    return this;
+}
 
 /* The special move 3 hitbox's destructor: first releases the opponent while it holds it. */
 void StingmonSpecial3Hitbox_destroy(StingmonSpecial3Hitbox *this, s32 flags) {
