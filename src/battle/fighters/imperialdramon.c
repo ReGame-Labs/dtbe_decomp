@@ -5,6 +5,7 @@
 #include "common.h"
 #include <abs.h>
 #include "battle/game_classes.h"
+#include "battle/stage_objects.h"
 #include "engine/game/game_state.h"
 #include "engine/gfx/lights.h"
 #include "engine/gfx/prim/build_line_g2.h"
@@ -856,8 +857,8 @@ typedef struct ImperialdramonSpecial1Hitbox {
     /* 0x088 */ s16 side;
     /* 0x08A */ s16 unk8A;
     /* 0x08C */ s32 unk8C;
-    /* 0x090 */ s16 unk90;
-    /* 0x092 */ s16 unk92;
+    /* 0x090 */ u16 unk90;
+    /* 0x092 */ u16 unk92;
     /* 0x094 */ s16 unk94;
     /* 0x096 */ s16 vramY;
     /* 0x098 */ s32 speed;
@@ -866,7 +867,7 @@ typedef struct ImperialdramonSpecial1Hitbox {
     /* 0x0AC */ u8 unkAC[4];
     /* 0x0B0 */ Vec3 position;
     /* 0x0BC */ u8 unkBC[4];
-    /* 0x0C0 */ SVECTOR unkC0[4][4];
+    /* 0x0C0 */ GridVertex unkC0[4][4];
     /* 0x140 */ SVECTOR corners[4];
 } ImperialdramonSpecial1Hitbox;
 
@@ -990,7 +991,68 @@ void ImperialdramonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/imperialdramon", ImperialdramonSpecial1Hitbox_tick);
+/* Advances the special move 1 beam hitbox: stretches its four quads out to +-700, accelerates once past 400 until its
+ * travelled distance exceeds 0x1E00 (0x1000 in JP), then destroys itself. */
+void ImperialdramonSpecial1Hitbox_tick(ImperialdramonSpecial1Hitbox *this) {
+    VECTOR pos;
+    s32 i;
+
+    switch (this->unk92) {
+    case 0:
+        this->unk8C = (COS_SIN_TABLE[(this->unk90 << 9) & 0xFFF].sin >> 3) + 0xDFF;
+        this->unk8A += (this->side * 720 - this->unk8A) >> 4;
+        if (this->unk8A > 700) {
+            this->unk8A = 700;
+        }
+        if (this->unk8A < -700) {
+            this->unk8A = -700;
+        }
+        for (i = 0; i < 4; i++) {
+            this->unkC0[i][2].vx = this->unkC0[i][0].vx = i * this->unk8A;
+            this->unkC0[i][3].vx = this->unkC0[i][1].vx = (i + 1) * this->unk8A;
+        }
+        if ((s16)abs(this->unk8A) > 400) {
+            s32 x, y, z;
+
+            this->velocity.vx += this->side << 4;
+            x = this->position.vx;
+            y = this->position.vy;
+            z = this->position.vz;
+            x += this->velocity.vx;
+            y += this->velocity.vy;
+            z += this->velocity.vz;
+            this->position.vx = x;
+            this->position.vy = y;
+            this->position.vz = z;
+#if VERSION_JP
+            this->unk9C += abs(this->speed);
+#else
+            this->unk9C += vecGetLength((VECTOR *)&this->velocity);
+#endif
+        }
+#if VERSION_JP
+        if (this->unk9C <= 0x1000) {
+#else
+        if (this->unk9C <= 0x1E00) {
+#endif
+            break;
+        }
+        this->unk92++;
+        /* fall through */
+    case 1:
+        if (this != NULL) {
+            this->parts.entity.vtable->destroy.func(
+                (u8 *)&this->parts.entity + this->parts.entity.vtable->destroy.delta, DESTROY_DELETE);
+        }
+        return;
+    }
+    pos = *(VECTOR *)&this->position;
+    pos.vx += this->unk8A << 2;
+    this->parts.part.position.vx = pos.vx;
+    this->parts.part.position.vy = pos.vy;
+    this->parts.part.position.vz = pos.vz;
+    this->unk90++;
+}
 
 /* On a hit: Hit_apply; when it struck a fighter it takes its position (unused) and disables its sphere. */
 void ImperialdramonSpecial1Hitbox_hit(UnkPartsEntity38 *this, CollisionSphere *sum) {
