@@ -1354,7 +1354,83 @@ void StingmonSpecial3Hitbox_destroy(StingmonSpecial3Hitbox *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Hitbox_tick);
+void func_800B34D0(StingmonSpecial3Hitbox *this);
+
+void StingmonSpecial3Hitbox_tick(StingmonSpecial3Hitbox *this) {
+    Fighter *opponent = Fighter_getOpponent(this->fighter);
+    BattleSide *side;
+
+    if (!((Stingmon *)this->fighter)->inSpecial3) {
+        entityDelete(&this->entity);
+    } else {
+        Fighter_getPosition(this->fighter, &this->unkBC);
+        this->unkBC.vx += Fighter_getFacing(this->fighter) * 640;
+        this->unkBC.vy -= 0xF0;
+
+        switch (this->unk8C) {
+            case 0:
+                this->unkA8 += (0x1000 - this->unkA8) >> 2;
+                if (this->unkA8 < 0xFF0) {
+                    break;
+                }
+                this->unkA8 = 0xFFF;
+                this->unk90 = 0;
+                this->unk8C++;
+            case 1:
+                this->unk90++;
+                if (this->unk90 < 40) {
+                    break;
+                }
+                this->unk8C++;
+            case 2:
+                this->unkA8 += (0 - this->unkA8) >> 2;
+                if (this->unkA8 != 0) {
+                    break;
+                }
+                this->unkA8 = 0;
+                this->unk8C++;
+            case 3:
+                entityDelete(&this->entity);
+                return;
+        }
+
+        if (this->unk8E == 60) {
+            ListNode *node = &this->part.link;
+
+            this->part.flags.bits.disabled = 1;
+            this->part.link.next->prev = this->part.link.prev;
+            node->prev->next = this->part.link.next;
+            this->part.link.next = node;
+            this->part.link.prev = node;
+        }
+
+        side = func_8007758C(opponent);
+        if (this->holdingOpponent != 0) {
+            Fighter_hold(opponent, 1);
+            if (this->holdingOpponent == this->unk88) {
+                VECTOR kb;
+
+                if (side->life > 0) {
+                    kb.vx = Fighter_getFacing(this->fighter) * 0x31C4;
+                    kb.vy = -0x6AA4;
+                    kb.vz = 0;
+                    Fighter_takeHit(opponent, 0x47B09000, (Vec3 *)&kb, 2);
+                } else {
+                    kb.vx = 0;
+                    kb.vy = 0;
+                    kb.vz = 0;
+                    kb.pad = 0;
+                    Fighter_takeHit(opponent, 0x7B09000, (Vec3 *)&kb, 2);
+                }
+            }
+            this->holdingOpponent++;
+        }
+
+        func_800B34D0(this);
+        this->part.position = this->unkBC;
+        this->unk8E++;
+    }
+}
 
 /* On a hit: Hit_apply; then a fighter hit that is not guarding is taken hold of, once: the sphere is disabled, the
  * owner gains 0x3000 of life, the fighter takes hit 0x7B00001 (kind 1) and stops, and the sphere leaves its list. */
