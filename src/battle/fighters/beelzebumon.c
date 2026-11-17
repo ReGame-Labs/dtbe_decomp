@@ -773,7 +773,38 @@ void func_80096B54(Unk800969E0 *this, Camera *camera) {
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift + 1);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80096CFC);
+extern EntityVtable D_80069B44;
+
+static inline s16 getCosInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].cos;
+}
+
+static inline s16 getSinInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].sin;
+}
+
+/* Constructs the sprite entity of vtable D_80069B44 (0x58 bytes): a Particle with frame 9, size 25,
+ * moving according to the given angle at speed 0x280. */
+Entity *func_80096CFC(void *this, Fighter *fighter, VECTOR *pos, s32 angle) {
+    Particle *p = (Particle *)this;
+    s32 speed = 0x280;
+    s16 sin, cos;
+
+    Particle_initById(p, 9, pos, &ZERO_VECTOR, 25, 0, 0);
+    p->entity.vtable = &D_80069B44;
+
+    angle &= 0xFFF;
+    sin = getSinInline(angle);
+    cos = getCosInline(angle);
+
+    p->sprite.position.vx += (sin * speed) >> 12;
+    p->sprite.position.vy += (cos * speed) >> 12;
+
+    p->velocity.vx = -(sin >> 5);
+    p->velocity.vy = -(cos >> 5);
+
+    return &p->entity;
+}
 
 /* The tick of func_80096CFC's sprite entity: moves by the vector at 0x44 in color 0xA02828 for 5 frames,
  * then deletes itself (Particle).
