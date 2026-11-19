@@ -20,6 +20,7 @@ struct BeelzebumonSpecial1Projectile *BeelzebumonSpecial1Projectile_init(struct 
                                                                          VECTOR *vel);
 struct Unk80096F6C *func_80096F6C(struct Unk80096F6C *this, Fighter *fighter);
 Unk80097FA0 *func_80097FA0(Unk80097FA0 *this, Fighter *fighter, Fight *fight);
+void func_800986C0(Unk80097FA0 *this);
 struct Unk80098720 *func_80098720(struct Unk80098720 *this, Fighter *fighter, Vec3 *position);
 struct Unk80098A78 *func_80098A78(struct Unk80098A78 *this, Fighter *fighter, Fight *fight, Vec3 *position,
                                  VECTOR *velocity);
@@ -41,6 +42,7 @@ typedef struct Beelzebumon {
     /* 0x4A4 */ s32 unk4A4;
     /* 0x4A8 */ s32 unk4A8;
     /* 0x4AC */ s32 unk4AC; /* Beelzebumon_endMove sets it */
+    /* 0x4B0 */ s32 unk4B0; /* airborne frames before special 3 ends early */
 } Beelzebumon;
 
 /* Builds Beelzebumon: a Fighter with its own vtable. */
@@ -377,7 +379,64 @@ void Beelzebumon_spawnSpecial2Particle(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", Beelzebumon_special3);
+void Beelzebumon_spawnSpecial3Effect(Fighter *this);
+void func_80095E8C(Fighter *this);
+void func_80095C44(Fighter *this);
+void func_800955D4(Fighter *this, s32 arg1);
+void func_80095CB4(Fighter *this);
+
+/* Special move 3: Fighter's, consumes 0x10000 gauge and plays voice 0xB5 at frame 0, spawns 3 effects and calls
+ * func_80095E8C while frame < 40, spawns func_80095C44 at frame 10 and func_800955D4(16) at frame 40, cancels if
+ * airborne for 4 frames before frame 44, spawns func_80095CB4 at frame 44, recoils at frame 47, and brakes with
+ * dust from frame 48. */
+void Beelzebumon_special3(Beelzebumon *this, s32 frame) {
+    Fighter_special3(&this->base, frame);
+    if (frame == 0) {
+        this->base.invulnerableFrames = 10;
+        this->unk4AC = 0;
+        this->unk4B0 = 0;
+        Fighter_addGauge(&this->base, -0x10000);
+        Fighter_playVoice(&this->base, 0xB5);
+    }
+    if (frame < 0x28) {
+        Beelzebumon_spawnSpecial3Effect(&this->base);
+        Beelzebumon_spawnSpecial3Effect(&this->base);
+        Beelzebumon_spawnSpecial3Effect(&this->base);
+        func_80095E8C(&this->base);
+    }
+    if (frame == 10) {
+        func_80095C44(&this->base);
+    }
+    if (frame == 0x28) {
+        func_800955D4(&this->base, 0x10);
+    }
+    if (frame < 0x2C) {
+        if (Fighter_isOnGround(&this->base)) {
+            this->unk4B0 = 0;
+        } else {
+            this->unk4B0++;
+        }
+        if (this->unk4B0 >= 4) {
+            this->unk4AC = 1;
+            Fighter_stopActionClip(&this->base);
+            return;
+        }
+    }
+    if (frame == 0x2C) {
+        func_80095CB4(&this->base);
+    }
+    if (frame == 0x2F) {
+        s32 x = ((s64)this->base.mass * 0xB1BC) >> 16;
+
+        this->base.force.vx -= x * Fighter_getFacing(&this->base);
+    }
+    if (frame >= 0x30) {
+        this->base.force.vx = ((s64)this->base.velocity.vx * -0x800) >> 12;
+        if (frame < 0x35) {
+            Fighter_spawnDust(&this->base, 1, 0x80, 2);
+        }
+    }
+}
 
 /* Creates an entity of func_80097FA0's class (0xB4 bytes) with g++'s new, for this one and its
  * Fighter_getScene object, and hands it to Fighter_addEntity. */
@@ -714,7 +773,38 @@ void func_80096B54(Unk800969E0 *this, Camera *camera) {
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, ot, camera->zShift + 1);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80096CFC);
+extern EntityVtable D_80069B44;
+
+static inline s16 getCosInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].cos;
+}
+
+static inline s16 getSinInline(s32 angle) {
+    return COS_SIN_TABLE[angle & 0xFFF].sin;
+}
+
+/* Constructs the sprite entity of vtable D_80069B44 (0x58 bytes): a Particle with frame 9, size 25,
+ * moving according to the given angle at speed 0x280. */
+Entity *func_80096CFC(void *this, Fighter *fighter, VECTOR *pos, s32 angle) {
+    Particle *p = (Particle *)this;
+    s32 speed = 0x280;
+    s16 sin, cos;
+
+    Particle_initById(p, 9, pos, &ZERO_VECTOR, 25, 0, 0);
+    p->entity.vtable = &D_80069B44;
+
+    angle &= 0xFFF;
+    sin = getSinInline(angle);
+    cos = getCosInline(angle);
+
+    p->sprite.position.vx += (sin * speed) >> 12;
+    p->sprite.position.vy += (cos * speed) >> 12;
+
+    p->velocity.vx = -(sin >> 5);
+    p->velocity.vy = -(cos >> 5);
+
+    return &p->entity;
+}
 
 /* The tick of func_80096CFC's sprite entity: moves by the vector at 0x44 in color 0xA02828 for 5 frames,
  * then deletes itself (Particle).
@@ -959,7 +1049,69 @@ void BeelzebumonSpecial2Hitbox_destroy(UnkPartsEntity3C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", BeelzebumonSpecial2Hitbox_tick);
+/* Advances the special move 2 hitbox: deletes at tick 13, enables at tick 2, disables at tick 7, sweeps a
+ * 512-unit arc around the fighter (centered 0x140 above), and on contact knocks an unguarded opponent upward and
+ * forward by facing * 0x1554. */
+void BeelzebumonSpecial2Hitbox_tick(BeelzebumonSpecial2Hitbox *this, void *arg) {
+    Vec3 position;
+    s32 step;
+    s32 angle;
+
+    if (this->unk9C >= 0xD) {
+        entityDelete(&this->parts.entity);
+        return;
+    }
+    if (this->unk9C == 2) {
+        this->parts.part.flags.bits.disabled = 0;
+    }
+    if (this->unk9C == 7) {
+        this->parts.part.flags.bits.disabled = 1;
+    }
+    Fighter_getPosition(this->fighter, &position);
+    step = this->unk9C;
+    if (step >= 7) {
+        step = 6;
+    }
+    step *= 0x140;
+    if (Fighter_getFacing(this->fighter) > 0) {
+        angle = step + 0x100;
+    } else {
+        angle = 0xF00 - step;
+    }
+    angle &= 0xFFF;
+    {
+        u32 touched = this->parts.part.flags.bits.touched;
+
+        position.vx += (COS_SIN_TABLE[angle].sin * 512) >> 12;
+        position.vy += ((COS_SIN_TABLE[angle].cos * 512) >> 12) - 0x140;
+        this->parts.part.position = position;
+        if (touched) {
+            this->parts.part.flags.bits.touched = 0;
+            if (TrackedHit_hitFighter(&this->parts.unk18)) {
+                Fighter *opponent;
+
+                this->parts.part.flags.bits.disabled = 1;
+                opponent = Fighter_getOpponent(this->fighter);
+                if (!Fighter_isGuarding(opponent)) {
+                    Vec3 force;
+                    s32 y = -0x7FF8;
+
+                    force.vy = y;
+                    force.vz = 0;
+                    force.vx = this->facing * 0x1554;
+                    opponent->force.vx = force.vx;
+                    opponent->force.vy = y;
+                    opponent->force.vz = 0;
+                }
+                Fighter_spawnContactEffect(this->fighter);
+            }
+        }
+    }
+    this->unk90 -= 0x12;
+    this->unk94 += 0x14;
+    this->unk98 += 8;
+    this->unk9C++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", BeelzebumonSpecial2Hitbox_draw);
 
@@ -1091,7 +1243,59 @@ void func_80098128(UnkPartsEntity3C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_800981BC);
+/* Updates the Unk80097FA0 entity: deletes itself once the fighter ends the move or after 50 ticks, updates
+ * unkA4, spawns a child effect every 2 ticks for the first 18 ticks, sweeps its hitbox in front of the fighter,
+ * and on contact pulls/pushes an unguarded opponent toward/away from its x position. */
+void func_800981BC(Unk80097FA0 *this, void *arg) {
+    VECTOR position;
+
+    if (((Beelzebumon *)this->fighter)->unk4AC != 0 || this->unkAC >= 0x32) {
+        entityDelete(&this->parts.entity);
+        return;
+    }
+    if (this->unkAC < 0x1E) {
+        this->unkA4 = this->unkAC * 4;
+    }
+    if (this->unkAC >= 0x2E) {
+        this->unkA4 = 0x80 - (this->unkAC - 0x2D) * 0x20;
+    }
+    if (this->unkAC < 0x12 && (this->unkAC & 1) == 0) {
+        func_800986C0(this);
+    }
+    position = *(VECTOR *)&this->position;
+    position.vx -= Fighter_getFacing(this->fighter) << 7;
+    position.vy -= 0x120;
+    position.vy += (this->unkAC & 3) * 0xC0;
+    this->parts.part.position = *(Vec3 *)&position;
+    if (this->unkA8 != 0 && --this->unkA8 == 0) {
+        this->parts.part.flags.bits.disabled = 0;
+    }
+    if (this->parts.part.flags.bits.touched) {
+        this->parts.part.flags.bits.touched = 0;
+        if (TrackedHit_hitFighter(&this->parts.unk18)) {
+            Fighter *opponent;
+
+            this->unkA8 = 7;
+            this->parts.part.flags.bits.disabled = 1;
+            opponent = Fighter_getOpponent(this->fighter);
+            if (!Fighter_isGuarding(opponent)) {
+                Vec3 pos;
+                s32 dir;
+
+                func_8007A650(opponent, &pos);
+                dir = (this->position.vx < pos.vx) ? 1 : -1;
+                pos.vx = dir * 0x1554;
+                pos.vy = 0;
+                pos.vz = 0;
+                opponent->force.vx = pos.vx;
+                opponent->force.vy = 0;
+                opponent->force.vz = 0;
+            }
+        }
+    }
+    this->unkA0 += 0x30;
+    this->unkAC++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_800983FC);
 
@@ -1259,7 +1463,72 @@ void func_80098C04(UnkPartsEntity3C *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80098C98);
+void func_8009918C(Unk80098A78 *this);
+
+/* Advances the Unk80098A78 projectile: moves by velocity, grows radius by 0x18 (doubled), spawns an effect every
+ * 10 ticks while total x distance < 0x1000, fades out once past 0x1000, and on hit disables itself and spawns a
+ * grey spin particle at 1/16 velocity. */
+void func_80098C98(Unk80098A78 *this, void *arg) {
+    s32 x = this->position.vx;
+    s32 y = this->position.vy;
+    s32 z = this->position.vz;
+    s32 vx = this->velocity.vx;
+    s32 vy = this->velocity.vy;
+    s32 vz = this->velocity.vz;
+    s32 r;
+
+    x += vx;
+    y += vy;
+    z += vz;
+    this->unkBC += 0x18;
+    r = this->unkBC << 1;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->parts.part.position.vx = x;
+    this->parts.part.position.vy = y;
+    this->parts.part.position.vz = z;
+    this->parts.part.radius = r;
+    this->unkAC += abs(vx);
+    if (this->unkAC < 0x1000) {
+        if (this->unkC0 < 0x80) {
+            this->unkC0 += 0x20;
+        }
+        if ((this->unkC4 + 6) % 10 == 0) {
+            func_8009918C(this);
+        }
+    } else {
+        this->unkC0 -= 0x14;
+    }
+    if (this->unkC0 <= 0) {
+        entityDelete(&this->parts.entity);
+        return;
+    }
+    if (this->parts.part.flags.bits.touched) {
+        this->parts.part.flags.bits.touched = 0;
+        if (TrackedHit_hitFighter(&this->parts.unk18)) {
+            VECTOR vel;
+            VECTOR *v;
+            Entity *child;
+
+            v = &vel;
+            this->parts.part.flags.bits.disabled = 1;
+            vel.vx = this->velocity.vx >> 4;
+            vel.vy = this->velocity.vy >> 4;
+            vel.vz = this->velocity.vz >> 4;
+            child = allocEntityMemory(0x58);
+            if (child != NULL) {
+                Entity *e = entityOperatorNewAt(0x58, child);
+
+                Particle_initById((Particle *)e, 0, (VECTOR *)&this->position, v, 0x80, 0x808080, 0);
+                e->vtable = &SPIN_PARTICLE_VTABLE;
+            }
+            entityAddSibling(&this->parts.entity, child);
+        }
+    }
+    this->unkB6 ^= 1;
+    this->unkC4++;
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/beelzebumon", func_80098ECC);
 

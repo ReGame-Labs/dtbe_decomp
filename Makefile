@@ -134,12 +134,12 @@ MAIN_SYMS := $(BUILDDIR)/main_syms.ld
 lower_hex = $(shell printf '%08x' $$(($(1))))
 $(MAIN_SYMS): $(ELF)
 	$(NM) $< | awk '$$2 ~ /^[TDRBSG]$$/ && ($$1 < "$(call lower_hex,$(OVERLAY_VRAM))" || $$1 >= "$(call lower_hex,$(OVERLAY_END))") \
-		{ printf "%s = 0x%s;\n", $$3, $$1 }' > $@
+		{ sub(/^f+/, "", $$1); printf "%s = 0x%s;\n", $$3, $$1 }' > $@
 
 # An overlay loaded after another one, its parent (OVL_PARENT_<name>), also
 # links against the parent's own symbols
 $(BUILDDIR)/%_syms.ld: $(BUILDDIR)/bin/%.elf
-	$(NM) $< | awk '$$2 ~ /^[TDRBSG]$$/ { printf "%s = 0x%s;\n", $$3, $$1 }' > $@
+	$(NM) $< | awk '$$2 ~ /^[TDRBSG]$$/ { sub(/^f+/, "", $$1); printf "%s = 0x%s;\n", $$3, $$1 }' > $@
 
 # An overlay links against the executable's symbols and its parent's, and
 # takes the rest of what it uses from splat's symbol files

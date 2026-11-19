@@ -5,6 +5,10 @@
 #include "common.h"
 #include <abs.h>
 #include "battle/game_classes.h"
+#include "engine/gfx/camera.h"
+#include "engine/gfx/prim/build_line_g2.h"
+#include "engine/gfx/prim_buffer.h"
+#include "engine/math/matrix.h"
 #include "engine/math/sin_cos.h"
 #include "engine/sound/sound_control.h"
 
@@ -492,7 +496,74 @@ INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009AFC4);
 
 INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009B370);
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009B664);
+/* Draws the third layer of an Unk8009AB40: an identity-rotated PolyFT4 at position + (facing * unk34, 0, 0)
+ * scaled asymmetrically by facing * unk3C. */
+void func_8009B664(Entity *base, s32 arg) {
+    Unk8009AB40 *this = (Unk8009AB40 *)base;
+    Camera *camera = (Camera *)arg;
+    VECTOR pos;
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 facing;
+    s32 u;
+    s32 vramY;
+    s32 w;
+
+    facing = this->facing;
+    {
+        s32 dx = facing * this->unk34;
+        pos = this->position;
+        pos.vx += dx;
+    }
+    packet = PRIM_BUFFER_FREE;
+    {
+        VECTOR *p = &pos;
+        s32 x = p->vx;
+        s32 y = p->vy;
+        s32 z = p->vz;
+
+        m.words[0] = 0x1000;
+        m.words[1] = 0;
+        m.words[2] = 0x1000;
+        m.words[3] = 0;
+        m.words[4] = 0x1000;
+        m.m.t[0] = x;
+        m.m.t[1] = y;
+        m.m.t[2] = z;
+    }
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    setModelMatrix(&m.m);
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = -0x20;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.color = 0x808080;
+    UV_BYTES(shape.uv1)[1] = 0;
+    UV_BYTES(shape.uv0)[1] = 0;
+    UV_BYTES(shape.uv3)[1] = 0x1F;
+    UV_BYTES(shape.uv2)[1] = 0x1F;
+    u = (((u8)this->unk44 & 3) << 5) | 0x80;
+    shape.flags = 9;
+    UV_BYTES(shape.uv2)[0] = u;
+    UV_BYTES(shape.uv0)[0] = u;
+    UV_BYTES(shape.uv3)[0] = u + 0x1F;
+    UV_BYTES(shape.uv1)[0] = u + 0x1F;
+    vramY = this->vramY;
+    w = facing * this->unk3C;
+    shape.clut = getClut(0x1C0, vramY + 0x7C);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    corners[0].vx = corners[2].vx = (-w) << 2;
+    corners[1].vx = corners[3].vx = w >> 1;
+    corners[0].vy = corners[1].vy = -(w << 1);
+    corners[2].vy = corners[3].vy = w << 1;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009B834);
 
@@ -567,7 +638,72 @@ void MetalGarurumonSpecial2Projectile_hit(MetalGarurumonSpecial2Projectile *this
     } while (0);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", MetalGarurumonSpecial2Projectile_draw);
+/* Draws the special move 2's projectile: two buildPolyFT4 quads at its position (main beam scaled by unkC0 and tip
+ * flare scaled by unkC4), mirrored by the sign of velocity.vx. */
+void MetalGarurumonSpecial2Projectile_draw(MetalGarurumonSpecial2Projectile *this, Camera *camera) {
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 side;
+    s32 len;
+    s32 vramY;
+
+    {
+        Vec3 *p = &this->base.position;
+        s32 x = p->vx;
+        s32 y = p->vy;
+        s32 z = p->vz;
+
+        /* Writing word 0 through (u32 *)&m keeps PRIM_BUFFER_FREE from hoisting above the matrix setup. */
+        ((u32 *)&m)[0] = 0x1000;
+        m.words[1] = 0;
+        m.words[2] = 0x1000;
+        m.words[3] = 0;
+        m.words[4] = 0x1000;
+        m.m.t[0] = x;
+        m.m.t[1] = y;
+        m.m.t[2] = z;
+    }
+    packet = PRIM_BUFFER_FREE;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    setModelMatrix(&m.m);
+    side = this->base.velocity.vx < 0 ? -1 : 1;
+    corners[0].vy = corners[1].vy = -0x50;
+    corners[2].vy = corners[3].vy = 0x50;
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = 0;
+    shape.flags = 0;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.color = 0x808080;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0x3F;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0xA0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xBF;
+    vramY = this->base.unkBC;
+    shape.clut = getClut(0x1C0, vramY + 0xFC);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    len = this->unkC0;
+    corners[0].vx = corners[2].vx = -(side * (len >> 2));
+    corners[1].vx = corners[3].vx = side * len;
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0xC0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xD7;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0xA0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xBF;
+    shape.clut = getClut(0x1C0, vramY + 0xFB);
+    len = this->unkC4;
+    corners[0].vy = corners[1].vy = -len;
+    corners[2].vy = corners[3].vy = len;
+    corners[0].vx = corners[2].vx = -(side * (len << 1));
+    corners[1].vx = corners[3].vx = side * (len >> 2);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* A point of MetalGarurumonSpecial3Hitbox's trail: where it was, and an age that grows by 3 a tick. */
 typedef struct MetalGarurumonSpecial3HitboxTrail {
@@ -730,7 +866,94 @@ void MetalGarurumonSpecial3Hitbox_draw(MetalGarurumonSpecial3Hitbox *this, s32 a
     func_8009CB58(this, arg);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009C678);
+void func_8009C678(MetalGarurumonSpecial3Hitbox *this) {
+    Entity *target;
+    s32 length;
+    s32 x, y, z, vx, vy, vz, dist, step;
+    s32 d[3];
+
+    target = getEntityByHandle(this->targetHandle);
+    if (target != NULL) {
+        func_8007A650((Fighter *)target, &this->targetPoint);
+    }
+    length = vecGetLength((VECTOR *)&this->velocity);
+    x = this->position.vx;
+    y = this->position.vy;
+    z = this->position.vz;
+    vx = this->velocity.vx;
+    vy = this->velocity.vy;
+    vz = this->velocity.vz;
+    x += vx;
+    y += vy;
+    z += vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->unkB8 += length;
+    dist = this->unkB8;
+    step = this->unkC4;
+    switch (step) {
+    case 0:
+        if (dist > 0x600) {
+            this->unkC4 = 1;
+        }
+        break;
+    case 1:
+        d[0] = (((this->targetPoint.vx - x) >> 3) - vx) >> 4;
+        d[1] = (((this->targetPoint.vy - y) >> 3) - vy) >> 4;
+        d[2] = (((this->targetPoint.vz - z) >> 3) - vz) >> 4;
+        this->velocity.vx = vx + d[0];
+        this->velocity.vy = vy + d[1];
+        this->velocity.vz = vz + d[2];
+        if (length < 0x20) {
+            this->unkC4 = 2;
+        }
+        break;
+    case 2:
+        d[0] = vx >> 3;
+        d[1] = vy >> 3;
+        d[2] = vz >> 3;
+        if (d[0] == 0) {
+            d[0] = 1;
+        }
+        if (d[1] == 0) {
+            d[1] = 1;
+        }
+        if (d[2] == 0) {
+            d[2] = 1;
+        }
+        {
+            s32 vx2 = this->velocity.vx;
+            s32 vy2 = this->velocity.vy;
+            s32 vz2 = this->velocity.vz;
+            vx2 += d[0];
+            vy2 += d[1];
+            this->velocity.vx = vx2;
+            this->velocity.vy = vy2;
+            vz2 += d[2];
+            this->velocity.vz = vz2;
+        }
+        break;
+    }
+    if (this->unkB8 > 0x2000 || this->ticks > 0x96) {
+        this->unkB4 = 1;
+        {
+            ListNode *node = &this->parts.part.link;
+            this->parts.part.link.next->prev = this->parts.part.link.prev;
+            node->prev->next = this->parts.part.link.next;
+            this->parts.part.link.next = node;
+            this->parts.part.link.prev = node;
+        }
+    }
+    {
+        s32 px = this->position.vx;
+        s32 py = this->position.vy;
+        s32 pz = this->position.vz;
+        this->parts.part.position.vx = px;
+        this->parts.part.position.vy = py;
+        this->parts.part.position.vz = pz;
+    }
+}
 
 /* Adds the position as the newest point of the trail (age 16) and ages every point by 3. */
 void func_8009C898(MetalGarurumonSpecial3Hitbox *this) {
@@ -795,7 +1018,71 @@ void func_8009CEE0(MetalGarurumonSpecial2Projectile *this, CollisionSphere *sum)
     } while (0);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009CFBC);
+/* The draw of func_8009CE8C's class (virtual table D_8006A184): same two quads as
+ * MetalGarurumonSpecial2Projectile_draw, with the main beam's UV at 0x40..0x7F and clut at vramY + 0xFA. */
+void func_8009CFBC(MetalGarurumonSpecial2Projectile *this, Camera *camera) {
+    MatrixWords m;
+    SVECTOR corners[4];
+    PolyFT4Shape shape;
+    void *packet;
+    u_long *ot;
+    s32 zShift;
+    s32 side;
+    s32 len;
+    s32 vramY;
+
+    {
+        Vec3 *p = &this->base.position;
+        s32 x = p->vx;
+        s32 y = p->vy;
+        s32 z = p->vz;
+
+        ((u32 *)&m)[0] = 0x1000;
+        m.words[1] = 0;
+        m.words[2] = 0x1000;
+        m.words[3] = 0;
+        m.words[4] = 0x1000;
+        m.m.t[0] = x;
+        m.m.t[1] = y;
+        m.m.t[2] = z;
+    }
+    packet = PRIM_BUFFER_FREE;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    setModelMatrix(&m.m);
+    side = this->base.velocity.vx < 0 ? -1 : 1;
+    corners[0].vy = corners[1].vy = -0x50;
+    corners[2].vy = corners[3].vy = 0x50;
+    corners[0].vz = corners[1].vz = corners[2].vz = corners[3].vz = 0;
+    shape.flags = 0;
+    shape.corners[0] = &corners[0];
+    shape.corners[1] = &corners[1];
+    shape.corners[2] = &corners[2];
+    shape.corners[3] = &corners[3];
+    shape.color = 0x808080;
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0x40;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0x7F;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0xA0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xBF;
+    vramY = this->base.unkBC;
+    shape.clut = getClut(0x1C0, vramY + 0xFA);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    len = this->unkC0;
+    corners[0].vx = corners[2].vx = -(side * (len >> 2));
+    corners[1].vx = corners[3].vx = side * len;
+    packet = buildPolyFT4(&shape, packet, ot, zShift);
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0xC0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xD7;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0xA0;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0xBF;
+    shape.clut = getClut(0x1C0, vramY + 0xFB);
+    len = this->unkC4;
+    corners[0].vy = corners[1].vy = -len;
+    corners[2].vy = corners[3].vy = len;
+    corners[0].vx = corners[2].vx = -(side * (len << 1));
+    corners[1].vx = corners[3].vx = side * (len >> 2);
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, packet, ot, zShift);
+}
 
 /* Constructs an entity of the class of virtual table D_8006A15C for arg. */
 Unk8009D20C *func_8009D20C(Unk8009D20C *this, void *arg) {
@@ -902,7 +1189,62 @@ void func_8009D5D4(Unk8009D4EC *this) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/metalgarurumon", func_8009D68C);
+static inline void setTranslationMG(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* The draw of func_8009D4EC's ring entity: spins by unk13C * 2, scales by (unk13C, 0x300 - unk13C, unk13C), and draws
+ * its 16 semi-transparent quads fading with 0x200 - unk13C. */
+void func_8009D68C(Unk8009D4EC *this, Camera *camera) {
+    MatrixWords m;
+    PolyFT4Shape shape;
+    MATRIX *mp = &m.m;
+    u_long *ot;
+    void *packet;
+    s32 zShift;
+    s32 i;
+    s32 c;
+    s32 vramY;
+
+    packet = PRIM_BUFFER_FREE;
+    setTranslationMG(m.m.t, &this->position);
+    m.words[0] = 0x1000;
+    m.words[1] = 0;
+    m.words[2] = 0x1000;
+    m.words[3] = 0;
+    m.words[4] = 0x1000;
+    ot = camera->ot.slots;
+    zShift = camera->zShift;
+    matrixSetRotationY(mp, this->unk13C * 2);
+    matrixScale(mp, this->unk13C, 0x300 - this->unk13C, this->unk13C);
+    setModelMatrix(mp);
+    UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] = 0;
+    UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] = 0xF;
+    UV_BYTES(shape.uv0)[1] = UV_BYTES(shape.uv1)[1] = 0x80;
+    UV_BYTES(shape.uv2)[1] = UV_BYTES(shape.uv3)[1] = 0x9F;
+    shape.flags = 9;
+    c = 0x200 - this->unk13C;
+    shape.color = c | (c << 8) | (c << 16);
+    vramY = this->vramY;
+    shape.clut = getClut(0x1C0, vramY + 0xFF);
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    for (i = 0; i < 16; i++) {
+        shape.corners[0] = &this->points[i].outer;
+        shape.corners[1] = &this->points[i + 1].outer;
+        shape.corners[2] = &this->points[i].inner;
+        shape.corners[3] = &this->points[i + 1].inner;
+        packet = buildPolyFT4(&shape, packet, ot, zShift);
+        UV_BYTES(shape.uv0)[0] = UV_BYTES(shape.uv2)[0] += 0x10;
+        UV_BYTES(shape.uv1)[0] = UV_BYTES(shape.uv3)[0] += 0x10;
+    }
+    PRIM_BUFFER_FREE = packet;
+}
 
 /* MetalGarurumon's destructor. */
 void MetalGarurumon_destroy(Entity *this, s32 flags) {

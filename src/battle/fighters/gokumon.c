@@ -18,7 +18,7 @@ s32 Gokumon_getAttackTrailColor(Fighter *this);
 /* whether the character's fighter (by Fighter_getSide) has the other colors (altColor) */
 s32 Gokumon_hasAltColor(Fighter *this);
 GokumonSpecial1Hitbox *GokumonSpecial1Hitbox_init(GokumonSpecial1Hitbox *this, Fighter *fighter);
-Entity *GokumonSpecial3Hitbox_init(Entity *this, Fighter *arg, Vec3 *vec);
+GokumonSpecial3Hitbox *GokumonSpecial3Hitbox_init(GokumonSpecial3Hitbox *this, Fighter *owner, Vec3 *pos);
 extern EntityVtable GOKUMON_SPECIAL3_HITBOX_VTABLE;
 extern EntityVtable GOKUMON_SPECIAL1_HITBOX_VTABLE;
 extern EntityVtable GOKUMON_VTABLE;
@@ -320,7 +320,86 @@ void Gokumon_spawnSpecial1Hitbox(Fighter *this) {
     Fighter_addEntity(this, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", Gokumon_special2);
+/* Special move 2: Fighter's; frames 0, 14, and 28 lunge forward and set hit properties (with voice/trail at 0);
+ * frame 46 spawns func_800C0298; frames 40..59 accelerate forward with dust and periodic hit updates; parts 0x400
+ * are active until frame 57. */
+void Gokumon_special2(Fighter *this, s32 frame) {
+    Fighter *opponent;
+    Entity *child;
+
+    Fighter_special2(this, frame);
+    func_80079AE4(this);
+    opponent = Fighter_getOpponent(this);
+    switch (frame) {
+    case 0:
+        Fighter_playVoice(this, 0x117);
+        Fighter_playSound(this, 7);
+        Gokumon_spawnTrail(this, 8, 60, Gokumon_getSpecialTrailColor(this), 0);
+        {
+            s64 impulse = ((s64)this->mass * 0x1C70) >> 16;
+            this->force.vx += (s32)impulse * Fighter_getFacing(this);
+        }
+        this->hitDamage = 0x4AC1000;
+        this->hitKind = 1;
+        this->invulnerableFrames = 14;
+        break;
+    case 14:
+        Fighter_playSound(this, 7);
+        {
+            s64 impulse = ((s64)this->mass * 0x238C) >> 16;
+            this->force.vx += (s32)impulse * Fighter_getFacing(this);
+        }
+        this->hitDamage = 0x4AC0C00;
+        this->hitKnockback.vx = Fighter_getFacing(this) * 5460;
+        this->hitKnockback.vy = -0x5550;
+        this->hitKnockback.vz = 0;
+        this->hitKind = 1;
+        break;
+    case 28:
+        Fighter_playSound(this, 7);
+        {
+            s64 impulse = ((s64)this->mass * 0x2AA8) >> 16;
+            s32 facing;
+            s32 vy;
+
+            this->force.vx += (s32)impulse * Fighter_getFacing(this);
+            this->hitDamage = 0x4AC0800;
+            facing = Fighter_getFacing(this);
+            vy = -(s32)(((s64)opponent->mass * 0x38E0) >> 16);
+            this->hitKnockback.vx = facing * 1820;
+            this->hitKnockback.vz = 0;
+            this->hitKind = 1;
+            this->hitKnockback.vy = vy;
+        }
+        break;
+    case 46:
+        Fighter_playSound(this, 0x113);
+        child = allocEntityMemory(0xB4);
+        if (child != NULL) {
+            func_800C0298((void *)entityOperatorNewAt(0xB4, child), this);
+        }
+        Fighter_addEntity(this, child);
+        break;
+    }
+    if ((u32)(frame - 40) < 20) {
+        Fighter_accelerateTo(this, Fighter_getFacing(this) * 21840);
+        if ((frame ^ 1) & 1) {
+            this->hitDamage = 0xCAC0800;
+            this->hitKnockback.vx = this->force.vx;
+            this->hitKnockback.vy = 0;
+            this->hitKnockback.vz = 0;
+        }
+        if ((frame & 3) == 0) {
+            this->hitKind = 1;
+        }
+        Fighter_spawnDust(this, -1, 0x60, 2);
+    }
+    if (frame < 57) {
+        this->attackParts = 0x400;
+    } else {
+        this->attackParts = 0;
+    }
+}
 
 /* Special move 3: Fighter's; frame 0 voice 0x116, 10 invulnerable frames and a gauge unit spent; frame 4 the hitbox,
  * from frame 5 func_800C00EC; every frame the burst, and (JP only) the clip stopped when the round is over. */
@@ -638,7 +717,77 @@ void GokumonSpecial1Hitbox_tick(GokumonSpecial1Hitbox *this) {
 
 INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial1Hitbox_draw);
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial3Hitbox_init);
+static inline void copySVectorWords(SVECTOR *dst, SVECTOR *src) {
+    s32 w0 = ((s32 *)src)[0];
+    s32 w1 = ((s32 *)src)[1];
+    ((s32 *)dst)[0] = w0;
+    ((s32 *)dst)[1] = w1;
+}
+
+/* Constructs Gokumon's special move 3 hitbox: initializes its entity/hit/sphere, builds the 8 stacked 8-vertex
+ * cyclone rings with random horizontal jitter, and starts sound 0x112. */
+GokumonSpecial3Hitbox *GokumonSpecial3Hitbox_init(GokumonSpecial3Hitbox *this, Fighter *owner, Vec3 *pos) {
+    MATRIX m;
+    VECTOR inVec;
+    VECTOR outVec;
+    s32 radius;
+    s32 height;
+    s32 offX;
+    s32 offZ;
+    s32 i, j;
+    s32 x, y, z;
+    MersenneTwister *rng = &RANDOM;
+
+    entityInit(&this->parts.entity, ENTITY_KIND_FIGHTER_OBJECT);
+    this->parts.entity.vtable = &GOKUMON_SPECIAL3_HITBOX_VTABLE;
+    Hit_init(&this->parts.base, owner, 0, (Vec3 *)&ZERO_VECTOR, 0);
+    CollisionSphere_init(&this->parts.part, pos, 0x100, &this->parts.base);
+    this->parts.part.entity = &this->parts.entity;
+    this->owner = owner;
+    x = pos->vx;
+    y = pos->vy;
+    z = pos->vz;
+    this->unk294 = 0;
+    this->unk298 = 0;
+    this->state = 0;
+    this->pulses = 0;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    this->vramY = Fighter_getVramY(owner);
+    radius = 0x100;
+    offX = 0;
+    offZ = 0;
+    height = 0;
+
+    for (i = 0; i < 8; i++) {
+        matrixInitRotationY(&m, i << 10);
+        memset(&inVec, 0, sizeof(inVec));
+        inVec.vx = radius;
+        inVec.vy = height;
+        for (j = 0; j < 7; j++) {
+            s16 vx, vy, vz;
+            SVECTOR *v = &this->rings[i][j];
+
+            matrixRotateY(&m, 0x249);
+            matrixTransformVec(&m, &outVec, &inVec);
+            vx = outVec.vx + offX;
+            vy = outVec.vy;
+            vz = outVec.vz + offZ;
+            v->vx = vx;
+            v->vy = vy;
+            v->vz = vz;
+        }
+        radius += 0x80;
+        height -= 0x180;
+        copySVectorWords(&this->rings[i][7], &this->rings[i][0]);
+        offX = (s32)mersenneTwisterGenerate(rng) % 128;
+        offZ = (s32)mersenneTwisterGenerate(rng) % 128;
+    }
+
+    this->soundHandle = soundControlPlaySound(&SOUND_CONTROL, 0x112, 0);
+    return this;
+}
 
 /* The special move 3 hitbox's destructor: the same as the special move 1 hitbox's. */
 void GokumonSpecial3Hitbox_destroy(GokumonSpecial3Hitbox *this, s32 flags) {
@@ -660,7 +809,60 @@ void GokumonSpecial3Hitbox_destroy(GokumonSpecial3Hitbox *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/gokumon", GokumonSpecial3Hitbox_tick);
+void func_800C12A4();
+void func_800C1180();
+
+/* Updates Gokumon's special move 3 hitbox: detaches its collision shape once the owner's attack ends or hits body
+ * state 0x13, grows unk298 to > 0x80 before attaching the shape and advancing state, ticks func_800C12A4 in state 1,
+ * shrinks unk298 in state 2 until destroyed, and calls func_800C1180 while advancing unk294 and pulses. */
+void GokumonSpecial3Hitbox_tick(GokumonSpecial3Hitbox *this, void *arg) {
+    s32 idle = 0;
+
+    if (Fighter_isAttackIdle(this->owner) || Fighter_getBodyStateId(this->owner) == 0x13) {
+        idle = 1;
+    }
+    if (idle) {
+        ListNode *node = &this->parts.part.link;
+        this->parts.part.link.next->prev = this->parts.part.link.prev;
+        node->prev->next = this->parts.part.link.next;
+        this->parts.part.link.next = node;
+        this->parts.part.link.prev = node;
+        this->state = 2;
+    }
+    if (this->state < 2) {
+        Fighter_getPosition(this->owner, &this->position);
+    }
+    switch (this->state) {
+        case 0:
+            this->unk298 += 8;
+            if (this->unk298 > 0x80) {
+                Fight *scene = Fighter_getScene(this->owner);
+                if (Fighter_getSide(this->owner) == 0) {
+                    Fight_addSide0Shape(scene, &this->parts.part.link);
+                } else {
+                    Fight_addSide1Shape(scene, &this->parts.part.link);
+                }
+                this->state++;
+            }
+            break;
+        case 1:
+            func_800C12A4(this, arg);
+            break;
+        case 2:
+            this->unk298 -= 8;
+            if (this->unk298 <= 0) {
+                if (this != NULL) {
+                    this->parts.entity.vtable->destroy.func(
+                        (u8 *)&this->parts.entity + this->parts.entity.vtable->destroy.delta, DESTROY_DELETE);
+                }
+                return;
+            }
+            break;
+    }
+    func_800C1180(this, arg);
+    this->unk294 += 0x100;
+    this->pulses++;
+}
 
 INCLUDE_RODATA("game/nonmatchings/fighters/gokumon", D_8006CD70);
 

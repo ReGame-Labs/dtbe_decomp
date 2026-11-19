@@ -38,7 +38,7 @@ extern EntityVtable SAINTGARGOMON_VTABLE;
 /* SaintGargomon's class (CHARACTER_SAINTGARGOMON): special3 keeps the handle of its sound. */
 typedef struct SaintGargomon {
     /* 0x000 */ Fighter base;
-    /* 0x4A4 */ s32 unk4A4;
+    /* 0x4A4 */ Fighter *unk4A4;
     /* 0x4A8 */ u32 soundHandle; /* special3's sound (Fighter_playSound), stopped at its end */
 } SaintGargomon;
 void func_800AB830(UnkPartsEntity38 *this);
@@ -128,7 +128,97 @@ void SaintGargomon_throw(Fighter *this, s32 frame) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", SaintGargomon_special2);
+Model *Fighter_getModel(Fighter *this);
+
+/* Special move 2: grabs an opponent in reach on frame 0 (turning and holding it with a hit spark), attaches and
+ * rotates it onto node 4 at frame 24 and frames 30..33 if still within range, launches it at frame 71, and cancels
+ * the clip during frames 25..70 if the attached opponent becomes unlinked. */
+void SaintGargomon_special2(SaintGargomon *this, s32 frame) {
+    Vec3 knockback;
+    VECTOR pos;
+    VECTOR oppPos;
+    s16 facing;
+    Fighter *opponent;
+    Model *model;
+    MATRIX *local;
+    Entity *child;
+    s32 dx, dy;
+
+    facing = Fighter_getFacing(&this->base);
+    if (frame == 0 && !Fighter_getOpponentInReach(&this->base, 1)) {
+        Fighter_playActionClip(&this->base, 5, 0, 0, -1);
+        return;
+    }
+    opponent = Fighter_getOpponent(&this->base);
+    model = Fighter_getModel(opponent);
+    model->group.object.transform.valid = 0;
+    local = &model->group.object.transform.local.m;
+    switch (frame) {
+    case 0:
+        if (facing == Fighter_getFacing(opponent)) {
+            if (facing > 0) {
+                Fighter_faceLeft(opponent, 0);
+            } else {
+                Fighter_faceRight(opponent, 0);
+            }
+        }
+        Fighter_hold(opponent, 60);
+        knockback.vx = facing << 12;
+        knockback.vy = 0x1000;
+        knockback.vz = 0;
+        Fighter_takeHit(opponent, 0x80000000, (Vec3 *)&ZERO_VECTOR, 0);
+        memset(&oppPos, 0, sizeof(oppPos));
+        Fighter_getNodePosition(&this->base, &pos, 18, &oppPos);
+        child = allocEntityMemory(0x48);
+        if (child != NULL) {
+            HitSpark_init(entityOperatorNewAt(0x48, child), (Vec3 *)&pos, &ZERO_VECTOR, 0xC0, 0x808080);
+        }
+        Fighter_addEntity(&this->base, child);
+        break;
+    case 24:
+        Fighter_getPosition(&this->base, (Vec3 *)&pos);
+        Fighter_getOpponentPosition(&this->base, (Vec3 *)&oppPos);
+        dx = ABS(pos.vx - oppPos.vx);
+        dy = ABS(pos.vy - oppPos.vy);
+        if (dx > func_80079DD8(&this->base) + func_80079DD8(opponent) + 0x100 || dy > 0x80) {
+            Fighter_stopActionClip(&this->base);
+            return;
+        }
+        Fighter_playVoice(&this->base, 0xE0);
+        this->unk4A4 = opponent;
+        matrixRotateX(local, -0xB33);
+        Fighter_attachTo(opponent, &this->base, 4);
+        Fighter_setClip(opponent, 0x20, 0, 0);
+        model->group.object.transform.local.m.t[0] = 0;
+        model->group.object.transform.local.m.t[1] = -0x40;
+        model->group.object.transform.local.m.t[2] = 0x130;
+        break;
+    case 30:
+    case 31:
+    case 32:
+    case 33:
+        matrixRotateX(local, 0x71);
+        Fighter_attachTo(opponent, &this->base, 4);
+        model->group.object.transform.local.m.t[0] = 0;
+        model->group.object.transform.local.m.t[1] = -0x40;
+        model->group.object.transform.local.m.t[2] = 0x130;
+        break;
+    case 71:
+        Fighter_detach(opponent);
+        knockback.vx = facing * 36400;
+        knockback.vy = 0;
+        knockback.vz = 0;
+        Fighter_takeHit(opponent, 0xC3AC5000, &knockback, 0);
+        break;
+    }
+    Fighter_special2(&this->base, frame);
+    func_80079AE4(&this->base);
+    if ((u32)(frame - 25) < 46) {
+        if (listIsAlone(&this->unk4A4->entity.link)) {
+            Fighter_stopActionClip(&this->base);
+        }
+    }
+}
 
 void SaintGargomon_spawnSpecial1Hitbox(Fighter *this, s32 velocityY);
 
@@ -458,7 +548,51 @@ void SaintGargomonSpecial1Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
 
 void func_800ABB54(SaintGargomonSpecial1Hitbox *this);
 
-INCLUDE_ASM("game/nonmatchings/fighters/saintgargomon", func_800AB830);
+/* Clamps velocity to [-0x40, 0x40] on each axis, spawns a ParticleSpray with half the negated velocity and a
+ * func_800AD5BC hitbox at position, then deletes itself. */
+void func_800AB830(UnkPartsEntity38 *base) {
+    SaintGargomonSpecial1Hitbox *this = (SaintGargomonSpecial1Hitbox *)base;
+    Vec3 vel;
+    Entity *child;
+    Vec3 *vp;
+
+    if (this->velocity.vx < -0x40) {
+        this->velocity.vx = -0x40;
+    }
+    if (this->velocity.vy < -0x40) {
+        this->velocity.vy = -0x40;
+    }
+    if (this->velocity.vz < -0x40) {
+        this->velocity.vz = -0x40;
+    }
+    if (this->velocity.vx > 0x40) {
+        this->velocity.vx = 0x40;
+    }
+    if (this->velocity.vy > 0x40) {
+        this->velocity.vy = 0x40;
+    }
+    if (this->velocity.vz > 0x40) {
+        this->velocity.vz = 0x40;
+    }
+    vp = &vel;
+    vel.vx = -this->velocity.vx >> 1;
+    vel.vy = -this->velocity.vy >> 1;
+    vel.vz = -this->velocity.vz >> 1;
+    child = allocEntityMemory(0x48);
+    if (child != NULL) {
+        ParticleSpray_init(entityOperatorNewAt(0x48, child), 3, &this->position, vp, 0x100, 6, 0x808080);
+    }
+    entityAddSibling(&this->parts.entity, child);
+    child = allocEntityMemory(0xB0);
+    if (child != NULL) {
+        func_800AD5BC(entityOperatorNewAt(0xB0, child), this->owner, this->fight, &this->position, 0x280, 0x7A81800);
+    }
+    entityAddSibling(&this->parts.entity, child);
+    if (this != NULL) {
+        this->parts.entity.vtable->destroy.func(
+            (u8 *)&this->parts.entity + this->parts.entity.vtable->destroy.delta, DESTROY_DELETE);
+    }
+}
 
 /* On a hit: Hit_apply with sum, then func_800AB830 (a spray and a child hitbox). */
 void SaintGargomonSpecial1Hitbox_hit(UnkPartsEntity38 *this, void *sum) {

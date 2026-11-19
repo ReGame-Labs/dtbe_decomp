@@ -1313,7 +1313,46 @@ Unk800A83E0 *func_800A83E0(Unk800A83E0 *this, Vec3 *position, Vec3 *velocity, Ve
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A84E4);
+/* Moves by velocity, steers toward steer for steerFrames (else damps velocity by 1/4), grows size by 4, advances
+ * animFrame, fades brightness by 12, and deletes itself at 0. */
+void func_800A84E4(Unk800A83E0 *this) {
+    s32 x = this->position.vx, y = this->position.vy, z = this->position.vz;
+    s32 vx = this->velocity.vx, vy = this->velocity.vy, vz = this->velocity.vz;
+
+    x += vx;
+    y += vy;
+    z += vz;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    if (--this->steerFrames >= 0) {
+        s32 sx = this->steer.vx;
+        s32 sy = this->steer.vy;
+        s32 sz = this->steer.vz;
+        s32 nvx = vx + (sx - vx) / 10;
+        s32 nvy = vy + (sy - vy) / 10;
+        s32 nvz = vz + (sz - vz) / 10;
+
+        this->velocity.vx = nvx;
+        this->velocity.vy = nvy;
+        this->velocity.vz = nvz;
+        this->steer.vx = sx - sx / 20;
+        this->steer.vy = sy - sy / 20;
+        this->steer.vz = sz - sz / 20;
+        this->angle = ratan2(nvy, nvx) + 0x500;
+    } else {
+        this->velocity.vx = vx - (vx >> 2);
+        this->velocity.vy = vy - (vy >> 2);
+        this->velocity.vz = vz - (vz >> 2);
+    }
+    this->size += 4;
+    this->animFrame = (this->animFrame + 1) & 7;
+    this->brightness -= 12;
+    if (this->brightness <= 0 && this != NULL) {
+        this->entity.vtable->destroy.func(
+            (u8 *)&this->entity + this->entity.vtable->destroy.delta, DESTROY_DELETE);
+    }
+}
 
 void func_800A86A8(Unk800A83E0 *this, Camera *camera) {
     MatrixWords m;
@@ -1390,7 +1429,92 @@ SakuyamonSpecial3Effect *SakuyamonSpecial3Effect_init(SakuyamonSpecial3Effect *t
     return this;
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", SakuyamonSpecial3Effect_tick);
+s32 Fighter_isInvulnerable(Fighter *this);
+Unk800A9944 *func_800A926C(Unk800A9944 *this, Fighter *fighter, Vec3 *position);
+
+/* Ticks the special move 3 effect: tracks node 19 while state < 3 (jumping to state 3 if the fighter stops attacking,
+ * leaves the ground, or enters body state 0x13), steps unk2C/unk30/unk34 through states 0..3, spawns func_800A926C
+ * and deletes itself once unk2C <= 0, holds a nearby vulnerable opponent, and advances unk3C, unk38, and frames. */
+void SakuyamonSpecial3Effect_tick(SakuyamonSpecial3Effect *this) {
+    s32 done = 0;
+    Fighter *opponent;
+
+    if (Fighter_isAttackIdle(this->fighter) || !Fighter_isOnGround(this->fighter) ||
+        Fighter_getBodyStateId(this->fighter) == 0x13) {
+        done = 1;
+    }
+    if (this->state < 3) {
+        Fighter_getNodePosition(this->fighter, &this->position, 19, &D_8006B198);
+        if (done != 0) {
+            this->state = 3;
+        }
+    }
+    switch (this->state) {
+    case 0:
+        this->unk2C += (0x308 - this->unk2C) >> 3;
+        if (this->unk2C >= 0x300) {
+            this->state = 1;
+        }
+        break;
+    case 1:
+        this->unk30 += (0x304 - this->unk30) >> 2;
+        if (this->unk30 > 0x200) {
+            this->unk34 += (0x308 - this->unk34) >> 3;
+        }
+        if (this->frames >= 0x3D) {
+            this->state++;
+        }
+        break;
+    case 2:
+        this->unk2C += 0x10;
+        if (this->unk2C >= 0x380) {
+            this->state = 3;
+        }
+        break;
+    case 3:
+        this->unk30 -= this->unk30 >> 2;
+        this->unk2C = (this->unk2C - (this->unk30 >> 2)) >> 1;
+        if (this->unk2C <= 0) {
+            Entity *child = allocEntityMemory(0xD8);
+            if (child != NULL) {
+                func_800A926C(entityOperatorNewAt(0xD8, child), this->fighter, (Vec3 *)&this->position);
+            }
+            entityAddSibling(&this->entity, child);
+            if (this != NULL) {
+                this->entity.vtable->destroy.func(
+                    (u8 *)&this->entity + this->entity.vtable->destroy.delta, DESTROY_DELETE);
+            }
+            return;
+        }
+        break;
+    }
+    opponent = Fighter_getOpponent(this->fighter);
+    if (!Fighter_isInvulnerable(opponent)) {
+        s32 reach = Fighter_getParams(opponent)->height + 0x40;
+        Vec3 diff;
+        s32 x, y, z;
+
+        func_8007A650(opponent, &diff);
+        x = diff.vx;
+        y = diff.vy;
+        z = diff.vz;
+        x -= this->position.vx;
+        y -= this->position.vy;
+        z -= this->position.vz;
+        diff.vx = x;
+        diff.vy = y;
+        diff.vz = z;
+        if (abs(diff.vx) < this->unk2C + reach && abs(diff.vy) < reach) {
+            Fighter_hold(opponent, 4);
+        }
+    }
+    this->unk3C++;
+    if (this->unk3C >= 6) {
+        this->unk3C = 0;
+    }
+    this->unk38 += 0x20;
+    this->frames++;
+}
 
 /* The draw of the entities of SAKUYAMON_SPECIAL3_EFFECT_VTABLE: func_800A8C24, then func_800A8F80. */
 void SakuyamonSpecial3Effect_draw(Entity *this, s32 arg) {
@@ -1409,9 +1533,12 @@ INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A8F80);
 
 INCLUDE_RODATA("game/nonmatchings/fighters/sakuyamon", D_8006ACD4);
 
-static const CVECTOR D_8006AE3C = { 0x43, 0xE0, 0x98, 0 };
 void func_800A94D0(Unk800A9944 *this);
 
+#if VERSION_JP
+INCLUDE_ASM("game/nonmatchings/fighters/sakuyamon", func_800A926C);
+#else
+static const CVECTOR D_8006AE3C = { 0x43, 0xE0, 0x98, 0 };
 Unk800A9944 *func_800A926C(Unk800A9944 *this, Fighter *fighter, Vec3 *position) {
     Hit *hit;
     s32 x, y, z;
@@ -1475,6 +1602,7 @@ Unk800A9944 *func_800A926C(Unk800A9944 *this, Fighter *fighter, Vec3 *position) 
     func_800A94D0(this);
     return this;
 }
+#endif
 
 /* The destructor of func_800A926C's class: stops its sound, takes its member at 0x38 out of its list. */
 void func_800A9428(Unk800A9944 *this, s32 flags) {

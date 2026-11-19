@@ -34,17 +34,24 @@ typedef struct StingmonSpecial3Hitbox {
     /* 0x034 */ u8 unk34[0x38 - 0x34];
     /* 0x038 */ CollisionSphere part;
     /* 0x080 */ Fighter *fighter;
-    /* 0x084 */ u8 unk84[0x88 - 0x84];
+    /* 0x084 */ Fight *fight;
     /* 0x088 */ u16 unk88;           /* 60 - unk8E when it takes hold of the opponent */
     /* 0x08A */ u16 holdingOpponent; /* while set, the destructor releases the opponent (Fighter_hold(0)) */
     /* 0x08C */ u16 unk8C;
     /* 0x08E */ u16 unk8E;
-    /* 0x090 */ u8 unk90[0xAC - 0x90];
+    /* 0x090 */ u16 unk90;
+    /* 0x092 */ u16 unk92;
+    /* 0x094 */ s16 vramY;
+    /* 0x096 */ u8 unk96[16];
+    /* 0x0A6 */ u8 unkA6[2];
+    /* 0x0A8 */ s32 unkA8;
     /* 0x0AC */ Vec3 unkAC;
     /* 0x0B8 */ u8 unkB8[4];
     /* 0x0BC */ Vec3 unkBC; /* StingmonSpecial3Hitbox_init's third argument */
     /* 0x0C8 */ u8 unkC8[4];
     /* 0x0CC */ VECTOR unkCC[16];
+    /* 0x1CC */ s32 unk1CC[16];
+    /* 0x20C */ s16 unk20C[16];
 } StingmonSpecial3Hitbox;
 void Stingmon_spawnAttack3Hitbox(Stingmon *this);
 
@@ -607,7 +614,72 @@ void Stingmon_spawnAttack3Hitbox(Stingmon *this) {
     Fighter_addEntity(&this->base, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial2Hitbox_init);
+/* The UnkPartsEntity38 class StingmonSpecial2Hitbox_init constructs (virtual tables STINGMON_SPECIAL2_HITBOX_VTABLE and
+ * STINGMON_SPECIAL2_HITBOX_HIT_VTABLE). */
+typedef struct StingmonSpecial2Hitbox {
+    /* 0x00 */ UnkPartsEntity38 parts;
+    /* 0x80 */ Fighter *fighter;
+    /* 0x84 */ u16 frame;
+    /* 0x86 */ s16 facing; /* the character's (Fighter_getFacing) */
+    /* 0x88 */ u8 unk88;   /* 10, or 3: the frames state 2 waits */
+    /* 0x89 */ u8 unk89;   /* rises to 0x80 in state 1, falls to 0 in state 3 */
+    /* 0x8A */ u16 state;
+    /* 0x8C */ u16 unk8C;  /* state 2's frame count */
+    /* 0x8E */ s16 vramY;  /* the character's 0x440 (Fighter_getVramY) */
+    /* 0x90 */ VECTOR position; /* the character's point 20 (Fighter_getNodePosition) */
+    /* 0xA0 */ SVECTOR corners[4];
+} StingmonSpecial2Hitbox;
+
+/* Builds a special move 2 hitbox for fighter at position with velocity (its z selects state 0 with unk88 10 and part
+ * flag 1, or state 1 with unk88 3) and adds its sphere to fighter's side of list. */
+StingmonSpecial2Hitbox *StingmonSpecial2Hitbox_init(StingmonSpecial2Hitbox *this, Fighter *fighter, Vec3 *position,
+                                                     VECTOR *velocity, Fight *list) {
+    CollisionSphere *part;
+    s32 x, y, z;
+
+    entityInit(&this->parts.entity, 0x30000);
+    Hit_init(&this->parts.base, fighter, 0x7AC1FD9, (Vec3 *)velocity, 1);
+    this->parts.base.vtable = STINGMON_SPECIAL2_HITBOX_HIT_VTABLE;
+    this->parts.entity.vtable = &STINGMON_SPECIAL2_HITBOX_VTABLE;
+    CollisionSphere_init(&this->parts.part, position, 0x80, &this->parts.base);
+    this->vramY = Fighter_getVramY(fighter);
+    this->facing = Fighter_getFacing(fighter);
+    this->fighter = fighter;
+    this->state = 0;
+    this->unk8C = 0;
+    this->unk89 = 0;
+    this->frame = 0;
+    if (velocity->vz == 0) {
+        this->unk88 = 10;
+        this->state = 0;
+    } else {
+        this->unk88 = 3;
+        this->state = 1;
+    }
+    this->corners[0].vx = this->corners[1].vx = this->corners[2].vx = this->corners[3].vx = 0x20;
+    this->corners[0].vy = this->corners[1].vy = 0x54;
+    this->corners[2].vy = this->corners[3].vy = 0x17C;
+    this->corners[0].vz = this->corners[2].vz = 0x20;
+    this->corners[1].vz = this->corners[3].vz = -0x20;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    part = &this->parts.part;
+    this->parts.part.entity = &this->parts.entity;
+    this->position.vx = x;
+    this->position.vy = y;
+    this->position.vz = z;
+    if (Fighter_getSide(this->fighter) == 0) {
+        Fight_addSide0Shape(list, &part->link);
+    } else {
+        Fight_addSide1Shape(list, &part->link);
+    }
+    Fighter_playSound(this->fighter, 0xEB);
+    if (this->unk88 == 10) {
+        this->parts.part.flags.word |= 1;
+    }
+    return this;
+}
 
 /* The special move 2 hitbox's destructor. */
 void StingmonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
@@ -628,21 +700,6 @@ void StingmonSpecial2Hitbox_destroy(UnkPartsEntity38 *this, s32 flags) {
         entityOperatorDelete(this);
     }
 }
-
-/* The UnkPartsEntity38 class StingmonSpecial2Hitbox_init constructs (virtual tables STINGMON_SPECIAL2_HITBOX_VTABLE and
- * STINGMON_SPECIAL2_HITBOX_HIT_VTABLE). */
-typedef struct StingmonSpecial2Hitbox {
-    /* 0x00 */ UnkPartsEntity38 parts;
-    /* 0x80 */ Fighter *fighter;
-    /* 0x84 */ u16 frame;
-    /* 0x86 */ s16 facing; /* the character's (Fighter_getFacing) */
-    /* 0x88 */ u8 unk88;   /* 10, or 3: the frames state 2 waits */
-    /* 0x89 */ u8 unk89;   /* rises to 0x80 in state 1, falls to 0 in state 3 */
-    /* 0x8A */ u16 state;
-    /* 0x8C */ u16 unk8C;  /* state 2's frame count */
-    /* 0x8E */ s16 vramY;  /* the character's 0x440 (Fighter_getVramY) */
-    /* 0x90 */ VECTOR position; /* the character's point 20 (Fighter_getNodePosition) */
-} StingmonSpecial2Hitbox;
 
 extern VECTOR D_800D344C;
 
@@ -798,7 +855,74 @@ void StingmonSpecial2Effect_tick(StingmonSpecial2Effect *this) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006BA10);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial2Effect_draw);
+#define UV_BYTES(uv) ((u8 *)&(uv))
+
+extern SVECTOR D_8006BA10[4];
+
+void StingmonSpecial2Effect_draw(StingmonSpecial2Effect *this, Camera *camera) {
+    MatrixWords m;
+    MATRIX *matrix;
+    PolyFT4Shape shape;
+    Vec3 *position;
+    s32 x, y, z;
+
+    shape.flags = 0;
+    m.m.t[0] = 0;
+    m.m.t[1] = 0;
+    m.m.t[2] = 0;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    m.words[4] = m.words[2] = m.words[0] = (u16)this->unk28;
+    matrix = &m.m;
+    if ((u16)this->unk1C != 0) {
+        if (this->facing > 0) {
+            matrixRotateZ(matrix, 0x200);
+        } else {
+            matrixRotateZ(matrix, -0x200);
+        }
+    }
+    position = &this->position;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    m.m.t[0] = x;
+    m.m.t[1] = y;
+    m.m.t[2] = z;
+    setModelMatrix(matrix);
+    shape.corners[0] = &D_8006BA10[0];
+    shape.corners[1] = &D_8006BA10[1];
+    shape.corners[2] = &D_8006BA10[2];
+    shape.corners[3] = &D_8006BA10[3];
+    shape.color = this->unk22 | (this->unk22 << 8) | (this->unk22 << 16);
+    if (this->facing > 0) {
+        UV_BYTES(shape.uv0)[0] = 0x50;
+        UV_BYTES(shape.uv0)[1] = 0x40;
+        UV_BYTES(shape.uv1)[0] = 0x7F;
+        UV_BYTES(shape.uv1)[1] = 0x40;
+        UV_BYTES(shape.uv2)[0] = 0x50;
+        UV_BYTES(shape.uv2)[1] = 0x7F;
+        UV_BYTES(shape.uv3)[0] = 0x7F;
+        UV_BYTES(shape.uv3)[1] = 0x7F;
+    } else {
+        UV_BYTES(shape.uv0)[0] = 0x7F;
+        UV_BYTES(shape.uv0)[1] = 0x40;
+        UV_BYTES(shape.uv1)[0] = 0x50;
+        UV_BYTES(shape.uv1)[1] = 0x40;
+        UV_BYTES(shape.uv2)[0] = 0x7F;
+        UV_BYTES(shape.uv2)[1] = 0x7F;
+        UV_BYTES(shape.uv3)[0] = 0x50;
+        UV_BYTES(shape.uv3)[1] = 0x7F;
+    }
+    {
+        u16 vramY = this->vramY;
+
+        shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+        shape.clut = getClut(0x1C0, vramY + 0xF7);
+    }
+    shape.flags &= ~3;
+    shape.flags |= 9;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
+}
 
 /* The entity class of vtable D_8006BBE4 (0x3C bytes), made for a character at a position. */
 typedef struct Unk800B25CC {
@@ -865,7 +989,89 @@ void func_800B26B8(Unk800B25CC *this) {
 
 INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", D_8006BA30);
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", func_800B275C);
+extern SVECTOR D_8006BA30[4];
+
+static inline void setTranslation(long *t, Vec3 *v) {
+    s32 x = v->vx;
+    s32 y = v->vy;
+    s32 z = v->vz;
+
+    t[0] = x;
+    t[1] = y;
+    t[2] = z;
+}
+
+/* Draws Unk800B25CC as two layered additive textured quads from D_8006BA30 scaled by unk28 (the second half as tall)
+ * at position, shaded by unk20. */
+void func_800B275C(Unk800B25CC *this, Camera *camera) {
+    MatrixWords m;
+    MATRIX *mat = &m.m;
+    PolyFT4Shape shape;
+    u16 vramY;
+    s32 scale;
+    s32 s;
+
+    shape.flags = 0;
+    m.words[5] = 0;
+    m.words[6] = 0;
+    m.words[7] = 0;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    s = (u16)this->unk28;
+    m.words[0] = s;
+    m.words[2] = s;
+    m.words[4] = s;
+    setTranslation(m.m.t, &this->position);
+    setModelMatrix(mat);
+
+    shape.corners[0] = &D_8006BA30[0];
+    shape.corners[1] = &D_8006BA30[1];
+    shape.corners[2] = &D_8006BA30[2];
+    shape.corners[3] = &D_8006BA30[3];
+    UV_BYTES(shape.uv0)[0] = 0xA0;
+    UV_BYTES(shape.uv0)[1] = 0x80;
+    UV_BYTES(shape.uv1)[0] = 0xBF;
+    UV_BYTES(shape.uv1)[1] = 0x80;
+    UV_BYTES(shape.uv2)[0] = 0xA0;
+    UV_BYTES(shape.uv2)[1] = 0x9F;
+    UV_BYTES(shape.uv3)[0] = 0xBF;
+    UV_BYTES(shape.uv3)[1] = 0x9F;
+    shape.color = this->unk20 | (this->unk20 << 8) | (this->unk20 << 16);
+    vramY = this->vramY;
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    shape.clut = getClut(0x1C0, vramY + 0xF8);
+    shape.flags &= ~3;
+    shape.flags |= 9;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
+
+    scale = this->unk28;
+    m.words[5] = 0;
+    m.words[6] = 0;
+    m.words[7] = 0;
+    m.words[1] = 0;
+    m.words[3] = 0;
+    m.words[0] = scale & 0xFFFF;
+    m.words[2] = (scale >> 1) & 0xFFFF;
+    m.words[4] = scale & 0xFFFF;
+    setTranslation(m.m.t, &this->position);
+    setModelMatrix(mat);
+
+    UV_BYTES(shape.uv0)[0] = 0x40;
+    UV_BYTES(shape.uv0)[1] = 0xD0;
+    UV_BYTES(shape.uv1)[0] = 0x5F;
+    UV_BYTES(shape.uv1)[1] = 0xD0;
+    UV_BYTES(shape.uv2)[0] = 0x40;
+    UV_BYTES(shape.uv2)[1] = 0xDF;
+    UV_BYTES(shape.uv3)[0] = 0x5F;
+    UV_BYTES(shape.uv3)[1] = 0xDF;
+    shape.color = this->unk20 | (this->unk20 << 8) | (this->unk20 << 16);
+    vramY = this->vramY;
+    shape.tpage = getTPage(0, 1, 0x1C0, vramY);
+    shape.clut = getClut(0x1C0, vramY + 0xF9);
+    shape.flags &= ~3;
+    shape.flags |= 9;
+    PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift + 1);
+}
 
 extern VtableEntry STINGMON_SPECIAL1_PROJECTILE_HIT_VTABLE[];
 extern EntityVtable STINGMON_SPECIAL1_PROJECTILE_VTABLE;
@@ -947,7 +1153,6 @@ INCLUDE_RODATA("game/nonmatchings/fighters/stingmon", STINGMON_SPECIAL1_PROJECTI
 
 /* PolyFT4Shape's uv words as their u and v bytes (as in saintgargomon.c): game_classes.h types them u16, and the game
  * stores the bytes. */
-#define UV_BYTES(uv) ((u8 *)&(uv))
 
 /* The corners of the rectangle StingmonSpecial1Projectile_drawHead draws. */
 extern SVECTOR STINGMON_SPECIAL1_PROJECTILE_HEAD_CORNERS[4];
@@ -1045,10 +1250,86 @@ void StingmonSpecial1Projectile_drawStart(StingmonSpecial1Projectile *this, Came
     PRIM_BUFFER_FREE = buildPolyFT4(&shape, PRIM_BUFFER_FREE, camera->ot.slots, camera->zShift);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Hitbox_init);
-
 extern VtableEntry STINGMON_SPECIAL3_HITBOX_HIT_VTABLE[];
 extern EntityVtable STINGMON_SPECIAL3_HITBOX_VTABLE;
+
+/* Builds the special move 3's hitbox: 16 points around position, sphere at radius 0x180, zero damage until
+ * StingmonSpecial3Hitbox_tick sets it. */
+StingmonSpecial3Hitbox *StingmonSpecial3Hitbox_init(StingmonSpecial3Hitbox *this, Stingmon *fighter, Vec3 *position,
+                                                    VECTOR *knockback, Fight *fight) {
+    VECTOR offset;
+    VECTOR *offsetPtr;
+    VECTOR *posNode;
+    s32 i;
+    s32 x, y, z;
+    VECTOR *vec;
+    s16 *p20C;
+    s32 *p1CC;
+    u8 *unk96;
+
+    entityInit(&this->entity, ENTITY_KIND_FIGHTER_OBJECT);
+    Hit_init(&this->unk18, &fighter->base, 0, (Vec3 *)knockback, 1);
+    this->unk18.vtable = STINGMON_SPECIAL3_HITBOX_HIT_VTABLE;
+    this->entity.vtable = &STINGMON_SPECIAL3_HITBOX_VTABLE;
+    CollisionSphere_init(&this->part, position, 0x180, &this->unk18);
+
+    this->vramY = Fighter_getVramY(&fighter->base);
+    this->fighter = &fighter->base;
+    this->unk8C = 0;
+    this->unk90 = 0;
+    this->unk8E = 0;
+    this->unkA8 = 0;
+    this->unk92 = 0;
+    this->fight = fight;
+    x = position->vx;
+    y = position->vy;
+    z = position->vz;
+    this->holdingOpponent = 0;
+    this->unk88 = 0;
+    this->part.entity = (Entity *)this;
+    this->unkBC.vx = x;
+    this->unkBC.vy = y;
+    this->unkBC.vz = z;
+
+    if (Fighter_getSide(&fighter->base) == 0) {
+        Fight_addSide0Shape(fight, &this->part.link);
+    } else {
+        Fight_addSide1Shape(fight, &this->part.link);
+    }
+
+    i = 0;
+    unk96 = this->unk96;
+    offsetPtr = &offset;
+    posNode = (VECTOR *)&this->unkAC;
+    p20C = this->unk20C;
+    p1CC = this->unk1CC;
+    vec = this->unkCC;
+    do {
+        s32 vx = this->unkBC.vx;
+        s32 vy = this->unkBC.vy;
+        s32 vz = this->unkBC.vz;
+
+        vec->vx = vx;
+        vec->vy = vy;
+        vec->vz = vz;
+        unk96[i] = 0x80;
+        *p1CC = 0x1000;
+        *p20C = Fight_random(fight) & 0xFFF;
+        p20C++;
+        p1CC++;
+        vec++;
+        i++;
+    } while (i < 16);
+
+    offset.vx = 0;
+    offset.vy = 0;
+    offset.vz = 0;
+    offset.pad = 0;
+    Fighter_getNodePosition(this->fighter, posNode, 10, offsetPtr);
+    Fighter_playSound(this->fighter, 0xEC);
+
+    return this;
+}
 
 /* The special move 3 hitbox's destructor: first releases the opponent while it holds it. */
 void StingmonSpecial3Hitbox_destroy(StingmonSpecial3Hitbox *this, s32 flags) {
@@ -1073,7 +1354,83 @@ void StingmonSpecial3Hitbox_destroy(StingmonSpecial3Hitbox *this, s32 flags) {
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", StingmonSpecial3Hitbox_tick);
+void func_800B34D0(StingmonSpecial3Hitbox *this);
+
+void StingmonSpecial3Hitbox_tick(StingmonSpecial3Hitbox *this) {
+    Fighter *opponent = Fighter_getOpponent(this->fighter);
+    BattleSide *side;
+
+    if (!((Stingmon *)this->fighter)->inSpecial3) {
+        entityDelete(&this->entity);
+    } else {
+        Fighter_getPosition(this->fighter, &this->unkBC);
+        this->unkBC.vx += Fighter_getFacing(this->fighter) * 640;
+        this->unkBC.vy -= 0xF0;
+
+        switch (this->unk8C) {
+            case 0:
+                this->unkA8 += (0x1000 - this->unkA8) >> 2;
+                if (this->unkA8 < 0xFF0) {
+                    break;
+                }
+                this->unkA8 = 0xFFF;
+                this->unk90 = 0;
+                this->unk8C++;
+            case 1:
+                this->unk90++;
+                if (this->unk90 < 40) {
+                    break;
+                }
+                this->unk8C++;
+            case 2:
+                this->unkA8 += (0 - this->unkA8) >> 2;
+                if (this->unkA8 != 0) {
+                    break;
+                }
+                this->unkA8 = 0;
+                this->unk8C++;
+            case 3:
+                entityDelete(&this->entity);
+                return;
+        }
+
+        if (this->unk8E == 60) {
+            ListNode *node = &this->part.link;
+
+            this->part.flags.bits.disabled = 1;
+            this->part.link.next->prev = this->part.link.prev;
+            node->prev->next = this->part.link.next;
+            this->part.link.next = node;
+            this->part.link.prev = node;
+        }
+
+        side = func_8007758C(opponent);
+        if (this->holdingOpponent != 0) {
+            Fighter_hold(opponent, 1);
+            if (this->holdingOpponent == this->unk88) {
+                VECTOR kb;
+
+                if (side->life > 0) {
+                    kb.vx = Fighter_getFacing(this->fighter) * 0x31C4;
+                    kb.vy = -0x6AA4;
+                    kb.vz = 0;
+                    Fighter_takeHit(opponent, 0x47B09000, (Vec3 *)&kb, 2);
+                } else {
+                    kb.vx = 0;
+                    kb.vy = 0;
+                    kb.vz = 0;
+                    kb.pad = 0;
+                    Fighter_takeHit(opponent, 0x7B09000, (Vec3 *)&kb, 2);
+                }
+            }
+            this->holdingOpponent++;
+        }
+
+        func_800B34D0(this);
+        this->part.position = this->unkBC;
+        this->unk8E++;
+    }
+}
 
 /* On a hit: Hit_apply; then a fighter hit that is not guarding is taken hold of, once: the sphere is disabled, the
  * owner gains 0x3000 of life, the fighter takes hit 0x7B00001 (kind 1) and stops, and the sphere leaves its list. */
@@ -1103,7 +1460,54 @@ void StingmonSpecial3Hitbox_hit(StingmonSpecial3Hitbox *this, CollisionSphere *s
     }
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/stingmon", func_800B34D0);
+s16 func_800B36B4(StingmonSpecial3Hitbox *this, s32 index);
+s32 turnAngleToward(s32 target, s32 from, s32 step);
+
+void func_800B34D0(StingmonSpecial3Hitbox *this) {
+    VECTOR diff;
+    s32 i;
+
+    this->unk92++;
+    if (this->unk92 >= 17) {
+        this->unk92 = 16;
+    }
+    for (i = 0; i < this->unk92; i++) {
+        s32 *unk1CC = &this->unk1CC[i];
+        s16 *angle = &this->unk20C[i];
+        VECTOR *v = &this->unkCC[i];
+        s32 dx, dy;
+        s16 idx;
+
+        this->unk96[i] -= 4;
+        *unk1CC -= 16;
+        *unk1CC = (*unk1CC * this->unkA8) >> 12;
+        this->unk20C[i] = turnAngleToward(func_800B36B4(this, i), *angle, 0x40);
+        idx = *angle;
+        dx = -COS_SIN_TABLE[idx & 0xFFF].sin >> 7;
+        dy = -COS_SIN_TABLE[idx & 0xFFF].cos >> 7;
+        this->unkCC[i].vx += dx;
+        this->unkCC[i].vy += dy;
+        {
+            s32 vy, vz;
+            diff.vx = v->vx - this->unkAC.vx;
+            vy = v->vy;
+            vz = v->vz;
+            diff.vy = vy - this->unkAC.vy;
+            diff.vz = vz - this->unkAC.vz;
+        }
+        if (vecGetLength(&diff) < 0x80) {
+            s32 x = this->unkBC.vx;
+            s32 y = this->unkBC.vy;
+            s32 z = this->unkBC.vz;
+
+            v->vx = x;
+            v->vy = y;
+            v->vz = z;
+            *unk1CC = 0x1000;
+            *angle = Fight_random(this->fight) & 0xFFF;
+        }
+    }
+}
 
 /* The direction (ratan2) from the centre at 0xAC to point index, on x and y. */
 s16 func_800B36B4(StingmonSpecial3Hitbox *this, s32 index) {

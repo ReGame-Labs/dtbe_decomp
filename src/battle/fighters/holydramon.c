@@ -257,7 +257,67 @@ void Holydramon_spawnSpecial2Hitbox(Holydramon *this, s32 angle) {
     Fighter_addEntity(&this->base, child);
 }
 
-INCLUDE_ASM("game/nonmatchings/fighters/holydramon", Holydramon_special3);
+struct Unk8008BE04 *func_8008BE04(struct Unk8008BE04 *this, Fighter *fighter);
+void Holydramon_spawnSpecial3Effect(Holydramon *this);
+
+/* Special move 3: calls func_80079AE4, consumes 0x10000 gauge and plays clip 2 and voice 0x94 at frame 0, spawns
+ * func_8008BE04 at frames 0, 2 and 4; at frame 16 if within (0x400, 0x100) of the opponent switches to clip 0x1A and
+ * sets unk4A6, then spawns Holydramon_spawnSpecial3Effect with sound 0x8F every 4 frames until the clip ends. */
+void Holydramon_special3(Holydramon *this, s32 frame) {
+    Fighter *opponent = Fighter_getOpponent(&this->base);
+
+    func_80079AE4(&this->base);
+    if (frame == 0) {
+        Fighter_addGauge(&this->base, -0x10000);
+        this->unk4A4 = Fighter_getFacing(&this->base);
+        Fighter_playActionClip(&this->base, 2, 0, 0, -1);
+        Fighter_playVoice(&this->base, 0x94);
+        this->base.invulnerableFrames = 10;
+        goto spawn;
+    }
+    if (frame == 2 || frame == 4) {
+        Entity *child;
+    spawn:
+        child = allocEntityMemory(0x34);
+        if (child != NULL) {
+            func_8008BE04(entityOperatorNewAt(0x34, child), &this->base);
+        }
+        Fighter_addEntity(&this->base, child);
+    }
+    if (this->unk4A6 == 0) {
+        if (frame == 0x10) {
+            Vec3 pos1;
+            Vec3 pos2;
+
+            Fighter_getPosition(&this->base, &pos2);
+            Fighter_getPosition(opponent, &pos1);
+            {
+                s32 x = pos2.vx, y = pos2.vy, z = pos2.vz;
+                x -= pos1.vx;
+                y -= pos1.vy;
+                z -= pos1.vz;
+                pos2.vx = x;
+                pos2.vy = y;
+                pos2.vz = z;
+            }
+            if ((pos2.vx >= 0 ? pos2.vx : -pos2.vx) < 0x400 && (pos2.vy >= 0 ? pos2.vy : -pos2.vy) < 0x100) {
+                Fighter_accelerateTo(&this->base, 0);
+                Fighter_playActionClip(&this->base, 0x1A, 0, 0, -1);
+                this->unk4A6 = 1;
+            }
+        }
+    } else {
+        Fighter_accelerateTo(&this->base, 0);
+        if ((this->unk4A6 & 3) == 0) {
+            Fighter_playSound(&this->base, 0x8F);
+            Holydramon_spawnSpecial3Effect(this);
+        }
+        this->unk4A6++;
+        if (Fighter_isActionClipDone(&this->base)) {
+            this->unk4A6 = 0;
+        }
+    }
+}
 
 struct HolydramonSpecial3Effect *HolydramonSpecial3Effect_init(struct HolydramonSpecial3Effect *this, Fighter *fighter,
                                                                Vec3 *position);

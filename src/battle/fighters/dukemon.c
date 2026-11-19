@@ -314,6 +314,12 @@ void Dukemon_spawnSpecial3Hitbox(Fighter *this, s16 arg);
 void Dukemon_special3(Dukemon *this, s32 frame) {
     Fighter_special3(&this->base, frame);
     func_80079AE4(&this->base);
+#if VERSION_JP
+    if (Fight_isRoundOver(Fighter_getScene(&this->base))) {
+        Fighter_stopActionClip(&this->base);
+        return;
+    }
+#endif
     this->special3Active = 1;
     switch (frame) {
     case 0:
